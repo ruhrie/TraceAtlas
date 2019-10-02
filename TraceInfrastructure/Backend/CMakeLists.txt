@@ -7,8 +7,6 @@ set_target_properties(
 
 target_link_libraries(DashTracer ${llvm_libs} ${ZLIB_LIBRARIES})
 target_include_directories(DashTracer PRIVATE ${ZLIB_INCLUDE_DIRS} ${TRACE_INC})
-target_include_directories(DashTracer PUBLIC "${CMAKE_SOURCE_DIR}/include/")
 install(TARGETS DashTracer
     ARCHIVE DESTINATION lib
-    PUBLIC_HEADER DESTINATION "include"
 )
