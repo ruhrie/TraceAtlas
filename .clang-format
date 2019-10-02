@@ -1,0 +1,12 @@
+Standard: Cpp11
+BasedOnStyle: LLVM 
+IndentWidth: 4
+ColumnLimit: 0
+AlignAfterOpenBracket: true
+AlignTrailingComments: true
+AllowShortIfStatementsOnASingleLine: false
+AccessModifierOffset: -4
+NamespaceIndentation: All
+BreakBeforeBraces: Allman
+UseTab: Never
+IndentCaseLabels: true
