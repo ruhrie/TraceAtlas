@@ -24,3 +24,12 @@ target_link_libraries(dagExtractor ${llvm_libs})
 target_include_directories(dagExtractor PRIVATE ${DEP_INC} ${LLVM_INCLUDE_DIRS})
 
 install(TARGETS dagExtractor RUNTIME DESTINATION bin)
+
+add_executable(sizeEmitter SizeEmitter.cpp)
+
+set_target_properties(sizeEmitter PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+target_compile_definitions(sizeEmitter PUBLIC ${LLVM_DEFINITIONS})
+target_link_libraries(sizeEmitter ${llvm_libs})
+target_include_directories(sizeEmitter PRIVATE ${DEP_INC} ${LLVM_INCLUDE_DIRS})
+
+install(TARGETS sizeEmitter RUNTIME DESTINATION bin)
