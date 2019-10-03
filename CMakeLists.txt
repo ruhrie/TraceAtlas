@@ -3,7 +3,13 @@ project(TraceAtlas VERSION 0.1.0)
 
 SET (CMAKE_CXX_STANDARD 17)
 
-add_subdirectory("Dependencies")
+find_package(LLVM REQUIRED 8 CONFIG)
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+llvm_map_components_to_libnames(llvm_libs  support core irreader bitreader bitwriter transformutils)
 
+find_package(ZLIB REQUIRED)
+
+add_subdirectory("Dependencies")
 add_subdirectory("TraceInfrastructure")
 add_subdirectory("Utilities")
