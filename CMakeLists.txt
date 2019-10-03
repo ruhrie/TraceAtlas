@@ -6,3 +6,4 @@ SET (CMAKE_CXX_STANDARD 17)
 add_subdirectory("Dependencies")
 
 add_subdirectory("TraceInfrastructure")
+add_subdirectory("Utilities")
