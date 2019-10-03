@@ -15,3 +15,12 @@ target_link_libraries(kernelHasher ${llvm_libs})
 target_include_directories(kernelHasher PRIVATE ${DEP_INC} ${LLVM_INCLUDE_DIRS})
 
 install(TARGETS kernelHasher RUNTIME DESTINATION bin)
+
+add_executable(dagExtractor DagExtractor.cpp)
+
+set_target_properties(dagExtractor PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+target_compile_definitions(dagExtractor PUBLIC ${LLVM_DEFINITIONS})
+target_link_libraries(dagExtractor ${llvm_libs})
+target_include_directories(dagExtractor PRIVATE ${DEP_INC} ${LLVM_INCLUDE_DIRS})
+
+install(TARGETS dagExtractor RUNTIME DESTINATION bin)
