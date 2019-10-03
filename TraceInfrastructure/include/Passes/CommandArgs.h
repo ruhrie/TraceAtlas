@@ -5,13 +5,13 @@
 
 using namespace llvm;
 
-/// <summary>  
+/// <summary>
 /// The kernel index upon which to work.
-/// </summary>  
+/// </summary>
 extern cl::opt<int> KernelIndex;
-/// <summary>  
+/// <summary>
 /// The name of the input kernel file
-/// </summary>  
+/// </summary>
 extern cl::opt<std::string> KernelFilename;
 
 extern cl::opt<bool> DumpLoads;

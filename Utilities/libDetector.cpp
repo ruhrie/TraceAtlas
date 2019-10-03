@@ -1,16 +1,15 @@
-#include <llvm/IRReader/IRReader.h>
+#include <algorithm>
 #include <fstream>
 #include <iostream>
-#include <llvm/Support/SourceMgr.h>
-#include <llvm/Support/CommandLine.h>
-#include <string>
-#include <llvm/IR/Module.h>
 #include <json.hpp>
-#include <algorithm>
+#include <llvm/IR/Module.h>
+#include <llvm/IRReader/IRReader.h>
+#include <llvm/Support/CommandLine.h>
+#include <llvm/Support/SourceMgr.h>
 #include <set>
+#include <string>
 using namespace std;
 using namespace llvm;
-
 
 cl::opt<string> JsonFile("k", cl::desc("Specify input kernel json filename"), cl::value_desc("kernel filename"));
 cl::opt<string> InputFile("i", cl::desc("Specify input bitcode filename"), cl::value_desc("bitcode filename"));
@@ -45,7 +44,7 @@ int main(int argc, char *argv[])
         {
             BB->setName("BB_UID_" + std::to_string(UID++));
         }
-    }	
+    }
     map<string, set<string>> kernelParents;
     for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
     {
@@ -55,20 +54,20 @@ int main(int argc, char *argv[])
             BasicBlock *b = cast<BasicBlock>(BB);
             string blockName = b->getName();
             uint64_t id = std::stoul(blockName.substr(7));
-            for(auto kernel : kernels)
+            for (auto kernel : kernels)
             {
                 auto blocks = kernel.second;
-                if(find(blocks.begin(), blocks.end(), id) != blocks.end())
+                if (find(blocks.begin(), blocks.end(), id) != blocks.end())
                 {
-           			if(MDNode* N = f->getMetadata("libs"))
+                    if (MDNode *N = f->getMetadata("libs"))
                     {
                         string parent = cast<MDString>(N->getOperand(0))->getString();
-                        kernelParents[kernel.first].insert(parent);    
+                        kernelParents[kernel.first].insert(parent);
                     }
                 }
             }
         }
-    }	
+    }
 
     nlohmann::json finalJson = kernelParents;
     ofstream oStream(OutputFile);

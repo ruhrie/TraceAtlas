@@ -7,19 +7,19 @@ using namespace llvm;
 
 namespace DashTracer
 {
-	namespace Passes
-	{
+    namespace Passes
+    {
 
-		struct PapiExport : public FunctionPass
-		{
-			static char ID;
-			PapiExport() : FunctionPass(ID) {}
-			bool runOnFunction(Function& F) override;
-			bool doInitialization(Module& M) override;
-			void getAnalysisUsage(AnalysisUsage& AU) const override;
-		};
+        struct PapiExport : public FunctionPass
+        {
+            static char ID;
+            PapiExport() : FunctionPass(ID) {}
+            bool runOnFunction(Function &F) override;
+            bool doInitialization(Module &M) override;
+            void getAnalysisUsage(AnalysisUsage &AU) const override;
+        };
 
-	} // namespace Passes
+    } // namespace Passes
 } // namespace DashTracer
 
 #endif
