@@ -181,7 +181,11 @@ int main(int argc, char **argv)
             }
         }
 
-        notDone = (ret != Z_STREAM_END) || (status >= (size / BLOCK_SIZE));
+        notDone = (ret != Z_STREAM_END);// && (status <= (size / BLOCK_SIZE));
+        if(status <= (size / BLOCK_SIZE))
+        {
+            notDone = false;
+        }
         if (status % 100 == 0)
         {
             std::cout << "Currently reading block " << to_string(status) << " of " << to_string(size / BLOCK_SIZE) << "\n";
