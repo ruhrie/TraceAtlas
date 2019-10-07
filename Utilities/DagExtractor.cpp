@@ -184,6 +184,10 @@ int main(int argc, char **argv)
         notDone = (ret != Z_STREAM_END);// && (status <= (size / BLOCK_SIZE));
         if(status > (size / BLOCK_SIZE))
         {
+            std::cout << "went over\n";
+            std::cout << "statud: " << status << "\n";
+            std::cout << "size: " << size << "\n";
+            std::cout << "BLOCK_SIZE: " << BLOCK_SIZE << "\n";
             notDone = false;
         }
         if (status % 100 == 0)
