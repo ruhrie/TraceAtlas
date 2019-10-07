@@ -1,13 +1,13 @@
-#include <zlib.h>
-#include <fstream>
-#include <sstream>
-#include <iostream>
+#include "json.hpp"
 #include <algorithm>
-#include <vector>
+#include <fstream>
+#include <iostream>
+#include <llvm/Support/CommandLine.h>
 #include <map>
 #include <set>
-#include "json.hpp"
-#include <llvm/Support/CommandLine.h>
+#include <sstream>
+#include <vector>
+#include <zlib.h>
 using namespace llvm;
 using namespace std;
 
@@ -181,7 +181,7 @@ int main(int argc, char **argv)
             }
         }
 
-        notDone = ret != Z_STREAM_END;
+        notDone = (ret != Z_STREAM_END) || (status >= (size / BLOCK_SIZE));
         if (status % 100 == 0)
         {
             std::cout << "Currently reading block " << to_string(status) << " of " << to_string(size / BLOCK_SIZE) << "\n";
