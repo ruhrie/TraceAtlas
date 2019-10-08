@@ -84,7 +84,7 @@ int main(int argc, char **argv)
     inputTrace.open(InputFilename);
 
     inputTrace.seekg(0, ios_base::end);
-    int size = inputTrace.tellg();
+    uint64_t size = inputTrace.tellg();
     inputTrace.seekg(0, ios_base::beg);
 
     string result = "";
@@ -92,7 +92,7 @@ int main(int argc, char **argv)
     std::vector<int> basicBlocks;
     int lastBlock;
     string currentKernel = "-1";
-    int status = 0;
+    uint64_t status = 0;
     int currentUid = -1;
     while (notDone)
     {
