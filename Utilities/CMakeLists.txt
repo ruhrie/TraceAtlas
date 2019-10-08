@@ -33,3 +33,16 @@ target_link_libraries(sizeEmitter ${llvm_libs})
 target_include_directories(sizeEmitter PRIVATE ${DEP_INC} ${LLVM_INCLUDE_DIRS})
 
 install(TARGETS sizeEmitter RUNTIME DESTINATION bin)
+
+add_executable(bow Bow.cpp)
+target_link_libraries(bow ${llvm_libs})
+target_include_directories(bow PRIVATE ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(bow PRIVATE ${LLVM_DEFINITIONS})
+target_include_directories(bow PRIVATE  ${DEP_INC})
+
+set_target_properties(bow
+	PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin" 
+)
+
+install(TARGETS bow RUNTIME DESTINATION bin)
