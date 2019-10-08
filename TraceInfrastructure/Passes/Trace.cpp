@@ -120,13 +120,8 @@ namespace DashTracer
 
         bool Trace::doInitialization(Module &M)
         {
-#ifdef LLVM_9
-            fullFunc = M.getOrInsertFunction("Write", Type::getVoidTy(M.getContext()), Type::getInt8PtrTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt64Ty(M.getContext()));
-            fullAddrFunc = M.getOrInsertFunction("WriteAddress", Type::getVoidTy(M.getContext()), Type::getInt8PtrTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt64Ty(M.getContext()), Type::getInt8PtrTy(M.getContext()));
-#elif defined LLVM_8
             fullFunc = dyn_cast<Function>(M.getOrInsertFunction("Write", Type::getVoidTy(M.getContext()), Type::getInt8PtrTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt64Ty(M.getContext())));
             fullAddrFunc = dyn_cast<Function>(M.getOrInsertFunction("WriteAddress", Type::getVoidTy(M.getContext()), Type::getInt8PtrTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt64Ty(M.getContext()), Type::getInt8PtrTy(M.getContext())));
-#endif
             return false;
         }
         bool EncodedTrace::runOnBasicBlock(BasicBlock &BB)
