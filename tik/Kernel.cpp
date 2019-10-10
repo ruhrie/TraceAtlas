@@ -1,12 +1,12 @@
 #include "Kernel.h"
+#include "Util.h"
 #include <algorithm>
-#include <llvm/IR/Instructions.h>
+#include <iostream>
 #include <llvm/IR/CFG.h>
-#include <llvm/IR/Type.h>
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/IRBuilder.h>
-#include <iostream>
-#include "Util.h"
+#include <llvm/IR/Instructions.h>
+#include <llvm/IR/Type.h>
 using namespace llvm;
 using namespace std;
 
@@ -14,6 +14,10 @@ static int KernelUID = 0;
 
 Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
 {
+    MemoryRead = NULL;
+    MemoryWrite = NULL;
+    Body = NULL;
+    Init = NULL;
     Conditional = NULL;
     Name = "Kernel_" + to_string(KernelUID++);
     baseModule = new Module(Name, M->getContext());
@@ -40,24 +44,40 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
 
     //get conditional logic
     GetLoopInsts(blocks);
-    
+
     //now get the actual body
     GetBodyInsts(blocks);
 
-    GetInitInsts(blocks);    
+    GetInitInsts(blocks);
 
     //now get the memory array
     GetMemoryFunctions(baseModule);
 
     GetExits(blocks);
-    
+
     //finally remap everything
     Remap();
 }
 
 nlohmann::json Kernel::GetJson()
 {
-    nlohmann::json j = TikBase::GetJson();
+    nlohmann::json j;
+    if (Body != NULL)
+    {
+        j["Body"] = GetStrings(Body);
+    }
+    if (Init != NULL)
+    {
+        j["Init"] = GetStrings(Init);
+    }
+    if (MemoryRead != NULL)
+    {
+        j["MemoryRead"] = GetStrings(MemoryRead);
+    }
+    if (MemoryWrite != NULL)
+    {
+        j["MemoryWrite"] = GetStrings(MemoryWrite);
+    }
     if (Conditional != NULL)
     {
         j["Loop"] = GetStrings(Conditional);
@@ -67,6 +87,18 @@ nlohmann::json Kernel::GetJson()
 
 Kernel::~Kernel()
 {
+    if (MemoryRead != NULL)
+    {
+        delete MemoryRead;
+    }
+    if (MemoryWrite != NULL)
+    {
+        delete MemoryWrite;
+    }
+    if (Body != NULL)
+    {
+        delete Body;
+    }
     delete Conditional;
     delete baseModule;
 }
@@ -184,7 +216,7 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
 
 void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
 {
-    std::vector<Instruction*> result;
+    std::vector<Instruction *> result;
     vector<BasicBlock *> entrances;
     for (BasicBlock *block : blocks)
     {
@@ -279,29 +311,29 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
 
 void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
 {
-    std::vector<Instruction*> toAdd;
-    
+    std::vector<Instruction *> toAdd;
+
     for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
     {
         Instruction *inst = cast<Instruction>(BI);
         int numOps = inst->getNumOperands();
-        for(int i = 0; i < numOps; i++)
+        for (int i = 0; i < numOps; i++)
         {
             Value *op = inst->getOperand(i);
-            if(Instruction *operand = dyn_cast<Instruction>(op))
+            if (Instruction *operand = dyn_cast<Instruction>(op))
             {
                 BasicBlock *parentBlock = operand->getParent();
-                if(std::find(blocks.begin(), blocks.end(), parentBlock) == blocks.end())
+                if (std::find(blocks.begin(), blocks.end(), parentBlock) == blocks.end())
                 {
-                    if(find(toAdd.begin(), toAdd.end(), operand) == toAdd.end())
+                    if (find(toAdd.begin(), toAdd.end(), operand) == toAdd.end())
                     {
                         toAdd.push_back(operand);
                     }
                 }
-            }            
+            }
         }
     }
-    
+
     auto initList = &Init->getInstList();
     for (auto init : toAdd)
     {
@@ -349,8 +381,8 @@ void Kernel::GetMemoryFunctions(Module *m)
     BasicBlock *loadBlock = BasicBlock::Create(m->getContext(), "entry", MemoryRead);
     IRBuilder<> loadBuilder(loadBlock);
     Value *priorValue = NULL;
-    map<Value*, Value*> loadMap;
-    map<Value*, Value*> storeMap;
+    map<Value *, Value *> loadMap;
+    map<Value *, Value *> storeMap;
     if (loadValues.size() > 1)
     {
         for (Value *lVal : loadValues)
@@ -409,7 +441,7 @@ void Kernel::GetMemoryFunctions(Module *m)
     }
     Instruction *storeRet = cast<ReturnInst>(storeBuilder.CreateRet(priorValue));
 
-    vector<Instruction*> toRemove;
+    vector<Instruction *> toRemove;
     for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
     {
         Instruction *inst = cast<Instruction>(BI);
@@ -431,7 +463,7 @@ void Kernel::GetMemoryFunctions(Module *m)
             toRemove.push_back(newInst);
         }
     }
-    for(auto inst : toRemove)
+    for (auto inst : toRemove)
     {
         inst->removeFromParent();
     }
@@ -440,15 +472,15 @@ void Kernel::GetMemoryFunctions(Module *m)
 void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
 {
     vector<BasicBlock *> exits;
-    for(auto block : blocks)
+    for (auto block : blocks)
     {
         Instruction *term = block->getTerminator();
-        if(BranchInst *brInst = dyn_cast<BranchInst>(term))
+        if (BranchInst *brInst = dyn_cast<BranchInst>(term))
         {
-            for(unsigned int i = 0; i < brInst->getNumSuccessors(); i++)
+            for (unsigned int i = 0; i < brInst->getNumSuccessors(); i++)
             {
                 BasicBlock *succ = brInst->getSuccessor(i);
-                if(find(blocks.begin(), blocks.end(), succ) == blocks.end())
+                if (find(blocks.begin(), blocks.end(), succ) == blocks.end())
                 {
                     exits.push_back(succ);
                 }
@@ -457,7 +489,7 @@ void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
         else
         {
             throw 2;
-        }        
+        }
     }
     assert(exits.size() == 1);
     ExitTarget = exits[0];
