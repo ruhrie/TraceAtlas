@@ -124,7 +124,10 @@ int main(int argc, char *argv[])
                 change = true;
                 for (auto block : kernel.second)
                 {
-                    KernelMap[block] = kern;
+                    if (KernelMap.find(block) == KernelMap.end())
+                    {
+                        KernelMap[block] = kern;
+                    }
                 }
                 //and remove it from kernels
                 auto it = find(kernels.begin(), kernels.end(), kernel);

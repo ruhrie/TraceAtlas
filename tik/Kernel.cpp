@@ -50,10 +50,10 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
 
     GetInitInsts(blocks);
 
+    GetExits(blocks);
+
     //now get the memory array
     GetMemoryFunctions();
-
-    GetExits(blocks);
 
     //finally remap everything
     Remap();
@@ -234,69 +234,85 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
     vector<BasicBlock *> exploredBlocks;
     while (true)
     {
-        exploredBlocks.push_back(currentBlock);
-        for (BasicBlock::iterator bi = currentBlock->begin(), be = currentBlock->end(); bi != be; bi++)
+        if (find(blocks.begin(), blocks.end(), currentBlock) == blocks.end())
         {
-            Instruction *inst = cast<Instruction>(bi);
-            if (inst->isTerminator())
-            {
-                //we should ignore for the time being
-            }
-            else
-            {
-                //we now check if the instruction is already present
-                if (VMap.find(inst) == VMap.end())
-                {
-                    Instruction *cl = inst->clone();
-                    VMap[inst] = cl;
-                    result.push_back(cl);
-                }
-            }
+            break;
         }
-        Instruction *term = currentBlock->getTerminator();
-        if (BranchInst *brInst = dyn_cast<BranchInst>(term))
+        string blockName = currentBlock->getName();
+        uint64_t id = std::stoul(blockName.substr(7));
+        if (KernelMap.find(id) != KernelMap.end())
         {
-            if (brInst->isConditional())
-            {
-                bool explored = true;
-                //this indicates either the exit or a for loop within the code
-                //aka a kernel or something to unroll
-                int sucNum = brInst->getNumSuccessors();
-                for (int i = 0; i < sucNum; i++)
-                {
-                    BasicBlock *succ = brInst->getSuccessor(i);
-                    if (find(blocks.begin(), blocks.end(), succ) != blocks.end())
-                    {
-                        //this is a branch to a kernel block
-                        if (find(exploredBlocks.begin(), exploredBlocks.end(), succ) == exploredBlocks.end())
-                        {
-                            //and we haven't explored it yet
-                            explored = false;
-                            currentBlock = succ;
-                        }
-                    }
-                }
-                if (explored)
-                {
-                    break;
-                }
-            }
-            else
-            {
-                BasicBlock *succ = brInst->getSuccessor(0);
-                if (find(exploredBlocks.begin(), exploredBlocks.end(), succ) == exploredBlocks.end())
-                {
-                    currentBlock = succ;
-                }
-                else
-                {
-                    break;
-                }
-            }
+            Kernel *k = KernelMap[id];
+            CallInst *newCall = CallInst::Create(k->KernelFunction);
+            exploredBlocks.push_back(currentBlock);
+            currentBlock = k->ExitTarget;
         }
         else
         {
-            throw 2;
+            exploredBlocks.push_back(currentBlock);
+            for (BasicBlock::iterator bi = currentBlock->begin(), be = currentBlock->end(); bi != be; bi++)
+            {
+                Instruction *inst = cast<Instruction>(bi);
+                if (inst->isTerminator())
+                {
+                    //we should ignore for the time being
+                }
+                else
+                {
+                    //we now check if the instruction is already present
+                    if (VMap.find(inst) == VMap.end())
+                    {
+                        Instruction *cl = inst->clone();
+                        VMap[inst] = cl;
+                        result.push_back(cl);
+                    }
+                }
+            }
+            Instruction *term = currentBlock->getTerminator();
+            if (BranchInst *brInst = dyn_cast<BranchInst>(term))
+            {
+                if (brInst->isConditional())
+                {
+                    bool explored = true;
+                    //this indicates either the exit or a for loop within the code
+                    //aka a kernel or something to unroll
+                    int sucNum = brInst->getNumSuccessors();
+                    for (int i = 0; i < sucNum; i++)
+                    {
+                        BasicBlock *succ = brInst->getSuccessor(i);
+                        if (find(blocks.begin(), blocks.end(), succ) != blocks.end())
+                        {
+                            //this is a branch to a kernel block
+                            if (find(exploredBlocks.begin(), exploredBlocks.end(), succ) == exploredBlocks.end())
+                            {
+                                //and we haven't explored it yet
+                                explored = false;
+                                currentBlock = succ;
+                            }
+                        }
+                    }
+                    if (explored)
+                    {
+                        break;
+                    }
+                }
+                else
+                {
+                    BasicBlock *succ = brInst->getSuccessor(0);
+                    if (find(exploredBlocks.begin(), exploredBlocks.end(), succ) == exploredBlocks.end())
+                    {
+                        currentBlock = succ;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                throw 2;
+            }
         }
     }
     auto instList = &Body->getInstList();
