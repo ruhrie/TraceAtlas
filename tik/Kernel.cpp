@@ -48,6 +48,8 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
 
     //now get the memory array
     GetMemoryFunctions(baseModule);
+
+    GetExits(blocks);
     
     //finally remap everything
     Remap();
@@ -433,4 +435,30 @@ void Kernel::GetMemoryFunctions(Module *m)
     {
         inst->removeFromParent();
     }
+}
+
+void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
+{
+    vector<BasicBlock *> exits;
+    for(auto block : blocks)
+    {
+        Instruction *term = block->getTerminator();
+        if(BranchInst *brInst = dyn_cast<BranchInst>(term))
+        {
+            for(unsigned int i = 0; i < brInst->getNumSuccessors(); i++)
+            {
+                BasicBlock *succ = brInst->getSuccessor(i);
+                if(find(blocks.begin(), blocks.end(), succ) == blocks.end())
+                {
+                    exits.push_back(succ);
+                }
+            }
+        }
+        else
+        {
+            throw 2;
+        }        
+    }
+    assert(exits.size() == 1);
+    ExitTarget = exits[0];
 }

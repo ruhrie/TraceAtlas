@@ -1,9 +1,9 @@
 #pragma once
 #include "TikBase.h"
-#include <vector>
 #include <llvm/IR/Module.h>
 #include <llvm/Transforms/Utils/ValueMapper.h>
 #include <string>
+#include <vector>
 class Kernel : public TikBase
 {
 public:
@@ -12,6 +12,8 @@ public:
     std::string Name;
     nlohmann::json GetJson();
     llvm::BasicBlock *Conditional = NULL;
+    llvm::BasicBlock *ExitTarget = NULL;
+
 private:
     llvm::Function *mainFunction = NULL;
     llvm::ValueToValueMapTy VMap;
@@ -19,5 +21,6 @@ private:
     void GetLoopInsts(std::vector<llvm::BasicBlock *> blocks);
     void GetBodyInsts(std::vector<llvm::BasicBlock *> blocks);
     void GetInitInsts(std::vector<llvm::BasicBlock *> blocks);
+    void GetExits(std::vector<llvm::BasicBlock *> blocks);
     void GetMemoryFunctions(llvm::Module *m);
 };
