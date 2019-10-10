@@ -1,14 +1,14 @@
 #include "Tik.h"
-#include <llvm/Support/CommandLine.h>
-#include <string>
-#include <set>
 #include <fstream>
 #include <iostream>
+#include <json.hpp>
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/IR/Module.h>
-#include <llvm/Support/SourceMgr.h>
 #include <llvm/IRReader/IRReader.h>
-#include <json.hpp>
+#include <llvm/Support/CommandLine.h>
+#include <llvm/Support/SourceMgr.h>
+#include <set>
+#include <string>
 
 using namespace std;
 using namespace llvm;
@@ -19,8 +19,8 @@ enum Filetype
     DPDA
 };
 
-std::map<int, Kernel*> KernelMap;
-
+llvm::Module *TikModule;
+std::map<int, Kernel *> KernelMap;
 cl::opt<string> JsonFile("j", cl::desc("Specify input json filename"), cl::value_desc("json filename"));
 cl::opt<string> KernelFile("o", cl::desc("Specify output kernel filename"), cl::value_desc("kernel filename"));
 cl::opt<string> InputFile(cl::Positional, cl::Required, cl::desc("<input file>"));
@@ -81,40 +81,40 @@ int main(int argc, char *argv[])
         {
             BB->setName("BB_UID_" + std::to_string(UID++));
         }
-    }			
+    }
 
     TikModule = new Module(InputFile, context);
 
     //we now process all kernels who have no children and then remove them as we go
 
-    std::vector<Kernel*> results;
+    std::vector<Kernel *> results;
 
     bool change = true;
-    while(change)
+    while (change)
     {
         change = false;
-        for(auto kernel : kernels)
+        for (auto kernel : kernels)
         {
-            if(childParentMapping.find(kernel.first) == childParentMapping.end())
+            if (childParentMapping.find(kernel.first) == childParentMapping.end())
             {
                 //this kernel has no unexplained parents
                 Kernel *kern = new Kernel(kernel.second, sourceBitcode.get());
                 //so we remove its blocks from all parents
                 vector<string> toRemove;
-                for(auto child : childParentMapping)
+                for (auto child : childParentMapping)
                 {
                     auto loc = find(child.second.begin(), child.second.end(), kernel.first);
                     if (loc != child.second.end())
                     {
                         child.second.erase(loc);
-                        if(child.second.size() == 0)
+                        if (child.second.size() == 0)
                         {
                             toRemove.push_back(child.first);
                         }
                     }
                 }
                 //if necessary remove the entry from the map
-                for(auto r : toRemove)
+                for (auto r : toRemove)
                 {
                     auto it = childParentMapping.find(r);
                     childParentMapping.erase(it);
@@ -122,7 +122,7 @@ int main(int argc, char *argv[])
                 //publish our result
                 results.push_back(kern);
                 change = true;
-                for(auto block : kernel.second)
+                for (auto block : kernel.second)
                 {
                     KernelMap[block] = kern;
                 }
@@ -131,12 +131,12 @@ int main(int argc, char *argv[])
                 kernels.erase(it);
                 //and restart the iterator to ensure cohesion
                 break;
-            }            
+            }
         }
     }
 
     nlohmann::json finalJson;
-    for(Kernel* kern : results)
+    for (Kernel *kern : results)
     {
         finalJson["Kernels"][kern->Name] = kern->GetJson();
     }

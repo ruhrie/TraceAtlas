@@ -1,4 +1,5 @@
 #include "Kernel.h"
+#include "Tik.h"
 #include "Util.h"
 #include <algorithm>
 #include <iostream>
@@ -20,12 +21,11 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
     Init = NULL;
     Conditional = NULL;
     Name = "Kernel_" + to_string(KernelUID++);
-    baseModule = new Module(Name, M->getContext());
 
-    FunctionType *mainType = FunctionType::get(Type::getVoidTy(baseModule->getContext()), false);
-    mainFunction = Function::Create(mainType, GlobalValue::LinkageTypes::ExternalLinkage, Name, baseModule);
-    Body = BasicBlock::Create(baseModule->getContext(), "Body", mainFunction);
-    Init = BasicBlock::Create(baseModule->getContext(), "Init", mainFunction);
+    FunctionType *mainType = FunctionType::get(Type::getVoidTy(TikModule->getContext()), false);
+    KernelFunction = Function::Create(mainType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
+    Body = BasicBlock::Create(TikModule->getContext(), "Body", KernelFunction);
+    Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
     //start by getting a reference to all the blocks
     vector<BasicBlock *> blocks;
     for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
@@ -51,7 +51,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
     GetInitInsts(blocks);
 
     //now get the memory array
-    GetMemoryFunctions(baseModule);
+    GetMemoryFunctions();
 
     GetExits(blocks);
 
@@ -100,27 +100,24 @@ Kernel::~Kernel()
         delete Body;
     }
     delete Conditional;
-    delete baseModule;
+    delete KernelFunction;
 }
 
 void Kernel::Remap()
 {
-    for (Module::iterator F = baseModule->begin(), E = baseModule->end(); F != E; ++F)
+    for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)
     {
-        for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
+        for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
         {
-            for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
-            {
-                Instruction *inst = cast<Instruction>(BI);
-                RemapInstruction(inst, VMap, llvm::RF_IgnoreMissingLocals);
-            }
+            Instruction *inst = cast<Instruction>(BI);
+            RemapInstruction(inst, VMap, llvm::RF_IgnoreMissingLocals);
         }
     }
 }
 
 void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
 {
-    Conditional = BasicBlock::Create(baseModule->getContext(), "Loop", mainFunction);
+    Conditional = BasicBlock::Create(TikModule->getContext(), "Loop", KernelFunction);
     vector<Instruction *> result;
     //now identify all exit blocks
     vector<BasicBlock *> exits;
@@ -343,7 +340,7 @@ void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
     }
 }
 
-void Kernel::GetMemoryFunctions(Module *m)
+void Kernel::GetMemoryFunctions()
 {
     set<LoadInst *> loadInst;
     set<StoreInst *> storeInst;
@@ -373,12 +370,12 @@ void Kernel::GetMemoryFunctions(Module *m)
         Value *storeVal = store->getPointerOperand();
         storeValues.insert(storeVal);
     }
-    FunctionType *funcType = FunctionType::get(Type::getInt32Ty(m->getContext()), Type::getInt32Ty(m->getContext()), false);
-    MemoryRead = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, "MemoryRead", m);
-    MemoryWrite = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, "MemoryWrite", m);
+    FunctionType *funcType = FunctionType::get(Type::getInt32Ty(TikModule->getContext()), Type::getInt32Ty(TikModule->getContext()), false);
+    MemoryRead = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, "MemoryRead", TikModule);
+    MemoryWrite = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, "MemoryWrite", TikModule);
 
     int i = 0;
-    BasicBlock *loadBlock = BasicBlock::Create(m->getContext(), "entry", MemoryRead);
+    BasicBlock *loadBlock = BasicBlock::Create(TikModule->getContext(), "entry", MemoryRead);
     IRBuilder<> loadBuilder(loadBlock);
     Value *priorValue = NULL;
     map<Value *, Value *> loadMap;
@@ -387,8 +384,8 @@ void Kernel::GetMemoryFunctions(Module *m)
     {
         for (Value *lVal : loadValues)
         {
-            Instruction *converted = cast<Instruction>(loadBuilder.CreatePtrToInt(lVal, Type::getInt32Ty(m->getContext())));
-            Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(m->getContext()), i++);
+            Instruction *converted = cast<Instruction>(loadBuilder.CreatePtrToInt(lVal, Type::getInt32Ty(TikModule->getContext())));
+            Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
             loadMap[lVal] = indexConstant;
             if (priorValue == NULL)
             {
@@ -404,29 +401,29 @@ void Kernel::GetMemoryFunctions(Module *m)
     }
     else if (loadValues.size() == 1)
     {
-        Instruction *converted = cast<Instruction>(loadBuilder.CreatePtrToInt(*loadValues.begin(), Type::getInt32Ty(m->getContext())));
+        Instruction *converted = cast<Instruction>(loadBuilder.CreatePtrToInt(*loadValues.begin(), Type::getInt32Ty(TikModule->getContext())));
         priorValue = converted;
     }
     Instruction *loadRet = cast<ReturnInst>(loadBuilder.CreateRet(priorValue));
 
     //now do the store
     i = 0;
-    BasicBlock *storeBlock = BasicBlock::Create(m->getContext(), "entry", MemoryWrite);
+    BasicBlock *storeBlock = BasicBlock::Create(TikModule->getContext(), "entry", MemoryWrite);
     IRBuilder<> storeBuilder(storeBlock);
     if (storeValues.size() > 1)
     {
         for (Value *lVal : storeValues)
         {
-            Instruction *converted = cast<Instruction>(storeBuilder.CreatePtrToInt(lVal, Type::getInt32Ty(m->getContext())));
+            Instruction *converted = cast<Instruction>(storeBuilder.CreatePtrToInt(lVal, Type::getInt32Ty(TikModule->getContext())));
             if (priorValue == NULL)
             {
                 priorValue = converted;
-                Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(m->getContext()), i);
+                Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i);
                 storeMap[lVal] = indexConstant;
             }
             else
             {
-                Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(m->getContext()), i++);
+                Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
                 ICmpInst *cmpInst = cast<ICmpInst>(storeBuilder.CreateICmpEQ(MemoryWrite->arg_begin(), indexConstant));
                 SelectInst *sInst = cast<SelectInst>(storeBuilder.CreateSelect(cmpInst, converted, priorValue));
                 priorValue = sInst;
@@ -436,7 +433,7 @@ void Kernel::GetMemoryFunctions(Module *m)
     }
     else if (storeValues.size() == 1)
     {
-        Instruction *converted = cast<Instruction>(storeBuilder.CreatePtrToInt(*storeValues.begin(), Type::getInt32Ty(m->getContext())));
+        Instruction *converted = cast<Instruction>(storeBuilder.CreatePtrToInt(*storeValues.begin(), Type::getInt32Ty(TikModule->getContext())));
         priorValue = converted;
     }
     Instruction *storeRet = cast<ReturnInst>(storeBuilder.CreateRet(priorValue));

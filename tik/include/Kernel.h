@@ -19,13 +19,12 @@ public:
     llvm::Function *MemoryWrite = NULL;
 
 private:
-    llvm::Module *baseModule;
-    llvm::Function *mainFunction = NULL;
+    llvm::Function *KernelFunction = NULL;
     llvm::ValueToValueMapTy VMap;
     void Remap();
     void GetLoopInsts(std::vector<llvm::BasicBlock *> blocks);
     void GetBodyInsts(std::vector<llvm::BasicBlock *> blocks);
     void GetInitInsts(std::vector<llvm::BasicBlock *> blocks);
     void GetExits(std::vector<llvm::BasicBlock *> blocks);
-    void GetMemoryFunctions(llvm::Module *m);
+    void GetMemoryFunctions();
 };

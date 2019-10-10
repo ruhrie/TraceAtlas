@@ -4,4 +4,4 @@
 #include <map>
 
 extern std::map<int, Kernel *> KernelMap;
-llvm::Module *TikModule;
+extern llvm::Module *TikModule;
