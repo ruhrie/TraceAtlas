@@ -98,11 +98,11 @@ void DetectKernels(char* sourceFile, float thresh, int hotThresh, bool newline)
 	    }
 
 	    // Now parse the line into a dictionary with block as key and count as value
-	    for( std::vector<std::string>::iterator it = split.begin(); it != split.end(); it++ )
+	    for( std::string it : split )
 	    {
-		    if( it == split.begin() )
+		    if( it == split.front() )
 		    {
-			    it->append( priorLine );
+			    it += priorLine ;
 		    }
 		    // split it by the colon between the instruction and value
 		    std::stringstream itstream(it);
