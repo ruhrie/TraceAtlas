@@ -26,10 +26,11 @@ void DetectKernels(char* sourceFile, float thresh, int hotThresh, bool newline)
 	std::vector<int> result;
 	int radius = 5;
 
-	std::map <std::string, float> blockMap;
-	std::map <std::string, float> blockCount;
+	std::map <int, std::map<int, int> > blockMap;
+	std::map <int, int> blockCount;
 	std::ifstream::pos_type traceSize = filesize(sourceFile);
 	int blocks = traceSize / BLOCK_SIZE + 1;
+	std::cout << "Blocks in this trace is " << blocks << "\n";
 
 	// now read the trace
     std::ifstream inputTrace;
@@ -66,27 +67,33 @@ void DetectKernels(char* sourceFile, float thresh, int hotThresh, bool newline)
     int lastBlock;
     std::string strresult;
     std::vector<std::string> fileList;
-    std::vector<std::string>::iterator it = fileList.begin();
+    std::vector<int> priorBlocks;
+    //std::vector<std::string>::iterator it = fileList.begin();
+    std::cout << "Starting trace parse.\n";
     while (notDone)
     {
+	index++;
 	// read a block size of the trace
         inputTrace.readsome(dataArray, BLOCK_SIZE);
-        strm.next_in = (Bytef *)dataArray;
-        strm.avail_in = inputTrace.gcount();
+        strm.next_in = (Bytef *)dataArray; // input data to z_lib for decompression
+        strm.avail_in = inputTrace.gcount(); // remaining characters in the compressed inputTrace
         while (strm.avail_in != 0)
         {
     	    // decompress our data
-            strm.next_out = (Bytef *)decompressedArray;
-            strm.avail_out = BLOCK_SIZE;
+            strm.next_out = (Bytef *)decompressedArray; // pointer where uncompressed data is written to
+            strm.avail_out = BLOCK_SIZE; // remaining space in decompressedArray
             ret = inflate(&strm, Z_NO_FLUSH);
             assert(ret != Z_STREAM_ERROR);
 
 	    // put decompressed data into a string for splitting 
 	    unsigned int have = BLOCK_SIZE-strm.avail_out;
+	    std::cout << "have is " << have << ".\n";
 	    for( int i = 0; i < have; i++ )
 	    {
 		    strresult += decompressedArray[i];
 	    }
+	    //std::cout << strresult << "\n";
+    	    //std::cout << "Decompressed the data and put it into a vector of BLOCK_SIZE.\n";
 
 	    // split strresult by \n's
 	    std::stringstream stringStream(strresult);
@@ -96,6 +103,7 @@ void DetectKernels(char* sourceFile, float thresh, int hotThresh, bool newline)
 	    {
 		    split.push_back(segment);
 	    }
+	    //std::cout << "Now we've split the vector.\n";
 
 	    // Now parse the line into a dictionary with block as key and count as value
 	    for( std::string it : split )
@@ -104,6 +112,7 @@ void DetectKernels(char* sourceFile, float thresh, int hotThresh, bool newline)
 		    {
 			    it += priorLine ;
 		    }
+	    	    //std::cout << "Started parsing a line.\n";
 		    // split it by the colon between the instruction and value
 		    std::stringstream itstream(it);
 		    std::vector<std::string> spl;
@@ -111,10 +120,70 @@ void DetectKernels(char* sourceFile, float thresh, int hotThresh, bool newline)
 		    {
 			    spl.push_back(segment);
 		    }
+	    	    //std::cout << "Just split the line by its colon.\n";
 		    std::string key = spl.front();
 		    std::string value = spl.back();
-	    } // for( it )
+		    //std::cout << it << "\n";
+		    //std::cout << key << "\n";
+		    //std::cout << value << "\n";
+		    if( key == value )
+		    {
+			    break;
+		    }
+		    
+		    // If key is basic block, put it in our sorting dictionary
+		    if( key == "BasicBlock" )
+		    {
+	    	    	    //std::cout << "This line is a basic block.\n";
+			    int block = stoi(value, 0, 0);
+			    blockCount[block] += 1;
+			    priorBlocks.push_back(block);
+	    	    	    ///std::cout << "Just put the last block in priorBlocks.\n";
+			    if( priorBlocks.size() > (2 * radius + 1) )
+			    {
+				    priorBlocks.erase( priorBlocks.begin() );
+			    }
+			    if( priorBlocks.size() > radius )
+			    {
+				    //std::cout << "Iterating block in blockMap.\n";
+				    for( int i = 0; i < priorBlocks.size(); i++ )
+				    {
+					    //std::cout << block << "," << i << "\n";
+					    blockMap[block][i]++;
+				    }
+				    //std::cout << "Done iterating block.\n";
+			    } // if priorBlocks.size > radius
+	    	    	    //std::cout << "Just parsed the basic block.\n";
+		    } // if key == BasicBlock
+	    } // for it in split
+	    priorLine = split.back();
+	    // status bar stuff 
+	    // if( index % 100 == 0 )
+	    // {
+	    //     update bar
+	    // }
+	    // if( have < BLOCK_SIZE )
+	    // {
+	    //     we're done
+	    // }
 	} // while(strm.avail_in != 0)
+	notDone = ( ret != Z_STREAM_END );
+	if( index > blocks )
+	{
+		notDone = false;
+	}
+	//std::cout << "notDone is updated.\n";
+    	for( auto elem : blockCount)
+    	{
+		std::cout << elem.first << "\n";
+		std::cout << elem.second<< "\n";
+		/*
+		for( auto key : blockMap[elem.first] )
+		{
+	        	std::cout << key.first << "\n";//<< key.second.first << "," << key.second.second << "\n";
+		}
+		*/
+    	}
     } // while( notDone)
 
 }
