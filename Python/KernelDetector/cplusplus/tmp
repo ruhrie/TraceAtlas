@@ -1,6 +1,0 @@
-make clean
-make[1]: Entering directory '/mnt/nobackup-11/bwilli46/Dash-Parser/Dash-Parser/cplusplus'
-rm -rf *.native
-make[1]: Leaving directory '/mnt/nobackup-11/bwilli46/Dash-Parser/Dash-Parser/cplusplus'
-clang++-8 main.cpp EncodeDetect.cpp  -lz -o test.native
-Makefile:13: recipe for target 'run' failed

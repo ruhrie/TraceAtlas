@@ -1,6 +1,6 @@
 
 #include <string>
-#include "EncodeDetect.hpp"
+#include "EncodeDetect.h"
 
 int main()
 {
