@@ -396,29 +396,21 @@ void Kernel::GetMemoryFunctions()
     Value *priorValue = NULL;
     map<Value *, Value *> loadMap;
     map<Value *, Value *> storeMap;
-    if (loadValues.size() > 1)
+    for (Value *lVal : loadValues)
     {
-        for (Value *lVal : loadValues)
+        Instruction *converted = cast<Instruction>(loadBuilder.CreatePtrToInt(lVal, Type::getInt32Ty(TikModule->getContext())));
+        Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
+        loadMap[lVal] = indexConstant;
+        if (priorValue == NULL)
         {
-            Instruction *converted = cast<Instruction>(loadBuilder.CreatePtrToInt(lVal, Type::getInt32Ty(TikModule->getContext())));
-            Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
-            loadMap[lVal] = indexConstant;
-            if (priorValue == NULL)
-            {
-                priorValue = converted;
-            }
-            else
-            {
-                ICmpInst *cmpInst = cast<ICmpInst>(loadBuilder.CreateICmpEQ(MemoryRead->arg_begin(), indexConstant));
-                SelectInst *sInst = cast<SelectInst>(loadBuilder.CreateSelect(cmpInst, converted, priorValue));
-                priorValue = sInst;
-            }
+            priorValue = converted;
         }
-    }
-    else if (loadValues.size() == 1)
-    {
-        Instruction *converted = cast<Instruction>(loadBuilder.CreatePtrToInt(*loadValues.begin(), Type::getInt32Ty(TikModule->getContext())));
-        priorValue = converted;
+        else
+        {
+            ICmpInst *cmpInst = cast<ICmpInst>(loadBuilder.CreateICmpEQ(MemoryRead->arg_begin(), indexConstant));
+            SelectInst *sInst = cast<SelectInst>(loadBuilder.CreateSelect(cmpInst, converted, priorValue));
+            priorValue = sInst;
+        }
     }
     Instruction *loadRet = cast<ReturnInst>(loadBuilder.CreateRet(priorValue));
 
@@ -426,31 +418,23 @@ void Kernel::GetMemoryFunctions()
     i = 0;
     BasicBlock *storeBlock = BasicBlock::Create(TikModule->getContext(), "entry", MemoryWrite);
     IRBuilder<> storeBuilder(storeBlock);
-    if (storeValues.size() > 1)
+    for (Value *lVal : storeValues)
     {
-        for (Value *lVal : storeValues)
+        Instruction *converted = cast<Instruction>(storeBuilder.CreatePtrToInt(lVal, Type::getInt32Ty(TikModule->getContext())));
+        if (priorValue == NULL)
         {
-            Instruction *converted = cast<Instruction>(storeBuilder.CreatePtrToInt(lVal, Type::getInt32Ty(TikModule->getContext())));
-            if (priorValue == NULL)
-            {
-                priorValue = converted;
-                Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i);
-                storeMap[lVal] = indexConstant;
-            }
-            else
-            {
-                Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
-                ICmpInst *cmpInst = cast<ICmpInst>(storeBuilder.CreateICmpEQ(MemoryWrite->arg_begin(), indexConstant));
-                SelectInst *sInst = cast<SelectInst>(storeBuilder.CreateSelect(cmpInst, converted, priorValue));
-                priorValue = sInst;
-                storeMap[lVal] = indexConstant;
-            }
+            priorValue = converted;
+            Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i);
+            storeMap[lVal] = indexConstant;
         }
-    }
-    else if (storeValues.size() == 1)
-    {
-        Instruction *converted = cast<Instruction>(storeBuilder.CreatePtrToInt(*storeValues.begin(), Type::getInt32Ty(TikModule->getContext())));
-        priorValue = converted;
+        else
+        {
+            Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
+            ICmpInst *cmpInst = cast<ICmpInst>(storeBuilder.CreateICmpEQ(MemoryWrite->arg_begin(), indexConstant));
+            SelectInst *sInst = cast<SelectInst>(storeBuilder.CreateSelect(cmpInst, converted, priorValue));
+            priorValue = sInst;
+            storeMap[lVal] = indexConstant;
+        }
     }
     Instruction *storeRet = cast<ReturnInst>(storeBuilder.CreateRet(priorValue));
 
