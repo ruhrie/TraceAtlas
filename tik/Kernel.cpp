@@ -245,6 +245,7 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
             Kernel *k = KernelMap[id];
             CallInst *newCall = CallInst::Create(k->KernelFunction);
             exploredBlocks.push_back(currentBlock);
+            result.push_back(newCall);
             currentBlock = k->ExitTarget;
         }
         else
