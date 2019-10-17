@@ -4,7 +4,7 @@
 
 int main()
 {
-	char sourceFile[] = "./test.trc";
+	char sourceFile[] = "./testing/test.trc";
 	DetectKernels(sourceFile, 0.95, 512, false);
 	return 0;
 }
