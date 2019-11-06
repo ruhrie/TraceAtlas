@@ -16,7 +16,6 @@ int indeces[11];
 
 void InitializePapi()
 {
-    printf("initialize \n");
     PAPI_library_init(PAPI_VER_CURRENT);
     PAPI_create_eventset(&PapiEventSet);
 
@@ -330,7 +329,6 @@ void InitializePapi()
 
 void TerminatePapi()
 {
-    printf("terminate\n");
     if (PapiRunning)
     {
         StopPapi();
@@ -365,14 +363,12 @@ void TerminatePapi()
 
 void StartPapi()
 {
-    printf("start\n");
     PAPI_start(PapiEventSet);
     PapiRunning = true;
 }
 
 void StopPapi()
 {
-    printf("stop\n");
     if (PAPI_accum(PapiEventSet, PapiData) != PAPI_OK)
     {
         printf("Failed to stop event counter\n");
