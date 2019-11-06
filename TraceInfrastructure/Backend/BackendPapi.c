@@ -20,7 +20,7 @@ void InitializePapi()
     PAPI_library_init(PAPI_VER_CURRENT);
     PAPI_create_eventset(&PapiEventSet);
 
-    BackendPapiNames = (char *)malloc(56 * PAPI_MAX_STR_LEN);
+    BackendPapiNames = (char *)malloc(58 * PAPI_MAX_STR_LEN);
     strcpy(BackendPapiNames + PAPI_MAX_STR_LEN * 0, "PAPI_TOT_INS");
     strcpy(BackendPapiNames + PAPI_MAX_STR_LEN * 1, "PAPI_TOT_CYC");
     strcpy(BackendPapiNames + PAPI_MAX_STR_LEN * 2, "PAPI_L1_DCM");
@@ -81,160 +81,232 @@ void InitializePapi()
     strcpy(BackendPapiNames + PAPI_MAX_STR_LEN * 52, "PAPI_L2_TCR");
     strcpy(BackendPapiNames + PAPI_MAX_STR_LEN * 53, "PAPI_L3_TCR");
     strcpy(BackendPapiNames + PAPI_MAX_STR_LEN * 54, "PAPI_LST_INS");
+    strcpy(BackendPapiNames + PAPI_MAX_STR_LEN * 55, "PAPI_HW_INT");
+    strcpy(BackendPapiNames + PAPI_MAX_STR_LEN * 56, "PAPI_L1_DCA");
+    strcpy(BackendPapiNames + PAPI_MAX_STR_LEN * 57, "PAPI_L2_DCA");
 
     indeces[0] = 0;
     indeces[1] = 1;
     PapiEventCount = 2;
     char *pi = getenv("PAPI_INDEX");
+    char *env = getenv("PAPI_PLATFORM");
     if (pi == NULL)
     {
         pi = "0";
     }
+    if (env == NULL)
+    {
+        env = "SPADE";
+    }
     int PapiIndex = atoi(pi);
-    switch (PapiIndex)
+    int PapiPlatform = -1;
+    if (!strcmp(env, "SPADE"))
+    {
+        PapiPlatform = 0;
+    }
+    else if (!strcmp(env, "ZYNQ"))
+    {
+        PapiPlatform = 1;
+    }
+    switch (PapiPlatform)
     {
         case 0:
         {
-            indeces[2] = 2;
-            indeces[3] = 3;
-            indeces[4] = 4;
-            indeces[5] = 5;
-            indeces[6] = 6;
-            indeces[7] = 7;
-            indeces[8] = 8;
-            indeces[9] = 9;
-            PapiEventCount = 10;
+            switch (PapiIndex)
+            {
+                case 0:
+                {
+                    indeces[2] = 2;
+                    indeces[3] = 3;
+                    indeces[4] = 4;
+                    indeces[5] = 5;
+                    indeces[6] = 6;
+                    indeces[7] = 7;
+                    indeces[8] = 8;
+                    indeces[9] = 9;
+                    PapiEventCount = 10;
+                    break;
+                }
+                case 1:
+                {
+                    indeces[2] = 10;
+                    indeces[3] = 11;
+                    indeces[4] = 12;
+                    indeces[5] = 13;
+                    indeces[6] = 14;
+                    PapiEventCount = 7;
+                    break;
+                }
+                case 2:
+                {
+                    indeces[2] = 15;
+                    indeces[3] = 16;
+                    indeces[4] = 17;
+                    PapiEventCount = 5;
+                    break;
+                }
+                case 3:
+                {
+                    indeces[2] = 18;
+                    indeces[3] = 19;
+                    indeces[4] = 20;
+                    PapiEventCount = 5;
+                    break;
+                }
+                case 4:
+                {
+                    indeces[2] = 21;
+                    PapiEventCount = 3;
+                    break;
+                }
+                case 5:
+                {
+                    indeces[2] = 22;
+                    indeces[3] = 23;
+                    PapiEventCount = 4;
+                    break;
+                }
+                case 6:
+                {
+                    indeces[2] = 24;
+                    indeces[3] = 25;
+                    indeces[4] = 26;
+                    PapiEventCount = 5;
+                    break;
+                }
+                case 7:
+                {
+                    indeces[2] = 27;
+                    indeces[3] = 28;
+                    indeces[4] = 29;
+                    indeces[5] = 30;
+                    indeces[6] = 31;
+                    PapiEventCount = 7;
+                    break;
+                }
+                case 8:
+                {
+                    indeces[2] = 32;
+                    indeces[3] = 33;
+                    PapiEventCount = 4;
+                    break;
+                }
+                case 9:
+                {
+                    indeces[2] = 34;
+                    indeces[3] = 35;
+                    indeces[4] = 36;
+                    indeces[5] = 37;
+                    PapiEventCount = 6;
+                    break;
+                }
+                case 10:
+                {
+                    indeces[2] = 38;
+                    indeces[3] = 39;
+                    indeces[4] = 40;
+                    indeces[5] = 41;
+                    PapiEventCount = 6;
+                    break;
+                }
+                case 11:
+                {
+                    indeces[2] = 42;
+                    PapiEventCount = 3;
+                    break;
+                }
+                case 12:
+                {
+                    indeces[2] = 43;
+                    PapiEventCount = 3;
+                    break;
+                }
+                case 13:
+                {
+                    indeces[2] = 44;
+                    indeces[3] = 45;
+                    indeces[4] = 46;
+                    PapiEventCount = 5;
+                    break;
+                }
+                case 14:
+                {
+                    indeces[2] = 47;
+                    indeces[3] = 48;
+                    indeces[4] = 49;
+                    indeces[5] = 50;
+                    PapiEventCount = 6;
+                    break;
+                }
+                case 15:
+                {
+                    indeces[2] = 51;
+                    indeces[3] = 52;
+                    PapiEventCount = 4;
+                    break;
+                }
+                case 16:
+                {
+                    indeces[2] = 53;
+                    PapiEventCount = 3;
+                    break;
+                }
+                case 17:
+                {
+                    indeces[1] = 54;
+                    PapiEventCount = 2;
+                    break;
+                }
+                default:
+                {
+                    printf("Invalid PapiIndex for SPADE platform.\n");
+                    break;
+                }
+            }
             break;
         }
         case 1:
         {
-            indeces[2] = 10;
-            indeces[3] = 11;
-            indeces[4] = 12;
-            indeces[5] = 13;
-            indeces[6] = 14;
-            PapiEventCount = 7;
+            switch (PapiIndex)
+            {
+                case 0:
+                {
+                    indeces[2] = 2;
+                    indeces[3] = 3;
+                    indeces[4] = 10;
+                    indeces[5] = 22;
+                    indeces[6] = 20;
+                    PapiEventCount = 7;
+                    break;
+                }
+                case 1:
+                {
+                    indeces[2] = 55;
+                    indeces[3] = 40;
+                    indeces[4] = 42;
+                    indeces[5] = 43;
+                    indeces[6] = 37;
+                    PapiEventCount = 7;
+                    break;
+                }
+                case 2:
+                {
+                    indeces[2] = 56;
+                    indeces[3] = 57;
+                    PapiEventCount = 4;
+                    break;
+                }
+                default:
+                {
+                    printf("Invalid PapiIndex for ZYNQ platform.\n");
+                    break;
+                }
+            }
             break;
         }
-        case 2:
+        default:
         {
-            indeces[2] = 15;
-            indeces[3] = 16;
-            indeces[4] = 17;
-            PapiEventCount = 5;
-            break;
-        }
-        case 3:
-        {
-            indeces[2] = 18;
-            indeces[3] = 19;
-            indeces[4] = 20;
-            PapiEventCount = 5;
-            break;
-        }
-        case 4:
-        {
-            indeces[2] = 21;
-            PapiEventCount = 3;
-            break;
-        }
-        case 5:
-        {
-            indeces[2] = 22;
-            indeces[3] = 23;
-            PapiEventCount = 4;
-            break;
-        }
-        case 6:
-        {
-            indeces[2] = 24;
-            indeces[3] = 25;
-            indeces[4] = 26;
-            PapiEventCount = 5;
-            break;
-        }
-        case 7:
-        {
-            indeces[2] = 27;
-            indeces[3] = 28;
-            indeces[4] = 29;
-            indeces[5] = 30;
-            indeces[6] = 31;
-            PapiEventCount = 7;
-            break;
-        }
-        case 8:
-        {
-            indeces[2] = 32;
-            indeces[3] = 33;
-            PapiEventCount = 4;
-            break;
-        }
-        case 9:
-        {
-            indeces[2] = 34;
-            indeces[3] = 35;
-            indeces[4] = 36;
-            indeces[5] = 37;
-            PapiEventCount = 6;
-            break;
-        }
-        case 10:
-        {
-            indeces[2] = 38;
-            indeces[3] = 39;
-            indeces[4] = 40;
-            indeces[5] = 41;
-            PapiEventCount = 6;
-            break;
-        }
-        case 11:
-        {
-            indeces[2] = 42;
-            PapiEventCount = 3;
-            break;
-        }
-        case 12:
-        {
-            indeces[2] = 43;
-            PapiEventCount = 3;
-            break;
-        }
-        case 13:
-        {
-            indeces[2] = 44;
-            indeces[3] = 45;
-            indeces[4] = 46;
-            PapiEventCount = 5;
-            break;
-        }
-        case 14:
-        {
-            indeces[2] = 47;
-            indeces[3] = 48;
-            indeces[4] = 49;
-            indeces[5] = 50;
-            PapiEventCount = 6;
-            break;
-        }
-        case 15:
-        {
-            indeces[2] = 51;
-            indeces[3] = 52;
-            PapiEventCount = 4;
-            break;
-        }
-        case 16:
-        {
-            indeces[2] = 53;
-            PapiEventCount = 3;
-            break;
-        }
-        case 17:
-        {
-            indeces[1] = 54;
-            PapiEventCount = 2;
-            break;
+            printf("Invalid platform specified. No performance counters will be used.\n");
         }
     }
 
