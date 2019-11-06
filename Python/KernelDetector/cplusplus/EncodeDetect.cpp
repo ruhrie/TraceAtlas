@@ -82,16 +82,19 @@ void DetectKernels(char* sourceFile, float thresh, int hotThresh, bool newline)
     	    // decompress our data
             strm.next_out = (Bytef *)decompressedArray; // pointer where uncompressed data is written to
             strm.avail_out = BLOCK_SIZE; // remaining space in decompressedArray
+	    //std::cout << "avail_out is " << strm.avail_out << ".\n";
             ret = inflate(&strm, Z_NO_FLUSH);
             assert(ret != Z_STREAM_ERROR);
+	    //std::cout << "avail_out again is " << strm.avail_out << ".\n";
 
 	    // put decompressed data into a string for splitting 
 	    unsigned int have = BLOCK_SIZE-strm.avail_out;
-	    std::cout << "have is " << have << ".\n";
+	    //std::cout << "have is " << have << ".\n";
 	    for( int i = 0; i < have; i++ )
 	    {
 		    strresult += decompressedArray[i];
 	    }
+	    //std::cout << "strresult is ...\n";
 	    //std::cout << strresult << "\n";
     	    //std::cout << "Decompressed the data and put it into a vector of BLOCK_SIZE.\n";
 
@@ -102,12 +105,15 @@ void DetectKernels(char* sourceFile, float thresh, int hotThresh, bool newline)
 	    while(std::getline( stringStream, segment, '\n' ))
 	    {
 		    split.push_back(segment);
+	    	    //std::cout << split.back() << "\n";
 	    }
 	    //std::cout << "Now we've split the vector.\n";
 
 	    // Now parse the line into a dictionary with block as key and count as value
+	    //std::cout << "printing split ...\n";
 	    for( std::string it : split )
 	    {
+		    //std::cout << it << "\n";
 		    if( it == split.front() )
 		    {
 			    it += priorLine ;
@@ -138,7 +144,7 @@ void DetectKernels(char* sourceFile, float thresh, int hotThresh, bool newline)
 			    int block = stoi(value, 0, 0);
 			    blockCount[block] += 1;
 			    priorBlocks.push_back(block);
-	    	    	    ///std::cout << "Just put the last block in priorBlocks.\n";
+	    	    	    //std::cout << "Just put the last block in priorBlocks.\n";
 			    if( priorBlocks.size() > (2 * radius + 1) )
 			    {
 				    priorBlocks.erase( priorBlocks.begin() );
@@ -172,7 +178,13 @@ void DetectKernels(char* sourceFile, float thresh, int hotThresh, bool newline)
 	{
 		notDone = false;
 	}
+	if( index % 100 == 0 )
+	{
+		std::cout << "Currently reading block " << index << " of " << blocks << ".\n";
+	}
+
 	//std::cout << "notDone is updated.\n";
+	std::cout << "index is " << index << ".\n";
     	for( auto elem : blockCount)
     	{
 		std::cout << elem.first << "\n";
@@ -185,104 +197,59 @@ void DetectKernels(char* sourceFile, float thresh, int hotThresh, bool newline)
 		*/
     	}
     } // while( notDone)
-
-}
-
-
-
-
-
-
-
-
 /*
-	    int l = 0;
-	    for( string line : split )
-	    {
-		    l++;
-		    if( line == split.back() && result.back() != '\n' )
-		    {
-			    result = line;
-		    }
-		    else
-		    {
-			    std::stringstream lineStream(line);
-			    string key, value;
-			    getline(lineStream, key, ':');
-			    getline(lineStream, value, ':');
-			    if( key == "BasicBlock" )
-			    {
-				    int block = stoi(value, 0, 0);
-				    blockCount[block]+=1;
-				    lastBlock = block;
-				    if( currentKernel == "-1" || kernelMap[currentKernel].find(block) == kernelMap[currentKernel].end() )
-				    {
-					    // we aren't in the same kernel as last iteration
-					    string innerKernel = "-1";
-					    for( auto k : kernelMap )
-					    {
-						    if( k.second.find(block) != k.second.end() )
-						    {
-							    // we have a matching kernel
-							    innerKernel = k.first;
-							    break;
-						    }
-					    }
-					    currentKernel = innerKernel;
-					    if( innerKernel != "-1" )
-					    {
-						    currentUid = UID;
-						    kernelIdMap[UID++] = currentKernel;
-					    }
-				    }
-				    basicBlocks.push_back(block);
-			    }
-			    else if( key == "LoadAddress" );
-			    {
-				    uint64_t address = stoul( value, 0, 0 );
-				    int prodUid = writeMap[address];
-				    
-
-	}
-		//notDone = (ret != Z_STREAM_END);
-		notDone = true;
-    }
-    */
-	/* input verification
-    for( std::vector<std::string>::iterator it = fileList.begin(); it != fileList.end(); it++ )
+    // assign to every index of every list value in blockMap a normalized amount
+    std::vector< std::set<int> > kernels;
+    for( auto key : blockMap )
     {
-	for( int i = 0; i < BLOCK_SIZE; i++ )
-	{
-		std::cout << it[i];
-	}
+	    int total = 0;
+	    for( auto sub : blockMap[key] )
+	    {
+		    total+= blockMap[key][sub];
+	    }
+	    for( auto sub : blockMap[key] )
+	    {
+		    blockMap[key][sub] = (float)blockMap[key][sub] / (float)total;
+	    }
     }
-		
-		
+
+    std::set<int> covered;
+    std::map <int, int> sBlockCount;
+    for( auto it = blockCount.begin(); it != blockCount.end(); it++ )
+    {
+	    if( (*it).second.first > hotThresh )
+	    {
+		    if( covered.find( (*it).first ) )
+		    {
+			    float sum = 0.0;
+			    std::vector<int> values = blockMap[block];
+			    sort( values.begin(), values.end() );
+			    std::set kernel;
+			    while( sum < thresh )
+			    {
+				    int entry = values.front();
+				    covered.insert( entry );
+				    values.remove( values.front() );
+				    sum += entry.find(1);
+				    kernel.insert( entry.front() );
+			    }
+			    kernels.insert( kernel );
+		    } // if covered
+	    } // if > hotThresh
+	    else
+	    {
+		    break;
+	    }
+    } // for it in blockCount
+
+    for( auto it = kernels.begin(); it != kernels.end(); it++ )
+    {
+	    if( !result.find(it) )
+	    {
+		    result.insert(it);
+	    }
+    }
+*/
 }
 
-    */
 
-/*
-	// loop until we have covered every basic block
-	while( true )
-	{
-		std::vector <std::string> lines;
-		while( std::getline(stream,line) )
-		{
-			lines.push_back(line);
-		}
-
-		// split line by ;
-		std::vector<std::string>::iterator line;
-		for( line = lines.begin(); line != lines.end(); line++)
-		{
-			if( line == lines.begin() )
-			{
-				line = priorLine + line;
-			}
-		}
-	}
-		
-	*/	
-
-	
