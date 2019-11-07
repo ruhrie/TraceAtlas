@@ -1,12 +1,12 @@
 #include "Kernel.h"
+#include "Util.h"
 #include <algorithm>
-#include <llvm/IR/Instructions.h>
+#include <iostream>
 #include <llvm/IR/CFG.h>
-#include <llvm/IR/Type.h>
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/IRBuilder.h>
-#include <iostream>
-#include "Util.h"
+#include <llvm/IR/Instructions.h>
+#include <llvm/IR/Type.h>
 using namespace llvm;
 using namespace std;
 
@@ -38,17 +38,18 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
         }
     }
 
-    //get conditional logic
-    GetLoopInsts(blocks);
-    
     //now get the actual body
     GetBodyInsts(blocks);
 
-    GetInitInsts(blocks);    
+    //get conditional logic
+    GetLoopInsts(blocks);
+
+    //to be removed
+    GetInitInsts(blocks);
 
     //now get the memory array
     GetMemoryFunctions(baseModule);
-    
+
     //finally remap everything
     Remap();
 }
@@ -142,7 +143,11 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
         for (auto user : check->users())
         {
             Instruction *usr = cast<Instruction>(user);
-            if (find(result.begin(), result.end(), usr) == result.end() && result.size())
+            bool found = false;
+            for (auto i : result)
+                if (i->isIdenticalTo(usr))
+                    found = true;
+            if (!found && result.size()) //we haven't already done it
             {
                 if (BranchInst *br = dyn_cast<BranchInst>(usr))
                 {
@@ -156,6 +161,8 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
         if (elegible)
         {
             result.push_back(check);
+            //Instruction *ret = cast<Instruction>(VMap[check]);
+            //ret->removeFromParent();
             //if we are elegible we can then check all ops
             int opCount = check->getNumOperands();
             for (int i = 0; i < opCount; i++)
@@ -176,13 +183,61 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
     {
         Instruction *cl = cond->clone();
         VMap[cond] = cl;
+        cond->eraseFromParent();
         condList->push_back(cl);
     }
 }
 
+vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<BasicBlock *> validBlocks, vector<Instruction *> currentSet)
+{
+    for (BasicBlock::iterator BI = start->begin(), BE = start->end(); BI != BE; ++BI)
+    {
+        Instruction *inst = cast<Instruction>(BI);
+        if (!inst->isTerminator())
+        {
+            Instruction *cl = inst->clone();
+            VMap[inst] = cl;
+            currentSet.push_back(cl);
+        }
+    }
+    Instruction *term = start->getTerminator();
+    unsigned int succCount = term->getNumSuccessors();
+    unsigned int validSuccessors = 0;
+    for (int i = 0; i < succCount; i++)
+    {
+        if (find(validBlocks.begin(), validBlocks.end(), term->getSuccessor(i)) != validBlocks.end())
+        {
+            validSuccessors++;
+        }
+    }
+    vector<Instruction *> result;
+    if (validSuccessors > 1)
+    {
+        //we have a branch
+    }
+    else
+    {
+        //only one successor
+        BasicBlock *succ = term->getSuccessor(0);
+        vector<BasicBlock *> trimmed = validBlocks;
+        trimmed.erase(remove(trimmed.begin(), trimmed.end(), start), trimmed.end());
+
+        if (find(validBlocks.begin(), validBlocks.end(), succ) != validBlocks.end())
+        {
+            return getInstructionPath(succ, trimmed, currentSet);
+        }
+        else
+        {
+            //this is the end
+            return currentSet;
+        }
+    }
+    return result;
+}
+
 void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
 {
-    std::vector<Instruction*> result;
+    std::vector<Instruction *> result;
     vector<BasicBlock *> entrances;
     for (BasicBlock *block : blocks)
     {
@@ -200,76 +255,11 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
     //this code won't support loops/internal kernels initially
     //!! I'm serious
     BasicBlock *currentBlock = entrances[0];
-    vector<BasicBlock *> exploredBlocks;
-    while (true)
-    {
-        exploredBlocks.push_back(currentBlock);
-        for (BasicBlock::iterator bi = currentBlock->begin(), be = currentBlock->end(); bi != be; bi++)
-        {
-            Instruction *inst = cast<Instruction>(bi);
-            if (inst->isTerminator())
-            {
-                //we should ignore for the time being
-            }
-            else
-            {
-                //we now check if the instruction is already present
-                if (VMap.find(inst) == VMap.end())
-                {
-                    Instruction *cl = inst->clone();
-                    VMap[inst] = cl;
-                    result.push_back(cl);
-                }
-            }
-        }
-        Instruction *term = currentBlock->getTerminator();
-        if (BranchInst *brInst = dyn_cast<BranchInst>(term))
-        {
-            if (brInst->isConditional())
-            {
-                bool explored = true;
-                //this indicates either the exit or a for loop within the code
-                //aka a kernel or something to unroll
-                int sucNum = brInst->getNumSuccessors();
-                for (int i = 0; i < sucNum; i++)
-                {
-                    BasicBlock *succ = brInst->getSuccessor(i);
-                    if (find(blocks.begin(), blocks.end(), succ) != blocks.end())
-                    {
-                        //this is a branch to a kernel block
-                        if (find(exploredBlocks.begin(), exploredBlocks.end(), succ) == exploredBlocks.end())
-                        {
-                            //and we haven't explored it yet
-                            explored = false;
-                            currentBlock = succ;
-                        }
-                    }
-                }
-                if (explored)
-                {
-                    break;
-                }
-            }
-            else
-            {
-                BasicBlock *succ = brInst->getSuccessor(0);
-                if (find(exploredBlocks.begin(), exploredBlocks.end(), succ) == exploredBlocks.end())
-                {
-                    currentBlock = succ;
-                }
-                else
-                {
-                    break;
-                }
-            }
-        }
-        else
-        {
-            throw 2;
-        }
-    }
+
+    auto asdf = getInstructionPath(currentBlock, blocks);
+
     auto instList = &Body->getInstList();
-    for (Instruction *i : result)
+    for (Instruction *i : asdf)
     {
         instList->push_back(i);
     }
@@ -277,29 +267,29 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
 
 void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
 {
-    std::vector<Instruction*> toAdd;
-    
+    std::set<Instruction *> toAdd;
+
     for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
     {
         Instruction *inst = cast<Instruction>(BI);
         int numOps = inst->getNumOperands();
-        for(int i = 0; i < numOps; i++)
+        for (int i = 0; i < numOps; i++)
         {
             Value *op = inst->getOperand(i);
-            if(Instruction *operand = dyn_cast<Instruction>(op))
+            if (Instruction *operand = dyn_cast<Instruction>(op))
             {
                 BasicBlock *parentBlock = operand->getParent();
-                if(std::find(blocks.begin(), blocks.end(), parentBlock) == blocks.end())
+                if (std::find(blocks.begin(), blocks.end(), parentBlock) == blocks.end())
                 {
-                    if(find(toAdd.begin(), toAdd.end(), operand) == toAdd.end())
+                    if (find(toAdd.begin(), toAdd.end(), operand) == toAdd.end())
                     {
-                        toAdd.push_back(operand);
+                        toAdd.insert(operand);
                     }
                 }
-            }            
+            }
         }
     }
-    
+
     auto initList = &Init->getInstList();
     for (auto init : toAdd)
     {
@@ -347,8 +337,8 @@ void Kernel::GetMemoryFunctions(Module *m)
     BasicBlock *loadBlock = BasicBlock::Create(m->getContext(), "entry", MemoryRead);
     IRBuilder<> loadBuilder(loadBlock);
     Value *priorValue = NULL;
-    map<Value*, Value*> loadMap;
-    map<Value*, Value*> storeMap;
+    map<Value *, Value *> loadMap;
+    map<Value *, Value *> storeMap;
     if (loadValues.size() > 1)
     {
         for (Value *lVal : loadValues)
@@ -407,7 +397,7 @@ void Kernel::GetMemoryFunctions(Module *m)
     }
     Instruction *storeRet = cast<ReturnInst>(storeBuilder.CreateRet(priorValue));
 
-    vector<Instruction*> toRemove;
+    vector<Instruction *> toRemove;
     for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
     {
         Instruction *inst = cast<Instruction>(BI);
@@ -429,7 +419,7 @@ void Kernel::GetMemoryFunctions(Module *m)
             toRemove.push_back(newInst);
         }
     }
-    for(auto inst : toRemove)
+    for (auto inst : toRemove)
     {
         inst->removeFromParent();
     }
