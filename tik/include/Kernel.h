@@ -22,4 +22,5 @@ private:
     void GetInitInsts(std::vector<llvm::BasicBlock *> blocks);
     void GetMemoryFunctions(llvm::Module *m);
     std::vector<llvm::Instruction *> getInstructionPath(llvm::BasicBlock *start, std::vector<llvm::BasicBlock *> validBlocks, std::vector<llvm::Instruction *> currentSet = {});
+    llvm::BasicBlock *getPathMerge(llvm::BasicBlock *start);
 };

@@ -70,6 +70,56 @@ Kernel::~Kernel()
     delete baseModule;
 }
 
+llvm::BasicBlock *Kernel::getPathMerge(llvm::BasicBlock *start)
+{
+    Instruction *term = start->getTerminator();
+    unsigned int pathCount = term->getNumSuccessors();
+    vector<BasicBlock *> currentBlocks(pathCount);
+    vector<set<BasicBlock *>> exploredBlocks(pathCount);
+    for (int i = 0; i < pathCount; i++)
+    {
+        currentBlocks[i] = term->getSuccessor(i);
+    }
+    BasicBlock *exit;
+    int k = 0;
+    while (k < 10000)
+    {
+        bool done = false;
+        for (int i = 0; i < currentBlocks.size(); i++)
+        {
+            Instruction *newTerm = currentBlocks[i]->getTerminator();
+            unsigned int subCount = newTerm->getNumSuccessors();
+            if (subCount > 1)
+            {
+            }
+            else
+            {
+                BasicBlock *newSuc = newTerm->getSuccessor(0);
+                exploredBlocks[i].insert(newSuc);
+                currentBlocks[i] = newSuc;
+            }
+        }
+        for (int i = 0; i < pathCount; i++)
+        {
+            BasicBlock *toComp = currentBlocks[i];
+            bool missing = false;
+            for (int j = 0; j < pathCount; j++)
+            {
+                if (exploredBlocks[i].find(toComp) == exploredBlocks[i].end())
+                {
+                    missing = true;
+                    break;
+                }
+            }
+            if (!missing)
+            {
+                return toComp;
+            }
+        }
+    }
+    throw 2;
+}
+
 void Kernel::Remap()
 {
     for (Module::iterator F = baseModule->begin(), E = baseModule->end(); F != E; ++F)
