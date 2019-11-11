@@ -25,6 +25,9 @@ private:
     void GetLoopInsts(std::vector<llvm::BasicBlock *> blocks);
     void GetBodyInsts(std::vector<llvm::BasicBlock *> blocks);
     void GetInitInsts(std::vector<llvm::BasicBlock *> blocks);
-    void GetExits(std::vector<llvm::BasicBlock *> blocks);
     void GetMemoryFunctions();
+    std::vector<llvm::Instruction *> getInstructionPath(llvm::BasicBlock *start, std::vector<llvm::BasicBlock *> validBlocks, std::vector<llvm::Instruction *> currentSet = {});
+    llvm::BasicBlock *getPathMerge(llvm::BasicBlock *start);
+    std::vector<llvm::Instruction *> GetPathInstructions(llvm::BasicBlock *start, llvm::BasicBlock *end);
+    void GetExits(std::vector<llvm::BasicBlock *> blocks);
 };
