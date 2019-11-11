@@ -1,0 +1,3 @@
+
+in = open('outfile.txt')
+
