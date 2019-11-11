@@ -70,8 +70,9 @@ Kernel::~Kernel()
     delete baseModule;
 }
 
-llvm::BasicBlock *Kernel::getPathMerge(llvm::BasicBlock *start)
+BasicBlock *Kernel::getPathMerge(llvm::BasicBlock *start)
 {
+    vector<BasicBlock *> result;
     Instruction *term = start->getTerminator();
     unsigned int pathCount = term->getNumSuccessors();
     vector<BasicBlock *> currentBlocks(pathCount);
@@ -81,16 +82,18 @@ llvm::BasicBlock *Kernel::getPathMerge(llvm::BasicBlock *start)
         currentBlocks[i] = term->getSuccessor(i);
     }
     BasicBlock *exit;
-    int k = 0;
-    while (k < 10000)
+    bool done = false;
+    while (!done)
     {
-        bool done = false;
+
         for (int i = 0; i < currentBlocks.size(); i++)
         {
             Instruction *newTerm = currentBlocks[i]->getTerminator();
             unsigned int subCount = newTerm->getNumSuccessors();
             if (subCount > 1)
             {
+                throw 2;
+                cout << "hi";
             }
             else
             {
@@ -113,11 +116,73 @@ llvm::BasicBlock *Kernel::getPathMerge(llvm::BasicBlock *start)
             }
             if (!missing)
             {
-                return toComp;
+                exit = toComp;
+                done = true;
             }
         }
     }
-    throw 2;
+
+    return exit;
+}
+
+vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock *end)
+{
+    //we now know the merge point so we will add all instructions to the result
+    //if it is a load we need to delay adding it till the end
+    //if we find another conditional we must recurse
+    vector<Instruction *> result;
+    BasicBlock * currentBlock;
+    Instruction *term = start->getTerminator();
+    unsigned int pathCount = term->getNumSuccessors();
+    vector<BasicBlock *> currentBlocks(pathCount);
+    map<int, vector<StoreInst *>> stores;
+    for (int i = 0; i < pathCount; i++)
+    {
+        currentBlocks[i] = term->getSuccessor(i);
+    }
+    bool done = false;
+    while (!done)
+    {
+        done = true;
+        for (int i = 0; i < currentBlocks.size(); i++)
+        {
+            currentBlock = currentBlocks[i];
+            if (currentBlock != end)
+            {
+                for (BasicBlock::iterator BI = currentBlock->begin(), BE = currentBlock->end(); BI != BE; ++BI)
+                {
+                    Instruction *inst = cast<Instruction>(BI);
+                    if(StoreInst *lInst = dyn_cast<StoreInst>(inst))
+                    {
+                        //a load we need to buffer
+                        stores[i].push_back(lInst);
+                    }
+                    else if(!inst->isTerminator())
+                    {
+                        //the general case
+                        result.push_back(inst);
+                    }
+                }
+                Instruction *newTerm = currentBlock->getTerminator();
+                unsigned int subCount = newTerm->getNumSuccessors();
+                if (subCount > 1)
+                {
+                    throw 2;
+                    cout << "hi";
+                }
+                else
+                {
+                    BasicBlock *newSuc = newTerm->getSuccessor(0);
+                    currentBlocks[i] = newSuc;
+                }
+            }
+        }
+    }
+    for(auto a : result)
+    {
+        PrintVal(a);
+    }
+    return result;
 }
 
 void Kernel::Remap()
@@ -263,6 +328,12 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
     vector<Instruction *> result;
     if (validSuccessors > 1)
     {
+        PrintVal(start);
+        auto mergePoint = getPathMerge(start);
+        auto mergeInsts = GetPathInstructions(start, mergePoint);
+        //PrintVal(mergePoint);
+
+        throw 2;
         //we have a branch
     }
     else
