@@ -30,14 +30,19 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
     vector<BasicBlock *> blocks;
     for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
     {
-        for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
+        Function *f = cast<Function>(F);
+        string fName = f->getName();
+        if (fName.rfind("tempFunction") != 0)
         {
-            BasicBlock *b = cast<BasicBlock>(BB);
-            string blockName = b->getName();
-            uint64_t id = std::stoul(blockName.substr(7));
-            if (find(basicBlocks.begin(), basicBlocks.end(), id) != basicBlocks.end())
+            for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
             {
-                blocks.push_back(b);
+                BasicBlock *b = cast<BasicBlock>(BB);
+                string blockName = b->getName();
+                uint64_t id = std::stoul(blockName.substr(7));
+                if (find(basicBlocks.begin(), basicBlocks.end(), id) != basicBlocks.end())
+                {
+                    blocks.push_back(b);
+                }
             }
         }
     }
@@ -166,7 +171,7 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
     BasicBlock *currentBlock;
     Instruction *term = start->getTerminator();
     Value *branchCondition = NULL;
-    if(BranchInst *brTerm = dyn_cast<BranchInst>(term))
+    if (BranchInst *brTerm = dyn_cast<BranchInst>(term))
     {
         branchCondition = brTerm->getCondition();
     }
@@ -174,7 +179,7 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
     {
         throw 2;
     }
-    
+
     unsigned int pathCount = term->getNumSuccessors();
     vector<BasicBlock *> currentBlocks(pathCount);
     map<int, vector<StoreInst *>> stores;
@@ -222,7 +227,7 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
     }
     Module *m = start->getModule();
     FunctionType *ft = FunctionType::get(Type::getVoidTy(m->getContext()), Type::getVoidTy(m->getContext()), false);
-    Function *tempFunction = Function::Create(ft, GlobalValue::LinkageTypes::InternalLinkage, "", m);
+    Function *tempFunction = Function::Create(ft, GlobalValue::LinkageTypes::InternalLinkage, "tempFunction", m);
     BasicBlock *tempBlock = BasicBlock::Create(start->getContext(), "asdf", tempFunction);
     IRBuilder<> tempBuilder(tempBlock);
     vector<StoreInst *> handledStores;
@@ -258,7 +263,7 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
                     {
                         //we never found a match so we create a load instead
                         valsToSelect.push_back(lInst);
-                        if(!loadUsed)
+                        if (!loadUsed)
                         {
                             loadUsed = true;
                             result.push_back(lInst);
@@ -437,13 +442,12 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
     vector<Instruction *> result;
     if (validSuccessors > 1)
     {
-        PrintVal(start);
+        //we have a branch
         auto mergePoint = getPathMerge(start);
         auto mergeInsts = GetPathInstructions(start, mergePoint);
-        PrintVal(mergePoint);
-
-        throw 2;
-        //we have a branch
+        auto subPath = getInstructionPath(mergePoint, validBlocks, currentSet);
+        mergeInsts.insert(mergeInsts.end(), subPath.begin(), subPath.end());
+        return mergeInsts;
     }
     else
     {
