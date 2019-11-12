@@ -163,8 +163,18 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
     //if it is a load we need to delay adding it till the end
     //if we find another conditional we must recurse
     vector<Instruction *> result;
-    BasicBlock * currentBlock;
+    BasicBlock *currentBlock;
     Instruction *term = start->getTerminator();
+    Value *branchCondition = NULL;
+    if(BranchInst *brTerm = dyn_cast<BranchInst>(term))
+    {
+        branchCondition = brTerm->getCondition();
+    }
+    else
+    {
+        throw 2;
+    }
+    
     unsigned int pathCount = term->getNumSuccessors();
     vector<BasicBlock *> currentBlocks(pathCount);
     map<int, vector<StoreInst *>> stores;
@@ -184,12 +194,12 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
                 for (BasicBlock::iterator BI = currentBlock->begin(), BE = currentBlock->end(); BI != BE; ++BI)
                 {
                     Instruction *inst = cast<Instruction>(BI);
-                    if(StoreInst *lInst = dyn_cast<StoreInst>(inst))
+                    if (StoreInst *lInst = dyn_cast<StoreInst>(inst))
                     {
                         //a load we need to buffer
                         stores[i].push_back(lInst);
                     }
-                    else if(!inst->isTerminator())
+                    else if (!inst->isTerminator())
                     {
                         //the general case
                         result.push_back(inst);
@@ -210,9 +220,79 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
             }
         }
     }
-    for(auto a : result)
+    Module *m = start->getModule();
+    FunctionType *ft = FunctionType::get(Type::getVoidTy(m->getContext()), Type::getVoidTy(m->getContext()), false);
+    Function *tempFunction = Function::Create(ft, GlobalValue::LinkageTypes::InternalLinkage, "", m);
+    BasicBlock *tempBlock = BasicBlock::Create(start->getContext(), "asdf", tempFunction);
+    IRBuilder<> tempBuilder(tempBlock);
+    vector<StoreInst *> handledStores;
+    for (auto pair : stores)
     {
-        PrintVal(a);
+        auto storeVec = pair.second;
+        for (auto store : storeVec)
+        {
+            //we need to create this store somehow
+            //first check if it exists in the others, if so use it otherwise create a load
+            if (find(handledStores.begin(), handledStores.end(), store) == handledStores.end())
+            {
+                //not already handled so get check if there are others
+                vector<Value *> valsToSelect;
+                auto ptr = store->getPointerOperand();
+                LoadInst *lInst = tempBuilder.CreateLoad(ptr);
+                bool loadUsed = false;
+
+                for (auto p2 : stores)
+                {
+                    StoreInst *asdf = NULL;
+                    //check each entry of the dictionary
+                    for (auto i : p2.second)
+                    {
+                        auto ptr2 = i->getPointerOperand();
+                        if (ptr2 == ptr) //these are writing to the same address (ideally a better check will exist)
+                        {
+                            asdf = i;
+                            break;
+                        }
+                    }
+                    if (asdf == NULL)
+                    {
+                        //we never found a match so we create a load instead
+                        valsToSelect.push_back(lInst);
+                        if(!loadUsed)
+                        {
+                            loadUsed = true;
+                            result.push_back(lInst);
+                        }
+                    }
+                    else
+                    {
+                        valsToSelect.push_back(asdf->getValueOperand());
+                        handledStores.push_back(asdf);
+                    }
+                }
+                //now that we have the values, create the select tree
+
+                Value *priorValue = NULL;
+                int i = 0;
+                for (auto v : valsToSelect)
+                {
+                    Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
+                    if (priorValue != NULL)
+                    {
+                        //this will need to be expanded for switch instructions
+                        SelectInst *sInst = cast<SelectInst>(tempBuilder.CreateSelect(branchCondition, v, priorValue));
+                        priorValue = sInst;
+                        result.push_back(sInst);
+                    }
+                    else
+                    {
+                        priorValue = v;
+                    }
+                }
+                auto finStore = tempBuilder.CreateStore(priorValue, ptr);
+                result.push_back(finStore);
+            }
+        }
     }
     return result;
 }
