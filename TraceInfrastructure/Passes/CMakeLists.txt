@@ -1,4 +1,4 @@
-add_library(DashPasses MODULE Trace.cpp Annotate.cpp TraceIO.cpp CommandArgs.cpp PapiExport.cpp PapiIO.cpp Functions.cpp AddLibrary.cpp)
+add_library(DashPasses MODULE Trace.cpp TraceMem.cpp Annotate.cpp TraceMemIO.cpp TraceIO.cpp CommandArgs.cpp PapiExport.cpp PapiIO.cpp Functions.cpp AddLibrary.cpp)
 target_compile_definitions(DashPasses PRIVATE ${LLVM_DEFINITIONS})
 set_target_properties(DashPasses
     PROPERTIES
