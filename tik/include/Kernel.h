@@ -34,6 +34,7 @@ private:
     void GetExits(std::vector<llvm::BasicBlock *> blocks);
     void CreateExitBlock(void);
     void GetMemoryFunctions(void);
+    void AddInputArguments(void);
     void ConnectFunctions(void);
 
 };

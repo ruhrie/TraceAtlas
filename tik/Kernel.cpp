@@ -3,12 +3,15 @@
 #include "Util.h"
 #include <algorithm>
 #include <iostream>
+#include <vector>
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Type.h>
+#include <llvm/IR/Function.h>
 #include <llvm/Transforms/Utils/Cloning.h>
+#include <llvm/ADT/SmallVector.h>
 
 using namespace llvm;
 using namespace std;
@@ -65,6 +68,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
     // connect Init->Loop->Body with branches
     ConnectFunctions();
 
+   AddInputArguments();
     //remap everything so that our values resolved
     Remap();
 
@@ -115,51 +119,8 @@ Kernel::~Kernel()
 }
 
 void Kernel::Remap()
-{
+{ 
 
-    // first, go through all the variables in this function and get all my input arguments required (thats above)
-    // second, create a new function for the entire tik representation, with the proper inputs to initialize each global
-    std::vector< llvm::Type* > inputArgs;
-    for( auto inst : toAdd )
-    {
-        inputArgs.push_back( inst->getType() );
-    }
-
-    // third, add all other basic blocks to this function
-    FunctionType *funcType = FunctionType::get(Type::getInt32Ty(TikModule->getContext()), inputArgs, false);
-    llvm::Function* newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName()+"_Reformatted", TikModule);
-    //for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)    
-    //{
-//        llvm::BasicBlock* newBlock = llvm::CloneFunctionInto(newFunc, KernelFunction, cast<llvm::BasicBlock>(BB), VMap, "" );
-        //llvm::CloneFunctionInto(newFunc, KernelFunction, VMap, false, < );
-        //std::string BBname = BB->getName();
-        /*if( BBname == "Loop" ) // Conditional Block
-        {
-            Conditional = newBlock;
-        }
-        else if( BBname == "Init" ) // Init Block
-        {
-            Init = newBlock;
-        } 
-        else if( BBname == "Body" ) // Body Block
-        {
-            Body = newBlock;
-        } 
-        else if( BBname == "Exit" ) // Exit Block
-        {
-            Exit = newBlock;
-        }
-        else
-        {
-            throw 2;
-        } =             
-    }*/
-
-    // erase the old function
-    //KernelFunction->eraseFromParent();
-    KernelFunction = newFunc;
-    
-    // fourth, store the input arguments to my globals
 
     for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)
     {
@@ -169,6 +130,254 @@ void Kernel::Remap()
             RemapInstruction(inst, VMap, llvm::RF_None);
         }
     }
+}
+
+void Kernel::AddInputArguments(void)
+{
+    // fourth, find the global pointers to store the input args into
+    // for each global variable not used in the body function, but is used in the mem functions, those need to be initialized by input args
+    // 1.) make a list of all load/store instructions in the kernel function, mread and mwrite
+    // 2.) for each load instruction in mread/mwrite
+    //       for each store instruction in body
+    //          if the pointer operand in an mread/mwrite loadInst is found in a body storeInst, remove it from the list and break
+    // Now we have our list of globals to store input args into
+
+    // first, go through all the variables in this function and get all my input arguments required (thats above)
+    // second, create a new function for the entire tik representation, with the proper inputs to initialize each global
+    std::vector< llvm::Type* > inputArgs;
+    for( auto inst : toAdd )
+    {
+        inputArgs.push_back( inst->getType() );
+    }
+    FunctionType *funcType = FunctionType::get(Type::getInt32Ty(TikModule->getContext()), inputArgs, false);
+    llvm::Function* newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName()+"_Reformatted", TikModule);
+    
+    // third, clone the old function into the new one
+    SmallVector< ReturnInst*, 10 > retinstlist;
+    llvm::CloneFunctionInto(newFunc, KernelFunction, VMap, false, retinstlist );
+
+    // remove the old function from the parent but do not erase it
+    //KernelFunction->removeFromParent();
+    //std::cout << (newFunc->getParent()->getName() == KernelFunction->getParent()->getName()) << std::endl;
+    KernelFunction = newFunc;
+
+
+    //std::vector< std::pair< llvm::Value*, llvm::GlobalValue*> > inputArg;
+    // 1.)
+    std::vector< llvm::LoadInst* > MfuncLoads;
+    std::vector< llvm::StoreInst* >BfuncStores;
+    for( Function::iterator KF = KernelFunction->begin(), KFE = KernelFunction->end(); KF != KFE; KF++ )
+    {
+        BasicBlock* block = cast<BasicBlock>(KF);
+        for( BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; BI++ )
+        {
+            Instruction* bStore = cast<Instruction>(BI);
+            if( StoreInst* sInst = dyn_cast<StoreInst>(bStore) )
+            {
+                BfuncStores.push_back(sInst);
+            }
+        }
+    }
+    //PrintVal( dyn_cast<LoadInst>(cast<Instruction>(MemoryRead->begin()->begin())) );
+    for( Function::iterator MRB = MemoryRead->begin(), MRE = MemoryRead->end(); MRB != MRE; MRB++ )
+    {
+        BasicBlock* block = cast<BasicBlock>(MRB);
+        for( BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; BI++ )
+        {
+            Instruction* mLoad = cast<Instruction>(BI);
+            if( LoadInst* lInst = dyn_cast<LoadInst>(mLoad) )
+            {
+                if( std::find( MfuncLoads.begin(), MfuncLoads.end(), lInst) == MfuncLoads.end() )
+                {
+
+                    MfuncLoads.push_back(lInst);
+                }
+            }
+        }
+    }
+    for( Function::iterator MWB = MemoryWrite->begin(), MWE = MemoryWrite->end(); MWB != MWE; MWB++ )
+    {
+        BasicBlock* block = cast<BasicBlock>(MWB);
+        for( BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; BI++ )
+        {
+            Instruction* mLoad = cast<Instruction>(BI);
+            if( LoadInst* lInst = dyn_cast<LoadInst>(mLoad) )
+            {
+                if( std::find( MfuncLoads.begin(), MfuncLoads.end(), lInst) == MfuncLoads.end() )
+                {                
+                    MfuncLoads.push_back(lInst);
+                }
+            }
+        }
+    }
+    /*for( auto i : BfuncStores )
+    {
+        PrintVal(i);
+    }
+    for( auto i : MfuncLoads)
+    {
+        PrintVal(i);
+    }*/
+
+    // 2.)
+    // First, make lists of all load and store instructions to be removed
+    std::vector< llvm::StoreInst* > toRemoveB;
+    std::vector< llvm::LoadInst* > toRemove;
+    for( auto bStore : BfuncStores )
+    {
+        for( int i = 0; i < MfuncLoads.size(); i++ )// mLoad : MfuncLoads )
+        {
+            if( bStore->getPointerOperand() == MfuncLoads[i]->getPointerOperand() )
+            {
+                toRemoveB.push_back( bStore );
+                toRemove.push_back( MfuncLoads[i] );
+            }
+            for( int j = i+1; j < MfuncLoads.size(); j++ )// remove : MfuncLoads )
+            {
+                if( MfuncLoads[j]->getPointerOperand() == MfuncLoads[i]->getPointerOperand() )
+                {
+                    if( std::find( toRemove.begin(), toRemove.end(), MfuncLoads[j] ) == toRemove.end() )
+                    {
+                        //std::cout << "removing duplicate..." << std::endl;
+                        //PrintVal( MfuncLoads[j]->getPointerOperand());
+                        toRemove.push_back( MfuncLoads[j] );
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Second, delete the ones that don't belong
+    for( int i = 0; i < toRemove.size(); i++)//auto lInst : toRemove)
+    {
+        MfuncLoads.erase( std::find( MfuncLoads.begin(), MfuncLoads.end(), toRemove[i] ) );
+    }
+    for( int i = 0; i < toRemoveB.size(); i++ )
+    {
+        BfuncStores.erase( std::find( BfuncStores.begin(), BfuncStores.end(), toRemoveB[i] ) );
+    }
+    /*for( auto i : BfuncStores )
+    {
+        PrintVal(i);
+    }
+    for( auto i : MfuncLoads)
+    {
+        PrintVal(i);
+    }*/
+
+    // fifth, store the input arguments to my globals
+    llvm::BasicBlock* newInit = NULL;
+    for( iplist<BasicBlock>::iterator block = KernelFunction->getBasicBlockList().begin(); block != KernelFunction->getBasicBlockList().end(); block++ )
+    {
+        if( block->getName() == "Init")
+        {
+            newInit = block->getSingleSuccessor()->getSinglePredecessor();//->getBlock();  //std::find( KernelFunction->getBasicBlockList().begin(), KernelFunction->getBasicBlockList().end(), block );
+            break;
+        }
+    }
+
+    std::vector< llvm::StoreInst* > newStores;
+    auto initList = &newInit->getInstList();
+    for( int i = 0; i < MfuncLoads.size(); i++ )
+    {
+        for( auto inarg = KernelFunction->arg_begin(), inargE = KernelFunction->arg_end(); inarg != inargE; inarg++ )
+        {
+            if( inarg->getType() == MfuncLoads[i]->getType() )
+            {
+                // we have a candidate. now check if we have already assigned this arg
+                bool taken = false;
+                for( auto sInst : newStores )//std::find( newStores.begin(), newStores.end(), dyn_cast<StoreInst>(inarg) ) == newStores.end() )
+                {
+                    if( sInst->getValueOperand() == inarg)
+                    {
+                        taken=true;
+                    }
+                }
+                if( !taken )
+                {
+                    IRBuilder<> builder( Init );//i->getNextNode() );
+                    //Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
+                    // now store the input arg in our global pointer
+                    //PrintVal(MfuncLoads[i]);
+                    auto b = builder.CreateStore( inarg, MfuncLoads[i]->getPointerOperand() );
+                    newStores.push_back(b);
+                    //PrintVal(b);
+                    // add it to the instruction list of Init
+                    //initList->push_front(b);
+                    break;
+                }
+            }
+        }
+    }
+
+    for( auto add : toAdd )
+    {
+        for( auto store : newStores )
+        {
+            //if( add->getPointerOperand() == store->getPointerOperand() )
+            //{
+                VMap[add] = store;
+                //break;
+            //}
+        }
+    }
+    std::cout << "Finished inargs." << std::endl;
+
+
+
+
+
+
+
+
+
+
+    // get a pointer to the instruction list for the Init function (declared globally on top)
+/*    auto initList = &Init->getInstList();
+    for (auto init : toAdd)
+    {
+        // find the global variable this instruction refers to
+        auto index = GlobalMap.find( init );
+        if( index == GlobalMap.end() )
+        {
+            llvm::Constant *globalInt = ConstantPointerNull::get( cast<PointerType>(init->getType()) );
+            llvm::GlobalVariable *g = new GlobalVariable(*TikModule, globalInt->getType(), false, llvm::GlobalValue::LinkageTypes::ExternalLinkage, globalInt);
+            GlobalMap[ init ] = g;
+            index = GlobalMap.find(init);
+        }
+        PrintVal(index->second);
+        Instruction *i = init->clone();
+        IRBuilder<> builder( Init );//i->getNextNode() );
+        Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
+        //PrintVal(a->getType());
+        // now store the input arg in our global pointer
+        auto b = builder.CreateStore(i, index->second);
+        VMap[init] = b;
+        // add it to the instruction list of Init
+        initList->push_back(b);
+        //initList->push_back(i);
+    }
+*/
+/*
+    // first, go through all the variables in this function and get all my input arguments required (thats above)
+    // second, create a new function for the entire tik representation, with the proper inputs to initialize each global
+    std::vector< llvm::Type* > inputArgs;
+    for( auto inst : toAdd )
+    {
+        inputArgs.push_back( inst->getType() );
+    }
+    FunctionType *funcType = FunctionType::get(Type::getInt32Ty(TikModule->getContext()), inputArgs, false);
+    llvm::Function* newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName()+"_Reformatted", TikModule);
+    
+    // third, clone the old function into the new one
+    SmallVector< ReturnInst*, 10 > retinstlist;
+    llvm::CloneFunctionInto(newFunc, KernelFunction, VMap, false, retinstlist );
+
+    // remove the old function from the parent but do not erase it
+    KernelFunction->removeFromParent();
+    //std::cout << (newFunc->getParent()->getName() == KernelFunction->getParent()->getName()) << std::endl;
+    KernelFunction = newFunc;*/
 }
 
 void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
@@ -403,6 +612,7 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
 void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
 {
     // I need to find all operands in the kernel that are not initialized in the kernel
+    // Then I need to make them globals and assign them to the input args
     // Operands are the values to the right of an instruction
 
     // for all instructions in a basic block
@@ -432,17 +642,49 @@ void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
         }
     }
 
-    // for each unresolved operand, add it to the init list where they will be initialized 
-    // get a pointer to the instruction list for the Init function (declared globally on top)
-    auto initList = &Init->getInstList();
-    for (auto init : toAdd)
+    for( auto init : toAdd )
     {
-        Instruction *i = init->clone();
-        VMap[init] = i;
-        // add it to the instruction list of Init
-        initList->push_back(i);
+        VMap[ init ] = init->clone();
     }
 
+    // for each unresolved operand, add it to the init list where they will be initialized 
+    // get a pointer to the instruction list for the Init function (declared globally on top)
+    /*auto initList = &Init->getInstList();
+    for (auto init : toAdd)
+    {
+        // find the global variable this instruction refers to
+        auto index = GlobalMap.find( init );
+        if( index == GlobalMap.end() )
+        {
+            llvm::Constant *globalInt = ConstantPointerNull::get( cast<PointerType>(init->getType()) );
+            llvm::GlobalVariable *g = new GlobalVariable(*TikModule, globalInt->getType(), false, llvm::GlobalValue::LinkageTypes::ExternalLinkage, globalInt);
+            GlobalMap[ init ] = g;
+            index = GlobalMap.find(init);
+        }
+        Instruction *i = init->clone();
+        IRBuilder<> builder( Init );//i->getNextNode() );
+        Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
+        PrintVal(i);
+        auto b = builder.CreateStore(i, index->second);
+        VMap[init] = b;
+        // add it to the instruction list of Init
+        initList->push_back(b);
+        //initList->push_back(i);
+    }*/
+/*
+    for( BasicBlock::iterator BI = Init->begin(), BE = Init->end(); BI != BE; ++BI )
+    {
+        // search each instruction for each key in GlobalMap
+        Instruction* inst = cast<Instruction>(BI);
+        IRBuilder<> builder( inst->getNextNode() );
+        Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
+        auto a = builder.CreateGEP( inst->getType(), GlobalMap[inst], constant );
+        //PrintVal(a->getType());
+        auto b = builder.CreateStore(inst, a);
+        //globalSet.insert(b);
+        //PrintVal(b);
+    }
+*/
 }
 
 void Kernel::GetMemoryFunctions()
@@ -499,10 +741,10 @@ void Kernel::GetMemoryFunctions()
     for (Value *lVal : loadValues)
     {
         // every time we make a pointer to an index, do the same thing to the global map
-        PrintVal(VMap[lVal]);
+        //PrintVal(VMap[lVal]);
         if( GlobalMap.find( VMap[lVal] ) == GlobalMap.end() )
         {
-            PrintVal(VMap[lVal]);
+            //PrintVal(VMap[lVal]);
             llvm::Constant *globalInt = ConstantPointerNull::get( cast<PointerType>(lVal->getType()) );
             llvm::GlobalVariable *g = new GlobalVariable(*TikModule, globalInt->getType(), false, llvm::GlobalValue::LinkageTypes::ExternalLinkage, globalInt);
             GlobalMap[ VMap[lVal] ] = g;
@@ -537,10 +779,10 @@ void Kernel::GetMemoryFunctions()
     priorValue = NULL;
     for (Value *lVal : storeValues)
     {
-        PrintVal(VMap[lVal]);
+        //PrintVal(VMap[lVal]);
         if( GlobalMap.find( VMap[lVal] ) == GlobalMap.end() )
         {
-            PrintVal(VMap[lVal]);
+            //PrintVal(VMap[lVal]);
             llvm::Constant *globalInt = ConstantPointerNull::get( cast<PointerType>(lVal->getType()) );
             llvm::GlobalVariable *g = new GlobalVariable(*TikModule, globalInt->getType(), false, llvm::GlobalValue::LinkageTypes::ExternalLinkage, globalInt);
             GlobalMap[ VMap[lVal] ] = g;
@@ -576,22 +818,15 @@ void Kernel::GetMemoryFunctions()
         //PrintVal(inst);
         if( GlobalMap.find( inst ) != GlobalMap.end() )
         {
-            IRBuilder<> builder(inst->getNextNode() );
+            IRBuilder<> builder( inst->getNextNode() );
             Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
             auto a = builder.CreateGEP( inst->getType(), GlobalMap[inst], constant );
             //PrintVal(a->getType());
             auto b = builder.CreateStore(inst, a);
             globalSet.insert(b);
             //PrintVal(b);
-        }
+        }  
     }
-    //PrintVal(Body); std::cout << "\n";
-
-    /*
-        for( auto key : GlobalMap )
-    {
-        //PrintVal(key.first); PrintVal(key.second); std::cout << "\n";
-    }*/
     
     // remove instructions not belonging to parent kernel
     vector<Instruction *> toRemove;
@@ -625,6 +860,8 @@ void Kernel::GetMemoryFunctions()
     {
         inst->removeFromParent();
     }
+
+    
 }
 
 void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
