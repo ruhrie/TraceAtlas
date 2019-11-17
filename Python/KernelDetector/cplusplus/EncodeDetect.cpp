@@ -22,15 +22,11 @@ std::ifstream::pos_type filesize(const char *filename)
 
 void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
 {
-    //std::cout << "Detecting type one Kernels.\n";
-    std::vector<int> result;
     int radius = 5;
-
     std::map<int, std::map<int, int>> blockMap;
     std::map<int, int> blockCount;
     std::ifstream::pos_type traceSize = filesize(sourceFile);
     int blocks = traceSize / BLOCK_SIZE + 1;
-    //std::cout << "Blocks in this trace is " << blocks << "\n";
 
     // now read the trace
     std::ifstream inputTrace;
@@ -67,11 +63,10 @@ void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
 
     std::vector<std::string> fileList;
     std::vector<int> priorBlocks;
-    //std::cout << "Starting trace parse.\n";
 	int c = 0;
+	bool seenFirst;
     while (notDone)
     {
-
         // read a block size of the trace
         inputTrace.readsome(dataArray, BLOCK_SIZE);
         strm.next_in = (Bytef *)dataArray;   // input data to z_lib for decompression
@@ -98,7 +93,7 @@ void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
 
         } // while(strm.avail_in != 0)
 
-		// split bufferString by \n's
+	
 		std::stringstream stringStream(bufferString);
 		std::vector<std::string> split;
 		std::string segment;
@@ -106,26 +101,17 @@ void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
 		while (std::getline(stringStream, segment, '\n'))
 		{
 			split.push_back(segment);
-			//std::cout << split.back() << "\n";
 		}
-		//std::cout << "Now we've split the vector.\n";
 
-		// Now parse the line into a dictionary with block as key and count as value
-		//std::cout << "printing split ...\n";
-
+		seenFirst = false;
 		for (std::string it : split)
 		{
-			//std::cout << it << "\n";
-			if (it == split.back() && bufferString.back() != '\n')
-			{
-				break;
-			}
 			auto pi = it;
-			if (it == split.front())
+			if (it == split.front() && !seenFirst)
 			{
 				it = priorLine + it;
+				seenFirst = true;
 			}
-			//std::cout << "Started parsing a line.\n";
 			// split it by the colon between the instruction and value
 			std::stringstream itstream(it);
 			std::vector<std::string> spl;
@@ -133,16 +119,10 @@ void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
 			{
 				spl.push_back(segment);
 			}
-			//std::cout << "Just split the line by its colon.\n";
+
 			std::string key = spl.front();
 			std::string value = spl.back();
-			/*if (spl.front() == "BasicBlock" && spl.back() == "0X4")
-			{
-				std::cout << "BB 4 was found in block " << index << " and its count is " << blockCount[block] << std::endl;
-			}*/
-			//std::cout << it << "\n";
-			//std::cout << key << "\n";
-			//std::cout << value << "\n";
+
 			if (key == value)
 			{
 				break;
@@ -150,35 +130,22 @@ void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
 			// If key is basic block, put it in our sorting dictionary
 			if (key == "BasicBlock")
 			{
-				//std::cout << "This line is a basic block.\n";
 				long int block = stoi(value, 0, 0);
-				if (block == 0)
-				{
-					//std::cout << block << " : " << value << "\n";
-				}
 				blockCount[block] += 1;
 				priorBlocks.push_back(block);
-				//std::cout << "Just put the last block in priorBlocks.\n";
+
 				if (priorBlocks.size() > (2 * radius + 1))
 				{
 					priorBlocks.erase(priorBlocks.begin());
 				}
-				if (spl.front() == "BasicBlock" && spl.back() == "0X4")
-				{
-					std::cout << "BB 4 was found in block " << index << " and its count is " << blockCount[block] << std::endl;
-				}
 				if (priorBlocks.size() > radius)
 				{
-					//std::cout << "Iterating block in blockMap.\n";
 					for( auto i : priorBlocks )
 					{
-						//std::cout << block << "," << i << "\n";
 						blockMap[block][i]++;
 					}
-					//std::cout << "Done iterating block.\n";
 				} // if priorBlocks.size > radius
-					//std::cout << "Just parsed the basic block.\n";
-			}     // if key == BasicBlock
+			}// if key == BasicBlock
 			else if (key == "TraceVersion")
 			{
 			}
@@ -204,27 +171,24 @@ void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
 		index++;
 
         notDone = (ret != Z_STREAM_END);
-		outfile << bufferString;
         if (index > blocks)
         {
             notDone = false;
         }
         if (index % 100 == 0)
         {
-            //std::cout << "Currently reading block " << index << " of " << blocks << ".\n";
+            std::cout << "Currently reading block " << index << " of " << blocks << ".\n";
         }
-    } // while( notDone)
+    } // while( notDone )
 
-    //std::cout << "notDone is updated.\n";
-    //std::cout << "index is " << index << ".\n";
+	std::cout << "About to output counts.\n";
     for (auto elem : blockCount)
     {
-        //std::cout << elem.first << " : " << elem.second << "\n";
+        std::cout << elem.first << " : " << elem.second << "\n";
     }
 
     // assign to every index of every list value in blockMap a normalized amount
     std::map<int, std::map<int, float>> fBlockMap;
-    std::vector<std::set<int>> kernels;
     for (auto &key : blockMap)
     {
         int total = 0;
@@ -256,28 +220,32 @@ void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
         std::cout << "\n";
     }*/
 
-    /*
+    
     std::set<int> covered;
+	std::vector<int> kernels;
     std::map <int, int> sBlockCount;
-    for( auto it = blockCount.begin(); it != blockCount.end(); it++ )
+    for( auto &it : blockCount )
     {
-	    if( (*it).second.first > hotThresh )
+	    if( it.second > hotThresh )
 	    {
-		    if( covered.find( (*it).first ) )
+		    if( covered.find( it.first ) != covered.end() )
 		    {
 			    float sum = 0.0;
-			    std::vector<int> values = blockMap[block];
+			    std::vector<float> values = fBlockMap.find( it.first );
 			    sort( values.begin(), values.end() );
-			    std::set kernel;
+			    std::set<float> kernel;
 			    while( sum < thresh )
 			    {
-				    int entry = values.front();
+				    float entry = values[1];
 				    covered.insert( entry );
-				    values.remove( values.front() );
-				    sum += entry.find(1);
-				    kernel.insert( entry.front() );
+				    std::remove( values.begin(), values.end(), entry );
+				    sum += entry;
+				    kernel.insert( entry );
 			    }
-			    kernels.insert( kernel );
+				for( entry : kernel)
+				{
+			    	kernels.push_back( entry );
+				}
 		    } // if covered
 	    } // if > hotThresh
 	    else
@@ -286,12 +254,12 @@ void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
 	    }
     } // for it in blockCount
 
-    for( auto it = kernels.begin(); it != kernels.end(); it++ )
+	std::vector< int > result;
+    for( auto it : kernels )
     {
-	    if( !result.find(it) )
+	    if( std::find( result.begin(), result.end(), it) == result.end() )
 	    {
 		    result.insert(it);
 	    }
     }
-*/
 }

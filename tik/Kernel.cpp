@@ -65,10 +65,11 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
 
     CreateExitBlock();
 
+    AddInputArguments();
+
     // connect Init->Loop->Body with branches
     ConnectFunctions();
 
-   AddInputArguments();
     //remap everything so that our values resolved
     Remap();
 
@@ -120,8 +121,6 @@ Kernel::~Kernel()
 
 void Kernel::Remap()
 { 
-
-
     for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)
     {
         for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
@@ -151,18 +150,22 @@ void Kernel::AddInputArguments(void)
     }
     FunctionType *funcType = FunctionType::get(Type::getInt32Ty(TikModule->getContext()), inputArgs, false);
     llvm::Function* newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName()+"_Reformatted", TikModule);
-    
-    // third, clone the old function into the new one
-    SmallVector< ReturnInst*, 10 > retinstlist;
+    std::cout << newFunc->getInstructionCount() << std::endl;
+
+    /*// third, clone the old function into the new one
+    SmallVector< ReturnInst*, 1 > retinstlist;
     llvm::CloneFunctionInto(newFunc, KernelFunction, VMap, false, retinstlist );
+*/
+    // clone each basic block and put them into the new function
+    newInit = CloneBasicBlock(Init, VMap, "", newFunc);
+    newBody = CloneBasicBlock(Body, VMap, "", newFunc);
+    newExit = CloneBasicBlock(Exit, VMap, "", newFunc);
+    newConditional = CloneBasicBlock(Conditional, VMap, "", newFunc);
 
     // remove the old function from the parent but do not erase it
-    //KernelFunction->removeFromParent();
-    //std::cout << (newFunc->getParent()->getName() == KernelFunction->getParent()->getName()) << std::endl;
+    KernelFunction->removeFromParent();
     KernelFunction = newFunc;
 
-
-    //std::vector< std::pair< llvm::Value*, llvm::GlobalValue*> > inputArg;
     // 1.)
     std::vector< llvm::LoadInst* > MfuncLoads;
     std::vector< llvm::StoreInst* >BfuncStores;
@@ -178,7 +181,6 @@ void Kernel::AddInputArguments(void)
             }
         }
     }
-    //PrintVal( dyn_cast<LoadInst>(cast<Instruction>(MemoryRead->begin()->begin())) );
     for( Function::iterator MRB = MemoryRead->begin(), MRE = MemoryRead->end(); MRB != MRE; MRB++ )
     {
         BasicBlock* block = cast<BasicBlock>(MRB);
@@ -189,7 +191,6 @@ void Kernel::AddInputArguments(void)
             {
                 if( std::find( MfuncLoads.begin(), MfuncLoads.end(), lInst) == MfuncLoads.end() )
                 {
-
                     MfuncLoads.push_back(lInst);
                 }
             }
@@ -210,14 +211,6 @@ void Kernel::AddInputArguments(void)
             }
         }
     }
-    /*for( auto i : BfuncStores )
-    {
-        PrintVal(i);
-    }
-    for( auto i : MfuncLoads)
-    {
-        PrintVal(i);
-    }*/
 
     // 2.)
     // First, make lists of all load and store instructions to be removed
@@ -225,21 +218,19 @@ void Kernel::AddInputArguments(void)
     std::vector< llvm::LoadInst* > toRemove;
     for( auto bStore : BfuncStores )
     {
-        for( int i = 0; i < MfuncLoads.size(); i++ )// mLoad : MfuncLoads )
+        for( int i = 0; i < MfuncLoads.size(); i++ )
         {
             if( bStore->getPointerOperand() == MfuncLoads[i]->getPointerOperand() )
             {
                 toRemoveB.push_back( bStore );
                 toRemove.push_back( MfuncLoads[i] );
             }
-            for( int j = i+1; j < MfuncLoads.size(); j++ )// remove : MfuncLoads )
+            for( int j = i+1; j < MfuncLoads.size(); j++ )
             {
                 if( MfuncLoads[j]->getPointerOperand() == MfuncLoads[i]->getPointerOperand() )
                 {
                     if( std::find( toRemove.begin(), toRemove.end(), MfuncLoads[j] ) == toRemove.end() )
                     {
-                        //std::cout << "removing duplicate..." << std::endl;
-                        //PrintVal( MfuncLoads[j]->getPointerOperand());
                         toRemove.push_back( MfuncLoads[j] );
                         break;
                     }
@@ -249,7 +240,7 @@ void Kernel::AddInputArguments(void)
     }
 
     // Second, delete the ones that don't belong
-    for( int i = 0; i < toRemove.size(); i++)//auto lInst : toRemove)
+    for( int i = 0; i < toRemove.size(); i++)
     {
         MfuncLoads.erase( std::find( MfuncLoads.begin(), MfuncLoads.end(), toRemove[i] ) );
     }
@@ -257,22 +248,14 @@ void Kernel::AddInputArguments(void)
     {
         BfuncStores.erase( std::find( BfuncStores.begin(), BfuncStores.end(), toRemoveB[i] ) );
     }
-    /*for( auto i : BfuncStores )
-    {
-        PrintVal(i);
-    }
-    for( auto i : MfuncLoads)
-    {
-        PrintVal(i);
-    }*/
 
     // fifth, store the input arguments to my globals
     llvm::BasicBlock* newInit = NULL;
-    for( iplist<BasicBlock>::iterator block = KernelFunction->getBasicBlockList().begin(); block != KernelFunction->getBasicBlockList().end(); block++ )
+    for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)
     {
-        if( block->getName() == "Init")
+        if( BB->getName() == "Init")
         {
-            newInit = block->getSingleSuccessor()->getSinglePredecessor();//->getBlock();  //std::find( KernelFunction->getBasicBlockList().begin(), KernelFunction->getBasicBlockList().end(), block );
+            newInit = dyn_cast<BasicBlock>(BB);
             break;
         }
     }
@@ -287,7 +270,7 @@ void Kernel::AddInputArguments(void)
             {
                 // we have a candidate. now check if we have already assigned this arg
                 bool taken = false;
-                for( auto sInst : newStores )//std::find( newStores.begin(), newStores.end(), dyn_cast<StoreInst>(inarg) ) == newStores.end() )
+                for( auto sInst : newStores )
                 {
                     if( sInst->getValueOperand() == inarg)
                     {
@@ -296,15 +279,9 @@ void Kernel::AddInputArguments(void)
                 }
                 if( !taken )
                 {
-                    IRBuilder<> builder( Init );//i->getNextNode() );
-                    //Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
-                    // now store the input arg in our global pointer
-                    //PrintVal(MfuncLoads[i]);
+                    IRBuilder<> builder( newInit );
                     auto b = builder.CreateStore( inarg, MfuncLoads[i]->getPointerOperand() );
                     newStores.push_back(b);
-                    //PrintVal(b);
-                    // add it to the instruction list of Init
-                    //initList->push_front(b);
                     break;
                 }
             }
@@ -315,22 +292,13 @@ void Kernel::AddInputArguments(void)
     {
         for( auto store : newStores )
         {
-            //if( add->getPointerOperand() == store->getPointerOperand() )
-            //{
-                VMap[add] = store;
-                //break;
-            //}
+
+            VMap[add] = store;
+
         }
     }
+
     std::cout << "Finished inargs." << std::endl;
-
-
-
-
-
-
-
-
 
 
     // get a pointer to the instruction list for the Init function (declared globally on top)
@@ -359,32 +327,14 @@ void Kernel::AddInputArguments(void)
         //initList->push_back(i);
     }
 */
-/*
-    // first, go through all the variables in this function and get all my input arguments required (thats above)
-    // second, create a new function for the entire tik representation, with the proper inputs to initialize each global
-    std::vector< llvm::Type* > inputArgs;
-    for( auto inst : toAdd )
-    {
-        inputArgs.push_back( inst->getType() );
-    }
-    FunctionType *funcType = FunctionType::get(Type::getInt32Ty(TikModule->getContext()), inputArgs, false);
-    llvm::Function* newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName()+"_Reformatted", TikModule);
-    
-    // third, clone the old function into the new one
-    SmallVector< ReturnInst*, 10 > retinstlist;
-    llvm::CloneFunctionInto(newFunc, KernelFunction, VMap, false, retinstlist );
 
-    // remove the old function from the parent but do not erase it
-    KernelFunction->removeFromParent();
-    //std::cout << (newFunc->getParent()->getName() == KernelFunction->getParent()->getName()) << std::endl;
-    KernelFunction = newFunc;*/
 }
 
 void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
 {
     // we want to detect all instructions that are responsible for deciding whether or not the kernel should continue
     // to do this we look for all instructions that are terminators, and successors to those terminators, 
-    //     and decide whether or not they are indeed maintaining the loop
+    //     and decide whether or not they are indeed maintain the loop
     // terminators are a special class of instructions in LLVM IR
     Conditional = BasicBlock::Create(TikModule->getContext(), "Loop", KernelFunction);
     vector<Instruction *> result;
@@ -399,7 +349,7 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
         for (int i = 0; i < term->getNumSuccessors(); i++)
         {
             BasicBlock *succ = term->getSuccessor(i);
-            // if the successor to this terminator is not in the set of kernel blocks, its not in this kernel
+            // if the successor to this terminator is not in the set of kernel blocks, its an exit instr
             if (find(blocks.begin(), blocks.end(), succ) == blocks.end())
             {
                 exit = true;
@@ -445,7 +395,7 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
     {
         Instruction *check = conditions.back();
         conditions.pop_back();
-        bool elegible = true;
+        bool eligible = true;
         //a terminator instruction is eligible only if all of its users are in the loop
         // users are all the instructions that consume the value produced by this terminator instruction
         for (auto user : check->users())
@@ -460,12 +410,12 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
                 }
                 else
                 {
-                    elegible = false;
+                    eligible = false;
                 }
             }
         }
         // if our successor is eligible, put the terminator in result
-        if (elegible)
+        if (eligible)
         {
             result.push_back(check);
             // see if the operands in our terminator are resolved in this kernel or not
@@ -899,17 +849,17 @@ void Kernel::CreateExitBlock(void)
 void Kernel::ConnectFunctions()
 {
     // init->loop (unconditional)
-    IRBuilder<> initBuilder(Init);
-    auto a = initBuilder.CreateBr(Conditional);
+    IRBuilder<> initBuilder(newInit);
+    auto a = initBuilder.CreateBr(newConditional);
 
     // loop->body (conditional)
-    IRBuilder<> loopBuilder(Conditional);
+    IRBuilder<> loopBuilder(newConditional);
     //Value* cond = inst->getOperand();
-    auto b = loopBuilder.CreateCondBr(cond, Body, Exit);
+    auto b = loopBuilder.CreateCondBr(cond, newBody, newExit);
 
     // body->loop (unconditional)
-    IRBuilder<> bodyBuilder(Body);
-    auto c = bodyBuilder.CreateBr(Conditional);
+    IRBuilder<> bodyBuilder(newBody);
+    auto c = bodyBuilder.CreateBr(newConditional);
 
 }
 

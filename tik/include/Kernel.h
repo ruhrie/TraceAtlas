@@ -17,6 +17,10 @@ public:
     llvm::BasicBlock *Body = NULL;
     llvm::BasicBlock *Init = NULL;
     llvm::BasicBlock *Exit = NULL;
+    llvm::BasicBlock* newConditional = NULL;
+    llvm::BasicBlock* newBody = NULL;
+    llvm::BasicBlock* newInit = NULL;
+    llvm::BasicBlock* newExit = NULL;
     llvm::Function *MemoryRead = NULL;
     llvm::Function *MemoryWrite = NULL;
 

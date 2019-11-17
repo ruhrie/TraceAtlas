@@ -1,3 +1,0 @@
-
-in = open('outfile.txt')
-

@@ -7,7 +7,7 @@ from collections import deque
 from Status import ConsoleStatus as cs
 
 def DetectKernels(sourceFile, thresh = 0.95, hotThresh = 512, newLine = False):
-    print("Detecting type one kernels")
+    #print("Detecting type one kernels")
     result = []
     radius = 5
     blockSize = 4096
@@ -28,7 +28,6 @@ def DetectKernels(sourceFile, thresh = 0.95, hotThresh = 512, newLine = False):
         outfile = open('./outfile','a+')
         while(True):
             data = stream.read(blockSize)
-            res = ""
             res = decob.decompress(data).decode('utf-8')
             lines = res.split("\n")
             for line in lines[:-1]:
@@ -40,6 +39,8 @@ def DetectKernels(sourceFile, thresh = 0.95, hotThresh = 512, newLine = False):
                 if key == "BasicBlock":
                     block = int(val, 0)
                     blockCount[block] += 1
+                    if block == 4:
+                        print("BB 4 was found in block {} and its count is {}".format(index, blockCount[block]))
                     priorBlocks.append(block)
                     if len(priorBlocks) > (2 * radius + 1):
                         priorBlocks.popleft()
@@ -50,11 +51,13 @@ def DetectKernels(sourceFile, thresh = 0.95, hotThresh = 512, newLine = False):
             index += 1
             if index % 100 == 0:
                 bar.Update(index)
+            #outfile.write(res)
             if len(data) != blockSize:
                 bar.Finish()
                 break
-            outfile.write(res)
     print( sorted(blockCount) )
+    for key in sorted(blockCount):
+        print(str(key)+" : "+str(blockCount[key]) )
     for key in sorted( blockMap ):
         print(blockMap[key])
     kernels = []
@@ -85,7 +88,10 @@ def DetectKernels(sourceFile, thresh = 0.95, hotThresh = 512, newLine = False):
     for kernel in kernels:
         if not kernel in result:
             result.append(kernel)
-    print("Detected " + str(len(result)) + " type one kernels")
+    #print("Detected " + str(len(result)) + " type one kernels")
     return result
 
-print( sorted( DetectKernels( "./cplusplus/testing/test.trc" ) ) )
+#print( sorted( DetectKernels( "./cplusplus/testing/test.trc" ) ) )
+DetectKernels( "/mnt/nobackup-11/bwilli46/TraceAtlas/Python/KernelDetector/cplusplus/testing/kalman_0_0.trc" )
+
+
