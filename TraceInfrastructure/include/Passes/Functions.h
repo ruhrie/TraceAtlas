@@ -16,6 +16,7 @@ namespace DashTracer
         extern Function *LoadDump;
         extern Function *fullFunc;
         extern Function *fullAddrFunc;
+        extern Function *fullAddrValueFunc;
     } // namespace Passes
 } // namespace DashTracer
 

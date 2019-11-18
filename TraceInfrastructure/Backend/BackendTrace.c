@@ -98,6 +98,22 @@ void WriteAddress(char *inst, int line, int block, uint64_t func, char *address)
     WriteStream(fin);
 }
 
+void WriteAddressValue(char *inst, int line, int block, uint64_t func, char *address,char *MemValue)
+{
+    char suffix[160];
+#if defined _WIN32
+    sprintf(suffix, ";line:%d;block:%d;function:%llu;address:%llu;MemValue:%llu\n", line, block, func, (uint64_t)address,(uint64_t)MemValue);
+#else
+    sprintf(suffix, ";line:%d;block:%d;function:%lu;address:%lu;MemValue:%lu\n", line, block, func, (uint64_t)address,(uint64_t)MemValue);
+#endif
+    size_t size = strlen(inst) + strlen(suffix);
+    char fin[size];
+
+    strcpy(fin, inst);
+    strncat(fin, suffix, 160);
+    WriteStream(fin);
+}
+
 void OpenFile(char *test)
 {
     sem_init(&semaphore_DashTracer, 1, 1);

@@ -75,25 +75,51 @@ namespace DashTracer
                     //if there is a load or a store also append the address and call fullAddrFunc
                     if (LoadInst *load = dyn_cast<LoadInst>(CI))
                     {
-                        Value *addr = load->getOperand(0);
-                        Value *memValue = load->getOperand(1);
-                        outs()<<"load addr "<< addr[0];
-                        outs()<<"load memValue "<< memValue[0];
+                        Value *addr = load->getPointerOperand();
+                        Value *MemValue = load;
+                       
+                        errs()<<"load:";
+                        errs()<< *load << '\n';
+                        errs()<<"load addr:";
+                        errs()<< *addr << '\n';
+                        errs()<<"load MemValue:";
+                        errs()<< *MemValue << '\n';
+                       
                         auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0), true);
                         Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB.getContext()));
                         values.push_back(cast);
+
+                        castCode = CastInst::getCastOpcode(MemValue, true, PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0), true);
+                        cast = builder.CreateCast(castCode, MemValue, Type::getInt8PtrTy(BB.getContext()));
+                        values.push_back(cast);
+
+                        // ArrayRef<Value *> ref = ArrayRef<Value *>(values);
+                        // builder.CreateCall(fullAddrValueFunc, ref);
                         ArrayRef<Value *> ref = ArrayRef<Value *>(values);
                         builder.CreateCall(fullAddrFunc, ref);
                     }
                     else if (StoreInst *store = dyn_cast<StoreInst>(CI))
                     {
-                        Value *addr = store->getOperand(0);
-                        Value *memValue = store->getOperand(1);
-                        outs()<<"store addr "<< addr[0];
-                        outs()<<"store memValue "<< memValue[0];
+                        Value *addr = store->getPointerOperand();
+                        Value *MemValue = store->getOperand(0);
+    
+                        // errs()<<"store:";
+                        // errs()<< *store << '\n';
+                        // errs()<<"store addr:";
+                        // errs()<< *addr << '\n';                
+                        // errs()<<"store MemValue:";
+                        // errs()<< *MemValue << '\n';                        
+
                         auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0), true);
                         Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB.getContext()));
                         values.push_back(cast);
+
+                        //castCode = CastInst::getCastOpcode(MemValue, true, PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0), true);
+                        //cast = builder.CreateCast(castCode, MemValue, Type::getInt8PtrTy(BB.getContext()));
+                        // values.push_back(cast);
+
+                        // ArrayRef<Value *> ref = ArrayRef<Value *>(values);
+                        // builder.CreateCall(fullAddrValueFunc, ref);
                         ArrayRef<Value *> ref = ArrayRef<Value *>(values);
                         builder.CreateCall(fullAddrFunc, ref);
                     }
@@ -128,6 +154,7 @@ namespace DashTracer
         {
             fullFunc = dyn_cast<Function>(M.getOrInsertFunction("Write", Type::getVoidTy(M.getContext()), Type::getInt8PtrTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt64Ty(M.getContext())));
             fullAddrFunc = dyn_cast<Function>(M.getOrInsertFunction("WriteAddress", Type::getVoidTy(M.getContext()), Type::getInt8PtrTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt64Ty(M.getContext()), Type::getInt8PtrTy(M.getContext())));
+            fullAddrValueFunc = dyn_cast<Function>(M.getOrInsertFunction("WriteAddressValue", Type::getVoidTy(M.getContext()), Type::getInt8PtrTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt64Ty(M.getContext()), Type::getInt8PtrTy(M.getContext()),Type::getInt8PtrTy(M.getContext())));
             return false;
         }
         bool EncodedTraceMem::runOnBasicBlock(BasicBlock &BB)
@@ -197,7 +224,7 @@ namespace DashTracer
 
         char TraceMem::ID = 0;
         char EncodedTraceMem::ID = 1;
-        static RegisterPass<TraceMem> X("Trace", "Adds tracing mem to the binary", true, false);
-        static RegisterPass<EncodedTraceMem> Y("EncodedTrace", "Adds encoded tracing mem to the binary", true, false);
+        static RegisterPass<TraceMem> X("TraceMem", "Adds tracing mem to the binary", true, false);
+        static RegisterPass<EncodedTraceMem> Y("EncodedTraceMem", "Adds encoded tracing mem to the binary", true, false);
     } // namespace Passes
 } // namespace DashTracer
