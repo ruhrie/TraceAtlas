@@ -1,5 +1,5 @@
-; ModuleID = '/mnt/nobackup-11/bwilli46/TraceAtlas/tik/TestApplications/1DBlur/1DBlur.ll'
-source_filename = "/mnt/nobackup-11/bwilli46/TraceAtlas/tik/TestApplications/1DBlur/1DBlur.ll"
+; ModuleID = '/home/ruhrie/TraceAtlas/tik/TestApplications/1DBlur/1DBlur.ll'
+source_filename = "/home/ruhrie/TraceAtlas/tik/TestApplications/1DBlur/1DBlur.ll"
 
 @0 = global i32** null
 @1 = global i32* null
@@ -36,8 +36,8 @@ entry:
 
 define i32 @Kernel_0_Reformatted(i32**, i32*) {
 Init:
-  store i32** %0, i32*** @0
   store i32* %1, i32** @1
+  store i32** %0, i32*** @0
   br label %Loop
 
 Body:                                             ; preds = %Loop
@@ -67,7 +67,7 @@ Exit:                                             ; preds = %Loop
   ret void
 
 Loop:                                             ; preds = %Body, %Init
-  %19 = load i32, void <badref>, align 4
+  %19 = load i32, i32* <badref>, align 4
   %20 = icmp slt i32 %17, 1024
   br i1 %18, label %Body, label %Exit
 }
@@ -184,7 +184,7 @@ Exit:                                             ; preds = %Loop
   ret void
 
 Loop:                                             ; preds = %Body, %Init
-  %57 = load i32, void <badref>, align 4
+  %57 = load i32, i32* <badref>, align 4
   %58 = icmp slt i32 %54, 1023
   br i1 %55, label %Body, label %Exit
 }

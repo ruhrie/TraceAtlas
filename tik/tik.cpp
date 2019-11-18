@@ -40,7 +40,6 @@ cl::opt<Filetype> InputType("t", cl::desc("Choose input file type"),
 int main(int argc, char *argv[])
 {
     cl::ParseCommandLineOptions(argc, argv);
-    std::cout << InputFile << " " << JsonFile << "\n";
     ifstream inputJson(JsonFile);
     nlohmann::json j;
     inputJson >> j;
@@ -158,9 +157,9 @@ int main(int argc, char *argv[])
     llvm:AssemblyAnnotationWriter* write = new llvm::AssemblyAnnotationWriter();
     std::string str;
     llvm::raw_string_ostream rso(str);
-    std::cout << "\n\n\n\n";
+    //std::cout << "\n\n\n\n";
     TikModule->print(rso, write);
-    std::cout << str << "\n";    
+    //std::cout << str << "\n";    
     //errs() << TikModule->print();
 
     // print human readable tik module to file

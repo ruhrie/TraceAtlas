@@ -3,15 +3,15 @@
 #include "Util.h"
 #include <algorithm>
 #include <iostream>
-#include <vector>
+#include <llvm/ADT/SmallVector.h>
 #include <llvm/IR/CFG.h>
+#include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Type.h>
-#include <llvm/IR/Function.h>
 #include <llvm/Transforms/Utils/Cloning.h>
-#include <llvm/ADT/SmallVector.h>
+#include <vector>
 
 using namespace llvm;
 using namespace std;
@@ -72,7 +72,6 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
 
     //remap everything so that our values resolved
     Remap();
-
 }
 
 nlohmann::json Kernel::GetJson()
@@ -120,7 +119,7 @@ Kernel::~Kernel()
 }
 
 void Kernel::Remap()
-{ 
+{
     for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)
     {
         for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
@@ -143,14 +142,14 @@ void Kernel::AddInputArguments(void)
 
     // first, go through all the variables in this function and get all my input arguments required (thats above)
     // second, create a new function for the entire tik representation, with the proper inputs to initialize each global
-    std::vector< llvm::Type* > inputArgs;
-    for( auto inst : toAdd )
+    std::vector<llvm::Type *> inputArgs;
+    for (auto inst : toAdd)
     {
-        inputArgs.push_back( inst->getType() );
+        inputArgs.push_back(inst->getType());
     }
     FunctionType *funcType = FunctionType::get(Type::getInt32Ty(TikModule->getContext()), inputArgs, false);
-    llvm::Function* newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName()+"_Reformatted", TikModule);
-    std::cout << newFunc->getInstructionCount() << std::endl;
+    llvm::Function *newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName() + "_Reformatted", TikModule);
+    //std::cout << newFunc->getInstructionCount() << std::endl;
 
     /*// third, clone the old function into the new one
     SmallVector< ReturnInst*, 1 > retinstlist;
@@ -167,142 +166,135 @@ void Kernel::AddInputArguments(void)
     KernelFunction = newFunc;
 
     // 1.)
-    std::vector< llvm::LoadInst* > MfuncLoads;
-    std::vector< llvm::StoreInst* >BfuncStores;
-    for( Function::iterator KF = KernelFunction->begin(), KFE = KernelFunction->end(); KF != KFE; KF++ )
+    std::set<llvm::LoadInst *> MfuncLoads;
+    std::set<llvm::StoreInst *> BfuncStores;
+    for (Function::iterator KF = KernelFunction->begin(), KFE = KernelFunction->end(); KF != KFE; KF++)
     {
-        BasicBlock* block = cast<BasicBlock>(KF);
-        for( BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; BI++ )
+        for (BasicBlock::iterator BI = KF->begin(), BE = KF->end(); BI != BE; BI++)
         {
-            Instruction* bStore = cast<Instruction>(BI);
-            if( StoreInst* sInst = dyn_cast<StoreInst>(bStore) )
+            if (StoreInst *sInst = dyn_cast<StoreInst>(BI))
             {
-                BfuncStores.push_back(sInst);
+                BfuncStores.insert(sInst);
             }
         }
     }
-    for( Function::iterator MRB = MemoryRead->begin(), MRE = MemoryRead->end(); MRB != MRE; MRB++ )
+    for (Function::iterator MRB = MemoryRead->begin(), MRE = MemoryRead->end(); MRB != MRE; MRB++)
     {
-        BasicBlock* block = cast<BasicBlock>(MRB);
-        for( BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; BI++ )
+        for (BasicBlock::iterator BI = MRB->begin(), BE = MRB->end(); BI != BE; BI++)
         {
-            Instruction* mLoad = cast<Instruction>(BI);
-            if( LoadInst* lInst = dyn_cast<LoadInst>(mLoad) )
+            if (LoadInst *lInst = dyn_cast<LoadInst>(BI))
             {
-                if( std::find( MfuncLoads.begin(), MfuncLoads.end(), lInst) == MfuncLoads.end() )
-                {
-                    MfuncLoads.push_back(lInst);
-                }
+                MfuncLoads.insert(lInst);
             }
         }
     }
-    for( Function::iterator MWB = MemoryWrite->begin(), MWE = MemoryWrite->end(); MWB != MWE; MWB++ )
+    for (Function::iterator MWB = MemoryWrite->begin(), MWE = MemoryWrite->end(); MWB != MWE; MWB++)
     {
-        BasicBlock* block = cast<BasicBlock>(MWB);
-        for( BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; BI++ )
+        for (BasicBlock::iterator BI = MWB->begin(), BE = MWB->end(); BI != BE; BI++)
         {
-            Instruction* mLoad = cast<Instruction>(BI);
-            if( LoadInst* lInst = dyn_cast<LoadInst>(mLoad) )
+            if (LoadInst *lInst = dyn_cast<LoadInst>(BI))
             {
-                if( std::find( MfuncLoads.begin(), MfuncLoads.end(), lInst) == MfuncLoads.end() )
-                {                
-                    MfuncLoads.push_back(lInst);
-                }
+                MfuncLoads.insert(lInst);
             }
         }
     }
 
     // 2.)
     // First, make lists of all load and store instructions to be removed
-    std::vector< llvm::StoreInst* > toRemoveB;
-    std::vector< llvm::LoadInst* > toRemove;
-    for( auto bStore : BfuncStores )
+    std::vector<llvm::StoreInst *> toRemoveB;
+    std::set<llvm::LoadInst *> toRemove;
+
+    for (auto s : BfuncStores)
     {
-        for( int i = 0; i < MfuncLoads.size(); i++ )
+        for (auto l : MfuncLoads)
         {
-            if( bStore->getPointerOperand() == MfuncLoads[i]->getPointerOperand() )
+            if (s->getPointerOperand() == l->getPointerOperand())
             {
-                toRemoveB.push_back( bStore );
-                toRemove.push_back( MfuncLoads[i] );
+                toRemove.insert(l);
+                break;
             }
-            for( int j = i+1; j < MfuncLoads.size(); j++ )
+        }
+    }
+    /*
+    for (auto bStore : BfuncStores)
+    {
+        for (int i = 0; i < MfuncLoads.size(); i++)
+        {
+            if (bStore->getPointerOperand() == MfuncLoads[i]->getPointerOperand())
             {
-                if( MfuncLoads[j]->getPointerOperand() == MfuncLoads[i]->getPointerOperand() )
+                toRemoveB.push_back(bStore);
+                toRemove.push_back(MfuncLoads[i]);
+            }
+            for (int j = i + 1; j < MfuncLoads.size(); j++)
+            {
+                if (MfuncLoads[j]->getPointerOperand() == MfuncLoads[i]->getPointerOperand())
                 {
-                    if( std::find( toRemove.begin(), toRemove.end(), MfuncLoads[j] ) == toRemove.end() )
+                    if (std::find(toRemove.begin(), toRemove.end(), MfuncLoads[j]) == toRemove.end())
                     {
-                        toRemove.push_back( MfuncLoads[j] );
+                        toRemove.push_back(MfuncLoads[j]);
                         break;
                     }
                 }
             }
         }
     }
-
+    */
     // Second, delete the ones that don't belong
-    for( int i = 0; i < toRemove.size(); i++)
+    for (auto l : toRemove)
     {
-        MfuncLoads.erase( std::find( MfuncLoads.begin(), MfuncLoads.end(), toRemove[i] ) );
+        //auto i = MfuncLoads.find(l);
+        MfuncLoads.erase(std::find(MfuncLoads.begin(), MfuncLoads.end(), l));
     }
-    for( int i = 0; i < toRemoveB.size(); i++ )
+    /*
+    for (int i = 0; i < toRemoveB.size(); i++)
     {
-        BfuncStores.erase( std::find( BfuncStores.begin(), BfuncStores.end(), toRemoveB[i] ) );
+        BfuncStores.erase(std::find(BfuncStores.begin(), BfuncStores.end(), toRemoveB[i]));
     }
+    */
 
     // fifth, store the input arguments to my globals
-    llvm::BasicBlock* newInit = NULL;
+    llvm::BasicBlock *newInit = NULL;
     for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)
     {
-        if( BB->getName() == "Init")
+        if (BB->getName() == "Init")
         {
             newInit = dyn_cast<BasicBlock>(BB);
             break;
         }
     }
 
-    std::vector< llvm::StoreInst* > newStores;
+    std::set<llvm::StoreInst *> newStores;
+    set<llvm::Value *> invalidStuff;
     auto initList = &newInit->getInstList();
-    for( int i = 0; i < MfuncLoads.size(); i++ )
+    for (auto l : MfuncLoads)
     {
-        for( auto inarg = KernelFunction->arg_begin(), inargE = KernelFunction->arg_end(); inarg != inargE; inarg++ )
+        for (auto inarg = KernelFunction->arg_begin(), inargE = KernelFunction->arg_end(); inarg != inargE; inarg++)
         {
-            if( inarg->getType() == MfuncLoads[i]->getType() )
+            if (inarg->getType() == l->getType() && invalidStuff.find(inarg) == invalidStuff.end())
             {
                 // we have a candidate. now check if we have already assigned this arg
-                bool taken = false;
-                for( auto sInst : newStores )
-                {
-                    if( sInst->getValueOperand() == inarg)
-                    {
-                        taken=true;
-                    }
-                }
-                if( !taken )
-                {
-                    IRBuilder<> builder( newInit );
-                    auto b = builder.CreateStore( inarg, MfuncLoads[i]->getPointerOperand() );
-                    newStores.push_back(b);
-                    break;
-                }
+                IRBuilder<> builder(newInit);
+                auto b = builder.CreateStore(inarg, l->getPointerOperand());
+                newStores.insert(b);
+                invalidStuff.insert(inarg);
+                break;
             }
         }
     }
-
-    for( auto add : toAdd )
+    //cout << "start:\n";
+    for (auto add : toAdd)
     {
-        for( auto store : newStores )
+        //PrintVal(add);
+        for (auto store : newStores)
         {
-
-            VMap[add] = store;
-
+            //VMap[add] = store;
         }
     }
 
-    std::cout << "Finished inargs." << std::endl;
-
+    //std::cout << "Finished inargs." << std::endl;
 
     // get a pointer to the instruction list for the Init function (declared globally on top)
-/*    auto initList = &Init->getInstList();
+    /*    auto initList = &Init->getInstList();
     for (auto init : toAdd)
     {
         // find the global variable this instruction refers to
@@ -327,13 +319,12 @@ void Kernel::AddInputArguments(void)
         //initList->push_back(i);
     }
 */
-
 }
 
 void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
 {
     // we want to detect all instructions that are responsible for deciding whether or not the kernel should continue
-    // to do this we look for all instructions that are terminators, and successors to those terminators, 
+    // to do this we look for all instructions that are terminators, and successors to those terminators,
     //     and decide whether or not they are indeed maintain the loop
     // terminators are a special class of instructions in LLVM IR
     Conditional = BasicBlock::Create(TikModule->getContext(), "Loop", KernelFunction);
@@ -404,7 +395,7 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
             // if this successor (usr) to the terminator (check) is not in our result already
             if (find(result.begin(), result.end(), usr) == result.end() && result.size())
             {
-                // if this successor is a branch  
+                // if this successor is a branch
                 if (BranchInst *br = dyn_cast<BranchInst>(usr))
                 {
                 }
@@ -592,12 +583,14 @@ void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
         }
     }
 
-    for( auto init : toAdd )
+    for (auto init : toAdd)
     {
-        VMap[ init ] = init->clone();
+        //PrintVal(init);
+        VMap[init] = init->clone();
     }
+    std::cout << "\n";
 
-    // for each unresolved operand, add it to the init list where they will be initialized 
+    // for each unresolved operand, add it to the init list where they will be initialized
     // get a pointer to the instruction list for the Init function (declared globally on top)
     /*auto initList = &Init->getInstList();
     for (auto init : toAdd)
@@ -621,7 +614,7 @@ void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
         initList->push_back(b);
         //initList->push_back(i);
     }*/
-/*
+    /*
     for( BasicBlock::iterator BI = Init->begin(), BE = Init->end(); BI != BE; ++BI )
     {
         // search each instruction for each key in GlobalMap
@@ -692,19 +685,19 @@ void Kernel::GetMemoryFunctions()
     {
         // every time we make a pointer to an index, do the same thing to the global map
         //PrintVal(VMap[lVal]);
-        if( GlobalMap.find( VMap[lVal] ) == GlobalMap.end() )
+        if (GlobalMap.find(VMap[lVal]) == GlobalMap.end())
         {
             //PrintVal(VMap[lVal]);
-            llvm::Constant *globalInt = ConstantPointerNull::get( cast<PointerType>(lVal->getType()) );
+            llvm::Constant *globalInt = ConstantPointerNull::get(cast<PointerType>(lVal->getType()));
             llvm::GlobalVariable *g = new GlobalVariable(*TikModule, globalInt->getType(), false, llvm::GlobalValue::LinkageTypes::ExternalLinkage, globalInt);
-            GlobalMap[ VMap[lVal] ] = g;
+            GlobalMap[VMap[lVal]] = g;
         }
         Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
-        auto a = loadBuilder.CreateGEP( lVal->getType(), GlobalMap[ VMap[lVal] ], constant );
-        auto b = loadBuilder.CreateLoad( a );
+        auto a = loadBuilder.CreateGEP(lVal->getType(), GlobalMap[VMap[lVal]], constant);
+        auto b = loadBuilder.CreateLoad(a);
         //PrintVal(lVal);
-        Instruction *converted = cast<Instruction>( loadBuilder.CreatePtrToInt( b, Type::getInt32Ty( TikModule->getContext() ) ) );
-        Constant *indexConstant = ConstantInt::get( Type::getInt32Ty( TikModule->getContext() ), i++ );
+        Instruction *converted = cast<Instruction>(loadBuilder.CreatePtrToInt(b, Type::getInt32Ty(TikModule->getContext())));
+        Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
         loadMap[lVal] = indexConstant;
         //PrintVal(a);
         if (priorValue == NULL)
@@ -713,7 +706,7 @@ void Kernel::GetMemoryFunctions()
         }
         else
         {
-            std::cout << "\n";
+            //std::cout << "\n";
             ICmpInst *cmpInst = cast<ICmpInst>(loadBuilder.CreateICmpEQ(MemoryRead->arg_begin(), indexConstant));
             SelectInst *sInst = cast<SelectInst>(loadBuilder.CreateSelect(cmpInst, converted, priorValue));
             priorValue = sInst;
@@ -730,17 +723,17 @@ void Kernel::GetMemoryFunctions()
     for (Value *lVal : storeValues)
     {
         //PrintVal(VMap[lVal]);
-        if( GlobalMap.find( VMap[lVal] ) == GlobalMap.end() )
+        if (GlobalMap.find(VMap[lVal]) == GlobalMap.end())
         {
             //PrintVal(VMap[lVal]);
-            llvm::Constant *globalInt = ConstantPointerNull::get( cast<PointerType>(lVal->getType()) );
+            llvm::Constant *globalInt = ConstantPointerNull::get(cast<PointerType>(lVal->getType()));
             llvm::GlobalVariable *g = new GlobalVariable(*TikModule, globalInt->getType(), false, llvm::GlobalValue::LinkageTypes::ExternalLinkage, globalInt);
-            GlobalMap[ VMap[lVal] ] = g;
+            GlobalMap[VMap[lVal]] = g;
         }
         // every time we make a pointer to an index, do the same thing to the global map
         Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
-        auto a = storeBuilder.CreateGEP( lVal->getType(), GlobalMap[ VMap[lVal] ], constant );
-        auto b = storeBuilder.CreateLoad( a );
+        auto a = storeBuilder.CreateGEP(lVal->getType(), GlobalMap[VMap[lVal]], constant);
+        auto b = storeBuilder.CreateLoad(a);
         Instruction *converted = cast<Instruction>(storeBuilder.CreatePtrToInt(b, Type::getInt32Ty(TikModule->getContext())));
         Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
         if (priorValue == NULL)
@@ -759,35 +752,35 @@ void Kernel::GetMemoryFunctions()
     Instruction *storeRet = cast<ReturnInst>(storeBuilder.CreateRet(priorValue));
 
     // set of global variables we have created
-    std::set < llvm::Value* >globalSet;
+    std::set<llvm::Value *> globalSet;
     // for each instruction in memread (for example)
-    for( BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI )
+    for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
     {
         // search each instruction for each key in GlobalMap
-        Instruction* inst = cast<Instruction>(BI);
+        Instruction *inst = cast<Instruction>(BI);
         //PrintVal(inst);
-        if( GlobalMap.find( inst ) != GlobalMap.end() )
+        if (GlobalMap.find(inst) != GlobalMap.end())
         {
-            IRBuilder<> builder( inst->getNextNode() );
+            IRBuilder<> builder(inst->getNextNode());
             Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
-            auto a = builder.CreateGEP( inst->getType(), GlobalMap[inst], constant );
+            auto a = builder.CreateGEP(inst->getType(), GlobalMap[inst], constant);
             //PrintVal(a->getType());
             auto b = builder.CreateStore(inst, a);
             globalSet.insert(b);
             //PrintVal(b);
-        }  
+        }
     }
-    
+
     // remove instructions not belonging to parent kernel
     vector<Instruction *> toRemove;
     for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
     {
         Instruction *inst = cast<Instruction>(BI);
-        if( globalSet.find(inst) != globalSet.end() )
+        if (globalSet.find(inst) != globalSet.end())
         {
             continue;
         }
-                
+
         IRBuilder<> builder(inst);
         if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
         {
@@ -802,7 +795,7 @@ void Kernel::GetMemoryFunctions()
         {
             auto memCall = builder.CreateCall(MemoryWrite, storeMap[newInst->getPointerOperand()]);
             auto casted = builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType());
-            auto newStore = builder.CreateStore(VMap[ newInst->getValueOperand() ], casted);
+            auto newStore = builder.CreateStore(VMap[newInst->getValueOperand()], casted);
             toRemove.push_back(newInst);
         }
     }
@@ -810,8 +803,6 @@ void Kernel::GetMemoryFunctions()
     {
         inst->removeFromParent();
     }
-
-    
 }
 
 void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
@@ -860,6 +851,4 @@ void Kernel::ConnectFunctions()
     // body->loop (unconditional)
     IRBuilder<> bodyBuilder(newBody);
     auto c = bodyBuilder.CreateBr(newConditional);
-
 }
-
