@@ -14,9 +14,9 @@ nlohmann::json TikBase::GetJson()
     {
         j["Body"] = GetStrings(Body);
     }
-    if (Init != NULL)
+    if (Exit != NULL)
     {
-        j["Init"] = GetStrings(Init);
+        j["Exit"] = GetStrings(Exit);
     }
     if (MemoryRead != NULL)
     {
@@ -34,7 +34,7 @@ TikBase::TikBase()
     MemoryRead = NULL;
     MemoryWrite = NULL;
     Body = NULL;
-    Init = NULL;
+    Exit = NULL;
 }
 
 TikBase::~TikBase()
@@ -50,5 +50,9 @@ TikBase::~TikBase()
     if (Body != NULL)
     {
         delete Body;
+    }
+    if (Exit != NULL)
+    {
+        delete Exit;
     }
 }

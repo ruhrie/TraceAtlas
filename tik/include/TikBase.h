@@ -7,7 +7,8 @@ class TikBase
 {
 public:
     llvm::BasicBlock *Body = NULL;
-    llvm::BasicBlock *Init = NULL;
+    //llvm::BasicBlock *Init = NULL;
+    llvm::BasicBlock *Exit = NULL;
     llvm::Function *MemoryRead = NULL;
     llvm::Function *MemoryWrite = NULL;
     virtual nlohmann::json GetJson();

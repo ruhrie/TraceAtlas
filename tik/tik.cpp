@@ -29,13 +29,15 @@ enum Filetype
 llvm::Module *TikModule;
 std::map<int, Kernel *> KernelMap;
 cl::opt<string> JsonFile("j", cl::desc("Specify input json filename"), cl::value_desc("json filename"));
-cl::opt<string> KernelFile("o", cl::desc("Specify output kernel filename"), cl::value_desc("kernel filename"));
+cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"));
 cl::opt<string> InputFile(cl::Positional, cl::Required, cl::desc("<input file>"));
 cl::opt<Filetype> InputType("t", cl::desc("Choose input file type"),
                             cl::values(
                                 clEnumVal(LLVM, "LLVM IR"),
-                                clEnumVal(DPDA, "DPDA DSL")),
+                                clEnumVal(DPDA, "DPDA")),
                             cl::init(LLVM));
+cl::opt<string> OutputType("f", cl::desc("Specify output file format. Can be either JSON or LLVM"), cl::value_desc("format"));
+cl::opt<bool> ASCIIFormat("S", cl::desc("output json as human-readable ASCII text"));
 
 int main(int argc, char *argv[])
 {
@@ -79,6 +81,7 @@ int main(int argc, char *argv[])
     LLVMContext context;
     SMDiagnostic smerror;
     unique_ptr<Module> sourceBitcode = parseIRFile(InputFile, smerror, context);
+    
     //annotate it with the same algorithm used in the tracer
     static uint64_t UID = 0;
     for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
@@ -142,43 +145,49 @@ int main(int argc, char *argv[])
             }
         }
     }
+    ResolveFunctionCalls();
 
     // writing part
-    //
     nlohmann::json finalJson;
     for (Kernel *kern : results)
     {
         finalJson["Kernels"][kern->Name] = kern->GetJson();
     }
 
-    ResolveFunctionCalls();
+    if( OutputType == "JSON")
+    {
+        std::cout << OutputType << std::endl;
+        ofstream oStream(OutputFile);
+        oStream << finalJson;
+        oStream.close();
+    }
+    else
+    {
+        std::cout << OutputType << std::endl;
+        if( ASCIIFormat )
+        {
+            // print human readable tik module to file
+            llvm:AssemblyAnnotationWriter* write = new llvm::AssemblyAnnotationWriter();
+            std::string str;
+            llvm::raw_string_ostream rso(str);
+            std::filebuf f0;
+            f0.open(OutputFile, std::ios::out);
+            TikModule->print(rso, write);
+            std::ostream readableStream(&f0);
+            readableStream << str;
+            f0.close();
+        }
+        else
+        {
+            // not human readable IR
+            std::filebuf f;
+            f.open(OutputFile, std::ios::out);
+            std::ostream rawStream(&f);
+            raw_os_ostream raw_stream(rawStream);
+            WriteBitcodeToFile(*TikModule, raw_stream);
+        }
+    }
 
-    // print tik representation to terminal
-    llvm:AssemblyAnnotationWriter* write = new llvm::AssemblyAnnotationWriter();
-    std::string str;
-    llvm::raw_string_ostream rso(str);
-    //std::cout << "\n\n\n\n";
-    TikModule->print(rso, write);
-    //std::cout << str << "\n";    
-    //errs() << TikModule->print();
-
-    // print human readable tik module to file
-    std::filebuf f0;
-    f0.open("./readable_raw_bitcode.ll", std::ios::out);
-    std::ostream readableStream(&f0);
-    readableStream << str;
-    f0.close();
-
-    // not human readable IR
-    std::filebuf f;
-    f.open("./raw_bitcode.ll", std::ios::out);
-    std::ostream rawStream(&f);
-    raw_os_ostream raw_stream(rawStream);
-    WriteBitcodeToFile(*TikModule, raw_stream);
-
-    ofstream oStream(KernelFile);
-    oStream << finalJson;
-    oStream.close();
     return 0;
 }
 
@@ -206,9 +215,7 @@ void ResolveFunctionCalls(void)
     }
     
     for( auto funcCal : functionCalls )
-    {
-        //llvm::Function* origin = llvm::Function::Create(mainType, GlobalValue::LinkageTypes::ExternalLinkage, funcCal->getCalledFunction()->getName(), TikModule);
-        
+    {        
         llvm::Function* funcName = TikModule->getFunction( funcCal->getCalledFunction()->getName() );
         // if funcName is NULL, do nothing. Else we have a valid function in the module
         if( funcName )
@@ -217,8 +224,6 @@ void ResolveFunctionCalls(void)
         }
         else
         {
-            //FunctionType *mainType = FunctionType::get( Type::getVoidTy( TikModule->getContext() ), false );
-            //llvm::Function* funcDec = llvm::Function::Create(mainType, funcCal->getCalledFunction()->getLinkage(), funcCal->getCalledFunction()->getName(), TikModule);
             llvm::Function* funcDec = llvm::Function::Create(funcCal->getFunctionType(), GlobalValue::LinkageTypes::ExternalLinkage, funcCal->getCalledFunction()->getName(), TikModule);
             funcDec->setAttributes( funcCal->getAttributes() );
             funcCal->setCalledFunction(funcDec);
