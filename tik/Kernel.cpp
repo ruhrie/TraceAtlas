@@ -152,6 +152,7 @@ BasicBlock *Kernel::getPathMerge(llvm::BasicBlock *start)
             {
                 exit = toComp;
                 done = true;
+                break;
             }
         }
     }
@@ -183,6 +184,7 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
     for (int i = 0; i < pathCount; i++)
     {
         currentBlocks[i] = term->getSuccessor(i);
+        stores[i] = {};
     }
     bool done = false;
     while (!done)
@@ -220,8 +222,6 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
                 }*/
                 if (subCount > 1)
                 {
-
-                    PrintVal(newTerm);
                     throw 2;
                     cout << "hi";
                 }

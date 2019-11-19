@@ -4,8 +4,8 @@
 #define WIDTH 1024
 int main()
 {
-    int *input = malloc(sizeof(int) * WIDTH);
-    int *output = malloc(sizeof(int) * WIDTH);
+    int *input = (int*)malloc(sizeof(int) * WIDTH);
+    int *output = (int*)malloc(sizeof(int) * WIDTH);
 
     srand(time(NULL));
     //initialize the data
