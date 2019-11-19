@@ -54,6 +54,8 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
     //now get the memory array
     //GetMemoryFunctions();
 
+    GetExits(blocks);
+
     //finally remap everything
     Remap();
 }
@@ -208,8 +210,18 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
                 }
                 Instruction *newTerm = currentBlock->getTerminator();
                 unsigned int subCount = newTerm->getNumSuccessors();
+                unsigned int validSuccessors = 0; /*
+                for (int i = 0; i < subCount; i++)
+                {
+                    if (find(validBlocks.begin(), validBlocks.end(), newTerm->getSuccessor(i)) != validBlocks.end())
+                    {
+                        validSuccessors++;
+                    }
+                }*/
                 if (subCount > 1)
                 {
+
+                    PrintVal(newTerm);
                     throw 2;
                     cout << "hi";
                 }
@@ -461,6 +473,17 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
     {
         //only one successor
         BasicBlock *succ = term->getSuccessor(0);
+        string blockName = succ->getName();
+        uint64_t id = std::stoul(blockName.substr(7));
+        if (KernelMap.find(id) != KernelMap.end())
+        {
+            //we are in a kernel
+            Kernel *k = KernelMap[id];
+            CallInst *ci = CallInst::Create(k->KernelFunction);
+            result.push_back(ci);
+            succ = k->ExitTarget;
+        }
+
         vector<BasicBlock *> trimmed;
         for (auto block : validBlocks)
         {
@@ -469,7 +492,6 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
                 trimmed.push_back(block);
             }
         }
-
         if (find(validBlocks.begin(), validBlocks.end(), succ) != validBlocks.end())
         {
             auto subResult = getInstructionPath(succ, trimmed);
