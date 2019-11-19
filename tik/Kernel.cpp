@@ -50,11 +50,11 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
         }
     }
 
-    //get conditional logic
-    GetLoopInsts(blocks);
-
     //now get the actual body
     GetBodyInsts(blocks);
+
+    //get conditional logic
+    GetLoopInsts(blocks);
 
     GetInitInsts(blocks);
 
@@ -365,6 +365,7 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock* > blocks)
     for( int i = 0; i < ExternalValues.size(); i++ )
     {
         IRBuilder<> builder(Init);
+        PrintVal(ExternalValues[i]);
         auto b = builder.CreateStore( KernelFunction->arg_begin()+i, GlobalMap[ ExternalValues[i] ] );
         newStores.insert(b);
     }
@@ -393,17 +394,10 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock* > blocks)
 
 void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
 {
-    
-    // we want to detect all instructions that are responsible for deciding whether or not the kernel should continue
-    // to do this we look for all instructions that are terminators, and successors to those terminators,
-    //     and decide whether or not they are indeed maintain the loop
-    // terminators are a special class of instructions in LLVM IR
     Conditional = BasicBlock::Create(TikModule->getContext(), "Loop", KernelFunction);
     vector<Instruction *> result;
-    // vector of unique basic blocks belonging to the kernel
+    //now identify all exit blocks
     vector<BasicBlock *> exits;
-    // identify all exit blocks
-    // an exit block is one that is supposed to exit a loop
     for (BasicBlock *block : blocks)
     {
         bool exit = false;
@@ -411,22 +405,19 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
         for (int i = 0; i < term->getNumSuccessors(); i++)
         {
             BasicBlock *succ = term->getSuccessor(i);
-            // if the successor to this terminator is not in the set of kernel blocks, its an exit instr
             if (find(blocks.begin(), blocks.end(), succ) == blocks.end())
             {
+                //it isn't in the kernel
                 exit = true;
             }
         }
-        // if the successor is in this kernel, add that block to the kernel
         if (exit)
         {
             exits.push_back(block);
         }
     }
-
-    //now that we have the exit blocks we can get the conditional logic for them
-    //assert(exits.size() == 1);
-    // vector of unique terminator instructions that are based on a condition
+    //now that we have the exits we can get the conditional logic for them
+    assert(exits.size() == 1);
     std::vector<Instruction *> conditions;
     for (BasicBlock *exit : exits)
     {
@@ -436,8 +427,6 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
             if (brInst->isConditional())
             {
                 Instruction *condition = cast<Instruction>(brInst->getCondition());
-                // assign this to the global value to we can access it globally when connecting Loop to Body
-                cond = condition;
                 conditions.push_back(condition);
             }
             else
@@ -451,15 +440,14 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
         }
     }
     assert(conditions.size() == 1);
+    cond = conditions[0];
 
-    // now that we have conditional terminator instructions, look for their successors
     while (conditions.size() != 0)
     {
         Instruction *check = conditions.back();
         conditions.pop_back();
-        bool eligible = true;
-        //a terminator instruction is eligible only if all of its users are in the loop
-        // users are all the instructions that consume the value produced by this terminator instruction
+        bool elegible = true;
+        //a value is elegible only if all of its users are in the loop
         for (auto user : check->users())
         {
             Instruction *usr = cast<Instruction>(user);
@@ -473,18 +461,16 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
             }
             if (!found && result.size()) //we haven't already done it
             {
-                // if this successor is a branch
                 if (BranchInst *br = dyn_cast<BranchInst>(usr))
                 {
                 }
                 else
                 {
-                    eligible = false;
+                    elegible = false;
                 }
             }
         }
-        // if our successor is eligible, put the terminator in result
-        if (eligible)
+        if (elegible)
         {
             result.push_back(check);
             //if we are elegible we can then check all ops
@@ -501,7 +487,6 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
         }
     }
 
-    // put all the valid terminator instructions in the Init Function
     reverse(result.begin(), result.end());
     auto condList = &Conditional->getInstList();
     for (auto cond : result)
@@ -520,6 +505,7 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
         }
     }
 }
+
 
 vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<BasicBlock *> validBlocks)
 {
@@ -593,9 +579,6 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
 
 void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
 {
-    // we have to pick out the basic blocks that are doing the actual work of the kernels
-    // we do this by filtering out entry blocks (blocks that don't have predecessors)
-    // then we look at those block's successors
     std::vector<Instruction *> result;
     vector<BasicBlock *> entrances;
     for (BasicBlock *block : blocks)
@@ -614,94 +597,11 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
     //this code won't support loops/internal kernels initially
     //!! I'm serious
     BasicBlock *currentBlock = entrances[0];
-    vector<BasicBlock *> exploredBlocks;
-    while (true)
-    {
-        // if we are on our final basic block, we're done
-        if (find(blocks.begin(), blocks.end(), currentBlock) == blocks.end())
-        {
-            break;
-        }
-        string blockName = currentBlock->getName();
-        uint64_t id = std::stoul(blockName.substr(7));
-        if (KernelMap.find(id) != KernelMap.end())
-        {
-            Kernel *k = KernelMap[id];
-            CallInst *newCall = CallInst::Create(k->KernelFunction);
-            exploredBlocks.push_back(currentBlock);
-            result.push_back(newCall);
-            currentBlock = k->ExitTarget;
-        }
-        else
-        {
-            exploredBlocks.push_back(currentBlock);
-            for (BasicBlock::iterator bi = currentBlock->begin(), be = currentBlock->end(); bi != be; bi++)
-            {
-                Instruction *inst = cast<Instruction>(bi);
-                if (inst->isTerminator())
-                {
-                    //we should ignore for the time being
-                }
-                else
-                {
-                    //we now check if the instruction is already present
-                    if (VMap.find(inst) == VMap.end())
-                    {
-                        Instruction *cl = inst->clone();
-                        VMap[inst] = cl;
-                        result.push_back(cl);
-                    }
-                }
-            }
-            Instruction *term = currentBlock->getTerminator();
-            if (BranchInst *brInst = dyn_cast<BranchInst>(term))
-            {
-                if (brInst->isConditional())
-                {
-                    bool explored = true;
-                    //this indicates either the exit or a for loop within the code
-                    //aka a kernel or something to unroll
-                    int sucNum = brInst->getNumSuccessors();
-                    for (int i = 0; i < sucNum; i++)
-                    {
-                        BasicBlock *succ = brInst->getSuccessor(i);
-                        if (find(blocks.begin(), blocks.end(), succ) != blocks.end())
-                        {
-                            //this is a branch to a kernel block
-                            if (find(exploredBlocks.begin(), exploredBlocks.end(), succ) == exploredBlocks.end())
-                            {
-                                //and we haven't explored it yet
-                                explored = false;
-                                currentBlock = succ;
-                            }
-                        }
-                    }
-                    if (explored)
-                    {
-                        break;
-                    }
-                }
-                else
-                {
-                    BasicBlock *succ = brInst->getSuccessor(0);
-                    if (find(exploredBlocks.begin(), exploredBlocks.end(), succ) == exploredBlocks.end())
-                    {
-                        currentBlock = succ;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-            }
-            else
-            {
-                throw 2;
-            }
-        }
-    }
+
+    auto asdf = getInstructionPath(currentBlock, blocks);
+
     auto instList = &Body->getInstList();
-    for (Instruction *i : result)
+    for (Instruction *i : asdf)
     {
         instList->push_back(i);
     }
@@ -728,7 +628,7 @@ void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
             {
                 BasicBlock *parentBlock = operand->getParent();
                 // if the parentBlock of the operand is not in this block, then these values will be unresolved in the TIK representation
-                if (std::find(blocks.begin(), blocks.end(), parentBlock) == blocks.end())
+                if (std::find(blocks.begin(), blocks.end(), parentBlock) == blocks.end() && parentBlock != NULL)
                 {
                     // if the operand is not in our vector of operands, add it
                     if (find(ExternalValues.begin(), ExternalValues.end(), operand) == ExternalValues.end())
@@ -777,24 +677,7 @@ void Kernel::GetMemoryFunctions()
             storeInst.insert(newInst);
         }
     }
-    /*for( auto iter : ExternalValues )
-    {
-        if( LoadInst* inst = dyn_cast<LoadInst>(iter) )
-        {
-            PrintVal(inst);
-            loadInst.insert(inst);
-        }
-        else if( StoreInst* inst = dyn_cast<StoreInst>(iter) )
-        {
-            storeInst.insert(inst);
-        }
-    }*/
-    /*for( auto inst : ExternalValues )
-    {
-        PrintVal(inst);
-        PrintVal(VMap[inst]);
-        storeInst.insert( dyn_cast<StoreInst>(VM) );
-    }*/
+
     // values to put into load and store instructions
     set<Value *> loadValues;
     set<Value *> storeValues;
@@ -931,9 +814,10 @@ void Kernel::GetMemoryFunctions()
         }
         else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
         {
+            PrintVal(newInst);
             auto memCall = builder.CreateCall(MemoryWrite, storeMap[newInst->getPointerOperand()]);
             auto casted = builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType());
-            auto newStore = builder.CreateStore(VMap[newInst->getValueOperand()], casted);
+            auto newStore = builder.CreateStore(newInst->getValueOperand(), casted);
             toRemove.push_back(newInst);
         }
     }
@@ -961,7 +845,7 @@ void Kernel::GetMemoryFunctions()
         {
             auto memCall = builder.CreateCall(MemoryWrite, storeMap[newInst->getPointerOperand()]);
             auto casted = builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType());
-            auto newStore = builder.CreateStore(VMap[newInst->getValueOperand()], casted);
+            auto newStore = builder.CreateStore(newInst->getValueOperand(), casted);
             toRemove.push_back(inst);
         }
     }

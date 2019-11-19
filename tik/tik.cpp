@@ -156,14 +156,12 @@ int main(int argc, char *argv[])
 
     if( OutputType == "JSON")
     {
-        std::cout << OutputType << std::endl;
         ofstream oStream(OutputFile);
         oStream << finalJson;
         oStream.close();
     }
     else
     {
-        std::cout << OutputType << std::endl;
         if( ASCIIFormat )
         {
             // print human readable tik module to file
