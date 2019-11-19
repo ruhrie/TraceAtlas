@@ -30,19 +30,14 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
     vector<BasicBlock *> blocks;
     for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
     {
-        Function *f = cast<Function>(F);
-        string fName = f->getName();
-        if (fName.rfind("tempFunction") != 0)
+        for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
         {
-            for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
+            BasicBlock *b = cast<BasicBlock>(BB);
+            string blockName = b->getName();
+            uint64_t id = std::stoul(blockName.substr(7));
+            if (find(basicBlocks.begin(), basicBlocks.end(), id) != basicBlocks.end())
             {
-                BasicBlock *b = cast<BasicBlock>(BB);
-                string blockName = b->getName();
-                uint64_t id = std::stoul(blockName.substr(7));
-                if (find(basicBlocks.begin(), basicBlocks.end(), id) != basicBlocks.end())
-                {
-                    blocks.push_back(b);
-                }
+                blocks.push_back(b);
             }
         }
     }
@@ -57,7 +52,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
     GetInitInsts(blocks);
 
     //now get the memory array
-    GetMemoryFunctions();
+    //GetMemoryFunctions();
 
     //finally remap everything
     Remap();
@@ -196,6 +191,7 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
             currentBlock = currentBlocks[i];
             if (currentBlock != end)
             {
+                done = false;
                 for (BasicBlock::iterator BI = currentBlock->begin(), BE = currentBlock->end(); BI != BE; ++BI)
                 {
                     Instruction *inst = cast<Instruction>(BI);
@@ -225,11 +221,7 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
             }
         }
     }
-    Module *m = start->getModule();
-    FunctionType *ft = FunctionType::get(Type::getVoidTy(m->getContext()), Type::getVoidTy(m->getContext()), false);
-    Function *tempFunction = Function::Create(ft, GlobalValue::LinkageTypes::InternalLinkage, "tempFunction", m);
-    BasicBlock *tempBlock = BasicBlock::Create(start->getContext(), "asdf", tempFunction);
-    IRBuilder<> tempBuilder(tempBlock);
+
     vector<StoreInst *> handledStores;
     for (auto pair : stores)
     {
@@ -243,7 +235,7 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
                 //not already handled so get check if there are others
                 vector<Value *> valsToSelect;
                 auto ptr = store->getPointerOperand();
-                LoadInst *lInst = tempBuilder.CreateLoad(ptr);
+                LoadInst *lInst = new LoadInst(ptr); // tempBuilder.CreateLoad(ptr);
                 bool loadUsed = false;
 
                 for (auto p2 : stores)
@@ -285,7 +277,7 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
                     if (priorValue != NULL)
                     {
                         //this will need to be expanded for switch instructions
-                        SelectInst *sInst = cast<SelectInst>(tempBuilder.CreateSelect(branchCondition, v, priorValue));
+                        SelectInst *sInst = SelectInst::Create(branchCondition, v, priorValue); // cast<SelectInst>(tempBuilder.CreateSelect(branchCondition, v, priorValue));
                         priorValue = sInst;
                         result.push_back(sInst);
                     }
@@ -294,7 +286,7 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
                         priorValue = v;
                     }
                 }
-                auto finStore = tempBuilder.CreateStore(priorValue, ptr);
+                auto finStore = new StoreInst(priorValue, ptr); // tempBuilder.CreateStore(priorValue, ptr);
                 result.push_back(finStore);
             }
         }
@@ -374,8 +366,12 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
             Instruction *usr = cast<Instruction>(user);
             bool found = false;
             for (auto i : result)
+            {
                 if (i->isIdenticalTo(usr))
+                {
                     found = true;
+                }
+            }
             if (!found && result.size()) //we haven't already done it
             {
                 if (BranchInst *br = dyn_cast<BranchInst>(usr))
@@ -390,8 +386,6 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
         if (elegible)
         {
             result.push_back(check);
-            //Instruction *ret = cast<Instruction>(VMap[check]);
-            //ret->removeFromParent();
             //if we are elegible we can then check all ops
             int opCount = check->getNumOperands();
             for (int i = 0; i < opCount; i++)
@@ -408,17 +402,28 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
 
     reverse(result.begin(), result.end());
     auto condList = &Conditional->getInstList();
+
     for (auto cond : result)
     {
-        Instruction *cl = cond->clone();
-        VMap[cond] = cl;
-        cond->eraseFromParent();
-        condList->push_back(cl);
+        for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
+        {
+            Instruction *I = cast<Instruction>(BI);
+            if (I->isIdenticalTo(cond))
+            {
+                I->removeFromParent();
+                Instruction *cl = cond->clone();
+                VMap[cond] = cl;
+                condList->push_back(cl);
+                break;
+            }
+        }
     }
 }
 
-vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<BasicBlock *> validBlocks, vector<Instruction *> currentSet)
+vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<BasicBlock *> validBlocks)
 {
+    vector<Instruction *> result;
+    //clone every instruction in the basic block
     for (BasicBlock::iterator BI = start->begin(), BE = start->end(); BI != BE; ++BI)
     {
         Instruction *inst = cast<Instruction>(BI);
@@ -426,7 +431,7 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
         {
             Instruction *cl = inst->clone();
             VMap[inst] = cl;
-            currentSet.push_back(cl);
+            result.push_back(cl);
         }
     }
     Instruction *term = start->getTerminator();
@@ -439,31 +444,37 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
             validSuccessors++;
         }
     }
-    vector<Instruction *> result;
     if (validSuccessors > 1)
     {
         //we have a branch
         auto mergePoint = getPathMerge(start);
         auto mergeInsts = GetPathInstructions(start, mergePoint);
-        auto subPath = getInstructionPath(mergePoint, validBlocks, currentSet);
-        mergeInsts.insert(mergeInsts.end(), subPath.begin(), subPath.end());
-        return mergeInsts;
+        for (auto a : mergeInsts)
+        {
+            Instruction *cl = a->clone();
+            VMap[a] = cl;
+            result.push_back(cl);
+        }
+        auto subPath = getInstructionPath(mergePoint, validBlocks);
+        result.insert(result.end(), subPath.begin(), subPath.end());
     }
     else
     {
         //only one successor
         BasicBlock *succ = term->getSuccessor(0);
-        vector<BasicBlock *> trimmed = validBlocks;
-        trimmed.erase(remove(trimmed.begin(), trimmed.end(), start), trimmed.end());
+        vector<BasicBlock *> trimmed;
+        for (auto block : validBlocks)
+        {
+            if (block != start)
+            {
+                trimmed.push_back(block);
+            }
+        }
 
         if (find(validBlocks.begin(), validBlocks.end(), succ) != validBlocks.end())
         {
-            return getInstructionPath(succ, trimmed, currentSet);
-        }
-        else
-        {
-            //this is the end
-            return currentSet;
+            auto subResult = getInstructionPath(succ, trimmed);
+            result.insert(result.end(), subResult.begin(), subResult.end());
         }
     }
     return result;
@@ -513,12 +524,9 @@ void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
             if (Instruction *operand = dyn_cast<Instruction>(op))
             {
                 BasicBlock *parentBlock = operand->getParent();
-                if (std::find(blocks.begin(), blocks.end(), parentBlock) == blocks.end())
+                if (std::find(blocks.begin(), blocks.end(), parentBlock) == blocks.end() && parentBlock != NULL)
                 {
-                    if (find(toAdd.begin(), toAdd.end(), operand) == toAdd.end())
-                    {
-                        toAdd.insert(operand);
-                    }
+                    toAdd.insert(operand);
                 }
             }
         }

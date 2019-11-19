@@ -33,7 +33,6 @@ cl::opt<Filetype> InputType("t", cl::desc("Choose input file type"),
 int main(int argc, char *argv[])
 {
     cl::ParseCommandLineOptions(argc, argv);
-    std::cout << InputFile << " " << JsonFile << "\n";
     ifstream inputJson(JsonFile);
     nlohmann::json j;
     inputJson >> j;
