@@ -240,18 +240,18 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
 
                 for (auto p2 : stores)
                 {
-                    StoreInst *asdf = NULL;
+                    StoreInst *sInst = NULL;
                     //check each entry of the dictionary
                     for (auto i : p2.second)
                     {
                         auto ptr2 = i->getPointerOperand();
                         if (ptr2 == ptr) //these are writing to the same address (ideally a better check will exist)
                         {
-                            asdf = i;
+                            sInst = i;
                             break;
                         }
                     }
-                    if (asdf == NULL)
+                    if (sInst == NULL)
                     {
                         //we never found a match so we create a load instead
                         valsToSelect.push_back(lInst);
@@ -263,8 +263,8 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
                     }
                     else
                     {
-                        valsToSelect.push_back(asdf->getValueOperand());
-                        handledStores.push_back(asdf);
+                        valsToSelect.push_back(sInst->getValueOperand());
+                        handledStores.push_back(sInst);
                     }
                 }
                 //now that we have the values, create the select tree
@@ -402,7 +402,6 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
 
     reverse(result.begin(), result.end());
     auto condList = &Conditional->getInstList();
-
     for (auto cond : result)
     {
         for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
