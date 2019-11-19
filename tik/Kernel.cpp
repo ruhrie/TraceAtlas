@@ -122,7 +122,6 @@ Kernel::~Kernel()
     delete Conditional;
     delete KernelFunction;
 }
-
 void Kernel::Remap()
 {
     for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)
@@ -133,6 +132,208 @@ void Kernel::Remap()
             RemapInstruction(inst, VMap, llvm::RF_None);
         }
     }
+}
+
+BasicBlock *Kernel::getPathMerge(llvm::BasicBlock *start)
+{
+    vector<BasicBlock *> result;
+    Instruction *term = start->getTerminator();
+    unsigned int pathCount = term->getNumSuccessors();
+    vector<BasicBlock *> currentBlocks(pathCount);
+    vector<set<BasicBlock *>> exploredBlocks(pathCount);
+    for (int i = 0; i < pathCount; i++)
+    {
+        currentBlocks[i] = term->getSuccessor(i);
+    }
+    BasicBlock *exit;
+    bool done = false;
+    while (!done)
+    {
+
+        for (int i = 0; i < currentBlocks.size(); i++)
+        {
+            Instruction *newTerm = currentBlocks[i]->getTerminator();
+            unsigned int subCount = newTerm->getNumSuccessors();
+            if (subCount > 1)
+            {
+                throw 2;
+                cout << "hi";
+            }
+            else
+            {
+                BasicBlock *newSuc = newTerm->getSuccessor(0);
+                exploredBlocks[i].insert(newSuc);
+                currentBlocks[i] = newSuc;
+            }
+        }
+        for (int i = 0; i < pathCount; i++)
+        {
+            BasicBlock *toComp = currentBlocks[i];
+            bool missing = false;
+            for (int j = 0; j < pathCount; j++)
+            {
+                if (exploredBlocks[i].find(toComp) == exploredBlocks[i].end())
+                {
+                    missing = true;
+                    break;
+                }
+            }
+            if (!missing)
+            {
+                exit = toComp;
+                done = true;
+                break;
+            }
+        }
+    }
+
+    return exit;
+}
+
+vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock *end)
+{
+    //we now know the merge point so we will add all instructions to the result
+    //if it is a load we need to delay adding it till the end
+    //if we find another conditional we must recurse
+    vector<Instruction *> result;
+    BasicBlock *currentBlock;
+    Instruction *term = start->getTerminator();
+    Value *branchCondition = NULL;
+    if (BranchInst *brTerm = dyn_cast<BranchInst>(term))
+    {
+        branchCondition = brTerm->getCondition();
+    }
+    else
+    {
+        throw 2;
+    }
+
+    unsigned int pathCount = term->getNumSuccessors();
+    vector<BasicBlock *> currentBlocks(pathCount);
+    map<int, vector<StoreInst *>> stores;
+    for (int i = 0; i < pathCount; i++)
+    {
+        currentBlocks[i] = term->getSuccessor(i);
+        stores[i] = {};
+    }
+    bool done = false;
+    while (!done)
+    {
+        done = true;
+        for (int i = 0; i < currentBlocks.size(); i++)
+        {
+            currentBlock = currentBlocks[i];
+            if (currentBlock != end)
+            {
+                done = false;
+                for (BasicBlock::iterator BI = currentBlock->begin(), BE = currentBlock->end(); BI != BE; ++BI)
+                {
+                    Instruction *inst = cast<Instruction>(BI);
+                    if (StoreInst *lInst = dyn_cast<StoreInst>(inst))
+                    {
+                        //a load we need to buffer
+                        stores[i].push_back(lInst);
+                    }
+                    else if (!inst->isTerminator())
+                    {
+                        //the general case
+                        result.push_back(inst);
+                    }
+                }
+                Instruction *newTerm = currentBlock->getTerminator();
+                unsigned int subCount = newTerm->getNumSuccessors();
+                unsigned int validSuccessors = 0; /*
+                for (int i = 0; i < subCount; i++)
+                {
+                    if (find(validBlocks.begin(), validBlocks.end(), newTerm->getSuccessor(i)) != validBlocks.end())
+                    {
+                        validSuccessors++;
+                    }
+                }*/
+                if (subCount > 1)
+                {
+                    throw 2;
+                    cout << "hi";
+                }
+                else
+                {
+                    BasicBlock *newSuc = newTerm->getSuccessor(0);
+                    currentBlocks[i] = newSuc;
+                }
+            }
+        }
+    }
+
+    vector<StoreInst *> handledStores;
+    for (auto pair : stores)
+    {
+        auto storeVec = pair.second;
+        for (auto store : storeVec)
+        {
+            //we need to create this store somehow
+            //first check if it exists in the others, if so use it otherwise create a load
+            if (find(handledStores.begin(), handledStores.end(), store) == handledStores.end())
+            {
+                //not already handled so get check if there are others
+                vector<Value *> valsToSelect;
+                auto ptr = store->getPointerOperand();
+                LoadInst *lInst = new LoadInst(ptr); // tempBuilder.CreateLoad(ptr);
+                bool loadUsed = false;
+
+                for (auto p2 : stores)
+                {
+                    StoreInst *sInst = NULL;
+                    //check each entry of the dictionary
+                    for (auto i : p2.second)
+                    {
+                        auto ptr2 = i->getPointerOperand();
+                        if (ptr2 == ptr) //these are writing to the same address (ideally a better check will exist)
+                        {
+                            sInst = i;
+                            break;
+                        }
+                    }
+                    if (sInst == NULL)
+                    {
+                        //we never found a match so we create a load instead
+                        valsToSelect.push_back(lInst);
+                        if (!loadUsed)
+                        {
+                            loadUsed = true;
+                            result.push_back(lInst);
+                        }
+                    }
+                    else
+                    {
+                        valsToSelect.push_back(sInst->getValueOperand());
+                        handledStores.push_back(sInst);
+                    }
+                }
+                //now that we have the values, create the select tree
+
+                Value *priorValue = NULL;
+                int i = 0;
+                for (auto v : valsToSelect)
+                {
+                    Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
+                    if (priorValue != NULL)
+                    {
+                        //this will need to be expanded for switch instructions
+                        SelectInst *sInst = SelectInst::Create(branchCondition, v, priorValue); // cast<SelectInst>(tempBuilder.CreateSelect(branchCondition, v, priorValue));
+                        priorValue = sInst;
+                        result.push_back(sInst);
+                    }
+                    else
+                    {
+                        priorValue = v;
+                    }
+                }
+                auto finStore = new StoreInst(priorValue, ptr); // tempBuilder.CreateStore(priorValue, ptr);
+                result.push_back(finStore);
+            }
+        }
+    }
+    return result;
 }
 
 void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock* > blocks)
@@ -262,8 +463,15 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
         for (auto user : check->users())
         {
             Instruction *usr = cast<Instruction>(user);
-            // if this successor (usr) to the terminator (check) is not in our result already
-            if (find(result.begin(), result.end(), usr) == result.end() && result.size())
+            bool found = false;
+            for (auto i : result)
+            {
+                if (i->isIdenticalTo(usr))
+                {
+                    found = true;
+                }
+            }
+            if (!found && result.size()) //we haven't already done it
             {
                 // if this successor is a branch
                 if (BranchInst *br = dyn_cast<BranchInst>(usr))
@@ -279,7 +487,7 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
         if (eligible)
         {
             result.push_back(check);
-            // see if the operands in our terminator are resolved in this kernel or not
+            //if we are elegible we can then check all ops
             int opCount = check->getNumOperands();
             for (int i = 0; i < opCount; i++)
             {
@@ -298,10 +506,89 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
     auto condList = &Conditional->getInstList();
     for (auto cond : result)
     {
-        Instruction *cl = cond->clone();
-        VMap[cond] = cl;
-        condList->push_back(cl);
+        for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
+        {
+            Instruction *I = cast<Instruction>(BI);
+            if (I->isIdenticalTo(cond))
+            {
+                I->removeFromParent();
+                Instruction *cl = cond->clone();
+                VMap[cond] = cl;
+                condList->push_back(cl);
+                break;
+            }
+        }
     }
+}
+
+vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<BasicBlock *> validBlocks)
+{
+    vector<Instruction *> result;
+    //clone every instruction in the basic block
+    for (BasicBlock::iterator BI = start->begin(), BE = start->end(); BI != BE; ++BI)
+    {
+        Instruction *inst = cast<Instruction>(BI);
+        if (!inst->isTerminator())
+        {
+            Instruction *cl = inst->clone();
+            VMap[inst] = cl;
+            result.push_back(cl);
+        }
+    }
+    Instruction *term = start->getTerminator();
+    unsigned int succCount = term->getNumSuccessors();
+    unsigned int validSuccessors = 0;
+    for (int i = 0; i < succCount; i++)
+    {
+        if (find(validBlocks.begin(), validBlocks.end(), term->getSuccessor(i)) != validBlocks.end())
+        {
+            validSuccessors++;
+        }
+    }
+    if (validSuccessors > 1)
+    {
+        //we have a branch
+        auto mergePoint = getPathMerge(start);
+        auto mergeInsts = GetPathInstructions(start, mergePoint);
+        for (auto a : mergeInsts)
+        {
+            Instruction *cl = a->clone();
+            VMap[a] = cl;
+            result.push_back(cl);
+        }
+        auto subPath = getInstructionPath(mergePoint, validBlocks);
+        result.insert(result.end(), subPath.begin(), subPath.end());
+    }
+    else
+    {
+        //only one successor
+        BasicBlock *succ = term->getSuccessor(0);
+        string blockName = succ->getName();
+        uint64_t id = std::stoul(blockName.substr(7));
+        if (KernelMap.find(id) != KernelMap.end())
+        {
+            //we are in a kernel
+            Kernel *k = KernelMap[id];
+            CallInst *ci = CallInst::Create(k->KernelFunction);
+            result.push_back(ci);
+            succ = k->ExitTarget;
+        }
+
+        vector<BasicBlock *> trimmed;
+        for (auto block : validBlocks)
+        {
+            if (block != start)
+            {
+                trimmed.push_back(block);
+            }
+        }
+        if (find(validBlocks.begin(), validBlocks.end(), succ) != validBlocks.end())
+        {
+            auto subResult = getInstructionPath(succ, trimmed);
+            result.insert(result.end(), subResult.begin(), subResult.end());
+        }
+    }
+    return result;
 }
 
 void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)

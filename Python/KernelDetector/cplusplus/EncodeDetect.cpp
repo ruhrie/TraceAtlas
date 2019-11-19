@@ -1,20 +1,20 @@
 
-#include "EncodeDetect.h"
 #include <algorithm>
-#include <assert.h>
-#include <fstream>
 #include <iostream>
 #include <list>
-#include <map>
 #include <set>
-#include <sstream>
-#include <string>
 #include <vector>
+#include <string>
+#include <sstream>
+#include <map>
+#include <fstream>
+#include <assert.h>
 #include <zlib.h>
+#include "EncodeDetect.h"
 
-#define BLOCK_SIZE 4096
+#define 	BLOCK_SIZE	4096
 
-std::ifstream::pos_type filesize(const char *filename)
+std::ifstream::pos_type filesize(const char* filename)
 {
     std::ifstream in(filename, std::ifstream::ate | std::ifstream::binary);
     return in.tellg();
@@ -242,7 +242,7 @@ void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
 				    sum += entry;
 				    kernel.insert( entry );
 			    }
-				for( entry : kernel)
+				for( auto entry : kernel)
 				{
 			    	kernels.push_back( entry );
 				}

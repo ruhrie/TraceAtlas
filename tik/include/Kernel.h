@@ -61,4 +61,7 @@ private:
     void GetMemoryFunctions(void);
     void MorphKernelFunction(std::vector<llvm::BasicBlock* > blocks);
 
+    std::vector<llvm::Instruction *> getInstructionPath(llvm::BasicBlock *start, std::vector<llvm::BasicBlock *> validBlocks);
+    llvm::BasicBlock *getPathMerge(llvm::BasicBlock *start);
+    std::vector<llvm::Instruction *> GetPathInstructions(llvm::BasicBlock *start, llvm::BasicBlock *end);
 };
