@@ -78,6 +78,10 @@ nlohmann::json Kernel::GetJson()
     {
         j["Inputs"] = args;
     }
+    if (Init != NULL)
+    {
+        j["Init"] = GetStrings(Init);
+    }
     if (Body != NULL)
     {
         j["Body"] = GetStrings(Body);
@@ -394,6 +398,7 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
             BasicBlock *succ = term->getSuccessor(i);
             if (find(blocks.begin(), blocks.end(), succ) == blocks.end())
             {
+                // it isn't in the kernel
                 exit = true;
             }
         }
