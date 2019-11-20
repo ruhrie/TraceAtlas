@@ -183,11 +183,14 @@ namespace DashTracer
                     {
                         IRBuilder<> builder(load);
                         Value *addr = load->getPointerOperand();
-                        //Value *MemValue = load->getOperand(0);
+                        Value *MemValue = load->getOperand(0);
                         
 
                         auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0), true);
                         Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB.getContext()));
+                        builder.CreateCall(LoadDump, cast);
+                        castCode = CastInst::getCastOpcode(MemValue, true, Type::getInt8Ty(BB.getContext()), true);                      
+                        cast = builder.CreateCast(castCode, MemValue, Type::getInt8Ty(BB.getContext()));
                         builder.CreateCall(LoadDump, cast);
                         done = true;
                     }
@@ -198,9 +201,14 @@ namespace DashTracer
                     {
                         IRBuilder<> builder(store);
                         Value *addr = store->getOperand(0);
+                        Value *MemValue = store->getOperand(0);
 
                         auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0), true);
                         Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB.getContext()));
+                        builder.CreateCall(StoreDump, cast);
+
+                        castCode = CastInst::getCastOpcode(MemValue, true, Type::getInt8Ty(BB.getContext()), true);                      
+                        cast = builder.CreateCast(castCode, MemValue, Type::getInt8Ty(BB.getContext()));
                         builder.CreateCall(StoreDump, cast);
                         done = true;
                     }
