@@ -98,7 +98,7 @@ void WriteAddress(char *inst, int line, int block, uint64_t func, char *address)
     WriteStream(fin);
 }
 
-void WriteAddressValue(char *inst, int line, int block, uint64_t func, char *address,char *MemValue)
+void WriteAddressValue(char *inst, int line, int block, uint64_t func, char *address,char MemValue)
 {
     char suffix[160];
 #if defined _WIN32

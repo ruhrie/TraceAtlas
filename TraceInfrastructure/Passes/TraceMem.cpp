@@ -76,52 +76,58 @@ namespace DashTracer
                     if (LoadInst *load = dyn_cast<LoadInst>(CI))
                     {
                         Value *addr = load->getPointerOperand();
-                        Value *MemValue = load;
+                        Value *MemValue = load->getOperand(0);
                        
-                        errs()<<"load:";
-                        errs()<< *load << '\n';
-                        errs()<<"load addr:";
-                        errs()<< *addr << '\n';
-                        errs()<<"load MemValue:";
-                        errs()<< *MemValue << '\n';
-                       
+                        // errs()<<"src value:";
+                        // errs()<< *addr << '\n';
+                        // errs()<<"src type:";
+                        // errs()<< *(addr->getType()) << '\n';
+                        // errs()<<"dst type PointerType:";
+                        // errs()<< *(PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0)) << '\n';
+                        // errs()<<"dst type no PointerType:";
+                        // errs()<< *(Type::getInt8PtrTy(BB.getContext())) << '\n';
+
                         auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0), true);
                         Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB.getContext()));
                         values.push_back(cast);
-
-                        castCode = CastInst::getCastOpcode(MemValue, true, PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0), true);
-                        cast = builder.CreateCast(castCode, MemValue, Type::getInt8PtrTy(BB.getContext()));
+                        // errs()<<"address cast Value:";
+                        // errs()<< *cast << '\n';
+                        // errs()<<"castAble:";
+                        // errs()<< CastInst::isCastable (MemValue->getType(), Type::getInt8Ty(BB.getContext())) << '\n';
+                        castCode = CastInst::getCastOpcode(MemValue, true, Type::getInt8Ty(BB.getContext()), true);                      
+                        cast = builder.CreateCast(castCode, MemValue, Type::getInt8Ty(BB.getContext()));
+                        // errs()<<"MemValue cast Value:";
+                        // errs()<< *cast << '\n';
                         values.push_back(cast);
 
-                        // ArrayRef<Value *> ref = ArrayRef<Value *>(values);
-                        // builder.CreateCall(fullAddrValueFunc, ref);
                         ArrayRef<Value *> ref = ArrayRef<Value *>(values);
-                        builder.CreateCall(fullAddrFunc, ref);
+                        builder.CreateCall(fullAddrValueFunc, ref);
                     }
                     else if (StoreInst *store = dyn_cast<StoreInst>(CI))
                     {
                         Value *addr = store->getPointerOperand();
                         Value *MemValue = store->getOperand(0);
     
-                        // errs()<<"store:";
-                        // errs()<< *store << '\n';
-                        // errs()<<"store addr:";
-                        // errs()<< *addr << '\n';                
-                        // errs()<<"store MemValue:";
-                        // errs()<< *MemValue << '\n';                        
+                        //  errs()<<"store:";
+                        //  errs()<< *store << '\n';
+                        //  errs()<<"store addr:";
+                        //  errs()<< *addr << '\n';                
+                        //  errs()<<"store MemValue:";
+                        //  errs()<< *MemValue << '\n';                        
 
                         auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0), true);
                         Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB.getContext()));
                         values.push_back(cast);
 
-                        //castCode = CastInst::getCastOpcode(MemValue, true, PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0), true);
-                        //cast = builder.CreateCast(castCode, MemValue, Type::getInt8PtrTy(BB.getContext()));
-                        // values.push_back(cast);
+                        castCode = CastInst::getCastOpcode(MemValue, true, Type::getInt8Ty(BB.getContext()), true);                      
+                        cast = builder.CreateCast(castCode, MemValue, Type::getInt8Ty(BB.getContext()));
+                        //  errs()<<"MemValue cast Value:";
+                        //  errs()<< *cast << '\n';
+                        values.push_back(cast);
 
-                        // ArrayRef<Value *> ref = ArrayRef<Value *>(values);
-                        // builder.CreateCall(fullAddrValueFunc, ref);
+
                         ArrayRef<Value *> ref = ArrayRef<Value *>(values);
-                        builder.CreateCall(fullAddrFunc, ref);
+                        builder.CreateCall(fullAddrValueFunc, ref);
                     }
                     //if it is a return in main we need to call this one instruction earlier due to file io
                     else if (ReturnInst *ret = dyn_cast<ReturnInst>(CI))
@@ -154,7 +160,7 @@ namespace DashTracer
         {
             fullFunc = dyn_cast<Function>(M.getOrInsertFunction("Write", Type::getVoidTy(M.getContext()), Type::getInt8PtrTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt64Ty(M.getContext())));
             fullAddrFunc = dyn_cast<Function>(M.getOrInsertFunction("WriteAddress", Type::getVoidTy(M.getContext()), Type::getInt8PtrTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt64Ty(M.getContext()), Type::getInt8PtrTy(M.getContext())));
-            fullAddrValueFunc = dyn_cast<Function>(M.getOrInsertFunction("WriteAddressValue", Type::getVoidTy(M.getContext()), Type::getInt8PtrTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt64Ty(M.getContext()), Type::getInt8PtrTy(M.getContext()),Type::getInt8PtrTy(M.getContext())));
+            fullAddrValueFunc = dyn_cast<Function>(M.getOrInsertFunction("WriteAddressValue", Type::getVoidTy(M.getContext()), Type::getInt8PtrTy(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt32Ty(M.getContext()), Type::getInt64Ty(M.getContext()), Type::getInt8PtrTy(M.getContext()),Type::getInt8Ty(M.getContext())));
             return false;
         }
         bool EncodedTraceMem::runOnBasicBlock(BasicBlock &BB)
@@ -176,10 +182,9 @@ namespace DashTracer
                     if (LoadInst *load = dyn_cast<LoadInst>(CI))
                     {
                         IRBuilder<> builder(load);
-                        Value *addr = load->getOperand(0);
-                        Value *memValue = load->getOperand(1);
-                        outs()<<"load addr "<< addr[0];
-                        outs()<<"load memValue "<< memValue[0];
+                        Value *addr = load->getPointerOperand();
+                        //Value *MemValue = load->getOperand(0);
+                        
 
                         auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0), true);
                         Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB.getContext()));
@@ -193,9 +198,7 @@ namespace DashTracer
                     {
                         IRBuilder<> builder(store);
                         Value *addr = store->getOperand(0);
-                        Value *memValue = store->getOperand(1);
-                        outs()<<"store addr "<< addr[0];
-                        outs()<<"store memValue "<< memValue[0];
+
                         auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0), true);
                         Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB.getContext()));
                         builder.CreateCall(StoreDump, cast);
