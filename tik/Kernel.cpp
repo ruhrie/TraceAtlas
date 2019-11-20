@@ -761,7 +761,7 @@ void Kernel::GetMemoryFunctions()
         {
             if (llvm::cast<Instruction>(pair.first)->isIdenticalTo(inst))
             {
-                IRBuilder<> builder( inst->getNextNode() );
+                IRBuilder<> builder(inst->getNextNode());
                 Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
                 auto a = builder.CreateGEP(inst->getType(), GlobalMap[pair.first], constant);
                 auto b = builder.CreateStore(inst, a);

@@ -34,8 +34,8 @@ private:
     ///
     llvm::ValueToValueMapTy VMap;
 
-    /// @brief  Instruction specifying the condition of the loop. 
-    /// 
+    /// @brief  Instruction specifying the condition of the loop.
+    ///
     /// When generating the condition in the Loop block at the end of MorphKernelFunction, this global variable is used as a key in the global VMap to get the proper operand for the new branch instruction.
     ///
     llvm::Value *LoopCondition = NULL;
@@ -58,12 +58,12 @@ private:
     void Remap();
 
     /// @brief  Searches for the loop condition instruction, and adds its eligible users to the body block
-    ///          
+    ///
     /// The loop condition instruction needs to be identified and store in LoopCondition for later use in MorphKernelFunction
     /// Later, the condition's user instructions are evaluated, and those that are eligible to be in the tik representation are cloned into the VMap.
     /// Eligible instructions are those that belong to the kernel's original basic blocks, and not eligible otherwise.
     /// This function assumes that we will only find one conditional exit instruction, because we assume that the kernel will not have embedded loops in it.
-    /// 
+    ///
     /// @param   blocks     Vector of basic blocks in the module passed to the constructor.
     ///
     void GetLoopInsts(std::vector<llvm::BasicBlock *> blocks);
@@ -73,13 +73,13 @@ private:
     /// The function finds our first block, or entrance block, of the kernel.
     /// Then it searches the instruction path of that block for any function calls, and creates representations of those calls in the tik module.
     /// This code, as of this version, does not support internal loops.
-    /// 
+    ///
     /// @param  blocks      Vector of basic blocks in the module passed to the constructor.
     ///
     void GetBodyInsts(std::vector<llvm::BasicBlock *> blocks);
 
     /// @brief  Find all instructions not initialized in the kernel representation.
-    ///  
+    ///
     /// The parent block of each instruction in Kernel::Body is checked for its membership in the tik representation.
     /// If it is not found, that instruction is added to Kernel::Init
     ///
@@ -91,13 +91,13 @@ private:
     ///
     /// This function checks if there is one and exactly one successor the condition at the end of the tik representation.
     /// This is because we assume that there are no embedded loops in the kernel code.
-    /// Finally it assigns the one successor to Kernel::ExitTarget. 
+    /// Finally it assigns the one successor to Kernel::ExitTarget.
     ///
     /// @param  blocks      Vector of basic blocks in the module passed to the constructor.
     ///
-    void GetExits(std::vector<llvm::BasicBlock *> blocks); 
+    void GetExits(std::vector<llvm::BasicBlock *> blocks);
 
-    /// @brief  Simply creates a basic block with a return instruction. 
+    /// @brief  Simply creates a basic block with a return instruction.
     ///         Used at the end of the tik representation.
     ///
     void CreateExitBlock(void);
