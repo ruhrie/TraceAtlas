@@ -59,24 +59,20 @@ def DetectKernels(sourceFile, thresh = 0.95, hotThresh = 512, newLine = False):
         for sub in blockMap[key]:
             blockMap[key][sub] = float(blockMap[key][sub]) / float(total)
     covered = set()
-    # iterate over a list of tuples, sorted in descending order of key value
-    # each tuple has the key as first entry, and value as second entry
-    # block is the key 
-    # count is the value
     for block, count in sorted(blockCount.items(), key=lambda item:item[1], reverse=True):
         if count > hotThresh:
-            if not block in covered: # if we havent seen this blockID in another blockID in blockMap
+            if not block in covered:
                 sum = 0.0
-                values = blockMap[block] # collect all blockIDs this block was most likely associated with
-                sValues = sorted(values.items(), key=operator.itemgetter(1), reverse=True) # sort the associated blockIDs in descending order
+                values = blockMap[block]
+                sValues = sorted(values.items(), key=operator.itemgetter(1), reverse=True)
                 kernel = set()
                 while sum < thresh:
-                    entry = sValues[0] # pick the highest blockID we have
-                    covered.add(entry[0]) # add it to the set of covered blockIDs
-                    sValues.remove(sValues[0]) # remove what we've already accounted for
-                    sum += entry[1] # sum the normalized instance count
-                    kernel.add(entry[0]) # add this blockID to our kernel
-                kernels.append(kernel) # add the kernel [list of block IDs] to a list of kernels found so far
+                    entry = sValues[0]
+                    covered.add(entry[0])
+                    sValues.remove(sValues[0])
+                    sum += entry[1]
+                    kernel.add(entry[0])
+                kernels.append(kernel)
         else:
             break
     
@@ -85,3 +81,5 @@ def DetectKernels(sourceFile, thresh = 0.95, hotThresh = 512, newLine = False):
             result.append(kernel)
     print("Detected " + str(len(result)) + " type one kernels")
     return result
+
+print( sorted( DetectKernels( "./cplusplus/testing/test.trc" ) ) )

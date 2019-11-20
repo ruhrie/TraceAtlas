@@ -1,5 +1,5 @@
 file(GLOB SOURCES "*.cpp")
-
+cmake_minimum_required(VERSION 3.10)
 add_executable(tik ${SOURCES})
 
 set_target_properties(tik
@@ -9,7 +9,7 @@ set_target_properties(tik
 
 target_link_libraries(tik PRIVATE ${llvm_libs})
 target_compile_definitions(tik PRIVATE ${LLVM_DEFINITIONS})
-target_include_directories(tik PRIVATE ${LLVM_INCLUDE_DIRS} "include" ${DEP_INC})
+target_include_directories(tik PRIVATE ${LLVM_INCLUDE_DIRS} "include/" ${DEP_INC} )
 
 option(BUILD_TIK_APPS "Build tik test applications" OFF)
 
