@@ -5,4 +5,3 @@
 
 extern std::map<int, Kernel *> KernelMap;
 extern llvm::Module *TikModule;
-void ResolveFunctionCalls(void);

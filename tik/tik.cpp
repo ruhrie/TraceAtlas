@@ -81,7 +81,7 @@ int main(int argc, char *argv[])
     LLVMContext context;
     SMDiagnostic smerror;
     unique_ptr<Module> sourceBitcode = parseIRFile(InputFile, smerror, context);
-    
+
     //annotate it with the same algorithm used in the tracer
     static uint64_t UID = 0;
     for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
@@ -145,7 +145,6 @@ int main(int argc, char *argv[])
             }
         }
     }
-    ResolveFunctionCalls();
 
     // writing part
     nlohmann::json finalJson;
@@ -154,7 +153,7 @@ int main(int argc, char *argv[])
         finalJson["Kernels"][kern->Name] = kern->GetJson();
     }
 
-    if( OutputType == "JSON")
+    if (OutputType == "JSON")
     {
         ofstream oStream(OutputFile);
         oStream << finalJson;
@@ -162,10 +161,10 @@ int main(int argc, char *argv[])
     }
     else
     {
-        if( ASCIIFormat )
+        if (ASCIIFormat)
         {
             // print human readable tik module to file
-            llvm:AssemblyAnnotationWriter* write = new llvm::AssemblyAnnotationWriter();
+            AssemblyAnnotationWriter *write = new llvm::AssemblyAnnotationWriter();
             std::string str;
             llvm::raw_string_ostream rso(str);
             std::filebuf f0;
@@ -177,7 +176,7 @@ int main(int argc, char *argv[])
         }
         else
         {
-            // not human readable IR
+            // non-human readable IR
             std::filebuf f;
             f.open(OutputFile, std::ios::out);
             std::ostream rawStream(&f);
@@ -187,45 +186,4 @@ int main(int argc, char *argv[])
     }
 
     return 0;
-}
-
-void ResolveFunctionCalls(void)
-{
-    // look through all instructions for function calls and put them in functionCalls
-    std::vector< llvm::CallInst* > functionCalls;
-    for (Module::iterator F = TikModule->begin(), E = TikModule->end(); F != E; ++F)
-    {
-        for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
-        {
-            for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
-            {
-                // if we found an instruction with a function call
-                if( llvm::CallInst* CI = dyn_cast<llvm::CallInst>(BI) )
-                {
-                    // if we haven't already added this function
-                    if( std::find( functionCalls.begin(), functionCalls.end(), CI ) == functionCalls.end() )
-                    {
-                        functionCalls.push_back(CI);
-                    }
-                }
-            }
-        }
-    }
-    
-    for( auto funcCal : functionCalls )
-    {        
-        llvm::Function* funcName = TikModule->getFunction( funcCal->getCalledFunction()->getName() );
-        // if funcName is NULL, do nothing. Else we have a valid function in the module
-        if( funcName )
-        {
-            // do nothing
-        }
-        else
-        {
-            llvm::Function* funcDec = llvm::Function::Create(funcCal->getFunctionType(), GlobalValue::LinkageTypes::ExternalLinkage, funcCal->getCalledFunction()->getName(), TikModule);
-            funcDec->setAttributes( funcCal->getAttributes() );
-            funcCal->setCalledFunction(funcDec);
-        }
-    }
-
 }
