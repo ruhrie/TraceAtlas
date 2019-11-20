@@ -3,11 +3,16 @@
 #include "Util.h"
 #include <algorithm>
 #include <iostream>
+#include <llvm/ADT/SmallVector.h>
 #include <llvm/IR/CFG.h>
+#include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Type.h>
+#include <llvm/Transforms/Utils/Cloning.h>
+#include <vector>
+
 using namespace llvm;
 using namespace std;
 
@@ -20,13 +25,15 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
     Body = NULL;
     Init = NULL;
     Conditional = NULL;
+    Exit = NULL;
     Name = "Kernel_" + to_string(KernelUID++);
 
     FunctionType *mainType = FunctionType::get(Type::getVoidTy(TikModule->getContext()), false);
     KernelFunction = Function::Create(mainType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
-    Body = BasicBlock::Create(TikModule->getContext(), "Body", KernelFunction);
     Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
-    //start by getting a reference to all the blocks
+    Body = BasicBlock::Create(TikModule->getContext(), "Body", KernelFunction);
+    Exit = BasicBlock::Create(TikModule->getContext(), "Exit", KernelFunction);
+
     vector<BasicBlock *> blocks;
     for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
     {
@@ -42,34 +49,46 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
         }
     }
 
-    //now get the actual body
     GetBodyInsts(blocks);
 
-    //get conditional logic
     GetLoopInsts(blocks);
 
-    //to be removed
     GetInitInsts(blocks);
-
-    //now get the memory array
-    //GetMemoryFunctions();
 
     GetExits(blocks);
 
-    //finally remap everything
+    GetMemoryFunctions();
+
+    CreateExitBlock();
+
     Remap();
+
+    MorphKernelFunction(blocks);
 }
 
 nlohmann::json Kernel::GetJson()
 {
     nlohmann::json j;
-    if (Body != NULL)
+    vector<string> args;
+    for (Argument *i = KernelFunction->arg_begin(); i < KernelFunction->arg_end(); i++)
     {
-        j["Body"] = GetStrings(Body);
+        args.push_back(GetString(i));
+    }
+    if (args.size() != 0)
+    {
+        j["Inputs"] = args;
     }
     if (Init != NULL)
     {
         j["Init"] = GetStrings(Init);
+    }
+    if (Body != NULL)
+    {
+        j["Body"] = GetStrings(Body);
+    }
+    if (Exit != NULL)
+    {
+        j["Exit"] = GetStrings(Exit);
     }
     if (MemoryRead != NULL)
     {
@@ -103,6 +122,17 @@ Kernel::~Kernel()
     delete Conditional;
     delete KernelFunction;
 }
+void Kernel::Remap()
+{
+    for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)
+    {
+        for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
+        {
+            Instruction *inst = cast<Instruction>(BI);
+            RemapInstruction(inst, VMap, llvm::RF_None);
+        }
+    }
+}
 
 BasicBlock *Kernel::getPathMerge(llvm::BasicBlock *start)
 {
@@ -119,7 +149,7 @@ BasicBlock *Kernel::getPathMerge(llvm::BasicBlock *start)
     bool done = false;
     while (!done)
     {
-
+        // go through all block terminator instructions
         for (int i = 0; i < currentBlocks.size(); i++)
         {
             Instruction *newTerm = currentBlocks[i]->getTerminator();
@@ -127,7 +157,6 @@ BasicBlock *Kernel::getPathMerge(llvm::BasicBlock *start)
             if (subCount > 1)
             {
                 throw 2;
-                cout << "hi";
             }
             else
             {
@@ -212,18 +241,10 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
                 }
                 Instruction *newTerm = currentBlock->getTerminator();
                 unsigned int subCount = newTerm->getNumSuccessors();
-                unsigned int validSuccessors = 0; /*
-                for (int i = 0; i < subCount; i++)
-                {
-                    if (find(validBlocks.begin(), validBlocks.end(), newTerm->getSuccessor(i)) != validBlocks.end())
-                    {
-                        validSuccessors++;
-                    }
-                }*/
+                unsigned int validSuccessors = 0;
                 if (subCount > 1)
                 {
                     throw 2;
-                    cout << "hi";
                 }
                 else
                 {
@@ -247,7 +268,7 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
                 //not already handled so get check if there are others
                 vector<Value *> valsToSelect;
                 auto ptr = store->getPointerOperand();
-                LoadInst *lInst = new LoadInst(ptr); // tempBuilder.CreateLoad(ptr);
+                LoadInst *lInst = new LoadInst(ptr);
                 bool loadUsed = false;
 
                 for (auto p2 : stores)
@@ -289,7 +310,7 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
                     if (priorValue != NULL)
                     {
                         //this will need to be expanded for switch instructions
-                        SelectInst *sInst = SelectInst::Create(branchCondition, v, priorValue); // cast<SelectInst>(tempBuilder.CreateSelect(branchCondition, v, priorValue));
+                        SelectInst *sInst = SelectInst::Create(branchCondition, v, priorValue);
                         priorValue = sInst;
                         result.push_back(sInst);
                     }
@@ -298,7 +319,7 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
                         priorValue = v;
                     }
                 }
-                auto finStore = new StoreInst(priorValue, ptr); // tempBuilder.CreateStore(priorValue, ptr);
+                auto finStore = new StoreInst(priorValue, ptr);
                 result.push_back(finStore);
             }
         }
@@ -306,14 +327,57 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
     return result;
 }
 
-void Kernel::Remap()
+void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
 {
+    // localVMap is the new VMap for the new function
+    llvm::ValueToValueMapTy localVMap;
+
+    // capture all the input args our kernel function will need
+    std::vector<llvm::Type *> inputArgs;
+    for (auto inst : ExternalValues)
+    {
+        inputArgs.push_back(inst->getType());
+    }
+    // create our new function with input args and clone our basic blocks into it
+    FunctionType *funcType = FunctionType::get(Type::getInt32Ty(TikModule->getContext()), inputArgs, false);
+    llvm::Function *newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName() + "_Reformatted", TikModule);
+    Init = CloneBasicBlock(Init, localVMap, "", newFunc);
+    Body = CloneBasicBlock(Body, localVMap, "", newFunc);
+    Exit = CloneBasicBlock(Exit, localVMap, "", newFunc);
+    Conditional = CloneBasicBlock(Conditional, localVMap, "", newFunc);
+
+    // remove the old function from the parent but do not erase it
+    KernelFunction->removeFromParent();
+    KernelFunction = newFunc;
+
+    // for each input instruction, store them into one of our global pointers
+    // GlobalMap already contains the input arg->global pointer relationships we need
+    std::set<llvm::StoreInst *> newStores;
+    for (int i = 0; i < ExternalValues.size(); i++)
+    {
+        IRBuilder<> builder(Init);
+        auto b = builder.CreateStore(KernelFunction->arg_begin() + i, GlobalMap[ExternalValues[i]]);
+        newStores.insert(b);
+    }
+
+    // now create the branches between basic blocks
+    // init->loop (unconditional)
+    IRBuilder<> initBuilder(Init);
+    auto a = initBuilder.CreateBr(Conditional);
+    // loop->body or loop->exit (conditional)
+    IRBuilder<> loopBuilder(Conditional);
+    auto b = loopBuilder.CreateCondBr(VMap[LoopCondition], Body, Exit);
+    // body->loop (unconditional)
+    IRBuilder<> bodyBuilder(Body);
+    auto c = bodyBuilder.CreateBr(Conditional);
+
+    // finally, remap our instructions for the new function
     for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)
     {
         for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
         {
             Instruction *inst = cast<Instruction>(BI);
-            RemapInstruction(inst, VMap, llvm::RF_IgnoreMissingLocals);
+            RemapInstruction(inst, localVMap, llvm::RF_None);
         }
     }
 }
@@ -322,7 +386,8 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
 {
     Conditional = BasicBlock::Create(TikModule->getContext(), "Loop", KernelFunction);
     vector<Instruction *> result;
-    //now identify all exit blocks
+
+    // identify all exit blocks
     vector<BasicBlock *> exits;
     for (BasicBlock *block : blocks)
     {
@@ -333,7 +398,7 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
             BasicBlock *succ = term->getSuccessor(i);
             if (find(blocks.begin(), blocks.end(), succ) == blocks.end())
             {
-                //it isn't in the kernel
+                // it isn't in the kernel
                 exit = true;
             }
         }
@@ -342,6 +407,7 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
             exits.push_back(block);
         }
     }
+
     //now that we have the exits we can get the conditional logic for them
     assert(exits.size() == 1);
     std::vector<Instruction *> conditions;
@@ -357,22 +423,27 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
             }
             else
             {
+                // this means the block's terminator is the wrong, so the input bitcode is flawed
                 throw 2;
             }
         }
         else
         {
+            // same story
             throw 2;
         }
     }
+    // we should only find one condition branch, because we assume that a detected kernel has no embedded loops
     assert(conditions.size() == 1);
+    LoopCondition = conditions[0];
 
+    // now check if the condition instruction's users are eligible instructions themselves for out body block, and throw it out after
     while (conditions.size() != 0)
     {
         Instruction *check = conditions.back();
         conditions.pop_back();
-        bool elegible = true;
-        //a value is elegible only if all of its users are in the loop
+        bool eligible = true;
+        // a value is eligible only if all of its users are in the loop
         for (auto user : check->users())
         {
             Instruction *usr = cast<Instruction>(user);
@@ -384,34 +455,38 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
                     found = true;
                 }
             }
-            if (!found && result.size()) //we haven't already done it
+            if (!found && result.size()) // we haven't already done it
             {
                 if (BranchInst *br = dyn_cast<BranchInst>(usr))
                 {
                 }
                 else
                 {
-                    elegible = false;
+                    eligible = false;
                 }
             }
         }
-        if (elegible)
+        if (eligible)
         {
             result.push_back(check);
-            //if we are elegible we can then check all ops
+
+            /** WHY DO WE NEED THE FOLLOWING EXTRA LOGIC **/
+
+            // if we are eligible we can then check all ops
             int opCount = check->getNumOperands();
             for (int i = 0; i < opCount; i++)
             {
                 Value *opValue = check->getOperand(i);
                 if (Instruction *op = dyn_cast<Instruction>(opValue))
                 {
-                    //assuming it is an instruction we should check it
+                    // assuming it is an instruction we should check it
                     conditions.push_back(op);
                 }
             }
         }
     }
 
+    // now clone the old instructions into the body block
     reverse(result.begin(), result.end());
     auto condList = &Conditional->getInstList();
     for (auto cond : result)
@@ -503,6 +578,7 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
 
 void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
 {
+    // search blocks for BBs whose predecessors are not in blocks, this will be the entry block
     std::vector<Instruction *> result;
     vector<BasicBlock *> entrances;
     for (BasicBlock *block : blocks)
@@ -511,30 +587,35 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
         {
             if (find(blocks.begin(), blocks.end(), pred) == blocks.end())
             {
-                //this is an entry block
                 entrances.push_back(block);
             }
         }
     }
     assert(entrances.size() == 1);
-
-    //this code won't support loops/internal kernels initially
-    //!! I'm serious
     BasicBlock *currentBlock = entrances[0];
 
-    auto asdf = getInstructionPath(currentBlock, blocks);
-
+    // next, find all the instructions in the entrance block bath who call functions, and make our own references to them
+    auto path = getInstructionPath(currentBlock, blocks);
     auto instList = &Body->getInstList();
-    for (Instruction *i : asdf)
+    for (Instruction *i : path)
     {
+        if (CallInst *callInst = dyn_cast<CallInst>(i))
+        {
+            Function *funcCal = callInst->getCalledFunction();
+            llvm::Function *funcName = TikModule->getFunction(funcCal->getName());
+            if (!funcName)
+            {
+                llvm::Function *funcDec = llvm::Function::Create(funcCal->getFunctionType(), GlobalValue::LinkageTypes::ExternalLinkage, funcCal->getName(), TikModule);
+                funcDec->setAttributes(funcCal->getAttributes());
+                callInst->setCalledFunction(funcDec);
+            }
+        }
         instList->push_back(i);
     }
 }
 
 void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
 {
-    std::set<Instruction *> toAdd;
-
     for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
     {
         Instruction *inst = cast<Instruction>(BI);
@@ -547,23 +628,19 @@ void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
                 BasicBlock *parentBlock = operand->getParent();
                 if (std::find(blocks.begin(), blocks.end(), parentBlock) == blocks.end() && parentBlock != NULL)
                 {
-                    toAdd.insert(operand);
+                    if (find(ExternalValues.begin(), ExternalValues.end(), operand) == ExternalValues.end())
+                    {
+                        ExternalValues.push_back(operand);
+                    }
                 }
             }
         }
-    }
-
-    auto initList = &Init->getInstList();
-    for (auto init : toAdd)
-    {
-        Instruction *i = init->clone();
-        VMap[init] = i;
-        initList->push_back(i);
     }
 }
 
 void Kernel::GetMemoryFunctions()
 {
+    // first, get all the pointer operands of each load and store in Kernel::Body
     set<LoadInst *> loadInst;
     set<StoreInst *> storeInst;
     for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
@@ -578,9 +655,20 @@ void Kernel::GetMemoryFunctions()
             storeInst.insert(newInst);
         }
     }
+    for (BasicBlock::iterator BI = Conditional->begin(), BE = Conditional->end(); BI != BE; ++BI)
+    {
+        Instruction *inst = cast<Instruction>(BI);
+        if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
+        {
+            loadInst.insert(newInst);
+        }
+        else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
+        {
+            storeInst.insert(newInst);
+        }
+    }
     set<Value *> loadValues;
     set<Value *> storeValues;
-    Type *memType;
     for (LoadInst *load : loadInst)
     {
         Value *loadVal = load->getPointerOperand();
@@ -592,6 +680,8 @@ void Kernel::GetMemoryFunctions()
         Value *storeVal = store->getPointerOperand();
         storeValues.insert(storeVal);
     }
+
+    // now create MemoryRead and MemoryWrite functions
     FunctionType *funcType = FunctionType::get(Type::getInt32Ty(TikModule->getContext()), Type::getInt32Ty(TikModule->getContext()), false);
     MemoryRead = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, "MemoryRead", TikModule);
     MemoryWrite = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, "MemoryWrite", TikModule);
@@ -600,11 +690,23 @@ void Kernel::GetMemoryFunctions()
     BasicBlock *loadBlock = BasicBlock::Create(TikModule->getContext(), "entry", MemoryRead);
     IRBuilder<> loadBuilder(loadBlock);
     Value *priorValue = NULL;
+
+    // MemoryRead
     map<Value *, Value *> loadMap;
-    map<Value *, Value *> storeMap;
     for (Value *lVal : loadValues)
     {
-        Instruction *converted = cast<Instruction>(loadBuilder.CreatePtrToInt(lVal, Type::getInt32Ty(TikModule->getContext())));
+        // since MemoryRead is a function, its pointers need to be globally scoped so it and the Kernel function can use them
+        if (GlobalMap.find(lVal) == GlobalMap.end())
+        {
+            llvm::Constant *globalInt = ConstantPointerNull::get(cast<PointerType>(lVal->getType()));
+            llvm::GlobalVariable *g = new GlobalVariable(*TikModule, globalInt->getType(), false, llvm::GlobalValue::LinkageTypes::ExternalLinkage, globalInt);
+            GlobalMap[lVal] = g;
+        }
+        // create a load for every time we use these global pointers
+        Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
+        auto a = loadBuilder.CreateGEP(lVal->getType(), GlobalMap[lVal], constant);
+        auto b = loadBuilder.CreateLoad(a);
+        Instruction *converted = cast<Instruction>(loadBuilder.CreatePtrToInt(b, Type::getInt32Ty(TikModule->getContext())));
         Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
         loadMap[lVal] = indexConstant;
         if (priorValue == NULL)
@@ -620,34 +722,69 @@ void Kernel::GetMemoryFunctions()
     }
     Instruction *loadRet = cast<ReturnInst>(loadBuilder.CreateRet(priorValue));
 
-    //now do the store
+    // MemoryWrite
     i = 0;
     BasicBlock *storeBlock = BasicBlock::Create(TikModule->getContext(), "entry", MemoryWrite);
     IRBuilder<> storeBuilder(storeBlock);
-    for (Value *lVal : storeValues)
+    map<Value *, Value *> storeMap;
+    priorValue = NULL;
+    for (Value *sVal : storeValues)
     {
-        Instruction *converted = cast<Instruction>(storeBuilder.CreatePtrToInt(lVal, Type::getInt32Ty(TikModule->getContext())));
+        // since MemoryWrite is a function, its pointers need to be globally scoped so it and the Kernel function can use them
+        if (GlobalMap.find(sVal) == GlobalMap.end())
+        {
+            llvm::Constant *globalInt = ConstantPointerNull::get(cast<PointerType>(sVal->getType()));
+            llvm::GlobalVariable *g = new GlobalVariable(*TikModule, globalInt->getType(), false, llvm::GlobalValue::LinkageTypes::ExternalLinkage, globalInt);
+            GlobalMap[sVal] = g;
+        }
+        Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
+        auto a = storeBuilder.CreateGEP(sVal->getType(), GlobalMap[sVal], constant);
+        auto b = storeBuilder.CreateLoad(a);
+        Instruction *converted = cast<Instruction>(storeBuilder.CreatePtrToInt(b, Type::getInt32Ty(TikModule->getContext())));
+        Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
         if (priorValue == NULL)
         {
             priorValue = converted;
-            Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i);
-            storeMap[lVal] = indexConstant;
+            storeMap[sVal] = indexConstant;
         }
         else
         {
-            Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
             ICmpInst *cmpInst = cast<ICmpInst>(storeBuilder.CreateICmpEQ(MemoryWrite->arg_begin(), indexConstant));
             SelectInst *sInst = cast<SelectInst>(storeBuilder.CreateSelect(cmpInst, converted, priorValue));
             priorValue = sInst;
-            storeMap[lVal] = indexConstant;
+            storeMap[sVal] = indexConstant;
         }
     }
     Instruction *storeRet = cast<ReturnInst>(storeBuilder.CreateRet(priorValue));
 
+    // every time we use a global pointer in the body, store to it
+    std::set<llvm::Value *> globalSet;
+    for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
+    {
+        Instruction *inst = cast<Instruction>(BI);
+        for (auto pair : GlobalMap)
+        {
+            if (llvm::cast<Instruction>(pair.first)->isIdenticalTo(inst))
+            {
+                IRBuilder<> builder(inst->getNextNode());
+                Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
+                auto a = builder.CreateGEP(inst->getType(), GlobalMap[pair.first], constant);
+                auto b = builder.CreateStore(inst, a);
+                globalSet.insert(b);
+            }
+        }
+    }
+
+    // find instructions in body block not belonging to parent kernel
     vector<Instruction *> toRemove;
     for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
     {
         Instruction *inst = cast<Instruction>(BI);
+        if (globalSet.find(inst) != globalSet.end())
+        {
+            continue;
+        }
+
         IRBuilder<> builder(inst);
         if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
         {
@@ -655,7 +792,6 @@ void Kernel::GetMemoryFunctions()
             auto casted = builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType());
             auto newLoad = builder.CreateLoad(casted);
             newInst->replaceAllUsesWith(newLoad);
-            //VMap[newInst] = newLoad;
             toRemove.push_back(newInst);
         }
         else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
@@ -666,6 +802,36 @@ void Kernel::GetMemoryFunctions()
             toRemove.push_back(newInst);
         }
     }
+
+    // find instructions in Conditional block not belonging to parent
+    for (BasicBlock::iterator BI = Conditional->begin(), BE = Conditional->end(); BI != BE; ++BI)
+    {
+        Instruction *inst = cast<Instruction>(BI);
+        if (globalSet.find(inst) != globalSet.end())
+        {
+            continue;
+        }
+
+        IRBuilder<> builder(inst);
+        if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
+        {
+            auto memCall = builder.CreateCall(MemoryRead, loadMap[newInst->getPointerOperand()]);
+            auto casted = builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType());
+            auto newLoad = builder.CreateLoad(casted);
+            newInst->replaceAllUsesWith(newLoad);
+            VMap[inst] = newLoad;
+            toRemove.push_back(inst);
+        }
+        else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
+        {
+            auto memCall = builder.CreateCall(MemoryWrite, storeMap[newInst->getPointerOperand()]);
+            auto casted = builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType());
+            auto newStore = builder.CreateStore(newInst->getValueOperand(), casted);
+            toRemove.push_back(inst);
+        }
+    }
+
+    // remove the instructions that don't belong
     for (auto inst : toRemove)
     {
         inst->removeFromParent();
@@ -674,12 +840,14 @@ void Kernel::GetMemoryFunctions()
 
 void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
 {
+    // search for exit basic blocks
     vector<BasicBlock *> exits;
     for (auto block : blocks)
     {
         Instruction *term = block->getTerminator();
         if (BranchInst *brInst = dyn_cast<BranchInst>(term))
         {
+            // put the successors of the exit block in a unique-entry vector
             for (unsigned int i = 0; i < brInst->getNumSuccessors(); i++)
             {
                 BasicBlock *succ = brInst->getSuccessor(i);
@@ -694,6 +862,14 @@ void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
             throw 2;
         }
     }
+
+    // we should have exactly one successor to our tik representation because we assume there are no embedded loops
     assert(exits.size() == 1);
     ExitTarget = exits[0];
+}
+
+void Kernel::CreateExitBlock(void)
+{
+    IRBuilder<> exitBuilder(Exit);
+    auto a = exitBuilder.CreateRetVoid();
 }
