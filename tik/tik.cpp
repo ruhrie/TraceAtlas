@@ -6,7 +6,7 @@
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/Instructions.h>
-
+#include "Util.h"
 #include <llvm/IR/Module.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
@@ -152,6 +152,8 @@ int main(int argc, char *argv[])
     {
         finalJson["Kernels"][kern->Name] = kern->GetJson();
     }
+
+    PrintVal(sourceBitcode.get());
 
     if (OutputType == "JSON")
     {

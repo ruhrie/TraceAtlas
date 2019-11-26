@@ -631,16 +631,20 @@ void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
                     if (find(ExternalValues.begin(), ExternalValues.end(), operand) == ExternalValues.end())
                     {
                         ExternalValues.push_back(operand);
+                        PrintVal(operand);
                     }
                 }
             }
         }
     }
+    cout << "\n";
 }
 
 void Kernel::GetMemoryFunctions()
 {
     // first, get all the pointer operands of each load and store in Kernel::Body
+    /** new for loop grabbing all inputs of child kernels */
+
     set<LoadInst *> loadInst;
     set<StoreInst *> storeInst;
     for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)

@@ -1,5 +1,6 @@
 #include "Util.h"
 #include <iostream>
+#include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/Support/raw_ostream.h>
 #include <regex>
 
@@ -12,6 +13,15 @@ void PrintVal(llvm::Value *val)
     llvm::raw_string_ostream rso(str);
     val->print(rso);
     std::cout << str << "\n";
+}
+
+void PrintVal(llvm::Module *mod)
+{
+    AssemblyAnnotationWriter *write = new llvm::AssemblyAnnotationWriter();
+    std::string str;
+    llvm::raw_string_ostream rso(str);
+    mod->print(rso, write);
+    std::cout << str;
 }
 
 void PrintVal(llvm::Type *val)

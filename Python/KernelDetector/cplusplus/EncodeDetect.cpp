@@ -7,6 +7,7 @@
 #include <string>
 #include <sstream>
 #include <map>
+#include <functional>
 #include <fstream>
 #include <assert.h>
 #include <zlib.h>
@@ -181,11 +182,12 @@ void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
         }
     } // while( notDone )
 
+	/*
 	std::cout << "About to output counts.\n";
     for (auto elem : blockCount)
     {
         std::cout << elem.first << " : " << elem.second << "\n";
-    }
+    }*/
 
     // assign to every index of every list value in blockMap a normalized amount
     std::map<int, std::map<int, float>> fBlockMap;
@@ -220,18 +222,29 @@ void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
         std::cout << "\n";
     }*/
 
-    
     std::set<int> covered;
 	std::vector<int> kernels;
-    std::map <int, int> sBlockCount;
-    for( auto &it : blockCount )
+
+	// sort blockMap in descending order of values by making a vector of pairs
+	std::vector< std::pair<int, int> > blockPairs;
+	for( auto iter = blockCount.begin(); iter != blockCount.end(); iter++ )
+	{
+		blockPairs.push_back( *iter );
+	}
+
+	std::sort( blockPairs.begin(), blockPairs.end(), [=](std::pair<int, int>& a, std::pair<int, int>& b)
+	{
+		return a.second > b.second;
+	} );
+
+    for( auto &it : blockPairs )
     {
 	    if( it.second > hotThresh )
 	    {
 		    if( covered.find( it.first ) != covered.end() )
 		    {
 			    float sum = 0.0;
-			    std::vector<float> values = fBlockMap.find( it.first );
+			    std::vector<float> values = fBlockMap.find( &it.first );
 			    sort( values.begin(), values.end() );
 			    std::set<float> kernel;
 			    while( sum < thresh )
@@ -248,18 +261,18 @@ void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
 				}
 		    } // if covered
 	    } // if > hotThresh
-	    else
+	    /*else
 	    {
 		    break;
-	    }
+	    }*/
     } // for it in blockCount
 
-	std::vector< int > result;
+	/*std::vector< int > result;
     for( auto it : kernels )
     {
 	    if( std::find( result.begin(), result.end(), it) == result.end() )
 	    {
 		    result.insert(it);
 	    }
-    }
+    }*/
 }

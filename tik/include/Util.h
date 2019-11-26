@@ -4,6 +4,7 @@
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/Function.h>
+#include <llvm/IR/Module.h>
 #include <vector>
 #include <map>
 #include <string>
@@ -11,6 +12,7 @@
 
 void PrintVal(llvm::Value *val);
 void PrintVal(llvm::Type *val);
+void PrintVal(llvm::Module *mod);
 std::string GetString(llvm::Value *v);
 std::vector<std::string> GetStrings(llvm::BasicBlock *bb);
 std::vector<std::string> GetStrings(std::set<llvm::Instruction *> instructions);
