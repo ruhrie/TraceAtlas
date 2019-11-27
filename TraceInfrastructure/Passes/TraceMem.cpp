@@ -191,7 +191,7 @@ namespace DashTracer
                         builder.CreateCall(LoadDump, cast);
                         castCode = CastInst::getCastOpcode(MemValue, true, Type::getInt8Ty(BB.getContext()), true);                      
                         cast = builder.CreateCast(castCode, MemValue, Type::getInt8Ty(BB.getContext()));
-                        builder.CreateCall(LoadDump, cast);
+                        builder.CreateCall(LoadDumpValue, cast);
                         done = true;
                     }
                 }
@@ -200,7 +200,7 @@ namespace DashTracer
                     if (StoreInst *store = dyn_cast<StoreInst>(CI))
                     {
                         IRBuilder<> builder(store);
-                        Value *addr = store->getOperand(0);
+                        Value *addr = store->getPointerOperand();
                         Value *MemValue = store->getOperand(0);
 
                         auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0), true);
@@ -209,7 +209,7 @@ namespace DashTracer
 
                         castCode = CastInst::getCastOpcode(MemValue, true, Type::getInt8Ty(BB.getContext()), true);                      
                         cast = builder.CreateCast(castCode, MemValue, Type::getInt8Ty(BB.getContext()));
-                        builder.CreateCall(StoreDump, cast);
+                        builder.CreateCall(StoreDumpValue, cast);
                         done = true;
                     }
                 }
@@ -222,7 +222,9 @@ namespace DashTracer
         {
             BB_ID = dyn_cast<Function>(M.getOrInsertFunction("BB_ID_Dump", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext())));
             LoadDump = dyn_cast<Function>(M.getOrInsertFunction("LoadDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)));
+            LoadDumpValue = dyn_cast<Function>(M.getOrInsertFunction("LoadDumpValue", Type::getVoidTy(M.getContext()), Type::getInt8Ty(M.getContext())));
             StoreDump = dyn_cast<Function>(M.getOrInsertFunction("StoreDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)));
+            StoreDumpValue = dyn_cast<Function>(M.getOrInsertFunction("StoreDumpValue", Type::getVoidTy(M.getContext()), Type::getInt8Ty(M.getContext())));
             return false;
         }
 

@@ -175,11 +175,23 @@ void LoadDump(void *address)
     sprintf(fin, "LoadAddress:%#lX\n", (uint64_t)address);
     WriteStream(fin);
 }
-
+void LoadDumpValue(int MemValue)
+{
+    char fin[128];
+    sprintf(fin, "LoadMemValue:%d\n", MemValue);
+    WriteStream(fin);
+}
 void StoreDump(void *address)
 {
     char fin[128];
     sprintf(fin, "StoreAddress:%#lX\n", (uint64_t)address);
+    WriteStream(fin);
+}
+
+void StoreDumpValue(int MemValue)
+{
+    char fin[128];
+    sprintf(fin, "LoadMemValue:%d\n", MemValue);
     WriteStream(fin);
 }
 
