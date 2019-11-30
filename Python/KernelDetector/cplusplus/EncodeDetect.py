@@ -84,5 +84,9 @@ def DetectKernels(sourceFile, thresh = 0.95, hotThresh = 512, newLine = False):
     for kernel in kernels:
         if not kernel in result:
             result.append(kernel)
+    for kernel in result:
+        for entry in kernel:
+            print( entry )
+            print( "\n\n" )
     print("Detected " + str(len(result)) + " type one kernels")
     return result

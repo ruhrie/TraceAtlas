@@ -21,7 +21,7 @@ std::ifstream::pos_type filesize(const char* filename)
     return in.tellg();
 }
 
-void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
+std::vector< std::set< int > > DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
 {
     int radius = 5;
     std::map<int, std::map<int, int>> blockMap;
@@ -190,7 +190,7 @@ void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
     }*/
 
     // assign to every index of every list value in blockMap a normalized amount
-    std::map<int, std::map<int, float>> fBlockMap;
+    std::map<int, std::vector< std::pair<int, float> > > fBlockMap;
     for (auto &key : blockMap)
     {
         int total = 0;
@@ -200,7 +200,8 @@ void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
         }
         for (auto &sub : key.second)
         {
-            fBlockMap[key.first][sub.first] = (float)sub.second / (float)total;
+            fBlockMap[key.first].push_back( std::pair<int, float>( sub.first, (float)sub.second / (float)total ) );
+        	//fBlockMap[key.first][sub.first] = (float)sub.second / (float)total;
         }
     }
     /*for (auto &key : blockMap)
@@ -223,7 +224,7 @@ void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
     }*/
 
     std::set<int> covered;
-	std::vector<int> kernels;
+	std::vector< std::set< int > > kernels;
 
 	// sort blockMap in descending order of values by making a vector of pairs
 	std::vector< std::pair<int, int> > blockPairs;
@@ -241,38 +242,40 @@ void DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
     {
 	    if( it.second > hotThresh )
 	    {
-		    if( covered.find( it.first ) != covered.end() )
+		    if( covered.find( it.first ) == covered.end() )
 		    {
 			    float sum = 0.0;
-			    std::vector<float> values = fBlockMap.find( &it.first );
-			    sort( values.begin(), values.end() );
-			    std::set<float> kernel;
+			    //std::vector<float> values = fBlockMap.find( &it.first );
+			    auto values = fBlockMap.find( it.first );		
+				std::sort( values->second.begin(), values->second.end(), [=](std::pair<int, float>& a, std::pair<int, float>& b)
+				{
+					return a.second > b.second;
+				} );
+			    std::set< int >kernel;
 			    while( sum < thresh )
 			    {
-				    float entry = values[1];
-				    covered.insert( entry );
-				    std::remove( values.begin(), values.end(), entry );
-				    sum += entry;
-				    kernel.insert( entry );
+				    std::pair< int, float > entry = values->second[0];
+				    covered.insert( entry.first );
+				    std::remove( values->second.begin(), values->second.end(), entry );
+				    sum += entry.second;
+				    kernel.insert( entry.first );
 			    }
-				for( auto entry : kernel)
-				{
-			    	kernels.push_back( entry );
-				}
+			    kernels.push_back( kernel );
 		    } // if covered
 	    } // if > hotThresh
-	    /*else
+	    else
 	    {
 		    break;
-	    }*/
+	    }
     } // for it in blockCount
 
-	/*std::vector< int > result;
+	std::vector< std::set< int > > result;
     for( auto it : kernels )
     {
 	    if( std::find( result.begin(), result.end(), it) == result.end() )
 	    {
-		    result.insert(it);
+		    result.push_back(it);
 	    }
-    }*/
+    }
+	return result;
 }

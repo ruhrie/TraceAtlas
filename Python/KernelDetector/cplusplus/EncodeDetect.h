@@ -1,6 +1,6 @@
 
 #include <iostream>
 
-void DetectKernels(char* sourceFile, float thresh, int hotThreash, bool newline);
+std::vector< std::set< int > > DetectKernels(char* sourceFile, float thresh, int hotThreash, bool newline);
 
 
