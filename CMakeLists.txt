@@ -10,6 +10,11 @@ llvm_map_components_to_libnames(llvm_libs  support core irreader bitreader bitwr
 
 find_package(ZLIB REQUIRED)
 
+option(ENABLE_TESTING "Build tests" ON)
+if(${ENABLE_TESTING})
+    enable_testing()
+endif()
+
 add_subdirectory("Dependencies")
 add_subdirectory("TraceInfrastructure")
 add_subdirectory("Utilities")
