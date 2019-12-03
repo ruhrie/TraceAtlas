@@ -1,46 +1,24 @@
 #pragma once
 #include <exception>
+#include <sstream>
 #include <string>
-class NotImplementedException : public std::exception
+
+class TikException : public std::exception
 {
-private:
-    std::string Message = "";
+protected:
+    std::string msg;
 
 public:
-    NotImplementedException();
-    NotImplementedException(std::string message)
+    TikException(const std::string &arg, const char *file, int line)
     {
-        Message = message;
+        std::ostringstream o;
+        o << file << ":" << line << ": " << arg;
+        msg = o.str();
     }
     const char *what()
     {
-        std::string res = "This code is not implemented";
-        if(Message != "")
-        {
-            res += ": " + Message;
-        }
-        return res.c_str();
+        return msg.c_str();
     }
 };
 
-class KernelException : public std::exception
-{
-private:
-    std::string Message = "";
-
-public:
-    KernelException();
-    KernelException(std::string message)
-    {
-        Message = message;
-    }
-    const char *what()
-    {
-        std::string res = "This code is not implemented";
-        if(Message != "")
-        {
-            res += ": " + Message;
-        }
-        return res.c_str();
-    }
-};
+#define TikException(arg) TikException(arg, __FILE__, __LINE__);

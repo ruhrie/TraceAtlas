@@ -1,5 +1,6 @@
 #include "tik/tik.h"
 #include <fstream>
+#include "tik/Exceptions.h"
 #include <iostream>
 #include <json.hpp>
 #include <llvm/Bitcode/BitcodeReader.h>
@@ -50,7 +51,7 @@ int main(int argc, char *argv[])
         inputJson >> j;
         inputJson.close();
     }
-    catch (const std::exception &e)
+    catch (TikException &e)
     {
         std::cerr << "Couldn't open input json file: " << JsonFile << "\n";
         std::cerr << e.what() << '\n';
@@ -95,7 +96,7 @@ int main(int argc, char *argv[])
     {
         sourceBitcode = parseIRFile(InputFile, smerror, context);
     }
-    catch (const std::exception &e)
+    catch (TikException &e)
     {
         std::cerr << "Couldn't open input bitcode file: " << InputFile << "\n";
         std::cerr << e.what() << '\n';
@@ -170,11 +171,16 @@ int main(int argc, char *argv[])
                     //and restart the iterator to ensure cohesion
                     break;
                 }
-                catch (const std::exception &e)
+                catch (TikException &e)
                 {
                     failedKernels.insert(kernel.second);
-                    std::cerr << "Failed to convert kernel to tik: " << "\n";
+                    std::cerr << "Failed to convert kernel to tik" << "\n";
                     std::cerr << e.what() << '\n';
+                }
+                catch(...)
+                {
+                    failedKernels.insert(kernel.second);
+                    std::cerr << "huh" << "\n";
                 }
             }
         }
@@ -220,7 +226,7 @@ int main(int argc, char *argv[])
             }
         }
     }
-    catch (const std::exception &e)
+    catch (TikException &e)
     {
         std::cerr << "Failed to open output file: " << OutputFile << "\n";
         std::cerr << e.what() << '\n';
