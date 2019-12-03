@@ -1,6 +1,7 @@
-#include "Kernel.h"
-#include "Tik.h"
-#include "Util.h"
+#include "tik/Kernel.h"
+#include "tik/tik.h"
+#include "tik/Util.h"
+#include "tik/Exceptions.h"
 #include <algorithm>
 #include <iostream>
 #include <llvm/ADT/SmallVector.h>
@@ -409,7 +410,10 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
     }
 
     //now that we have the exits we can get the conditional logic for them
-    assert(exits.size() == 1);
+    if(exits.size() != 1)
+    {
+        throw KernelException("tik only supports single exit kernels");
+    }
     std::vector<Instruction *> conditions;
     for (BasicBlock *exit : exits)
     {
@@ -434,7 +438,10 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
         }
     }
     // we should only find one condition branch, because we assume that a detected kernel has no embedded loops
-    assert(conditions.size() == 1);
+    if(conditions.size() != 1)
+    {
+        throw KernelException("tik only supports single condition kernels");
+    }
     LoopCondition = conditions[0];
 
     // now check if the condition instruction's users are eligible instructions themselves for out body block, and throw it out after
@@ -591,7 +598,10 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
             }
         }
     }
-    assert(entrances.size() == 1);
+    if(entrances.size() != 1)
+    {
+        throw KernelException("tik only supports ingle entrance kernels");
+    }
     BasicBlock *currentBlock = entrances[0];
 
     // next, find all the instructions in the entrance block bath who call functions, and make our own references to them
@@ -864,6 +874,10 @@ void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
     }
 
     // we should have exactly one successor to our tik representation because we assume there are no embedded loops
+    if(exits.size() != 1)
+    {
+        throw KernelException("kernels must have one exit");
+    } 
     assert(exits.size() == 1);
     ExitTarget = exits[0];
 }
