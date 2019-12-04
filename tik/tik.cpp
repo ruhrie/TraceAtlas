@@ -1,5 +1,6 @@
-#include "Tik.h"
+#include "tik/tik.h"
 #include <fstream>
+#include "tik/Exceptions.h"
 #include <iostream>
 #include <json.hpp>
 #include <llvm/Bitcode/BitcodeReader.h>
@@ -42,10 +43,20 @@ cl::opt<bool> ASCIIFormat("S", cl::desc("output json as human-readable ASCII tex
 int main(int argc, char *argv[])
 {
     cl::ParseCommandLineOptions(argc, argv);
-    ifstream inputJson(JsonFile);
+    ifstream inputJson;
     nlohmann::json j;
-    inputJson >> j;
-    inputJson.close();
+    try
+    {
+        inputJson.open(JsonFile);
+        inputJson >> j;
+        inputJson.close();
+    }
+    catch (TikException &e)
+    {
+        std::cerr << "Couldn't open input json file: " << JsonFile << "\n";
+        std::cerr << e.what() << '\n';
+        return EXIT_FAILURE;
+    }
 
     map<string, vector<int>> kernels;
 
@@ -80,7 +91,17 @@ int main(int argc, char *argv[])
     //load the llvm file
     LLVMContext context;
     SMDiagnostic smerror;
-    unique_ptr<Module> sourceBitcode = parseIRFile(InputFile, smerror, context);
+    unique_ptr<Module> sourceBitcode;
+    try
+    {
+        sourceBitcode = parseIRFile(InputFile, smerror, context);
+    }
+    catch (TikException &e)
+    {
+        std::cerr << "Couldn't open input bitcode file: " << InputFile << "\n";
+        std::cerr << e.what() << '\n';
+        return EXIT_FAILURE;
+    }
 
     //annotate it with the same algorithm used in the tracer
     static uint64_t UID = 0;
@@ -98,50 +119,69 @@ int main(int argc, char *argv[])
     std::vector<Kernel *> results;
 
     bool change = true;
+    set<vector<int>> failedKernels;
     while (change)
     {
         change = false;
         for (auto kernel : kernels)
         {
+            if(failedKernels.find(kernel.second) != failedKernels.end())
+            {
+                continue;
+            }
             if (childParentMapping.find(kernel.first) == childParentMapping.end())
             {
-                //this kernel has no unexplained parents
-                Kernel *kern = new Kernel(kernel.second, sourceBitcode.get());
-                //so we remove its blocks from all parents
-                vector<string> toRemove;
-                for (auto child : childParentMapping)
+                try
                 {
-                    auto loc = find(child.second.begin(), child.second.end(), kernel.first);
-                    if (loc != child.second.end())
+                    //this kernel has no unexplained parents
+                    Kernel *kern = new Kernel(kernel.second, sourceBitcode.get());
+                    //so we remove its blocks from all parents
+                    vector<string> toRemove;
+                    for (auto child : childParentMapping)
                     {
-                        child.second.erase(loc);
-                        if (child.second.size() == 0)
+                        auto loc = find(child.second.begin(), child.second.end(), kernel.first);
+                        if (loc != child.second.end())
                         {
-                            toRemove.push_back(child.first);
+                            child.second.erase(loc);
+                            if (child.second.size() == 0)
+                            {
+                                toRemove.push_back(child.first);
+                            }
                         }
                     }
-                }
-                //if necessary remove the entry from the map
-                for (auto r : toRemove)
-                {
-                    auto it = childParentMapping.find(r);
-                    childParentMapping.erase(it);
-                }
-                //publish our result
-                results.push_back(kern);
-                change = true;
-                for (auto block : kernel.second)
-                {
-                    if (KernelMap.find(block) == KernelMap.end())
+                    //if necessary remove the entry from the map
+                    for (auto r : toRemove)
                     {
-                        KernelMap[block] = kern;
+                        auto it = childParentMapping.find(r);
+                        childParentMapping.erase(it);
                     }
+                    //publish our result
+                    results.push_back(kern);
+                    change = true;
+                    for (auto block : kernel.second)
+                    {
+                        if (KernelMap.find(block) == KernelMap.end())
+                        {
+                            KernelMap[block] = kern;
+                        }
+                    }
+                    //and remove it from kernels
+                    auto it = find(kernels.begin(), kernels.end(), kernel);
+                    kernels.erase(it);
+                    //and restart the iterator to ensure cohesion
+                    break;
                 }
-                //and remove it from kernels
-                auto it = find(kernels.begin(), kernels.end(), kernel);
-                kernels.erase(it);
-                //and restart the iterator to ensure cohesion
-                break;
+                catch (TikException &e)
+                {
+                    failedKernels.insert(kernel.second);
+                    std::cerr << "Failed to convert kernel to tik" << "\n";
+                    std::cerr << e.what() << '\n';
+                }
+                catch(...)
+                {
+                    failedKernels.insert(kernel.second);
+                    std::cerr << "huh" << "\n";
+                }
             }
         }
     }
@@ -153,39 +193,46 @@ int main(int argc, char *argv[])
         finalJson["Kernels"][kern->Name] = kern->GetJson();
     }
 
-    PrintVal(sourceBitcode.get());
-
-    if (OutputType == "JSON")
+    try
     {
-        ofstream oStream(OutputFile);
-        oStream << finalJson;
-        oStream.close();
-    }
-    else
-    {
-        if (ASCIIFormat)
+        if (OutputType == "JSON")
         {
-            // print human readable tik module to file
-            AssemblyAnnotationWriter *write = new llvm::AssemblyAnnotationWriter();
-            std::string str;
-            llvm::raw_string_ostream rso(str);
-            std::filebuf f0;
-            f0.open(OutputFile, std::ios::out);
-            TikModule->print(rso, write);
-            std::ostream readableStream(&f0);
-            readableStream << str;
-            f0.close();
+            ofstream oStream(OutputFile);
+            oStream << finalJson;
+            oStream.close();
         }
         else
         {
-            // non-human readable IR
-            std::filebuf f;
-            f.open(OutputFile, std::ios::out);
-            std::ostream rawStream(&f);
-            raw_os_ostream raw_stream(rawStream);
-            WriteBitcodeToFile(*TikModule, raw_stream);
+            if (ASCIIFormat)
+            {
+                // print human readable tik module to file
+                AssemblyAnnotationWriter *write = new llvm::AssemblyAnnotationWriter();
+                std::string str;
+                llvm::raw_string_ostream rso(str);
+                std::filebuf f0;
+                f0.open(OutputFile, std::ios::out);
+                TikModule->print(rso, write);
+                std::ostream readableStream(&f0);
+                readableStream << str;
+                f0.close();
+            }
+            else
+            {
+                // non-human readable IR
+                std::filebuf f;
+                f.open(OutputFile, std::ios::out);
+                std::ostream rawStream(&f);
+                raw_os_ostream raw_stream(rawStream);
+                WriteBitcodeToFile(*TikModule, raw_stream);
+            }
         }
     }
+    catch (TikException &e)
+    {
+        std::cerr << "Failed to open output file: " << OutputFile << "\n";
+        std::cerr << e.what() << '\n';
+        return EXIT_FAILURE;
+    }
 
-    return 0;
+    return EXIT_SUCCESS;
 }

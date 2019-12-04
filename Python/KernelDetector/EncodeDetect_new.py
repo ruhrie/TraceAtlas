@@ -63,6 +63,7 @@ def DetectKernels(sourceFile, thresh = 0.95, hotThresh = 512, newLine = False):
     for block, count in sorted(blockCount.items(), key=lambda item:item[1], reverse=True):
         if count > hotThresh:
             if not block in covered:
+                print(block)
                 sum = 0.0
                 values = blockMap[block]
                 sValues = sorted(values.items(), key=operator.itemgetter(1), reverse=True)
@@ -82,8 +83,8 @@ def DetectKernels(sourceFile, thresh = 0.95, hotThresh = 512, newLine = False):
             result.append(kernel)
 
 
-    for kernel in kernels:
-        kernelString = ' , '.join(str(x) for x in kernel)
+    for kernel in sorted( kernels ):
+        kernelString = ' , '.join(str(x) for x in sorted( kernel) )
         print( kernelString+"\n\n" )
     print("Detected " + str(len(result)) + " type one kernels")
     return result

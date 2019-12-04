@@ -1,6 +1,7 @@
-#include "Kernel.h"
-#include "Tik.h"
-#include "Util.h"
+#include "tik/Kernel.h"
+#include "tik/Exceptions.h"
+#include "tik/Util.h"
+#include "tik/tik.h"
 #include <algorithm>
 #include <iostream>
 #include <llvm/ADT/SmallVector.h>
@@ -156,7 +157,7 @@ BasicBlock *Kernel::getPathMerge(llvm::BasicBlock *start)
             unsigned int subCount = newTerm->getNumSuccessors();
             if (subCount > 1)
             {
-                throw 2;
+                throw TikException("Not Implemented");
             }
             else
             {
@@ -204,7 +205,7 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
     }
     else
     {
-        throw 2;
+        throw TikException("Not Implemented");
     }
 
     unsigned int pathCount = term->getNumSuccessors();
@@ -244,7 +245,7 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
                 unsigned int validSuccessors = 0;
                 if (subCount > 1)
                 {
-                    throw 2;
+                    throw TikException("Not Implemented");
                 }
                 else
                 {
@@ -409,7 +410,10 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
     }
 
     //now that we have the exits we can get the conditional logic for them
-    assert(exits.size() == 1);
+    if (exits.size() != 1)
+    {
+        throw TikException("Kernel Exception: tik only supports single exit kernels");
+    }
     std::vector<Instruction *> conditions;
     for (BasicBlock *exit : exits)
     {
@@ -424,17 +428,20 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
             else
             {
                 // this means the block's terminator is the wrong, so the input bitcode is flawed
-                throw 2;
+                throw TikException("Not Implemented");
             }
         }
         else
         {
             // same story
-            throw 2;
+            throw TikException("Not Implemented");
         }
     }
     // we should only find one condition branch, because we assume that a detected kernel has no embedded loops
-    assert(conditions.size() == 1);
+    if (conditions.size() != 1)
+    {
+        throw TikException("Kernel Exception: tik only supports single condition kernels");
+    }
     LoopCondition = conditions[0];
 
     // now check if the condition instruction's users are eligible instructions themselves for out body block, and throw it out after
@@ -591,7 +598,10 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
             }
         }
     }
-    assert(entrances.size() == 1);
+    if (entrances.size() != 1)
+    {
+        throw TikException("Kernel Exception: tik only supports ingle entrance kernels");
+    }
     BasicBlock *currentBlock = entrances[0];
 
     // next, find all the instructions in the entrance block bath who call functions, and make our own references to them
@@ -863,11 +873,15 @@ void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
         }
         else
         {
-            throw 2;
+            throw TikException("Not Implemented");
         }
     }
 
     // we should have exactly one successor to our tik representation because we assume there are no embedded loops
+    if (exits.size() != 1)
+    {
+        throw TikException("Kernel Exception: kernels must have one exit");
+    }
     assert(exits.size() == 1);
     ExitTarget = exits[0];
 }
