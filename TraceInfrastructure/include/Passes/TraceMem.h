@@ -11,18 +11,6 @@ namespace DashTracer
 {
     namespace Passes
     {
-        /// <summary>
-        /// The Trace pass is responsible for injecting the tracing code and calling the other passes.
-        /// </summary>
-        struct TraceMem : public BasicBlockPass
-        {
-            static char ID;
-            TraceMem() : BasicBlockPass(ID) {}
-            bool runOnBasicBlock(BasicBlock &BB) override;
-            void getAnalysisUsage(AnalysisUsage &AU) const override;
-            bool doInitialization(Module &M) override;
-        };
-
         struct EncodedTraceMem : public BasicBlockPass
         {
             static char ID;

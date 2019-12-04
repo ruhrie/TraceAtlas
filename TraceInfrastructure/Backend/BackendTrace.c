@@ -101,6 +101,7 @@ void WriteAddress(char *inst, int line, int block, uint64_t func, char *address)
 void WriteAddressValue(char *inst, int line, int block, uint64_t func, char *address,char MemValue)
 {
     char suffix[160];
+    printf("MemValue:%lu\n",(uint64_t)MemValue);
 #if defined _WIN32
     sprintf(suffix, ";line:%d;block:%d;function:%llu;address:%llu;MemValue:%llu\n", line, block, func, (uint64_t)address,(uint64_t)MemValue);
 #else
@@ -171,27 +172,34 @@ void CloseFile()
 
 void LoadDump(void *address)
 {
+
+   // printf("MemAddr:%ld\n",(uint64_t) address);
+    //printf("MemValue:%d\n",*((uint8_t*)address));
     char fin[128];
     sprintf(fin, "LoadAddress:%#lX\n", (uint64_t)address);
     WriteStream(fin);
 }
-void LoadDumpValue(int MemValue)
+void LoadDumpValue(void *MemValue)
 {
-    char fin[128];
-    sprintf(fin, "LoadMemValue:%d\n", MemValue);
-    WriteStream(fin);
+    //printf("MemAddr:%ld\n",(uint64_t) MemValue);
+ //   printf("MemValue:%d\n",*((uint8_t*)MemValue));
+    // char fin[128];
+    // sprintf(fin, "LoadMemValue:%ld\n", (uint64_t)MemValue);
+    // WriteStream(fin);
 }
 void StoreDump(void *address)
 {
-    char fin[128];
-    sprintf(fin, "StoreAddress:%#lX\n", (uint64_t)address);
-    WriteStream(fin);
+    //printf("MemValue:%ld\n",(uint64_t)address);
+    //char fin[128];
+    //sprintf(fin, "StoreAddress:%#lX\n", (uint64_t)address);
+    //WriteStream(fin);
 }
 
-void StoreDumpValue(int MemValue)
+void StoreDumpValue(void *MemValue)
 {
+    printf("MemValue:%ld\n",(uint64_t)MemValue);
     char fin[128];
-    sprintf(fin, "LoadMemValue:%d\n", MemValue);
+    sprintf(fin, "LoadMemValue:%ld\n", (uint64_t)MemValue);
     WriteStream(fin);
 }
 

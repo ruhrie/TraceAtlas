@@ -40,5 +40,5 @@ namespace DashTracer
         }
     } // namespace Passes
     char Passes::TraceMemIO::ID = 0;
-    static RegisterPass<Passes::TraceMemIO> TraceMemIO("TraceMemIO", "Adds function calls to open/close trace files", true, false);
+    static RegisterPass<Passes::TraceMemIO> TraceMemIO("TraceMemIO", "Adds function calls to open/close memory value trace files", true, false);
 } // namespace DashTracer
