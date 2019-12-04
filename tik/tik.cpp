@@ -177,11 +177,6 @@ int main(int argc, char *argv[])
                     std::cerr << "Failed to convert kernel to tik" << "\n";
                     std::cerr << e.what() << '\n';
                 }
-                catch(...)
-                {
-                    failedKernels.insert(kernel.second);
-                    std::cerr << "huh" << "\n";
-                }
             }
         }
     }

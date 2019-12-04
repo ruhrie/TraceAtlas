@@ -520,7 +520,22 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
     for (BasicBlock::iterator BI = start->begin(), BE = start->end(); BI != BE; ++BI)
     {
         Instruction *inst = cast<Instruction>(BI);
-        if (!inst->isTerminator())
+        if (CallInst *ci = dyn_cast<CallInst>(inst))
+        {
+            Function *calledFunc = ci->getCalledFunction();
+            if (calledFunc->empty())
+            {
+                Instruction *cl = inst->clone();
+                VMap[inst] = cl;
+                result.push_back(cl);
+            }
+            else
+            {
+                auto subPath = getInstructionPath(&calledFunc->getEntryBlock(), validBlocks);
+                result.insert(result.end(), subPath.begin(), subPath.end());
+            }
+        }
+        else if (!inst->isTerminator())
         {
             Instruction *cl = inst->clone();
             VMap[inst] = cl;
@@ -550,6 +565,11 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
         }
         auto subPath = getInstructionPath(mergePoint, validBlocks);
         result.insert(result.end(), subPath.begin(), subPath.end());
+    }
+    else if(validSuccessors == 0)
+    {
+        //we don't need to do anything unless we started in a function and exited outside of it
+        //basically that shouldn't happen so we don't do anything
     }
     else
     {
@@ -865,6 +885,46 @@ void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
                 {
                     exits.push_back(succ);
                 }
+            }
+        }
+        else if (ReturnInst *rInst = dyn_cast<ReturnInst>(term))
+        {
+            Function *parentFunction = block->getParent();
+            vector<BasicBlock *> internalUse;
+            vector<BasicBlock *> externalUse;
+            for (auto user : parentFunction->users())
+            {
+                if (CallInst *ci = dyn_cast<CallInst>(user))
+                {
+                    BasicBlock *parent = ci->getParent();
+                    if (find(blocks.begin(), blocks.end(), parent) == blocks.end())
+                    {
+                        externalUse.push_back(parent);
+                    }
+                    else
+                    {
+                        internalUse.push_back(parent);
+                    }
+                }
+                else
+                {
+                    throw TikException("Function not called from callinst. Unexpected behavior.");
+                }
+            }
+            if (internalUse.size() != 0 && externalUse.size() == 0)
+            {
+                //use is internal so ignore
+            }
+            else if (internalUse.size() == 0 && externalUse.size() != 0)
+            {
+                for (auto a : externalUse)
+                {
+                    exits.push_back(a);
+                }
+            }
+            else
+            {
+                throw TikException("Function called both externally and internally. Unimplemented.")
             }
         }
         else
