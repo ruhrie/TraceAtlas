@@ -21,7 +21,7 @@ std::ifstream::pos_type filesize(const char* filename)
     return in.tellg();
 }
 
-std::vector< std::set< int > > DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
+std::vector< std::set< int > > ExtractKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
 {
     int radius = 5;
     std::map<int, std::map<int, int>> blockMap;
@@ -176,143 +176,10 @@ std::vector< std::set< int > > DetectKernels(char *sourceFile, float thresh, int
         {
             notDone = false;
         }
-        if (index % 100 == 0)
+        if (index % 1000 == 0)
         {
             std::cout << "Currently reading block " << index << " of " << blocks << ".\n";
         }
-    } // while( notDone )
-
-	/*
-	std::cout << "About to output counts.\n";
-    for (auto elem : blockCount)
-    {
-        std::cout << elem.first << " : " << elem.second << "\n";
-    }*/
-
-    // assign to every index of every list value in blockMap a normalized amount
-    std::map<int, std::vector< std::pair<int, float> > > fBlockMap;
-    for (auto &key : blockMap)
-    {
-        int total = 0;
-        for (auto &sub : key.second)
-        {
-            total += sub.second;
-        }
-        for (auto &sub : key.second)
-        {
-            fBlockMap[key.first].push_back( std::pair<int, float>( sub.first, (float)sub.second / (float)total ) );
-        	//fBlockMap[key.first][sub.first] = (float)sub.second / (float)total;
-        }
-    }
-    /*for (auto &key : blockMap)
-    {
-        std::cout << key.first << ": ";
-        for (auto &sub : key.second)
-        {
-            std::cout << sub.second << ", ";
-        }
-        std::cout << "\n";
-    }
-    for (auto &key : fBlockMap)
-    {
-        std::cout << key.first << ": ";
-        for (auto &sub : key.second)
-        {
-            std::cout << sub.second << ", ";
-        }
-        std::cout << "\n";
-    }*/
-
-    std::set<int> covered;
-	std::vector< std::set< int > > kernels;
-
-	// sort blockMap in descending order of values by making a vector of pairs
-	std::vector< std::pair<int, int> > blockPairs;
-	for( auto iter = blockCount.begin(); iter != blockCount.end(); iter++ )
-	{
-		blockPairs.push_back( *iter );
 	}
-
-	std::sort( blockPairs.begin(), blockPairs.end(), [=](std::pair<int, int>& a, std::pair<int, int>& b)
-	{
-		if( a.second > b.second )
-		{
-			return true;
-		}
-		else if( a.second == b.second)
-		{
-			if( a.first < b.first )
-			{
-				return true;
-			}
-			else
-			{
-				return false;
-			}
-		}
-		else
-		{
-			return false;
-		}
-	} );
-
-    for( auto &it : blockPairs )
-    {
-	    if( it.second > hotThresh )
-	    {
-		    if( covered.find( it.first ) == covered.end() )
-		    {
-				std::cout << "using seed " << it.first << "\n";
-			    float sum = 0.0;
-			    //std::vector<float> values = fBlockMap.find( &it.first );
-			    auto values = fBlockMap.find( it.first );		
-				std::sort( values->second.begin(), values->second.end(), [=](std::pair<int, float>& a, std::pair<int, float>& b)
-				{
-					if( a.second > b.second )
-					{
-						return true;
-					}
-					else if( a.second == b.second)
-					{
-						if( a.first < b.first )
-						{
-							return true;
-						}
-						else
-						{
-							return false;
-						}
-					}
-					else
-					{
-						return false;
-					}
-				} );
-			    std::set< int >kernel;
-			    while( sum < thresh )
-			    {
-				    std::pair< int, float > entry = values->second[0];
-				    covered.insert( entry.first );
-				    std::remove( values->second.begin(), values->second.end(), entry );
-				    sum += entry.second;
-				    kernel.insert( entry.first );
-			    }
-			    kernels.push_back( kernel );
-		    } // if covered
-	    } // if > hotThresh
-	    else
-	    {
-		    break;
-	    }
-    } // for it in blockCount
-
-	std::vector< std::set< int > > result;
-    for( auto it : kernels )
-    {
-	    if( std::find( result.begin(), result.end(), it) == result.end() )
-	    {
-		    result.push_back(it);
-	    }
-    }
-	return result;
 }
+

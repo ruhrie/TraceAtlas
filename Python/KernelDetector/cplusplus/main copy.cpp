@@ -7,7 +7,7 @@
 int main()
 {
     char sourceFile[] = "./testing/kalman_0_0.trc";
-    std::vector< std::set< int > > kernels = DetectKernels(sourceFile, 0.95, 512, false);
+    std::vector< std::set< int > > kernels = ExtractKernels(sourceFile, 0.95, 512, false);
     std::cout << "Detected " << kernels.size() << " type 1 kernels." << std::endl;
     for( auto entry : kernels )
     {
@@ -17,7 +17,5 @@ int main()
         }
         std::cout << "\n\n";
     }
-
-    
     return 0;
 }
