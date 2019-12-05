@@ -1,6 +1,5 @@
 
 #include <algorithm>
-#include <iostream>
 #include <list>
 #include <set>
 #include <vector>
@@ -8,7 +7,6 @@
 #include <sstream>
 #include <map>
 #include <functional>
-#include <fstream>
 #include <assert.h>
 #include <zlib.h>
 #include "EncodeDetect.h"
@@ -23,18 +21,34 @@ std::ifstream::pos_type filesize(const char* filename)
 
 std::vector< std::set< int > > DetectKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
 {
+	/* Structures for grouping kernels */
+	// Tracer parameter, sets the maximum width that the parser can look for temporally affine blocks
     int radius = 5;
+	// Maps a blockID to its vector of temporally affine blocks
     std::map<int, std::map<int, int>> blockMap;
+	// Holds the count of each blockID
     std::map<int, int> blockCount;
+    // Maps a kernelID to its set of blockIDs
+    std::map<int, std::set<int>> kernelMap;
+	// Vector for grouping blocks together 
+    std::vector<int> priorBlocks;
+
+    /* Read the Trace */
+	// Compute # of blocks in the trace
     std::ifstream::pos_type traceSize = filesize(sourceFile);
     int blocks = traceSize / BLOCK_SIZE + 1;
-
-    // now read the trace
+	// File stuff for input trace and output decompressed file
     std::ifstream inputTrace;
+	std::ofstream outfile;
+	outfile.open("outfile.txt");
+    inputTrace.open(sourceFile);
+    inputTrace.seekg(0, std::ios_base::end);
+    uint64_t size = inputTrace.tellg();
+    inputTrace.seekg(0, std::ios_base::beg);
+	// Holds blocks of the trace
     char dataArray[BLOCK_SIZE];
     char decompressedArray[BLOCK_SIZE];
-
-    // decompression object
+    // Zlib decompression object
     z_stream strm;
     int ret;
     strm.zalloc = Z_NULL;
@@ -42,29 +56,12 @@ std::vector< std::set< int > > DetectKernels(char *sourceFile, float thresh, int
     strm.opaque = Z_NULL;
     ret = inflateInit(&strm);
     assert(ret == Z_OK);
-
-    // create file object
-	std::ofstream outfile;
-	outfile.open("outfile.txt");
-    inputTrace.open(sourceFile);
-    inputTrace.seekg(0, std::ios_base::end);
-    uint64_t size = inputTrace.tellg();
-    inputTrace.seekg(0, std::ios_base::beg);
-
-    // dictionary for kernel sorting
-    std::map<int, std::set<int>> kernelMap;
-
-    // some variables for the loop
+    // Keep track of how many blocks of the trace we've done
     int index = 0;
+	// Connector for incomplete lines between blocks
     std::string priorLine = "";
-
-    // vectors to read the file into line by line
     bool notDone = true;
-    int lastBlock;
-
-    std::vector<std::string> fileList;
-    std::vector<int> priorBlocks;
-	int c = 0;
+	// Shows whether we've seen the first block ID yet
 	bool seenFirst;
     while (notDone)
     {

@@ -15,26 +15,32 @@
 
 #define 	BLOCK_SIZE	4096
 
-std::ifstream::pos_type filesize(const char* filename)
+std::map< int, std::vector< int > > ExtractKernels(char *sourceFile, std::vector< std::set< int > > kernels, bool newline)
 {
-    std::ifstream in(filename, std::ifstream::ate | std::ifstream::binary);
-    return in.tellg();
-}
+	/* Data structures for grouping kernels */
+	// Dictionary for holding the first blockID for each kernel
+	std::map< int, int > kernStart;
+	// Dictionary the final set of kernels, [kernelID] -> [blockIDs]
+	std::map< int, std::set< int >> finalBlocks;
+	// Vector for holding blocks not belonging to a type 1 kernel
+	std::map< int, std::set< int >> blocks;
 
-std::vector< std::set< int > > ExtractKernels(char *sourceFile, float thresh, int hotThresh, bool newline)
-{
-    int radius = 5;
-    std::map<int, std::map<int, int>> blockMap;
-    std::map<int, int> blockCount;
+    /* Read the Trace */
+	// Compute # of blocks in the trace
     std::ifstream::pos_type traceSize = filesize(sourceFile);
-    int blocks = traceSize / BLOCK_SIZE + 1;
-
-    // now read the trace
+    int totalBlocks = traceSize / BLOCK_SIZE + 1;
+	// File stuff for input trace and output decompressed file
     std::ifstream inputTrace;
+	std::ofstream outfile;
+	outfile.open("outfile.txt");
+    inputTrace.open(sourceFile);
+    inputTrace.seekg(0, std::ios_base::end);
+    uint64_t size = inputTrace.tellg();
+    inputTrace.seekg(0, std::ios_base::beg);
+	// Holds blocks of the trace
     char dataArray[BLOCK_SIZE];
     char decompressedArray[BLOCK_SIZE];
-
-    // decompression object
+    // Zlib decompression object
     z_stream strm;
     int ret;
     strm.zalloc = Z_NULL;
@@ -42,29 +48,12 @@ std::vector< std::set< int > > ExtractKernels(char *sourceFile, float thresh, in
     strm.opaque = Z_NULL;
     ret = inflateInit(&strm);
     assert(ret == Z_OK);
-
-    // create file object
-	std::ofstream outfile;
-	outfile.open("outfile.txt");
-    inputTrace.open(sourceFile);
-    inputTrace.seekg(0, std::ios_base::end);
-    uint64_t size = inputTrace.tellg();
-    inputTrace.seekg(0, std::ios_base::beg);
-
-    // dictionary for kernel sorting
-    std::map<int, std::set<int>> kernelMap;
-
-    // some variables for the loop
+    // Keep track of how many blocks of the trace we've done
     int index = 0;
+	// Connector for incomplete lines between blocks
     std::string priorLine = "";
-
-    // vectors to read the file into line by line
     bool notDone = true;
-    int lastBlock;
-
-    std::vector<std::string> fileList;
-    std::vector<int> priorBlocks;
-	int c = 0;
+	// Shows whether we've seen the first block ID yet
 	bool seenFirst;
     while (notDone)
     {
@@ -132,20 +121,35 @@ std::vector< std::set< int > > ExtractKernels(char *sourceFile, float thresh, in
 			if (key == "BasicBlock")
 			{
 				long int block = stoi(value, 0, 0);
-				blockCount[block] += 1;
-				priorBlocks.push_back(block);
-
-				if (priorBlocks.size() > (2 * radius + 1))
+				for( int i = 0; i < kernels.size(); i++)
 				{
-					priorBlocks.erase(priorBlocks.begin());
-				}
-				if (priorBlocks.size() > radius)
-				{
-					for( auto i : priorBlocks )
+					std::set< int > kernel = kernels[i];
+					if( block == kernStart[i] )
 					{
-						blockMap[block][i]++;
+						blocks[i].clear();
 					}
-				} // if priorBlocks.size > radius
+					else
+					{
+						blocks[i].insert(block);
+						if( kernel.find( block ) != kernel.end() )
+						{
+							if( kernStart.find(i) == kernStart.end() )
+							{
+								kernStart[i] = block;
+								finalBlocks[i].insert( block );
+								blocks[i].clear();
+							}
+							else
+							{
+								for( auto ind : blocks[i] )
+								{
+									finalBlocks[i].insert(ind);
+								}
+								blocks[i].clear();
+							}
+						}
+					}
+				}
 			}// if key == BasicBlock
 			else if (key == "TraceVersion")
 			{
@@ -172,14 +176,31 @@ std::vector< std::set< int > > ExtractKernels(char *sourceFile, float thresh, in
 		index++;
 
         notDone = (ret != Z_STREAM_END);
-        if (index > blocks)
+        if (index > totalBlocks)
         {
             notDone = false;
         }
-        if (index % 1000 == 0)
+        if (index % 1000 == 1)
         {
-            std::cout << "Currently reading block " << index << " of " << blocks << ".\n";
+            std::cout << "Currently reading block " << index << " of " << totalBlocks << ".\n";
         }
 	}
+
+	std::vector< std::set< int >> checker;
+	for( int i = 0; i < kernels.size(); i++ )
+	{
+		if( std::find( checker.begin(), checker.end(), finalBlocks[i]) == checker.end() )
+		{
+			checker.push_back(finalBlocks[i]);
+		}
+	}
+	std::map< int, std::vector< int >> finalMap;
+	for( int i = 0; i < checker.size(); i++ )
+	{
+		//std::sort( checker[i].begin(), checker[i].end() );
+		std::vector< int > v( checker[i].begin(), checker[i].end() );
+		finalMap[i] = v;
+	}
+	return finalMap;
 }
 
