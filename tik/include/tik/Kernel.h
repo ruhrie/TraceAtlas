@@ -110,6 +110,8 @@ private:
     /// @param  blocks      Vector of basic blocks in the module passed to the constructor.
     void MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks);
 
+    void HandleReturnInstructions(std::vector<llvm::BasicBlock *> blocks, llvm::Function *F);
+
     std::vector<llvm::Instruction *> getInstructionPath(llvm::BasicBlock *start, std::vector<llvm::BasicBlock *> validBlocks);
     llvm::BasicBlock *getPathMerge(llvm::BasicBlock *start);
     std::vector<llvm::Instruction *> GetPathInstructions(llvm::BasicBlock *start, llvm::BasicBlock *end);

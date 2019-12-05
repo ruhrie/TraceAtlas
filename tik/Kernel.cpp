@@ -540,6 +540,11 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
                     Value *arg = cast<Value>(ai);
                     VMap[arg] = VMap[ci->getOperand(i)];
                 }
+                Type *retType = calledFunc->getReturnType();
+                if (!retType->isVoidTy())
+                {
+                    HandleReturnInstructions(validBlocks, calledFunc);
+                }
             }
         }
         else if (!inst->isTerminator())
@@ -953,4 +958,9 @@ void Kernel::CreateExitBlock(void)
 {
     IRBuilder<> exitBuilder(Exit);
     auto a = exitBuilder.CreateRetVoid();
+}
+
+void Kernel::HandleReturnInstructions(std::vector<llvm::BasicBlock *> blocks, llvm::Function *F)
+{
+    throw TikException("Not Implemented");
 }
