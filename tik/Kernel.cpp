@@ -130,7 +130,7 @@ void Kernel::Remap()
         for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
         {
             Instruction *inst = cast<Instruction>(BI);
-            RemapInstruction(inst, VMap, llvm::RF_None);
+            RemapInstruction(inst, VMap, llvm::RF_IgnoreMissingLocals);
         }
     }
 }
@@ -533,6 +533,13 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
             {
                 auto subPath = getInstructionPath(&calledFunc->getEntryBlock(), validBlocks);
                 result.insert(result.end(), subPath.begin(), subPath.end());
+                int args = calledFunc->arg_size();
+                int i = 0;
+                for (auto ai = calledFunc->arg_begin(); ai < calledFunc->arg_end(); ai++, i++)
+                {
+                    Value *arg = cast<Value>(ai);
+                    VMap[arg] = VMap[ci->getOperand(i)];
+                }
             }
         }
         else if (!inst->isTerminator())
@@ -566,7 +573,7 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
         auto subPath = getInstructionPath(mergePoint, validBlocks);
         result.insert(result.end(), subPath.begin(), subPath.end());
     }
-    else if(validSuccessors == 0)
+    else if (validSuccessors == 0)
     {
         //we don't need to do anything unless we started in a function and exited outside of it
         //basically that shouldn't happen so we don't do anything
