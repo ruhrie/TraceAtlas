@@ -543,7 +543,24 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
                 Type *retType = calledFunc->getReturnType();
                 if (!retType->isVoidTy())
                 {
-                    HandleReturnInstructions(validBlocks, calledFunc);
+                    BasicBlock *block = &calledFunc->getEntryBlock();
+                    auto retTree = BuildReturnTree(block, validBlocks);
+                    Value* toRemap = NULL;
+                    if(retTree.size() == 1)
+                    {
+                        //this is a single value
+                        toRemap = retTree[0];
+                    }
+                    else
+                    {
+                        //this is a set of instructions where the last is the value of note
+                        toRemap = retTree.back();
+                        for(auto val : retTree)
+                        {
+                            result.push_back(cast<Instruction>(val));
+                        }
+                    }
+                    VMap[ci] = toRemap;
                 }
             }
         }
@@ -960,7 +977,83 @@ void Kernel::CreateExitBlock(void)
     auto a = exitBuilder.CreateRetVoid();
 }
 
-void Kernel::HandleReturnInstructions(std::vector<llvm::BasicBlock *> blocks, llvm::Function *F)
+//if the result is one entry long it is a value. Otherwise its a list of instructions
+vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blocks)
 {
-    throw TikException("Not Implemented");
+    vector<Value *> result;
+    Instruction *term = bb->getTerminator();
+    if (ReturnInst *retInst = dyn_cast<ReturnInst>(term))
+    {
+        //so the block is a return, just return the value
+        result.push_back(retInst->getReturnValue());
+    }
+    else if (BranchInst *brInst = dyn_cast<BranchInst>(term))
+    {
+        //we have a branch, if it is unconditional recurse on the target
+        //otherwise recurse on all targets and build a select between the results
+        //we assume the last entry in the vector is the result to be selected, so be careful on the order of insertion
+        if (brInst->isConditional())
+        {
+            //we have a conditional so select between return vals
+            //still need to check if successors are valid though
+            Value *cond = brInst->getCondition();
+            if (brInst->getNumSuccessors() != 2)
+            {
+                //sanity check
+                throw TikException("Unexpected number of brInst successors");
+            }
+            auto suc0 = brInst->getSuccessor(0);
+            auto suc1 = brInst->getSuccessor(1);
+            bool valid0 = find(blocks.begin(), blocks.end(), suc0) != blocks.end();
+            bool valid1 = find(blocks.begin(), blocks.end(), suc1) != blocks.end();
+            if (!(valid0 || valid1))
+            {
+                throw TikException("Branch instruction with no valid successors reached");
+            }
+            Value *c0 = NULL;
+            Value *c1 = NULL;
+            if (valid0) //if path 0 is valid we examine it
+            {
+                auto sub0 = BuildReturnTree(suc0, blocks);
+                if (sub0.size() != 1)
+                {
+                    //we can just copy them
+                    //otherwise this is a single value and should just be referenced
+                    result.insert(result.end(), sub0.begin(), sub0.end());
+                }
+                c0 = sub0.back();
+            }
+            if (valid1) //if path 1 is valid we examine it
+            {
+                auto sub1 = BuildReturnTree(brInst->getSuccessor(1), blocks);
+                if (sub1.size() != 1)
+                {
+                    //we can just copy them
+                    //otherwise this is a single value and should just be referenced
+                    result.insert(result.end(), sub1.begin(), sub1.end());
+                }
+                c1 = sub1.back();
+            }
+            if (valid0 && valid1) //if they are both valid we need to select between them
+            {
+                SelectInst *sInst = SelectInst::Create(cond, c0, c1);
+                result.push_back(sInst);
+            }
+        }
+        else
+        {
+            //we are not conditional so just recursef
+            auto sub = BuildReturnTree(brInst->getSuccessor(0), blocks);
+            result.insert(result.end(), sub.begin(), sub.end());
+        }
+    }
+    else
+    {
+        throw TikException("Not Implemented");
+    }
+    if (result.size() == 0)
+    {
+        throw TikException("Return instruction tree must have at least one result");
+    }
+    return result;
 }
