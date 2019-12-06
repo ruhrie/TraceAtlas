@@ -545,17 +545,17 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
                 {
                     BasicBlock *block = &calledFunc->getEntryBlock();
                     auto retTree = BuildReturnTree(block, validBlocks);
-                    Value* toRemap = NULL;
-                    if(retTree.size() == 1)
+                    Value *toRemap = NULL;
+                    if (retTree.size() == 1)
                     {
                         //this is a single value
-                        toRemap = retTree[0];
+                        toRemap = VMap[retTree[0]];
                     }
                     else
                     {
                         //this is a set of instructions where the last is the value of note
                         toRemap = retTree.back();
-                        for(auto val : retTree)
+                        for (auto val : retTree)
                         {
                             result.push_back(cast<Instruction>(val));
                         }
