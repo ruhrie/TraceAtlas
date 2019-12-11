@@ -179,9 +179,19 @@ void LoadDump(void *address)
     sprintf(fin, "LoadAddress:%#lX\n", (uint64_t)address);
     WriteStream(fin);
 }
-void LoadDumpValue(void *MemValue)
+void LoadDumpValue(void *MemValue, int size)
 {
-    //printf("MemAddr:%ld\n",(uint64_t) MemValue);
+    //printf("Memsize:%d\n", size);
+    
+    switch(size)
+    {
+        // case 8: printf("8 size :%d, MemValue:%d\n",size, *((int8_t*)MemValue)); break;
+        // case 32: printf("32 size :%d, MemValue:%d\n",size, *((int32_t*)MemValue)); break;
+        // case 64: printf("64 size :%d, MemValue:%ld\n",size, *((int64_t*)MemValue)); break;
+        // case 15: printf("15 size :%d, MemValue:%ld\n",size, (uint64_t)MemValue); break;
+        // case 2: printf("2 size :%d, MemValue:%f\n",size, *((float*)MemValue)); break;
+        case 3: printf("3 size :%d, MemValue:%lf\n",size, *((double*)MemValue)); break;
+    }
  //   printf("MemValue:%d\n",*((uint8_t*)MemValue));
     // char fin[128];
     // sprintf(fin, "LoadMemValue:%ld\n", (uint64_t)MemValue);

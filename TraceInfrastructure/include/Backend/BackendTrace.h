@@ -45,7 +45,7 @@ void OpenFile();
 void CloseFile();
 
 void LoadDump(void *address);
-void LoadDumpValue(void *MemValue);
+void LoadDumpValue(void *MemValue,int size);
 void StoreDump(void *address);
 void StoreDumpValue(void *MemValue);
 

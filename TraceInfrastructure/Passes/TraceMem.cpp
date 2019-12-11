@@ -29,12 +29,14 @@ namespace DashTracer
             uint64_t id = std::stoul(name.substr(7));
             Value *idValue = ConstantInt::get(Type::getInt64Ty(BB.getContext()), id);
             firstBuilder.CreateCall(BB_ID, idValue);
+            
             for (BasicBlock::iterator BI = BB.begin(), BE = BB.end(); BI != BE; ++BI)
             {
                 bool done = false;
                 Instruction *CI = dyn_cast<Instruction>(BI);
-                if (DumpLoads && !done)
+                if (!done)
                 {
+                    std::vector<Value *> values;
                     if (LoadInst *load = dyn_cast<LoadInst>(CI))
                     {
                         IRBuilder<> builder(load);
@@ -42,32 +44,53 @@ namespace DashTracer
                         Value *MemValue = load->getOperand(0);
                         
                         Type *tyaddr = addr->getType();                       
-                        errs()<<"addr type:";
-                        errs()<< *tyaddr << '\n';
-                        tyaddr = tyaddr->getContainedType(0);
-                        errs()<<"getContainedType type:";
-                        errs()<< *tyaddr << '\n';                        
-                        int tyid =  tyaddr->getTypeID();
-                        errs()<<" tyid:";
-                        errs()<< tyid << '\n';
+                        // errs()<<"addr type:";
+                        // errs()<< *tyaddr << '\n';
+                        Type *tyaddrContain = tyaddr->getContainedType(0);
+                        // errs()<<"getContainedType type:";
+                        // errs()<< *tyaddrContain << '\n';                        
+                        int tyid =  tyaddrContain->getTypeID();
+                        int sizeSig = tyid;
+                        
+                        if(tyid == 3)
+                        {
+                            errs()<<"inst:";
+                            errs()<< *load << '\n';
+                            errs()<<"addr:";
+                            errs()<< *addr << '\n';
+                            errs()<<"addr type:";
+                            errs()<< *tyaddr << '\n';
+                            errs()<<"getContainedType type:";
+                            errs()<< *tyaddrContain << '\n'; 
+
+                        }
+                        // errs()<<" tyid:";
+                        // errs()<< tyid << '\n';
                         if(tyaddr ->isIntegerTy())
                         {
-                            unsigned bit =  cast<IntegerType>(tyaddr)->getBitWidth();
-                            errs()<<" bit:";
-                            errs()<< bit << '\n';
+                            int bit =  cast<IntegerType>(tyaddr)->getBitWidth();
+                            sizeSig = bit;
+                            // errs()<<" bit:";
+                            // errs()<< bit << '\n';
                         }
                         
                         auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0), true);
                         Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB.getContext()));
+                        values.push_back(cast);
+
+                        ConstantInt *sizeSigVal = ConstantInt::get(llvm::Type::getInt8Ty(BB.getContext()), sizeSig);
+                        values.push_back(sizeSigVal);
+                        ArrayRef<Value *> ref = ArrayRef<Value *>(values);    
                         //builder.CreateCall(LoadDumpValue, cast);
                         //castCode = CastInst::getCastOpcode(MemValue, true, Type::getInt8Ty(BB.getContext()), true);                      
                         //cast = builder.CreateCast(castCode, MemValue, Type::getInt8Ty(BB.getContext()));
-                        builder.CreateCall(LoadDump, cast);
+                        builder.CreateCall(LoadDumpValue, ref);
                         done = true;
                     }
                 }
-                if (DumpStores && !done)
+                if (!done)
                 {
+                    std::vector<Value *> values;
                     if (StoreInst *store = dyn_cast<StoreInst>(CI))
                     {
                         IRBuilder<> builder(store);
@@ -77,10 +100,6 @@ namespace DashTracer
                         auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0), true);
                         Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB.getContext()));
                         builder.CreateCall(StoreDump, cast);
-
-                        //castCode = CastInst::getCastOpcode(MemValue, true, Type::getInt8Ty(BB.getContext()), true);                      
-                        //cast = builder.CreateCast(castCode, MemValue, Type::getInt8Ty(BB.getContext()));
-                        //builder.CreateCall(StoreDump, cast);
                         done = true;
                     }
                 }
@@ -93,7 +112,7 @@ namespace DashTracer
         {
             BB_ID = dyn_cast<Function>(M.getOrInsertFunction("BB_ID_Dump", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext())));
             LoadDump = dyn_cast<Function>(M.getOrInsertFunction("LoadDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)));
-            LoadDumpValue = dyn_cast<Function>(M.getOrInsertFunction("LoadDumpValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)));
+            LoadDumpValue = dyn_cast<Function>(M.getOrInsertFunction("LoadDumpValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8),Type::getInt8Ty(M.getContext()) ));
             //LoadDumpValueT = dyn_cast<Function>(M.getOrInsertFunction("LoadDumpValue", Type::getVoidTy(M.getContext()), Type::getInt8Ty(M.getContext())));
             StoreDump = dyn_cast<Function>(M.getOrInsertFunction("StoreDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)));
             //StoreDumpValueT = dyn_cast<Function>(M.getOrInsertFunction("StoreDumpValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)));
