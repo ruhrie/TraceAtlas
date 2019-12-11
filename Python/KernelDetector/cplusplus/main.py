@@ -1,4 +1,4 @@
-simport argparse
+import argparse
 import json
 from EncodeDetect import DetectKernels
 from EncodeExtractor import ExtractKernels

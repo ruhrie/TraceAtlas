@@ -83,7 +83,6 @@ std::map< int, std::vector< int > > ExtractKernels(char *sourceFile, std::vector
 
         } // while(strm.avail_in != 0)
 
-	
 		std::stringstream stringStream(bufferString);
 		std::vector<std::string> split;
 		std::string segment;
@@ -92,8 +91,9 @@ std::map< int, std::vector< int > > ExtractKernels(char *sourceFile, std::vector
 		{
 			split.push_back(segment);
 		}
-
+		
 		seenFirst = false;
+		int splitIndex = 0;
 		for (std::string it : split)
 		{
 			auto pi = it;
@@ -101,6 +101,10 @@ std::map< int, std::vector< int > > ExtractKernels(char *sourceFile, std::vector
 			{
 				it = priorLine + it;
 				seenFirst = true;
+			}
+			else if( splitIndex == split.size()-1 && bufferString.back() != '\n' )
+			{
+				break;
 			}
 			// split it by the colon between the instruction and value
 			std::stringstream itstream(it);
@@ -124,12 +128,13 @@ std::map< int, std::vector< int > > ExtractKernels(char *sourceFile, std::vector
 				for( int i = 0; i < kernels.size(); i++)
 				{
 					std::set< int > kernel = kernels[i];
-					if( block == kernStart[i] )
+					if( (kernStart.find(i) != kernStart.end()) && (block == kernStart[i]) )
 					{
 						blocks[i].clear();
 					}
 					else
 					{
+						//std::cout << "Inserting block " << block << " into kernel index " << i << std::endl;
 						blocks[i].insert(block);
 						if( kernel.find( block ) != kernel.end() )
 						{
@@ -164,6 +169,7 @@ std::map< int, std::vector< int > > ExtractKernels(char *sourceFile, std::vector
 			{
 				throw 2;
 			}
+			splitIndex++;
 		} // for it in split
 		if (bufferString.back() != '\n')
 		{
@@ -201,6 +207,7 @@ std::map< int, std::vector< int > > ExtractKernels(char *sourceFile, std::vector
 		std::vector< int > v( checker[i].begin(), checker[i].end() );
 		finalMap[i] = v;
 	}
+
 	return finalMap;
 }
 

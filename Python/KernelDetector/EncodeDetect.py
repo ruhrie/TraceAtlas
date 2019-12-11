@@ -63,7 +63,6 @@ def DetectKernels(sourceFile, thresh = 0.95, hotThresh = 512, newLine = False):
     # each tuple has the key as first entry, and value as second entry
     # block is the key 
     # count is the value
-    print( sorted(blockCount.items()) )
     for block, count in sorted(blockCount.items(), key=lambda item:item[1], reverse=True):
         if count > hotThresh:
             if not block in covered: # if we havent seen this blockID in another blockID in blockMap

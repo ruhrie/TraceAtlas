@@ -62,7 +62,7 @@ std::vector< std::set< int > > DetectKernels(char *sourceFile, float thresh, int
     std::string priorLine = "";
     bool notDone = true;
 	// Shows whether we've seen the first block ID yet
-	bool seenFirst;
+	bool seenFirst, seenLast;
     while (notDone)
     {
         // read a block size of the trace
@@ -102,13 +102,22 @@ std::vector< std::set< int > > DetectKernels(char *sourceFile, float thresh, int
 		}
 
 		seenFirst = false;
+		int splitIndex = 0;
 		for (std::string it : split)
 		{
-			auto pi = it;
 			if (it == split.front() && !seenFirst)
 			{
 				it = priorLine + it;
+				//std::cout << "This is its complete version" << std::endl;
+				//std::cout << it << std::endl;
 				seenFirst = true;
+			}
+			else if( splitIndex == split.size()-1 && bufferString.back() != '\n' )
+			{
+				//std::cout << "This is the last incomplete line" << std::endl;
+				//std::cout << split.back() << std::endl;
+				break;
+				seenLast = true;
 			}
 			// split it by the colon between the instruction and value
 			std::stringstream itstream(it);
@@ -157,6 +166,7 @@ std::vector< std::set< int > > DetectKernels(char *sourceFile, float thresh, int
 			{
 				throw 2;
 			}
+			splitIndex++;
 		} // for it in split
 		if (bufferString.back() != '\n')
 		{
@@ -173,14 +183,14 @@ std::vector< std::set< int > > DetectKernels(char *sourceFile, float thresh, int
         {
             notDone = false;
         }
-        if (index % 100 == 0)
+        if (index % 1000 == 1)
         {
             std::cout << "Currently reading block " << index << " of " << blocks << ".\n";
         }
     } // while( notDone )
 
-	/*
-	std::cout << "About to output counts.\n";
+	
+	/*std::cout << "About to output counts.\n";
     for (auto elem : blockCount)
     {
         std::cout << elem.first << " : " << elem.second << "\n";
@@ -259,7 +269,6 @@ std::vector< std::set< int > > DetectKernels(char *sourceFile, float thresh, int
 	    {
 		    if( covered.find( it.first ) == covered.end() )
 		    {
-				std::cout << "using seed " << it.first << "\n";
 			    float sum = 0.0;
 			    //std::vector<float> values = fBlockMap.find( &it.first );
 			    auto values = fBlockMap.find( it.first );		

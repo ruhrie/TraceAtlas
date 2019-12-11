@@ -72,4 +72,8 @@ def ExtractKernels(sourceFile, kernels, newLine = False):
     for index in range(len(checker)): # for every set of blockIDs belonging to a type 1 kernels, assign a sorted list to that index in finalDict
         finalDict[index] = list(sorted(checker[index])) 
     print("Detected " + str(len(finalDict)) + " unique type two kernels")
+    for key in finalDict:
+        print(finalDict(key))
+        print('\n')
+        
     return finalDict
