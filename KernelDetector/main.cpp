@@ -4,8 +4,11 @@
 #include "EncodeDetect.h"
 #include "EncodeExtract.h"
 #include <string>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 #include <llvm/Support/CommandLine.h>
+
+using namespace std;
+using namespace llvm;
 
 llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
 llvm::cl::opt<float> threshold("t", cl::desc("The threshold of block grouping required to complete a kernel."));
