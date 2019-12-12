@@ -1,5 +1,5 @@
 #pragma once
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 #include <llvm/IR/Module.h>
 #include <llvm/Transforms/Utils/ValueMapper.h>
 #include <map>

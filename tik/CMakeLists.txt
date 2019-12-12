@@ -7,9 +7,9 @@ set_target_properties(tik
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin" 
 )
 
-target_link_libraries(tik PRIVATE ${llvm_libs})
+target_link_libraries(tik PRIVATE ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json)
 target_compile_definitions(tik PRIVATE ${LLVM_DEFINITIONS})
-target_include_directories(tik PRIVATE ${LLVM_INCLUDE_DIRS} "include/" ${DEP_INC} )
+target_include_directories(tik PRIVATE ${LLVM_INCLUDE_DIRS} "include/")
 
 if(${ENABLE_TESTING})
     add_subdirectory(tests)

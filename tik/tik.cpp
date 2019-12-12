@@ -2,7 +2,7 @@
 #include "tik/Exceptions.h"
 #include <fstream>
 #include <iostream>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/AssemblyAnnotationWriter.h>
