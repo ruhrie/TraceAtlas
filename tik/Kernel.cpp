@@ -600,7 +600,7 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
     }
     if (entrances.size() != 1)
     {
-        throw TikException("Kernel Exception: tik only supports ingle entrance kernels");
+        throw TikException("Kernel Exception: tik only supports single entrance kernels");
     }
     BasicBlock *currentBlock = entrances[0];
 

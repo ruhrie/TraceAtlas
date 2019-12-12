@@ -7,7 +7,7 @@
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/Instructions.h>
-#include "Util.h"
+#include "tik/Util.h"
 #include <llvm/IR/Module.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
