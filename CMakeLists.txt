@@ -15,6 +15,7 @@ if(${ENABLE_TESTING})
     enable_testing()
 endif()
 
+add_subdirectory("KernelDetector")
 add_subdirectory("Dependencies")
 add_subdirectory("TraceInfrastructure")
 add_subdirectory("Utilities")
