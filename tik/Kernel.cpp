@@ -130,7 +130,7 @@ void Kernel::Remap()
         for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
         {
             Instruction *inst = cast<Instruction>(BI);
-            RemapInstruction(inst, VMap, llvm::RF_None);
+            RemapInstruction(inst, VMap, llvm::RF_IgnoreMissingLocals);
         }
     }
 }
@@ -520,7 +520,51 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
     for (BasicBlock::iterator BI = start->begin(), BE = start->end(); BI != BE; ++BI)
     {
         Instruction *inst = cast<Instruction>(BI);
-        if (!inst->isTerminator())
+        if (CallInst *ci = dyn_cast<CallInst>(inst))
+        {
+            Function *calledFunc = ci->getCalledFunction();
+            if (calledFunc->empty())
+            {
+                Instruction *cl = inst->clone();
+                VMap[inst] = cl;
+                result.push_back(cl);
+            }
+            else
+            {
+                auto subPath = getInstructionPath(&calledFunc->getEntryBlock(), validBlocks);
+                result.insert(result.end(), subPath.begin(), subPath.end());
+                int args = calledFunc->arg_size();
+                int i = 0;
+                for (auto ai = calledFunc->arg_begin(); ai < calledFunc->arg_end(); ai++, i++)
+                {
+                    Value *arg = cast<Value>(ai);
+                    VMap[arg] = VMap[ci->getOperand(i)];
+                }
+                Type *retType = calledFunc->getReturnType();
+                if (!retType->isVoidTy())
+                {
+                    BasicBlock *block = &calledFunc->getEntryBlock();
+                    auto retTree = BuildReturnTree(block, validBlocks);
+                    Value *toRemap = NULL;
+                    if (retTree.size() == 1)
+                    {
+                        //this is a single value
+                        toRemap = VMap[retTree[0]];
+                    }
+                    else
+                    {
+                        //this is a set of instructions where the last is the value of note
+                        toRemap = retTree.back();
+                        for (auto val : retTree)
+                        {
+                            result.push_back(cast<Instruction>(val));
+                        }
+                    }
+                    VMap[ci] = toRemap;
+                }
+            }
+        }
+        else if (!inst->isTerminator())
         {
             Instruction *cl = inst->clone();
             VMap[inst] = cl;
@@ -550,6 +594,11 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
         }
         auto subPath = getInstructionPath(mergePoint, validBlocks);
         result.insert(result.end(), subPath.begin(), subPath.end());
+    }
+    else if (validSuccessors == 0)
+    {
+        //we don't need to do anything unless we started in a function and exited outside of it
+        //basically that shouldn't happen so we don't do anything
     }
     else
     {
@@ -871,6 +920,46 @@ void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
                 }
             }
         }
+        else if (ReturnInst *rInst = dyn_cast<ReturnInst>(term))
+        {
+            Function *parentFunction = block->getParent();
+            vector<BasicBlock *> internalUse;
+            vector<BasicBlock *> externalUse;
+            for (auto user : parentFunction->users())
+            {
+                if (CallInst *ci = dyn_cast<CallInst>(user))
+                {
+                    BasicBlock *parent = ci->getParent();
+                    if (find(blocks.begin(), blocks.end(), parent) == blocks.end())
+                    {
+                        externalUse.push_back(parent);
+                    }
+                    else
+                    {
+                        internalUse.push_back(parent);
+                    }
+                }
+                else
+                {
+                    throw TikException("Function not called from callinst. Unexpected behavior.");
+                }
+            }
+            if (internalUse.size() != 0 && externalUse.size() == 0)
+            {
+                //use is internal so ignore
+            }
+            else if (internalUse.size() == 0 && externalUse.size() != 0)
+            {
+                for (auto a : externalUse)
+                {
+                    exits.push_back(a);
+                }
+            }
+            else
+            {
+                throw TikException("Function called both externally and internally. Unimplemented.")
+            }
+        }
         else
         {
             throw TikException("Not Implemented");
@@ -890,4 +979,85 @@ void Kernel::CreateExitBlock(void)
 {
     IRBuilder<> exitBuilder(Exit);
     auto a = exitBuilder.CreateRetVoid();
+}
+
+//if the result is one entry long it is a value. Otherwise its a list of instructions
+vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blocks)
+{
+    vector<Value *> result;
+    Instruction *term = bb->getTerminator();
+    if (ReturnInst *retInst = dyn_cast<ReturnInst>(term))
+    {
+        //so the block is a return, just return the value
+        result.push_back(retInst->getReturnValue());
+    }
+    else if (BranchInst *brInst = dyn_cast<BranchInst>(term))
+    {
+        //we have a branch, if it is unconditional recurse on the target
+        //otherwise recurse on all targets and build a select between the results
+        //we assume the last entry in the vector is the result to be selected, so be careful on the order of insertion
+        if (brInst->isConditional())
+        {
+            //we have a conditional so select between return vals
+            //still need to check if successors are valid though
+            Value *cond = brInst->getCondition();
+            if (brInst->getNumSuccessors() != 2)
+            {
+                //sanity check
+                throw TikException("Unexpected number of brInst successors");
+            }
+            auto suc0 = brInst->getSuccessor(0);
+            auto suc1 = brInst->getSuccessor(1);
+            bool valid0 = find(blocks.begin(), blocks.end(), suc0) != blocks.end();
+            bool valid1 = find(blocks.begin(), blocks.end(), suc1) != blocks.end();
+            if (!(valid0 || valid1))
+            {
+                throw TikException("Branch instruction with no valid successors reached");
+            }
+            Value *c0 = NULL;
+            Value *c1 = NULL;
+            if (valid0) //if path 0 is valid we examine it
+            {
+                auto sub0 = BuildReturnTree(suc0, blocks);
+                if (sub0.size() != 1)
+                {
+                    //we can just copy them
+                    //otherwise this is a single value and should just be referenced
+                    result.insert(result.end(), sub0.begin(), sub0.end());
+                }
+                c0 = sub0.back();
+            }
+            if (valid1) //if path 1 is valid we examine it
+            {
+                auto sub1 = BuildReturnTree(brInst->getSuccessor(1), blocks);
+                if (sub1.size() != 1)
+                {
+                    //we can just copy them
+                    //otherwise this is a single value and should just be referenced
+                    result.insert(result.end(), sub1.begin(), sub1.end());
+                }
+                c1 = sub1.back();
+            }
+            if (valid0 && valid1) //if they are both valid we need to select between them
+            {
+                SelectInst *sInst = SelectInst::Create(cond, c0, c1);
+                result.push_back(sInst);
+            }
+        }
+        else
+        {
+            //we are not conditional so just recursef
+            auto sub = BuildReturnTree(brInst->getSuccessor(0), blocks);
+            result.insert(result.end(), sub.begin(), sub.end());
+        }
+    }
+    else
+    {
+        throw TikException("Not Implemented");
+    }
+    if (result.size() == 0)
+    {
+        throw TikException("Return instruction tree must have at least one result");
+    }
+    return result;
 }

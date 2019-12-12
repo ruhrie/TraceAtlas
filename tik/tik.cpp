@@ -1,8 +1,8 @@
 #include "tik/tik.h"
-#include <fstream>
 #include "tik/Exceptions.h"
+#include <fstream>
 #include <iostream>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/AssemblyAnnotationWriter.h>
@@ -42,6 +42,7 @@ cl::opt<bool> ASCIIFormat("S", cl::desc("output json as human-readable ASCII tex
 
 int main(int argc, char *argv[])
 {
+    bool error = false;
     cl::ParseCommandLineOptions(argc, argv);
     ifstream inputJson;
     nlohmann::json j;
@@ -125,7 +126,7 @@ int main(int argc, char *argv[])
         change = false;
         for (auto kernel : kernels)
         {
-            if(failedKernels.find(kernel.second) != failedKernels.end())
+            if (failedKernels.find(kernel.second) != failedKernels.end())
             {
                 continue;
             }
@@ -174,13 +175,10 @@ int main(int argc, char *argv[])
                 catch (TikException &e)
                 {
                     failedKernels.insert(kernel.second);
-                    std::cerr << "Failed to convert kernel to tik" << "\n";
+                    std::cerr << "Failed to convert kernel to tik"
+                              << "\n";
                     std::cerr << e.what() << '\n';
-                }
-                catch(...)
-                {
-                    failedKernels.insert(kernel.second);
-                    std::cerr << "huh" << "\n";
+                    error = true;
                 }
             }
         }
@@ -233,6 +231,12 @@ int main(int argc, char *argv[])
         std::cerr << e.what() << '\n';
         return EXIT_FAILURE;
     }
-
-    return EXIT_SUCCESS;
+    if (error)
+    {
+        return EXIT_FAILURE;
+    }
+    else
+    {
+        return EXIT_SUCCESS;
+    }
 }

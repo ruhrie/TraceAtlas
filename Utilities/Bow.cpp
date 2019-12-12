@@ -5,7 +5,7 @@
 #include <llvm/Support/CommandLine.h>
 #include <string>
 #include <llvm/IR/Module.h>
-#include "json.hpp"
+#include <nlohmann/json.hpp>
 #include <algorithm>
 #include <set>
 using namespace std;

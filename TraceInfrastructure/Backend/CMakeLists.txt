@@ -1,12 +1,12 @@
-add_library(DashTracer STATIC BackendTrace.c BackendPapi.c)
+add_library(AtlasBackend STATIC BackendTrace.c BackendPapi.c)
 set_target_properties(
-    DashTracer PROPERTIES
+    AtlasBackend PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-    OUTPUT_NAME DashTracer
+    OUTPUT_NAME AtlasBackend
 )
 
-target_link_libraries(DashTracer ${llvm_libs} ${ZLIB_LIBRARIES})
-target_include_directories(DashTracer PRIVATE ${ZLIB_INCLUDE_DIRS} ${TRACE_INC})
-install(TARGETS DashTracer
+target_link_libraries(AtlasBackend ${llvm_libs} ZLIB::ZLIB)
+target_include_directories(AtlasBackend PRIVATE ${TRACE_INC})
+install(TARGETS AtlasBackend
     ARCHIVE DESTINATION lib
 )

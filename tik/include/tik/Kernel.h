@@ -1,5 +1,5 @@
 #pragma once
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 #include <llvm/IR/Module.h>
 #include <llvm/Transforms/Utils/ValueMapper.h>
 #include <map>
@@ -109,6 +109,8 @@ private:
     ///
     /// @param  blocks      Vector of basic blocks in the module passed to the constructor.
     void MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks);
+
+    std::vector<llvm::Value *> BuildReturnTree(llvm::BasicBlock *bb, std::vector<llvm::BasicBlock *> blocks);
 
     std::vector<llvm::Instruction *> getInstructionPath(llvm::BasicBlock *start, std::vector<llvm::BasicBlock *> validBlocks);
     llvm::BasicBlock *getPathMerge(llvm::BasicBlock *start);
