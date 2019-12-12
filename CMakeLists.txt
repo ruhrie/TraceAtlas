@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 project(TraceAtlas VERSION 0.1.0)
 
 SET (CMAKE_CXX_STANDARD 17)
@@ -16,7 +16,13 @@ if(${ENABLE_TESTING})
 endif()
 
 add_subdirectory("KernelDetector")
-add_subdirectory("Dependencies")
 add_subdirectory("TraceInfrastructure")
 add_subdirectory("Utilities")
 add_subdirectory("tik")
+
+find_package(Doxygen)
+if(DOXYGEN_FOUND)
+    configure_file(DoxygenLayout.xml ${CMAKE_CURRENT_BINARY_DIR}/DoxygenLayout.xml @ONLY)
+    configure_file(Doxyfile ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
+    add_custom_target(doc COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile)
+endif(DOXYGEN_FOUND)
