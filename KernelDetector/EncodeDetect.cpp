@@ -2,6 +2,7 @@
 #include "EncodeDetect.h"
 #include <algorithm>
 #include <assert.h>
+#include <deque>
 #include <functional>
 #include <list>
 #include <map>
@@ -24,13 +25,11 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
     // Tracer parameter, sets the maximum width that the parser can look for temporally affine blocks
     int radius = 5;
     // Maps a blockID to its vector of temporally affine blocks
-    std::map<int, std::map<int, int>> blockMap;
+    std::map<int, std::map<int, int>> blockMap; //should probably seperate the floating point values into a seperate structure
     // Holds the count of each blockID
-    std::map<int, int> blockCount;
-    // Maps a kernelID to its set of blockIDs
-    std::map<int, std::set<int>> kernelMap;
+    std::map<int, int> blockCount; //fine
     // Vector for grouping blocks together
-    std::vector<int> priorBlocks;
+    std::deque<int> priorBlocks; //should be a dequeue
 
     /* Read the Trace */
     // Compute # of blocks in the trace
@@ -101,7 +100,7 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
 
         seenFirst = false;
         int splitIndex = 0;
-        for (std::string it : split)
+        for (std::string &it : split)
         {
             if (it == split.front() && !seenFirst)
             {
@@ -141,7 +140,7 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
 
                 if (priorBlocks.size() > (2 * radius + 1))
                 {
-                    priorBlocks.erase(priorBlocks.begin());
+                    priorBlocks.pop_front();
                 }
                 if (priorBlocks.size() > radius)
                 {
@@ -187,14 +186,8 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
         }
     } // while( notDone )
 
-    /*std::cout << "About to output counts.\n";
-    for (auto elem : blockCount)
-    {
-        std::cout << elem.first << " : " << elem.second << "\n";
-    }*/
-
     // assign to every index of every list value in blockMap a normalized amount
-    std::map<int, std::vector<std::pair<int, float>>> fBlockMap;
+    std::map<int, std::vector<std::pair<int, float>>> fBlockMap; //really this is a matrix of floats
     for (auto &key : blockMap)
     {
         int total = 0;
@@ -205,27 +198,8 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
         for (auto &sub : key.second)
         {
             fBlockMap[key.first].push_back(std::pair<int, float>(sub.first, (float)sub.second / (float)total));
-            //fBlockMap[key.first][sub.first] = (float)sub.second / (float)total;
         }
     }
-    /*for (auto &key : blockMap)
-    {
-        std::cout << key.first << ": ";
-        for (auto &sub : key.second)
-        {
-            std::cout << sub.second << ", ";
-        }
-        std::cout << "\n";
-    }
-    for (auto &key : fBlockMap)
-    {
-        std::cout << key.first << ": ";
-        for (auto &sub : key.second)
-        {
-            std::cout << sub.second << ", ";
-        }
-        std::cout << "\n";
-    }*/
 
     std::set<int> covered;
     std::vector<std::set<int>> kernels;
@@ -306,7 +280,7 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
     } // for it in blockCount
 
     std::vector<std::set<int>> result;
-    for (auto it : kernels)
+    for (auto &it : kernels)
     {
         if (std::find(result.begin(), result.end(), it) == result.end())
         {

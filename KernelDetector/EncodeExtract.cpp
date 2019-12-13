@@ -91,7 +91,7 @@ std::map< int, std::vector< int > > ExtractKernels(std::string sourceFile, std::
 		
 		seenFirst = false;
 		int splitIndex = 0;
-		for (std::string it : split)
+		for (std::string &it : split)
 		{
 			auto pi = it;
 			if (it == split.front() && !seenFirst)
@@ -124,31 +124,26 @@ std::map< int, std::vector< int > > ExtractKernels(std::string sourceFile, std::
 				long int block = stoi(value, 0, 0);
 				for( int i = 0; i < kernels.size(); i++)
 				{
-					std::set< int > kernel = kernels[i];
-					if( (kernStart.find(i) != kernStart.end()) && (block == kernStart[i]) )
+					std::set< int > *kernel = &(kernels[i]);
+					if( (kernStart.find(i) != kernStart.end()) && (block == kernStart[i]) ) //check if i is a key and if we are the start //only second half is needed
 					{
 						blocks[i].clear();
 					}
 					else
 					{
-						//std::cout << "Inserting block " << block << " into kernel index " << i << std::endl;
 						blocks[i].insert(block);
-						if( kernel.find( block ) != kernel.end() )
+						if( kernel->find( block ) != kernel->end() ) //block is a part of kernel
 						{
-							if( kernStart.find(i) == kernStart.end() )
+							if( kernStart.find(i) == kernStart.end() ) //we haven't seen the start before ..so assign it
 							{
 								kernStart[i] = block;
 								finalBlocks[i].insert( block );
-								blocks[i].clear();
 							}
 							else
 							{
-								for( auto ind : blocks[i] )
-								{
-									finalBlocks[i].insert(ind);
-								}
-								blocks[i].clear();
+								finalBlocks[i].merge(blocks[i]);
 							}
+							blocks[i].clear();
 						}
 					}
 				}
