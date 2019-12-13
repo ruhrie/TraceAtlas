@@ -1,7 +1,9 @@
 
 #include <fstream>
 #include <iostream>
-std::ifstream::pos_type filesize(const char* filename);
-std::vector< std::set< int > > DetectKernels(char* sourceFile, float thresh, int hotThreash, bool newline);
+#include <string>
+#include <vector>
+#include <set>
 
-
+std::ifstream::pos_type filesize(std::string filename);
+std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, int hotThreash, bool newline);

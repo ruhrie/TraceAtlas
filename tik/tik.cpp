@@ -1,19 +1,19 @@
 #include "tik/tik.h"
 #include "tik/Exceptions.h"
+#include "tik/Util.h"
 #include <fstream>
 #include <iostream>
-#include <nlohmann/json.hpp>
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/Instructions.h>
-#include "tik/Util.h"
 #include <llvm/IR/Module.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/raw_os_ostream.h>
 #include <llvm/Support/raw_ostream.h>
+#include <nlohmann/json.hpp>
 
 #include <set>
 #include <string>

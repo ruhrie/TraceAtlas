@@ -2,20 +2,17 @@
 #include <algorithm>
 #include <iostream>
 #include <list>
-#include <set>
-#include <vector>
-#include <string>
 #include <sstream>
-#include <map>
 #include <functional>
 #include <fstream>
 #include <assert.h>
 #include <zlib.h>
+#include "EncodeExtract.h"
 #include "EncodeDetect.h"
 
 #define 	BLOCK_SIZE	4096
 
-std::map< int, std::vector< int > > ExtractKernels(char *sourceFile, std::vector< std::set< int > > kernels, bool newline)
+std::map< int, std::vector< int > > ExtractKernels(std::string sourceFile, std::vector< std::set< int > > kernels, bool newline)
 {
 	/* Data structures for grouping kernels */
 	// Dictionary for holding the first blockID for each kernel
