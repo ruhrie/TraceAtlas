@@ -47,7 +47,7 @@ void CloseFile();
 void LoadDump(void *address);
 void LoadDumpValue(void *MemValue,int size);
 void StoreDump(void *address);
-void StoreDumpValue(void *MemValue);
+void StoreDumpValue(void *MemValue,int size);
 
 void BB_ID_Dump(uint64_t block);
 

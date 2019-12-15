@@ -172,45 +172,50 @@ void CloseFile()
 
 void LoadDump(void *address)
 {
-
-   // printf("MemAddr:%ld\n",(uint64_t) address);
-    //printf("MemValue:%d\n",*((uint8_t*)address));
     char fin[128];
     sprintf(fin, "LoadAddress:%#lX\n", (uint64_t)address);
     WriteStream(fin);
 }
 void LoadDumpValue(void *MemValue, int size)
 {
-    //printf("Memsize:%d\n", size);
-    
+    char fin[128];
+    sprintf(fin, "LoadAddress:%#lX\n", (uint64_t)MemValue);
+    WriteStream(fin);
+    char value[128];
     switch(size)
     {
-        // case 8: printf("8 size :%d, MemValue:%d\n",size, *((int8_t*)MemValue)); break;
-        // case 32: printf("32 size :%d, MemValue:%d\n",size, *((int32_t*)MemValue)); break;
-        // case 64: printf("64 size :%d, MemValue:%ld\n",size, *((int64_t*)MemValue)); break;
-        // case 15: printf("15 size :%d, MemValue:%ld\n",size, (uint64_t)MemValue); break;
-        // case 2: printf("2 size :%d, MemValue:%f\n",size, *((float*)MemValue)); break;
-        case 3: printf("3 size :%d, MemValue:%lf\n",size, *((double*)MemValue)); break;
+        case 8:  sprintf(value,"value type int, MemValue:%d\n", *((int8_t*)MemValue)); break;        
+        case 32: sprintf(value,"value type int32, MemValue:%d\n", *((int32_t*)MemValue)); break;
+        case 64: sprintf(value,"value type int64, MemValue:%ld\n", *((int64_t*)MemValue)); break;
+        case 15: sprintf(value,"value type address, MemValue:%ld\n", *((uint64_t*)MemValue)); break;
+        case 2: sprintf(value,"value type float, MemValue:%f\n", *((float*)MemValue)); break;
+        case 3: sprintf(value,"value type double, MemValue:%lf\n", *((double*)MemValue)); break;
     }
- //   printf("MemValue:%d\n",*((uint8_t*)MemValue));
-    // char fin[128];
-    // sprintf(fin, "LoadMemValue:%ld\n", (uint64_t)MemValue);
-    // WriteStream(fin);
+    WriteStream(value);
 }
 void StoreDump(void *address)
 {
-    //printf("MemValue:%ld\n",(uint64_t)address);
-    //char fin[128];
-    //sprintf(fin, "StoreAddress:%#lX\n", (uint64_t)address);
-    //WriteStream(fin);
+    char fin[128];
+    sprintf(fin, "StoreAddress:%#lX\n", (uint64_t)address);
+    WriteStream(fin);
 }
 
-void StoreDumpValue(void *MemValue)
+void StoreDumpValue(void *MemValue, int size)
 {
-    printf("MemValue:%ld\n",(uint64_t)MemValue);
     char fin[128];
-    sprintf(fin, "LoadMemValue:%ld\n", (uint64_t)MemValue);
+    sprintf(fin, "StoreAddress:%#lX\n", (uint64_t)MemValue);
     WriteStream(fin);
+    char value[128];
+    switch(size)
+    {
+        case 8:  sprintf(value,"Store value type int, MemValue:%d\n", *((int8_t*)MemValue)); break;        
+        case 32: sprintf(value,"Store value type int32, MemValue:%d\n", *((int32_t*)MemValue)); break;
+        case 64: sprintf(value,"Store value type int64, MemValue:%ld\n", *((int64_t*)MemValue)); break;
+        case 15: sprintf(value,"Store value type address, MemValue:%ld\n", *((uint64_t*)MemValue)); break;
+        case 2: sprintf(value,"Store value type float, MemValue:%f\n", *((float*)MemValue)); break;
+        case 3: sprintf(value,"Store value type double, MemValue:%lf\n", *((double*)MemValue)); break;
+    }
+    WriteStream(value);
 }
 
 void BB_ID_Dump(uint64_t block)
