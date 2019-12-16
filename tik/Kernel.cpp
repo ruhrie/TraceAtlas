@@ -671,6 +671,12 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
         }
         instList->push_back(i);
     }
+    // finally, remap our instructions for the new function
+   /* for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
+    {
+        Instruction *inst = cast<Instruction>(BI);
+        RemapInstruction(inst, VMap, llvm::RF_None);
+    }*/
 }
 
 void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
@@ -690,7 +696,7 @@ void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
                     if (find(ExternalValues.begin(), ExternalValues.end(), operand) == ExternalValues.end())
                     {
                         ExternalValues.push_back(operand);
-                        PrintVal(operand);
+                        //PrintVal(operand);
                     }
                 }
             }
@@ -833,6 +839,8 @@ void Kernel::GetMemoryFunctions()
                 Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
                 auto a = builder.CreateGEP(inst->getType(), GlobalMap[pair.first], constant);
                 auto b = builder.CreateStore(inst, a);
+                PrintVal(pair.first);
+                PrintVal(pair.second);
                 globalSet.insert(b);
             }
         }
