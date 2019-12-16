@@ -11,11 +11,11 @@ namespace DashTracer
 {
     namespace Passes
     {
-        struct EncodedTraceMem : public BasicBlockPass
+        struct EncodedTraceMem : public FunctionPass
         {
             static char ID;
-            EncodedTraceMem() : BasicBlockPass(ID) {}
-            bool runOnBasicBlock(BasicBlock &BB) override;
+            EncodedTraceMem() : FunctionPass(ID) {}
+            bool runOnFunction(Function &F) override;
             void getAnalysisUsage(AnalysisUsage &AU) const override;
             bool doInitialization(Module &M) override;
         };

@@ -31,7 +31,7 @@ void Write(char *inst, int line, int block, uint64_t func);
 /// <param name="func">The function GUID.</param>
 /// <param name="address">A byte array representing a system pointer.</param>
 void WriteAddress(char *inst, int line, int block, uint64_t func, char *address);
-void WriteAddressValue(char *inst, int line, int block, uint64_t func, char *address,char MemValue);
+
 /// <summary>
 /// Opens the trace file for writing and initializes the compression stream.
 /// </summary>
@@ -45,9 +45,9 @@ void OpenFile();
 void CloseFile();
 
 void LoadDump(void *address);
-void LoadDumpValue(void *MemValue,int size);
+void DumpLoadValue(void *MemValue,int size);
 void StoreDump(void *address);
-void StoreDumpValue(void *MemValue,int size);
+void DumpStoreValue(void *MemValue,int size);
 
 void BB_ID_Dump(uint64_t block);
 

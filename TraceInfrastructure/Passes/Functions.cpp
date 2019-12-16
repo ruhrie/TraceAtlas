@@ -10,9 +10,9 @@ namespace DashTracer
         Function *closeFunc;
         Function *BB_ID;
         Function *StoreDump;
-        Function *StoreDumpValue;
+        Function *DumpStoreValue;
         Function *LoadDump;
-        Function *LoadDumpValue;
+        Function *DumpLoadValue;
         Function *fullFunc;
         Function *fullAddrFunc;
         Function *fullAddrValueFunc;    
