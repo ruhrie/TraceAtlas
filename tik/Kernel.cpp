@@ -339,9 +339,15 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     {
         inputArgs.push_back(inst->getType());
     }
+
     // create our new function with input args and clone our basic blocks into it
-    FunctionType *funcType = FunctionType::get(Type::getInt32Ty(TikModule->getContext()), inputArgs, false);
+    FunctionType *funcType = FunctionType::get(Type::getVoidTy(TikModule->getContext()), inputArgs, false);
     llvm::Function *newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName() + "_Reformatted", TikModule);
+    for (int i = 0; i < ExternalValues.size(); i++)
+    {
+        ArgumentMap[newFunc->arg_begin() + i] = ExternalValues[i];
+    }
+
     Init = CloneBasicBlock(Init, localVMap, "", newFunc);
     Body = CloneBasicBlock(Body, localVMap, "", newFunc);
     Exit = CloneBasicBlock(Exit, localVMap, "", newFunc);
@@ -356,6 +362,10 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     std::set<llvm::StoreInst *> newStores;
     for (int i = 0; i < ExternalValues.size(); i++)
     {
+        if( GlobalMap.find(ExternalValues[i]) == GlobalMap.end())
+        {
+            throw TikException("Could not find a key in the global map.");
+        }
         IRBuilder<> builder(Init);
         auto b = builder.CreateStore(KernelFunction->arg_begin() + i, GlobalMap[ExternalValues[i]]);
         newStores.insert(b);
@@ -373,6 +383,8 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     auto c = bodyBuilder.CreateBr(Conditional);
 
     // finally, remap our instructions for the new function
+
+            PrintVal(KernelFunction);
     for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)
     {
         for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
@@ -610,7 +622,13 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
         {
             //we are in a kernel
             Kernel *k = KernelMap[id];
-            CallInst *ci = CallInst::Create(k->KernelFunction);
+            std::vector<llvm::Value *> inargs;
+            for (auto ai = k->KernelFunction->arg_begin(); ai < k->KernelFunction->arg_end(); ai++)
+            {
+                inargs.push_back(cast<Value>(ai));
+            }
+            CallInst *ci = CallInst::Create(k->KernelFunction, inargs);
+            PrintVal(ci);
             result.push_back(ci);
             succ = k->ExitTarget;
         }
@@ -668,15 +686,42 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
                 funcDec->setAttributes(funcCal->getAttributes());
                 callInst->setCalledFunction(funcDec);
             }
+            else // must be a kernel function call
+            {
+                PrintVal(callInst);
+                auto calledFunc = callInst->getCalledFunction();
+                if (KfMap.find(calledFunc) != KfMap.end())
+                {
+                    auto subK = KfMap[calledFunc];
+                    for (auto ai = calledFunc->arg_begin(); ai < calledFunc->arg_end(); ai++)
+                    {
+                        bool found = false;
+                        for (Instruction *j : path) // look through the entire body for this argument value
+                        {
+                            if (subK->ArgumentMap.find(ai) != subK->ArgumentMap.end())
+                            {
+                                if (subK->ArgumentMap[ai] == j)
+                                {
+                                    found = true;
+                                    PrintVal(j);
+                                    PrintVal(subK->ArgumentMap[ai]);
+                                    break;
+                                }
+                            }
+                        }
+                        if (!found)
+                        {
+                            if (subK->ArgumentMap.find(ai) != subK->ArgumentMap.end())
+                            {
+                                ExternalValues.push_back(subK->ArgumentMap[ai]);
+                            }
+                        }
+                    }
+                }
+            }
         }
         instList->push_back(i);
     }
-    // finally, remap our instructions for the new function
-   /* for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
-    {
-        Instruction *inst = cast<Instruction>(BI);
-        RemapInstruction(inst, VMap, llvm::RF_None);
-    }*/
 }
 
 void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
@@ -696,13 +741,11 @@ void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
                     if (find(ExternalValues.begin(), ExternalValues.end(), operand) == ExternalValues.end())
                     {
                         ExternalValues.push_back(operand);
-                        //PrintVal(operand);
                     }
                 }
             }
         }
     }
-    cout << "\n";
 }
 
 void Kernel::GetMemoryFunctions()
