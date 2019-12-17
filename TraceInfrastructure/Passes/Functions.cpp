@@ -14,7 +14,6 @@ namespace DashTracer
         Function *LoadDump;
         Function *DumpLoadValue;
         Function *fullFunc;
-        Function *fullAddrFunc;
-        Function *fullAddrValueFunc;    
+        Function *fullAddrFunc;  
     } // namespace Passes
 } // namespace DashTracer
