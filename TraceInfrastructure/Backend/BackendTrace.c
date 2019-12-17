@@ -165,15 +165,11 @@ void DumpLoadValue(void *MemValue, int size)
     sprintf(fin, "LoadAddress:%#lX\n", (uint64_t)MemValue);
     WriteStream(fin);
     char value[128];
-    switch(size)
-    {
-        case 8:  sprintf(value,"value type int, MemValue:%d\n", *((int8_t*)MemValue)); break;        
-        case 32: sprintf(value,"value type int32, MemValue:%d\n", *((int32_t*)MemValue)); break;
-        case 64: sprintf(value,"value type int64, MemValue:%ld\n", *((int64_t*)MemValue)); break;
-        case 15: sprintf(value,"value type address, MemValue:%ld\n", *((uint64_t*)MemValue)); break;
-        case 2: sprintf(value,"value type float, MemValue:%f\n", *((float*)MemValue)); break;
-        case 3: sprintf(value,"value type double, MemValue:%lf\n", *((double*)MemValue)); break;
-    }
+    uint8_t* bitwisePrint = (uint8_t*)MemValue;
+    sprintf(value,"size:%d, MemValue:",size);
+    for(int i = 0; i< size; i++)
+      sprintf(value,"%u", bitwisePrint[i]);
+    sprintf(value,"\n");
     WriteStream(value);
 }
 void StoreDump(void *address)
@@ -189,15 +185,11 @@ void DumpStoreValue(void *MemValue, int size)
     sprintf(fin, "StoreAddress:%#lX\n", (uint64_t)MemValue);
     WriteStream(fin);
     char value[128];
-    switch(size)
-    {
-        case 8:  sprintf(value,"Store value type int, MemValue:%d\n", *((int8_t*)MemValue)); break;        
-        case 32: sprintf(value,"Store value type int32, MemValue:%d\n", *((int32_t*)MemValue)); break;
-        case 64: sprintf(value,"Store value type int64, MemValue:%ld\n", *((int64_t*)MemValue)); break;
-        case 15: sprintf(value,"Store value type address, MemValue:%ld\n", *((uint64_t*)MemValue)); break;
-        case 2: sprintf(value,"Store value type float, MemValue:%f\n", *((float*)MemValue)); break;
-        case 3: sprintf(value,"Store value type double, MemValue:%lf\n", *((double*)MemValue)); break;
-    }
+    uint8_t* bitwisePrint = (uint8_t*)MemValue;
+    sprintf(value,"size:%d, MemValue:",size);
+    for(int i = 0; i< size; i++)
+      sprintf(value,"%u", bitwisePrint[i]);
+    sprintf(value,"\n");
     WriteStream(value);
 }
 
