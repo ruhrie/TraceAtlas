@@ -362,13 +362,27 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     std::set<llvm::StoreInst *> newStores;
     for (int i = 0; i < ExternalValues.size(); i++)
     {
-        if( GlobalMap.find(ExternalValues[i]) == GlobalMap.end())
-        {
-            throw TikException("Could not find a key in the global map.");
-        }
         IRBuilder<> builder(Init);
-        auto b = builder.CreateStore(KernelFunction->arg_begin() + i, GlobalMap[ExternalValues[i]]);
-        newStores.insert(b);
+        if (GlobalMap.find(ExternalValues[i]) == GlobalMap.end())
+        {
+            // do nothing for now
+            //auto a = builder.CreateAlloca(ExternalValues[i]->getType());
+            //auto b = builder.CreateStore(KernelFunction->arg_begin()+i, a);
+            //ArgumentMap[KernelFunction->arg_begin()+i] = b;
+            //throw TikException("Could not find a key in the global map.");
+        }
+        else
+        {
+            auto b = builder.CreateStore(KernelFunction->arg_begin() + i, GlobalMap[ExternalValues[i]]);
+            newStores.insert(b);
+        }
+    }
+
+            
+    for( auto &key : ArgumentMap )
+    {
+        PrintVal(key.first);
+        PrintVal(key.second);
     }
 
     // now create the branches between basic blocks
@@ -382,9 +396,85 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     IRBuilder<> bodyBuilder(Body);
     auto c = bodyBuilder.CreateBr(Conditional);
 
-    // finally, remap our instructions for the new function
+    // Now find all calls to the embedded kernel functions in the body, if any, and change their arguments to the new ones
+    std::map< Argument*, Value* > embeddedCallArgs;
+    auto instList = &Body->getInstList();
+    for (BasicBlock::iterator i = Body->begin(), BE = Body->end(); i != BE; ++i)
+    {
+        if (CallInst *callInst = dyn_cast<CallInst>(i))
+        {
+            Function *funcCal = callInst->getCalledFunction();
+            llvm::Function *funcName = TikModule->getFunction(funcCal->getName());
+            if (!funcName)
+            {
+                // we have a non-kernel function call
+            }
+            else // must be a kernel function call
+            {
+                bool found = false;
+                auto calledFunc = callInst->getCalledFunction();
+                auto subK = KfMap[calledFunc];
+                if(subK)
+                {
+                    for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
+                    {
+                        for (BasicBlock::iterator j = Body->begin(), BE2 = Body->end(); j != BE2; ++j)
+                        {
+                            if( subK->ArgumentMap.find(sarg) != subK->ArgumentMap.end() )
+                            {  
+                                if ( subK->ArgumentMap[sarg] == cast<Instruction>(j) )
+                                {
+                                    found = true;
+                                    embeddedCallArgs[sarg] = cast<Instruction>(j);
+                                }
+                            }
+                        }
+                    }
+                    if (!found)
+                    {
+                        for (auto i : ExternalValues)
+                        {
+                            for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
+                            {
+                                for (auto arg = KernelFunction->arg_begin(); arg < KernelFunction->arg_end(); arg++)
+                                {
+                                    if (subK->ArgumentMap[sarg] == ArgumentMap[arg])
+                                    {
+                                        embeddedCallArgs[arg] = subK->ArgumentMap[sarg];
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    std::vector< Value* > embeddedArgs;
+                    for (auto &i : embeddedCallArgs)
+                    {
+                        embeddedArgs.push_back(i.second);
+                        callInst->setOperand(i.second);
+                    }
+                    //auto newCall = CallInst::Create(calledFunc, embeddedArgs);
+                    //callInst->setOperand()
+                }
+            }
+        }
+    }
 
-            PrintVal(KernelFunction);
+/*
+    for (auto i = instList.begin(); i != instList.end(); i++)
+    {
+        if (CallInst *callInst = dyn_cast<CallInst>(i))
+        {
+            Function *funcCal = callInst->getCalledFunction();
+            llvm::Function *funcName = TikModule->getFunction(funcCal->getName());
+            if (funcName)
+            {
+                llvm::Function *funcDec = llvm::Function::Create(funcCal->getFunctionType(), GlobalValue::LinkageTypes::ExternalLinkage, funcCal->getName(), TikModule);
+                funcDec->setAttributes(funcCal->getAttributes());
+                callInst->setCalledFunction(funcDec);
+    */
+
+
+    // finally, remap our instructions for the new function
     for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)
     {
         for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
@@ -628,7 +718,6 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
                 inargs.push_back(cast<Value>(ai));
             }
             CallInst *ci = CallInst::Create(k->KernelFunction, inargs);
-            PrintVal(ci);
             result.push_back(ci);
             succ = k->ExitTarget;
         }
@@ -688,33 +777,28 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
             }
             else // must be a kernel function call
             {
-                PrintVal(callInst);
                 auto calledFunc = callInst->getCalledFunction();
-                if (KfMap.find(calledFunc) != KfMap.end())
+                auto subK = KfMap[calledFunc];
+                for (auto ai = calledFunc->arg_begin(); ai < calledFunc->arg_end(); ai++)
                 {
-                    auto subK = KfMap[calledFunc];
-                    for (auto ai = calledFunc->arg_begin(); ai < calledFunc->arg_end(); ai++)
+                    bool found = false;
+                    for (Instruction *j : path) // look through the entire body for this argument value
                     {
-                        bool found = false;
-                        for (Instruction *j : path) // look through the entire body for this argument value
+                        if (subK->ArgumentMap.find(ai) != subK->ArgumentMap.end())
                         {
-                            if (subK->ArgumentMap.find(ai) != subK->ArgumentMap.end())
+                            if (subK->ArgumentMap[ai] == j)
                             {
-                                if (subK->ArgumentMap[ai] == j)
-                                {
-                                    found = true;
-                                    PrintVal(j);
-                                    PrintVal(subK->ArgumentMap[ai]);
-                                    break;
-                                }
+                                // find the argument in our arguments that map to the subkernels arguments in MorphKernelFunction
+                                found = true;
+                                break;
                             }
                         }
-                        if (!found)
+                    }
+                    if (!found)
+                    {
+                        if (subK->ArgumentMap.find(ai) != subK->ArgumentMap.end())
                         {
-                            if (subK->ArgumentMap.find(ai) != subK->ArgumentMap.end())
-                            {
-                                ExternalValues.push_back(subK->ArgumentMap[ai]);
-                            }
+                            ExternalValues.push_back(subK->ArgumentMap[ai]);
                         }
                     }
                 }
@@ -882,8 +966,6 @@ void Kernel::GetMemoryFunctions()
                 Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
                 auto a = builder.CreateGEP(inst->getType(), GlobalMap[pair.first], constant);
                 auto b = builder.CreateStore(inst, a);
-                PrintVal(pair.first);
-                PrintVal(pair.second);
                 globalSet.insert(b);
             }
         }
