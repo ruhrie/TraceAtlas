@@ -1,7 +1,5 @@
 build/
-build2/
 .vscode/
 *.pyc
 *.swp
 testing/
-outfile.txt
