@@ -1,4 +1,3 @@
-
 #include "EncodeDetect.h"
 #include <algorithm>
 #include <assert.h>
@@ -7,6 +6,7 @@
 #include <list>
 #include <map>
 #include <sstream>
+#include <iostream>
 #include <zlib.h>
 
 #define BLOCK_SIZE 4096

@@ -1,10 +1,10 @@
-
 #include "EncodeDetect.h"
 #include "EncodeExtract.h"
 #include <llvm/Support/CommandLine.h>
 #include <nlohmann/json.hpp>
 #include <set>
 #include <string>
+#include <iostream>
 #include <vector>
 
 using namespace std;
@@ -34,23 +34,5 @@ int main(int argc, char **argv)
     ofstream oStream(kernelFile);
     oStream << outputJson;
     oStream.close();
-    /*
-    for( auto entry : type1Kernels )
-    {
-        for( auto index : entry )
-        {
-            std::cout << index << " , ";
-        }
-        std::cout << "\n\n";
-    }
-    for( auto entry : type2Kernels )
-    {
-        for( auto index : entry.second )
-        {
-            std::cout << index << " , ";
-        }
-        std::cout << "\n\n";
-    }
-    */
     return 0;
 }

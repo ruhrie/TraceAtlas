@@ -21,7 +21,7 @@ void PrintVal(llvm::Module *mod)
     std::string str;
     llvm::raw_string_ostream rso(str);
     mod->print(rso, write);
-    std::cout << str;
+    std::cout << str << "\n";
 }
 
 void PrintVal(llvm::Type *val)
