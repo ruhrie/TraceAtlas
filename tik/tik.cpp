@@ -1,19 +1,19 @@
 #include "tik/tik.h"
 #include "tik/Exceptions.h"
+#include "tik/Util.h"
 #include <fstream>
 #include <iostream>
-#include <nlohmann/json.hpp>
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/Instructions.h>
-
 #include <llvm/IR/Module.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/raw_os_ostream.h>
 #include <llvm/Support/raw_ostream.h>
+#include <nlohmann/json.hpp>
 
 #include <set>
 #include <string>
@@ -29,6 +29,7 @@ enum Filetype
 
 llvm::Module *TikModule;
 std::map<int, Kernel *> KernelMap;
+std::map<llvm::Function *, Kernel*> KfMap;
 cl::opt<string> JsonFile("j", cl::desc("Specify input json filename"), cl::value_desc("json filename"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"));
 cl::opt<string> InputFile(cl::Positional, cl::Required, cl::desc("<input file>"));
@@ -136,6 +137,7 @@ int main(int argc, char *argv[])
                 {
                     //this kernel has no unexplained parents
                     Kernel *kern = new Kernel(kernel.second, sourceBitcode.get());
+                    KfMap[kern->KernelFunction] = kern;
                     //so we remove its blocks from all parents
                     vector<string> toRemove;
                     for (auto child : childParentMapping)
@@ -190,6 +192,7 @@ int main(int argc, char *argv[])
     {
         finalJson["Kernels"][kern->Name] = kern->GetJson();
     }
+
     try
     {
         if (OutputType == "JSON")

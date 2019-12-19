@@ -1,8 +1,8 @@
 #pragma once
-#include <nlohmann/json.hpp>
 #include <llvm/IR/Module.h>
 #include <llvm/Transforms/Utils/ValueMapper.h>
 #include <map>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 class Kernel
@@ -19,13 +19,12 @@ public:
     llvm::BasicBlock *Exit = NULL;
     llvm::Function *MemoryRead = NULL;
     llvm::Function *MemoryWrite = NULL;
-
-private:
     /// @brief  Pointer to the current kernel function.
     ///
     /// This pointer contains all basic blocks of the current tik representation being built.
     llvm::Function *KernelFunction = NULL;
 
+private:
     /// @brief  Maps old instructions to new instructions.
     ///
     /// Special LLVM map containing old instructions (from the original bitcode) as keys and new instructions as values.
@@ -43,9 +42,13 @@ private:
     /// This structure maps those local pointers to global pointers.
     std::map<llvm::Value *, llvm::GlobalValue *> GlobalMap;
 
+    ///
+    ///
+    std::map<llvm::Argument *, llvm::Value *> ArgumentMap;
+
     /// @brief  Vector containing all instructions that don't have their parent in the basic blocks of the tik representation.
     ///         These instructions become the input arguments to the Kernel function.
-    std::vector<llvm::Instruction *> ExternalValues;
+    std::vector<llvm::Value *> ExternalValues;
 
     /// @brief   Function for remapping instructions based on VMap.
     ///          This is done before morphing KernelFunction into a new function with inputs.

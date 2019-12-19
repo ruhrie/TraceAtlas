@@ -15,6 +15,7 @@ if(${ENABLE_TESTING})
     enable_testing()
 endif()
 
+add_subdirectory("cartographer")
 add_subdirectory("TraceInfrastructure")
 add_subdirectory("Utilities")
 add_subdirectory("tik")

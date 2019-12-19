@@ -339,9 +339,15 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     {
         inputArgs.push_back(inst->getType());
     }
+
     // create our new function with input args and clone our basic blocks into it
-    FunctionType *funcType = FunctionType::get(Type::getInt32Ty(TikModule->getContext()), inputArgs, false);
-    llvm::Function *newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName() + "_Reformatted", TikModule);
+    FunctionType *funcType = FunctionType::get(Type::getVoidTy(TikModule->getContext()), inputArgs, false);
+    llvm::Function *newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName() + "_tmp", TikModule);
+    for (int i = 0; i < ExternalValues.size(); i++)
+    {
+        ArgumentMap[newFunc->arg_begin() + i] = ExternalValues[i];
+    }
+
     Init = CloneBasicBlock(Init, localVMap, "", newFunc);
     Body = CloneBasicBlock(Body, localVMap, "", newFunc);
     Exit = CloneBasicBlock(Exit, localVMap, "", newFunc);
@@ -349,6 +355,7 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
 
     // remove the old function from the parent but do not erase it
     KernelFunction->removeFromParent();
+    newFunc->setName(KernelFunction->getName());
     KernelFunction = newFunc;
 
     // for each input instruction, store them into one of our global pointers
@@ -357,8 +364,11 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     for (int i = 0; i < ExternalValues.size(); i++)
     {
         IRBuilder<> builder(Init);
-        auto b = builder.CreateStore(KernelFunction->arg_begin() + i, GlobalMap[ExternalValues[i]]);
-        newStores.insert(b);
+        if (GlobalMap.find(ExternalValues[i]) != GlobalMap.end())
+        {
+            auto b = builder.CreateStore(KernelFunction->arg_begin() + i, GlobalMap[ExternalValues[i]]);
+            newStores.insert(b);
+        }
     }
 
     // now create the branches between basic blocks
@@ -371,6 +381,69 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     // body->loop (unconditional)
     IRBuilder<> bodyBuilder(Body);
     auto c = bodyBuilder.CreateBr(Conditional);
+
+    // Now find all calls to the embedded kernel functions in the body, if any, and change their arguments to the new ones
+    std::map<Argument *, Value *> embeddedCallArgs;
+    auto instList = &Body->getInstList();
+    for (BasicBlock::iterator i = Body->begin(), BE = Body->end(); i != BE; ++i)
+    {
+        if (CallInst *callInst = dyn_cast<CallInst>(i))
+        {
+            Function *funcCal = callInst->getCalledFunction();
+            llvm::Function *funcName = TikModule->getFunction(funcCal->getName());
+            if (!funcName)
+            {
+                // we have a non-kernel function call
+            }
+            else // must be a kernel function call
+            {
+                bool found = false;
+                auto calledFunc = callInst->getCalledFunction();
+                auto subK = KfMap[calledFunc];
+                if (subK)
+                {
+                    for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
+                    {
+                        for (BasicBlock::iterator j = Body->begin(), BE2 = Body->end(); j != BE2; ++j)
+                        {
+                            if (subK->ArgumentMap.find(sarg) != subK->ArgumentMap.end())
+                            {
+                                if (subK->ArgumentMap[sarg] == cast<Instruction>(j))
+                                {
+                                    found = true;
+                                    embeddedCallArgs[sarg] = cast<Instruction>(j);
+                                }
+                            }
+                        }
+                    }
+                    if (!found)
+                    {
+                        for (auto i : ExternalValues)
+                        {
+                            for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
+                            {
+                                for (auto arg = KernelFunction->arg_begin(); arg < KernelFunction->arg_end(); arg++)
+                                {
+                                    if (subK->ArgumentMap[sarg] == ArgumentMap[arg])
+                                    {
+                                        embeddedCallArgs[arg] = subK->ArgumentMap[sarg];
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    std::vector<Value *> embeddedArgs;
+                    unsigned int j = 0;
+                    for (auto &i : embeddedCallArgs)
+                    {
+                        embeddedArgs.push_back(i.second);
+                        callInst->setOperand(j, i.second);
+                        j++;
+                    }
+                }
+            }
+        }
+    }
 
     // finally, remap our instructions for the new function
     for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)
@@ -610,7 +683,12 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
         {
             //we are in a kernel
             Kernel *k = KernelMap[id];
-            CallInst *ci = CallInst::Create(k->KernelFunction);
+            std::vector<llvm::Value *> inargs;
+            for (auto ai = k->KernelFunction->arg_begin(); ai < k->KernelFunction->arg_end(); ai++)
+            {
+                inargs.push_back(cast<Value>(ai));
+            }
+            CallInst *ci = CallInst::Create(k->KernelFunction, inargs);
             result.push_back(ci);
             succ = k->ExitTarget;
         }
@@ -649,7 +727,7 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
     }
     if (entrances.size() != 1)
     {
-        throw TikException("Kernel Exception: tik only supports ingle entrance kernels");
+        throw TikException("Kernel Exception: tik only supports single entrance kernels");
     }
     BasicBlock *currentBlock = entrances[0];
 
@@ -667,6 +745,34 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
                 llvm::Function *funcDec = llvm::Function::Create(funcCal->getFunctionType(), GlobalValue::LinkageTypes::ExternalLinkage, funcCal->getName(), TikModule);
                 funcDec->setAttributes(funcCal->getAttributes());
                 callInst->setCalledFunction(funcDec);
+            }
+            else // must be a kernel function call
+            {
+                auto calledFunc = callInst->getCalledFunction();
+                auto subK = KfMap[calledFunc];
+                for (auto ai = calledFunc->arg_begin(); ai < calledFunc->arg_end(); ai++)
+                {
+                    bool found = false;
+                    for (Instruction *j : path) // look through the entire body for this argument value
+                    {
+                        if (subK->ArgumentMap.find(ai) != subK->ArgumentMap.end())
+                        {
+                            if (subK->ArgumentMap[ai] == j)
+                            {
+                                // find the argument in our arguments that map to the subkernels arguments in MorphKernelFunction
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!found)
+                    {
+                        if (subK->ArgumentMap.find(ai) != subK->ArgumentMap.end())
+                        {
+                            ExternalValues.push_back(subK->ArgumentMap[ai]);
+                        }
+                    }
+                }
             }
         }
         instList->push_back(i);
@@ -700,6 +806,8 @@ void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
 void Kernel::GetMemoryFunctions()
 {
     // first, get all the pointer operands of each load and store in Kernel::Body
+    /** new for loop grabbing all inputs of child kernels */
+
     set<LoadInst *> loadInst;
     set<StoreInst *> storeInst;
     for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
