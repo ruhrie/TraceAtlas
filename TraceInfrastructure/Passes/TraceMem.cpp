@@ -26,7 +26,7 @@ namespace DashTracer
     {
         std::vector<uint64_t> kernelBlockForValue;
         
-        bool EncodedTraceMem::runOnFunction(Function &F)
+        bool EncodedTraceMemory::runOnFunction(Function &F)
         {
             
             for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
@@ -58,7 +58,7 @@ namespace DashTracer
                                 ConstantInt *sizeSigVal = ConstantInt::get(llvm::Type::getInt8Ty(block->getContext()), sizeSig);
                                 values.push_back(sizeSigVal);
                                 ArrayRef<Value *> ref = ArrayRef<Value *>(values);    
-                                builder.CreateCall(DumpLoadValue, ref);
+                                builder.CreateCall(DumpLoadAddrValue, ref);
                                 done = true;
                             }
 
@@ -75,7 +75,7 @@ namespace DashTracer
                                 ConstantInt *sizeSigVal = ConstantInt::get(llvm::Type::getInt8Ty(block->getContext()), sizeSig);
                                 values.push_back(sizeSigVal);
                                 ArrayRef<Value *> ref = ArrayRef<Value *>(values);    
-                                builder.CreateCall(DumpStoreValue, ref);
+                                builder.CreateCall(DumpStoreAddrValue, ref);
                                 done = true;
                             }
                         }
@@ -85,10 +85,10 @@ namespace DashTracer
             return true;
         }
 
-        bool EncodedTraceMem::doInitialization(Module &M)
+        bool EncodedTraceMemory::doInitialization(Module &M)
         {   
-            DumpLoadValue = dyn_cast<Function>(M.getOrInsertFunction("DumpLoadValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8),Type::getInt8Ty(M.getContext()) ));
-            DumpStoreValue = dyn_cast<Function>(M.getOrInsertFunction("DumpStoreValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8),Type::getInt8Ty(M.getContext()) ));
+            DumpLoadAddrValue = dyn_cast<Function>(M.getOrInsertFunction("DumpLoadAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8),Type::getInt8Ty(M.getContext()) ));
+            DumpStoreAddrValue = dyn_cast<Function>(M.getOrInsertFunction("DumpStoreAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8),Type::getInt8Ty(M.getContext()) ));
             
             kernelBlockForValue.clear();
             std::ifstream inputStream(KernelFilename);
@@ -188,13 +188,13 @@ namespace DashTracer
             return false;
         }
 
-        void EncodedTraceMem::getAnalysisUsage(AnalysisUsage &AU) const
+        void EncodedTraceMemory::getAnalysisUsage(AnalysisUsage &AU) const
         {
             AU.addRequired<DashTracer::Passes::EncodedAnnotate>();
             AU.addRequired<DashTracer::Passes::TraceMemIO>();
             AU.setPreservesCFG();
         }
-        char EncodedTraceMem::ID = 1;
-        static RegisterPass<EncodedTraceMem> Y("EncodedTraceMem", "Adds encoded tracing memory value in the kernel to the binary", true, false);
+        char EncodedTraceMemory::ID = 1;
+        static RegisterPass<EncodedTraceMemory> Y("EncodedTraceMemory", "Adds encoded tracing memory value in the kernel to the binary", true, false);
     } // namespace Passes
 } // namespace DashTracer

@@ -11,10 +11,10 @@ namespace DashTracer
 {
     namespace Passes
     {
-        struct EncodedTraceMem : public FunctionPass
+        struct EncodedTraceMemory : public FunctionPass
         {
             static char ID;
-            EncodedTraceMem() : FunctionPass(ID) {}
+            EncodedTraceMemory() : FunctionPass(ID) {}
             bool runOnFunction(Function &F) override;
             void getAnalysisUsage(AnalysisUsage &AU) const override;
             bool doInitialization(Module &M) override;
