@@ -37,8 +37,8 @@ namespace DashTracer
         }
         bool PapiIO::doInitialization(Module &M)
         {
-            papiTerminate = dyn_cast<Function>(M.getOrInsertFunction("TerminatePapi", Type::getVoidTy(M.getContext())));
-            papiInitiate = dyn_cast<Function>(M.getOrInsertFunction("InitializePapi", Type::getVoidTy(M.getContext())));
+            papiTerminate = cast<Function>(M.getOrInsertFunction("TerminatePapi", Type::getVoidTy(M.getContext())).getCallee());
+            papiInitiate = cast<Function>(M.getOrInsertFunction("InitializePapi", Type::getVoidTy(M.getContext())).getCallee());
             return true;
         }
     } // namespace Passes

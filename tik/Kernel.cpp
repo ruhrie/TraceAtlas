@@ -1,6 +1,7 @@
-#include "Kernel.h"
-#include "Tik.h"
-#include "Util.h"
+#include "tik/Kernel.h"
+#include "tik/Exceptions.h"
+#include "tik/Util.h"
+#include "tik/tik.h"
 #include <algorithm>
 #include <iostream>
 #include <llvm/ADT/SmallVector.h>
@@ -129,7 +130,7 @@ void Kernel::Remap()
         for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
         {
             Instruction *inst = cast<Instruction>(BI);
-            RemapInstruction(inst, VMap, llvm::RF_None);
+            RemapInstruction(inst, VMap, llvm::RF_IgnoreMissingLocals);
         }
     }
 }
@@ -156,7 +157,7 @@ BasicBlock *Kernel::getPathMerge(llvm::BasicBlock *start)
             unsigned int subCount = newTerm->getNumSuccessors();
             if (subCount > 1)
             {
-                throw 2;
+                throw TikException("Not Implemented");
             }
             else
             {
@@ -204,7 +205,7 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
     }
     else
     {
-        throw 2;
+        throw TikException("Not Implemented");
     }
 
     unsigned int pathCount = term->getNumSuccessors();
@@ -244,7 +245,7 @@ vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock 
                 unsigned int validSuccessors = 0;
                 if (subCount > 1)
                 {
-                    throw 2;
+                    throw TikException("Not Implemented");
                 }
                 else
                 {
@@ -338,9 +339,15 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     {
         inputArgs.push_back(inst->getType());
     }
+
     // create our new function with input args and clone our basic blocks into it
-    FunctionType *funcType = FunctionType::get(Type::getInt32Ty(TikModule->getContext()), inputArgs, false);
-    llvm::Function *newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName() + "_Reformatted", TikModule);
+    FunctionType *funcType = FunctionType::get(Type::getVoidTy(TikModule->getContext()), inputArgs, false);
+    llvm::Function *newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName() + "_tmp", TikModule);
+    for (int i = 0; i < ExternalValues.size(); i++)
+    {
+        ArgumentMap[newFunc->arg_begin() + i] = ExternalValues[i];
+    }
+
     Init = CloneBasicBlock(Init, localVMap, "", newFunc);
     Body = CloneBasicBlock(Body, localVMap, "", newFunc);
     Exit = CloneBasicBlock(Exit, localVMap, "", newFunc);
@@ -348,6 +355,7 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
 
     // remove the old function from the parent but do not erase it
     KernelFunction->removeFromParent();
+    newFunc->setName(KernelFunction->getName());
     KernelFunction = newFunc;
 
     // for each input instruction, store them into one of our global pointers
@@ -356,8 +364,11 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     for (int i = 0; i < ExternalValues.size(); i++)
     {
         IRBuilder<> builder(Init);
-        auto b = builder.CreateStore(KernelFunction->arg_begin() + i, GlobalMap[ExternalValues[i]]);
-        newStores.insert(b);
+        if (GlobalMap.find(ExternalValues[i]) != GlobalMap.end())
+        {
+            auto b = builder.CreateStore(KernelFunction->arg_begin() + i, GlobalMap[ExternalValues[i]]);
+            newStores.insert(b);
+        }
     }
 
     // now create the branches between basic blocks
@@ -370,6 +381,69 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     // body->loop (unconditional)
     IRBuilder<> bodyBuilder(Body);
     auto c = bodyBuilder.CreateBr(Conditional);
+
+    // Now find all calls to the embedded kernel functions in the body, if any, and change their arguments to the new ones
+    std::map<Argument *, Value *> embeddedCallArgs;
+    auto instList = &Body->getInstList();
+    for (BasicBlock::iterator i = Body->begin(), BE = Body->end(); i != BE; ++i)
+    {
+        if (CallInst *callInst = dyn_cast<CallInst>(i))
+        {
+            Function *funcCal = callInst->getCalledFunction();
+            llvm::Function *funcName = TikModule->getFunction(funcCal->getName());
+            if (!funcName)
+            {
+                // we have a non-kernel function call
+            }
+            else // must be a kernel function call
+            {
+                bool found = false;
+                auto calledFunc = callInst->getCalledFunction();
+                auto subK = KfMap[calledFunc];
+                if (subK)
+                {
+                    for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
+                    {
+                        for (BasicBlock::iterator j = Body->begin(), BE2 = Body->end(); j != BE2; ++j)
+                        {
+                            if (subK->ArgumentMap.find(sarg) != subK->ArgumentMap.end())
+                            {
+                                if (subK->ArgumentMap[sarg] == cast<Instruction>(j))
+                                {
+                                    found = true;
+                                    embeddedCallArgs[sarg] = cast<Instruction>(j);
+                                }
+                            }
+                        }
+                    }
+                    if (!found)
+                    {
+                        for (auto i : ExternalValues)
+                        {
+                            for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
+                            {
+                                for (auto arg = KernelFunction->arg_begin(); arg < KernelFunction->arg_end(); arg++)
+                                {
+                                    if (subK->ArgumentMap[sarg] == ArgumentMap[arg])
+                                    {
+                                        embeddedCallArgs[arg] = subK->ArgumentMap[sarg];
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    std::vector<Value *> embeddedArgs;
+                    unsigned int j = 0;
+                    for (auto &i : embeddedCallArgs)
+                    {
+                        embeddedArgs.push_back(i.second);
+                        callInst->setOperand(j, i.second);
+                        j++;
+                    }
+                }
+            }
+        }
+    }
 
     // finally, remap our instructions for the new function
     for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)
@@ -409,7 +483,10 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
     }
 
     //now that we have the exits we can get the conditional logic for them
-    assert(exits.size() == 1);
+    if (exits.size() != 1)
+    {
+        throw TikException("Kernel Exception: tik only supports single exit kernels");
+    }
     std::vector<Instruction *> conditions;
     for (BasicBlock *exit : exits)
     {
@@ -424,17 +501,20 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
             else
             {
                 // this means the block's terminator is the wrong, so the input bitcode is flawed
-                throw 2;
+                throw TikException("Not Implemented");
             }
         }
         else
         {
             // same story
-            throw 2;
+            throw TikException("Not Implemented");
         }
     }
     // we should only find one condition branch, because we assume that a detected kernel has no embedded loops
-    assert(conditions.size() == 1);
+    if (conditions.size() != 1)
+    {
+        throw TikException("Kernel Exception: tik only supports single condition kernels");
+    }
     LoopCondition = conditions[0];
 
     // now check if the condition instruction's users are eligible instructions themselves for out body block, and throw it out after
@@ -513,7 +593,51 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
     for (BasicBlock::iterator BI = start->begin(), BE = start->end(); BI != BE; ++BI)
     {
         Instruction *inst = cast<Instruction>(BI);
-        if (!inst->isTerminator())
+        if (CallInst *ci = dyn_cast<CallInst>(inst))
+        {
+            Function *calledFunc = ci->getCalledFunction();
+            if (calledFunc->empty())
+            {
+                Instruction *cl = inst->clone();
+                VMap[inst] = cl;
+                result.push_back(cl);
+            }
+            else
+            {
+                auto subPath = getInstructionPath(&calledFunc->getEntryBlock(), validBlocks);
+                result.insert(result.end(), subPath.begin(), subPath.end());
+                int args = calledFunc->arg_size();
+                int i = 0;
+                for (auto ai = calledFunc->arg_begin(); ai < calledFunc->arg_end(); ai++, i++)
+                {
+                    Value *arg = cast<Value>(ai);
+                    VMap[arg] = VMap[ci->getOperand(i)];
+                }
+                Type *retType = calledFunc->getReturnType();
+                if (!retType->isVoidTy())
+                {
+                    BasicBlock *block = &calledFunc->getEntryBlock();
+                    auto retTree = BuildReturnTree(block, validBlocks);
+                    Value *toRemap = NULL;
+                    if (retTree.size() == 1)
+                    {
+                        //this is a single value
+                        toRemap = VMap[retTree[0]];
+                    }
+                    else
+                    {
+                        //this is a set of instructions where the last is the value of note
+                        toRemap = retTree.back();
+                        for (auto val : retTree)
+                        {
+                            result.push_back(cast<Instruction>(val));
+                        }
+                    }
+                    VMap[ci] = toRemap;
+                }
+            }
+        }
+        else if (!inst->isTerminator())
         {
             Instruction *cl = inst->clone();
             VMap[inst] = cl;
@@ -544,6 +668,11 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
         auto subPath = getInstructionPath(mergePoint, validBlocks);
         result.insert(result.end(), subPath.begin(), subPath.end());
     }
+    else if (validSuccessors == 0)
+    {
+        //we don't need to do anything unless we started in a function and exited outside of it
+        //basically that shouldn't happen so we don't do anything
+    }
     else
     {
         //only one successor
@@ -554,7 +683,12 @@ vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<Basic
         {
             //we are in a kernel
             Kernel *k = KernelMap[id];
-            CallInst *ci = CallInst::Create(k->KernelFunction);
+            std::vector<llvm::Value *> inargs;
+            for (auto ai = k->KernelFunction->arg_begin(); ai < k->KernelFunction->arg_end(); ai++)
+            {
+                inargs.push_back(cast<Value>(ai));
+            }
+            CallInst *ci = CallInst::Create(k->KernelFunction, inargs);
             result.push_back(ci);
             succ = k->ExitTarget;
         }
@@ -591,7 +725,10 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
             }
         }
     }
-    assert(entrances.size() == 1);
+    if (entrances.size() != 1)
+    {
+        throw TikException("Kernel Exception: tik only supports single entrance kernels");
+    }
     BasicBlock *currentBlock = entrances[0];
 
     // next, find all the instructions in the entrance block bath who call functions, and make our own references to them
@@ -608,6 +745,34 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
                 llvm::Function *funcDec = llvm::Function::Create(funcCal->getFunctionType(), GlobalValue::LinkageTypes::ExternalLinkage, funcCal->getName(), TikModule);
                 funcDec->setAttributes(funcCal->getAttributes());
                 callInst->setCalledFunction(funcDec);
+            }
+            else // must be a kernel function call
+            {
+                auto calledFunc = callInst->getCalledFunction();
+                auto subK = KfMap[calledFunc];
+                for (auto ai = calledFunc->arg_begin(); ai < calledFunc->arg_end(); ai++)
+                {
+                    bool found = false;
+                    for (Instruction *j : path) // look through the entire body for this argument value
+                    {
+                        if (subK->ArgumentMap.find(ai) != subK->ArgumentMap.end())
+                        {
+                            if (subK->ArgumentMap[ai] == j)
+                            {
+                                // find the argument in our arguments that map to the subkernels arguments in MorphKernelFunction
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!found)
+                    {
+                        if (subK->ArgumentMap.find(ai) != subK->ArgumentMap.end())
+                        {
+                            ExternalValues.push_back(subK->ArgumentMap[ai]);
+                        }
+                    }
+                }
             }
         }
         instList->push_back(i);
@@ -641,6 +806,8 @@ void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
 void Kernel::GetMemoryFunctions()
 {
     // first, get all the pointer operands of each load and store in Kernel::Body
+    /** new for loop grabbing all inputs of child kernels */
+
     set<LoadInst *> loadInst;
     set<StoreInst *> storeInst;
     for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
@@ -857,13 +1024,57 @@ void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
                 }
             }
         }
+        else if (ReturnInst *rInst = dyn_cast<ReturnInst>(term))
+        {
+            Function *parentFunction = block->getParent();
+            vector<BasicBlock *> internalUse;
+            vector<BasicBlock *> externalUse;
+            for (auto user : parentFunction->users())
+            {
+                if (CallInst *ci = dyn_cast<CallInst>(user))
+                {
+                    BasicBlock *parent = ci->getParent();
+                    if (find(blocks.begin(), blocks.end(), parent) == blocks.end())
+                    {
+                        externalUse.push_back(parent);
+                    }
+                    else
+                    {
+                        internalUse.push_back(parent);
+                    }
+                }
+                else
+                {
+                    throw TikException("Function not called from callinst. Unexpected behavior.");
+                }
+            }
+            if (internalUse.size() != 0 && externalUse.size() == 0)
+            {
+                //use is internal so ignore
+            }
+            else if (internalUse.size() == 0 && externalUse.size() != 0)
+            {
+                for (auto a : externalUse)
+                {
+                    exits.push_back(a);
+                }
+            }
+            else
+            {
+                throw TikException("Function called both externally and internally. Unimplemented.")
+            }
+        }
         else
         {
-            throw 2;
+            throw TikException("Not Implemented");
         }
     }
 
     // we should have exactly one successor to our tik representation because we assume there are no embedded loops
+    if (exits.size() != 1)
+    {
+        throw TikException("Kernel Exception: kernels must have one exit");
+    }
     assert(exits.size() == 1);
     ExitTarget = exits[0];
 }
@@ -872,4 +1083,85 @@ void Kernel::CreateExitBlock(void)
 {
     IRBuilder<> exitBuilder(Exit);
     auto a = exitBuilder.CreateRetVoid();
+}
+
+//if the result is one entry long it is a value. Otherwise its a list of instructions
+vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blocks)
+{
+    vector<Value *> result;
+    Instruction *term = bb->getTerminator();
+    if (ReturnInst *retInst = dyn_cast<ReturnInst>(term))
+    {
+        //so the block is a return, just return the value
+        result.push_back(retInst->getReturnValue());
+    }
+    else if (BranchInst *brInst = dyn_cast<BranchInst>(term))
+    {
+        //we have a branch, if it is unconditional recurse on the target
+        //otherwise recurse on all targets and build a select between the results
+        //we assume the last entry in the vector is the result to be selected, so be careful on the order of insertion
+        if (brInst->isConditional())
+        {
+            //we have a conditional so select between return vals
+            //still need to check if successors are valid though
+            Value *cond = brInst->getCondition();
+            if (brInst->getNumSuccessors() != 2)
+            {
+                //sanity check
+                throw TikException("Unexpected number of brInst successors");
+            }
+            auto suc0 = brInst->getSuccessor(0);
+            auto suc1 = brInst->getSuccessor(1);
+            bool valid0 = find(blocks.begin(), blocks.end(), suc0) != blocks.end();
+            bool valid1 = find(blocks.begin(), blocks.end(), suc1) != blocks.end();
+            if (!(valid0 || valid1))
+            {
+                throw TikException("Branch instruction with no valid successors reached");
+            }
+            Value *c0 = NULL;
+            Value *c1 = NULL;
+            if (valid0) //if path 0 is valid we examine it
+            {
+                auto sub0 = BuildReturnTree(suc0, blocks);
+                if (sub0.size() != 1)
+                {
+                    //we can just copy them
+                    //otherwise this is a single value and should just be referenced
+                    result.insert(result.end(), sub0.begin(), sub0.end());
+                }
+                c0 = sub0.back();
+            }
+            if (valid1) //if path 1 is valid we examine it
+            {
+                auto sub1 = BuildReturnTree(brInst->getSuccessor(1), blocks);
+                if (sub1.size() != 1)
+                {
+                    //we can just copy them
+                    //otherwise this is a single value and should just be referenced
+                    result.insert(result.end(), sub1.begin(), sub1.end());
+                }
+                c1 = sub1.back();
+            }
+            if (valid0 && valid1) //if they are both valid we need to select between them
+            {
+                SelectInst *sInst = SelectInst::Create(cond, c0, c1);
+                result.push_back(sInst);
+            }
+        }
+        else
+        {
+            //we are not conditional so just recursef
+            auto sub = BuildReturnTree(brInst->getSuccessor(0), blocks);
+            result.insert(result.end(), sub.begin(), sub.end());
+        }
+    }
+    else
+    {
+        throw TikException("Not Implemented");
+    }
+    if (result.size() == 0)
+    {
+        throw TikException("Return instruction tree must have at least one result");
+    }
+    return result;
 }
