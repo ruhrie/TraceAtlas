@@ -342,7 +342,7 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
 
     // create our new function with input args and clone our basic blocks into it
     FunctionType *funcType = FunctionType::get(Type::getVoidTy(TikModule->getContext()), inputArgs, false);
-    llvm::Function *newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName() + "_Reformatted", TikModule);
+    llvm::Function *newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName() + "_tmp", TikModule);
     for (int i = 0; i < ExternalValues.size(); i++)
     {
         ArgumentMap[newFunc->arg_begin() + i] = ExternalValues[i];
@@ -355,6 +355,7 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
 
     // remove the old function from the parent but do not erase it
     KernelFunction->removeFromParent();
+    newFunc->setName(KernelFunction->getName());
     KernelFunction = newFunc;
 
     // for each input instruction, store them into one of our global pointers
@@ -363,26 +364,11 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     for (int i = 0; i < ExternalValues.size(); i++)
     {
         IRBuilder<> builder(Init);
-        if (GlobalMap.find(ExternalValues[i]) == GlobalMap.end())
-        {
-            // do nothing for now
-            //auto a = builder.CreateAlloca(ExternalValues[i]->getType());
-            //auto b = builder.CreateStore(KernelFunction->arg_begin()+i, a);
-            //ArgumentMap[KernelFunction->arg_begin()+i] = b;
-            //throw TikException("Could not find a key in the global map.");
-        }
-        else
+        if (GlobalMap.find(ExternalValues[i]) != GlobalMap.end())
         {
             auto b = builder.CreateStore(KernelFunction->arg_begin() + i, GlobalMap[ExternalValues[i]]);
             newStores.insert(b);
         }
-    }
-
-            
-    for( auto &key : ArgumentMap )
-    {
-        PrintVal(key.first);
-        PrintVal(key.second);
     }
 
     // now create the branches between basic blocks
@@ -397,7 +383,7 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     auto c = bodyBuilder.CreateBr(Conditional);
 
     // Now find all calls to the embedded kernel functions in the body, if any, and change their arguments to the new ones
-    std::map< Argument*, Value* > embeddedCallArgs;
+    std::map<Argument *, Value *> embeddedCallArgs;
     auto instList = &Body->getInstList();
     for (BasicBlock::iterator i = Body->begin(), BE = Body->end(); i != BE; ++i)
     {
@@ -414,15 +400,15 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
                 bool found = false;
                 auto calledFunc = callInst->getCalledFunction();
                 auto subK = KfMap[calledFunc];
-                if(subK)
+                if (subK)
                 {
                     for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
                     {
                         for (BasicBlock::iterator j = Body->begin(), BE2 = Body->end(); j != BE2; ++j)
                         {
-                            if( subK->ArgumentMap.find(sarg) != subK->ArgumentMap.end() )
-                            {  
-                                if ( subK->ArgumentMap[sarg] == cast<Instruction>(j) )
+                            if (subK->ArgumentMap.find(sarg) != subK->ArgumentMap.end())
+                            {
+                                if (subK->ArgumentMap[sarg] == cast<Instruction>(j))
                                 {
                                     found = true;
                                     embeddedCallArgs[sarg] = cast<Instruction>(j);
@@ -446,33 +432,18 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
                             }
                         }
                     }
-                    std::vector< Value* > embeddedArgs;
+                    std::vector<Value *> embeddedArgs;
+                    unsigned int j = 0;
                     for (auto &i : embeddedCallArgs)
                     {
                         embeddedArgs.push_back(i.second);
-                        callInst->setOperand(i.second);
+                        callInst->setOperand(j, i.second);
+                        j++;
                     }
-                    //auto newCall = CallInst::Create(calledFunc, embeddedArgs);
-                    //callInst->setOperand()
                 }
             }
         }
     }
-
-/*
-    for (auto i = instList.begin(); i != instList.end(); i++)
-    {
-        if (CallInst *callInst = dyn_cast<CallInst>(i))
-        {
-            Function *funcCal = callInst->getCalledFunction();
-            llvm::Function *funcName = TikModule->getFunction(funcCal->getName());
-            if (funcName)
-            {
-                llvm::Function *funcDec = llvm::Function::Create(funcCal->getFunctionType(), GlobalValue::LinkageTypes::ExternalLinkage, funcCal->getName(), TikModule);
-                funcDec->setAttributes(funcCal->getAttributes());
-                callInst->setCalledFunction(funcDec);
-    */
-
 
     // finally, remap our instructions for the new function
     for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)
