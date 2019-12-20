@@ -6,7 +6,7 @@ TraceAtlas is a tool that generates a dynamic application trace from source code
 
 ## Building
 
-TraceAtlas requires a couple of libraries:
+TraceAtlas requires a few of libraries:
 * [LLVM-9](https://llvm.org/)
 * [papi](https://icl.utk.edu/papi/)
 * [nlohmann-json](https://github.com/nlohmann/json)
@@ -29,7 +29,7 @@ It can only trace code that is compiled into bitcode. Shared library code will n
 
 ## cartographer
 
-Cartographer is our trace analysis tool. To detect kernels simply call it with the input trace file specified by `-i` and the result by `-k`. The probability threshold can be specified by `-t` and the hotcode floor by `-ht`. The result is a dictionary containing kernels and basic block ids. These ids can be compared to the source code by running `opt -load {PATH_TO_ATLASPASSES} output.bc -o opt.ll -EncodedAnnotate -S` and looking at the source.
+Cartographer is our trace analysis tool. To detect kernels simply call it with the input trace file specified by `-i` and the result by `-k`. The probability threshold can be specified by `-t` and the hotcode floor by `-ht`. The result is a dictionary containing kernels and basic block IDs. These IDs can be compared to the source code by running `opt -load {PATH_TO_ATLASPASSES} output.bc -o opt.ll -EncodedAnnotate -S` and looking at the source.
 
 ## tik
 
@@ -42,4 +42,4 @@ Tik is a work in progress to extract kernels from the source code. It is not rea
 
 ## Utilities
 
-Various utilities are available as binaries. Feel free to use them, but the were written to solve a particular problem and are probably not useful to you.
+Various utilities are available as binaries. Feel free to use them, but they were written to solve a particular problem and are probably not useful to you.
