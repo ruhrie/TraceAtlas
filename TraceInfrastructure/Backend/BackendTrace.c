@@ -165,13 +165,13 @@ void DumpLoadAddrValue(void *MemValue, int size)
     sprintf(fin, "LoadAddress:%#lX\n", (uint64_t)MemValue);
     WriteStream(fin);
     char value[128];
-    uint8_t* bitwisePrint = (uint8_t*)MemValue;
-    sprintf(value,"size:%d, MemValue:",size);
-    for(int i = 0; i< size; i++)
+    uint8_t *bitwisePrint = (uint8_t *)MemValue;
+    sprintf(value, "size:%d, MemValue:", size);
+    for (int i = 0; i < size; i++)
     {
-        sprintf(value,"%u", bitwisePrint[i]);
-    }    
-    sprintf(value,"\n");
+        sprintf(value, "%u", bitwisePrint[i]);
+    }
+    sprintf(value, "\n");
     WriteStream(value);
 }
 void StoreDump(void *address)
@@ -187,13 +187,13 @@ void DumpStoreAddrValue(void *MemValue, int size)
     sprintf(fin, "StoreAddress:%#lX\n", (uint64_t)MemValue);
     WriteStream(fin);
     char value[128];
-    uint8_t* bitwisePrint = (uint8_t*)MemValue;
-    sprintf(value,"size:%d, MemValue:",size);
-    for(int i = 0; i< size; i++)
+    uint8_t *bitwisePrint = (uint8_t *)MemValue;
+    sprintf(value, "size:%d, MemValue:", size);
+    for (int i = 0; i < size; i++)
     {
-        sprintf(value,"%u", bitwisePrint[i]);
+        sprintf(value, "%u", bitwisePrint[i]);
     }
-    sprintf(value,"\n");
+    sprintf(value, "\n");
     WriteStream(value);
 }
 

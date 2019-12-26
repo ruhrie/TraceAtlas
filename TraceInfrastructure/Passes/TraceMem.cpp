@@ -3,16 +3,16 @@
 #include "Passes/CommandArgs.h"
 #include "Passes/Functions.h"
 #include "Passes/TraceMemIO.h"
+#include "llvm/IR/DataLayout.h"
+#include <fstream>
+#include <iostream>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Type.h>
-#include "llvm/IR/DataLayout.h"
 #include <llvm/Pass.h>
 #include <llvm/Support/raw_ostream.h>
-#include <fstream>
-#include <iostream>
 #include <map>
 #include <string>
 #include <vector>
@@ -25,21 +25,21 @@ namespace DashTracer
     namespace Passes
     {
         std::vector<uint64_t> kernelBlockForValue;
-        
+
         bool EncodedTraceMemory::runOnFunction(Function &F)
         {
-            
+
             for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
             {
                 BasicBlock *block = cast<BasicBlock>(BB);
                 std::string blockName = block->getName();
-                auto dl = block-> getModule()->getDataLayout();
+                auto dl = block->getModule()->getDataLayout();
                 uint64_t blockId = std::stoul(blockName.substr(7));
                 if (std::find(kernelBlockForValue.begin(), kernelBlockForValue.end(), blockId) != kernelBlockForValue.end())
                 {
                     for (BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; ++BI)
                     {
-                        
+
                         bool done = false;
                         Instruction *CI = dyn_cast<Instruction>(BI);
                         if (!done)
@@ -48,16 +48,16 @@ namespace DashTracer
                             if (LoadInst *load = dyn_cast<LoadInst>(CI))
                             {
                                 IRBuilder<> builder(load);
-                                Value *addr = load->getPointerOperand();                      
-                                Type *tyaddr = addr->getType();                       
-                                Type *tyaddrContain = tyaddr->getContainedType(0);                       
+                                Value *addr = load->getPointerOperand();
+                                Type *tyaddr = addr->getType();
+                                Type *tyaddrContain = tyaddr->getContainedType(0);
                                 int sizeSig = dl.getTypeAllocSize(tyaddrContain);
                                 auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(block->getContext()), 0), true);
                                 Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(block->getContext()));
                                 values.push_back(cast);
                                 ConstantInt *sizeSigVal = ConstantInt::get(llvm::Type::getInt8Ty(block->getContext()), sizeSig);
                                 values.push_back(sizeSigVal);
-                                ArrayRef<Value *> ref = ArrayRef<Value *>(values);    
+                                ArrayRef<Value *> ref = ArrayRef<Value *>(values);
                                 builder.CreateCall(DumpLoadAddrValue, ref);
                                 done = true;
                             }
@@ -66,15 +66,15 @@ namespace DashTracer
                             {
                                 IRBuilder<> builder(store);
                                 Value *addr = store->getPointerOperand();
-                                Type *tyaddr = addr->getType();                       
-                                Type *tyaddrContain = tyaddr->getContainedType(0);                       
-                                int sizeSig = dl.getTypeAllocSize(tyaddrContain);                               
+                                Type *tyaddr = addr->getType();
+                                Type *tyaddrContain = tyaddr->getContainedType(0);
+                                int sizeSig = dl.getTypeAllocSize(tyaddrContain);
                                 auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(block->getContext()), 0), true);
                                 Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(block->getContext()));
                                 values.push_back(cast);
                                 ConstantInt *sizeSigVal = ConstantInt::get(llvm::Type::getInt8Ty(block->getContext()), sizeSig);
                                 values.push_back(sizeSigVal);
-                                ArrayRef<Value *> ref = ArrayRef<Value *>(values);    
+                                ArrayRef<Value *> ref = ArrayRef<Value *>(values);
                                 builder.CreateCall(DumpStoreAddrValue, ref);
                                 done = true;
                             }
@@ -86,10 +86,10 @@ namespace DashTracer
         }
 
         bool EncodedTraceMemory::doInitialization(Module &M)
-        {   
-            DumpLoadAddrValue = dyn_cast<Function>(M.getOrInsertFunction("DumpLoadAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8),Type::getInt8Ty(M.getContext()) ));
-            DumpStoreAddrValue = dyn_cast<Function>(M.getOrInsertFunction("DumpStoreAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8),Type::getInt8Ty(M.getContext()) ));
-            
+        {
+            DumpLoadAddrValue = dyn_cast<Function>(M.getOrInsertFunction("DumpLoadAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())));
+            DumpStoreAddrValue = dyn_cast<Function>(M.getOrInsertFunction("DumpStoreAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())));
+
             kernelBlockForValue.clear();
             std::ifstream inputStream(KernelFilename);
             if (inputStream.is_open())
