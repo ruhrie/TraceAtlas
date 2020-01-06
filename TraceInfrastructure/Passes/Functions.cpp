@@ -10,7 +10,9 @@ namespace DashTracer
         Function *closeFunc;
         Function *BB_ID;
         Function *StoreDump;
+        Function *DumpStoreAddrValue;
         Function *LoadDump;
+        Function *DumpLoadAddrValue;
         Function *fullFunc;
         Function *fullAddrFunc;
     } // namespace Passes

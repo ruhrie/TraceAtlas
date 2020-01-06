@@ -159,12 +159,42 @@ void LoadDump(void *address)
     sprintf(fin, "LoadAddress:%#lX\n", (uint64_t)address);
     WriteStream(fin);
 }
-
+void DumpLoadAddrValue(void *MemValue, int size)
+{
+    char fin[128];
+    sprintf(fin, "LoadAddress:%#lX\n", (uint64_t)MemValue);
+    WriteStream(fin);
+    char value[128];
+    uint8_t *bitwisePrint = (uint8_t *)MemValue;
+    sprintf(value, "size:%d, MemValue:", size);
+    for (int i = 0; i < size; i++)
+    {
+        sprintf(value, "%u", bitwisePrint[i]);
+    }
+    sprintf(value, "\n");
+    WriteStream(value);
+}
 void StoreDump(void *address)
 {
     char fin[128];
     sprintf(fin, "StoreAddress:%#lX\n", (uint64_t)address);
     WriteStream(fin);
+}
+
+void DumpStoreAddrValue(void *MemValue, int size)
+{
+    char fin[128];
+    sprintf(fin, "StoreAddress:%#lX\n", (uint64_t)MemValue);
+    WriteStream(fin);
+    char value[128];
+    uint8_t *bitwisePrint = (uint8_t *)MemValue;
+    sprintf(value, "size:%d, MemValue:", size);
+    for (int i = 0; i < size; i++)
+    {
+        sprintf(value, "%u", bitwisePrint[i]);
+    }
+    sprintf(value, "\n");
+    WriteStream(value);
 }
 
 void BB_ID_Dump(uint64_t block)
