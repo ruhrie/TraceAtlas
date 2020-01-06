@@ -13,7 +13,7 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/Support/CommandLine.h"
-#include "json.hpp"
+#include <nlohmann/json.hpp>
 using namespace llvm;
 using json = nlohmann::json;
 using namespace std;

@@ -1,4 +1,4 @@
-#include <nlohmann/json.hpp>
+#include "json.hpp"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -108,8 +108,6 @@ int main(int argc, char **argv)
             assert(ret != Z_STREAM_ERROR);
             //we have now decompressed the data
             unsigned int have = BLOCK_SIZE - strm.avail_out;
-	    //cout << "have is " << have << "\n";
-	    //cout << "avail_in is " << strm.avail_in << "\n";
             for (int i = 0; i < have; i++)
             {
                 result += decompressedArray[i];
@@ -184,7 +182,6 @@ int main(int argc, char **argv)
         }
 
         notDone = (ret != Z_STREAM_END);// && (status <= (size / BLOCK_SIZE));
-	cout << "status is " << status << ".\n";
         if(status > (size / BLOCK_SIZE))
         {
             notDone = false;

@@ -1,3 +1,0 @@
-add_subdirectory(2DConv)
-add_subdirectory(1DBlur)
-add_subdirectory(1DCondition)
