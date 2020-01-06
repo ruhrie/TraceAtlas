@@ -116,8 +116,8 @@ namespace DashTracer
 
         bool PapiExport::doInitialization(Module &M)
         {
-            certOn = dyn_cast<Function>(M.getOrInsertFunction("CertifyPapiOn", Type::getVoidTy(M.getContext())));
-            certOff = dyn_cast<Function>(M.getOrInsertFunction("CertifyPapiOff", Type::getVoidTy(M.getContext())));
+            certOn = cast<Function>(M.getOrInsertFunction("CertifyPapiOn", Type::getVoidTy(M.getContext())).getCallee());
+            certOff = cast<Function>(M.getOrInsertFunction("CertifyPapiOff", Type::getVoidTy(M.getContext())).getCallee());
 
             kernelBlock.clear();
             std::ifstream inputStream(KernelFilename);

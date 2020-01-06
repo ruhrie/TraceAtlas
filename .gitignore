@@ -1,3 +1,5 @@
 build/
 .vscode/
 *.pyc
+*.swp
+testing/
