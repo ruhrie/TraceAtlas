@@ -14,3 +14,5 @@ target_include_directories(tik PRIVATE ${LLVM_INCLUDE_DIRS} "include/")
 if(${ENABLE_TESTING})
     add_subdirectory(tests)
 endif()
+
+set (TIK_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/include" PARENT_SCOPE)

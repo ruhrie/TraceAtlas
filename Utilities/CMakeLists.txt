@@ -45,3 +45,10 @@ set_target_properties(bow
 )
 
 install(TARGETS bow RUNTIME DESTINATION bin)
+
+add_executable(pig Pig.cpp)
+
+set_target_properties(pig PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+target_compile_definitions(pig PUBLIC ${LLVM_DEFINITIONS})
+target_link_libraries(pig ${llvm_libs}  nlohmann_json nlohmann_json::nlohmann_json)
+target_include_directories(pig PRIVATE ${LLVM_INCLUDE_DIRS} ${TIK_INCLUDE})
