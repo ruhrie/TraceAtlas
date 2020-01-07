@@ -105,16 +105,12 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
             if (it == split.front() && !seenFirst)
             {
                 it = priorLine + it;
-                //std::cout << "This is its complete version" << std::endl;
-                //std::cout << it << std::endl;
                 seenFirst = true;
             }
             else if (splitIndex == split.size() - 1 && bufferString.back() != '\n')
             {
-                //std::cout << "This is the last incomplete line" << std::endl;
-                //std::cout << split.back() << std::endl;
-                break;
                 seenLast = true;
+                break;
             }
             // split it by the colon between the instruction and value
             std::stringstream itstream(it);
