@@ -1,5 +1,6 @@
 #include "tik/Kernel.h"
 #include "tik/Exceptions.h"
+#include "tik/Metadata.h"
 #include "tik/Util.h"
 #include "tik/tik.h"
 #include <algorithm>
@@ -13,7 +14,6 @@
 #include <llvm/IR/Type.h>
 #include <llvm/Transforms/Utils/Cloning.h>
 #include <vector>
-
 using namespace llvm;
 using namespace std;
 
@@ -65,6 +65,8 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
     Remap();
 
     MorphKernelFunction(blocks);
+
+    ApplyMetadata();
 }
 
 nlohmann::json Kernel::GetJson()
@@ -352,7 +354,6 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     Body = CloneBasicBlock(Body, localVMap, "", newFunc);
     Exit = CloneBasicBlock(Exit, localVMap, "", newFunc);
     Conditional = CloneBasicBlock(Conditional, localVMap, "", newFunc);
-
     // remove the old function from the parent but do not erase it
     KernelFunction->removeFromParent();
     newFunc->setName(KernelFunction->getName());
@@ -367,6 +368,8 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
         if (GlobalMap.find(ExternalValues[i]) != GlobalMap.end())
         {
             auto b = builder.CreateStore(KernelFunction->arg_begin() + i, GlobalMap[ExternalValues[i]]);
+            MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Store))));
+            b->setMetadata("TikSynthetic", tikNode);
             newStores.insert(b);
         }
     }
@@ -377,6 +380,10 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     auto a = initBuilder.CreateBr(Conditional);
     // loop->body or loop->exit (conditional)
     IRBuilder<> loopBuilder(Conditional);
+    if(VMap[LoopCondition] == NULL)
+    {
+        throw TikException("Condition not found in VMap");
+    }
     auto b = loopBuilder.CreateCondBr(VMap[LoopCondition], Body, Exit);
     // body->loop (unconditional)
     IRBuilder<> bodyBuilder(Body);
@@ -937,6 +944,9 @@ void Kernel::GetMemoryFunctions()
                 Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
                 auto a = builder.CreateGEP(inst->getType(), GlobalMap[pair.first], constant);
                 auto b = builder.CreateStore(inst, a);
+
+                MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Store))));
+                b->setMetadata("TikSynthetic", tikNode);
                 globalSet.insert(b);
             }
         }
@@ -956,7 +966,9 @@ void Kernel::GetMemoryFunctions()
         if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
         {
             auto memCall = builder.CreateCall(MemoryRead, loadMap[newInst->getPointerOperand()]);
-            auto casted = builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType());
+            auto casted = cast<Instruction>(builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType()));
+            MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Cast))));
+            casted->setMetadata("TikSynthetic", tikNode);
             auto newLoad = builder.CreateLoad(casted);
             newInst->replaceAllUsesWith(newLoad);
             toRemove.push_back(newInst);
@@ -964,8 +976,10 @@ void Kernel::GetMemoryFunctions()
         else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
         {
             auto memCall = builder.CreateCall(MemoryWrite, storeMap[newInst->getPointerOperand()]);
-            auto casted = builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType());
-            auto newStore = builder.CreateStore(newInst->getValueOperand(), casted);
+            auto casted = cast<Instruction>(builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType()));
+            MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Cast))));
+            casted->setMetadata("TikSynthetic", tikNode);
+            auto newStore = builder.CreateStore(newInst->getValueOperand(), casted); //storee);
             toRemove.push_back(newInst);
         }
     }
@@ -1164,4 +1178,14 @@ vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blo
         throw TikException("Return instruction tree must have at least one result");
     }
     return result;
+}
+
+void Kernel::ApplyMetadata()
+{
+    MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::KernelFunction))));
+    MDNode *writeNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::MemoryRead))));
+    MDNode *readNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::MemoryWrite))));
+    KernelFunction->setMetadata("TikFunction", tikNode);
+    MemoryRead->setMetadata("TikFunction", readNode);
+    MemoryWrite->setMetadata("TikFunction", writeNode);
 }

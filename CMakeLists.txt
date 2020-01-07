@@ -17,8 +17,8 @@ endif()
 
 add_subdirectory("cartographer")
 add_subdirectory("TraceInfrastructure")
-add_subdirectory("Utilities")
 add_subdirectory("tik")
+add_subdirectory("Utilities")
 
 find_package(Doxygen)
 if(DOXYGEN_FOUND)

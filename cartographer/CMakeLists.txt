@@ -7,3 +7,5 @@ set_target_properties(cartographer
 )
 target_link_libraries(cartographer PRIVATE ${ZLIB_LIBRARY} ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json)
 target_include_directories(cartographer PRIVATE ${LLVM_INCLUDE_DIRS} "include/")
+
+install(TARGETS cartographer RUNTIME DESTINATION bin)
