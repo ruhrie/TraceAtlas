@@ -122,6 +122,7 @@ map<string, int> GetRatios(Function *F)
                 t->print(rso);
                 cerr << "Unrecognized type: " + str + "\n";
             }
+            result["instructionCount"]++;
         }
     }
 

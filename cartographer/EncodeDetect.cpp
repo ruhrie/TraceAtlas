@@ -13,6 +13,8 @@
 
 using namespace std;
 
+std::map<int, int> blockCount; //fine
+
 std::ifstream::pos_type filesize(std::string filename)
 {
     std::ifstream in(filename, std::ifstream::ate | std::ifstream::binary);
@@ -27,7 +29,7 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
     // Maps a blockID to its vector of temporally affine blocks
     std::map<int, std::map<int, int>> blockMap; //should probably seperate the floating point values into a seperate structure
     // Holds the count of each blockID
-    std::map<int, int> blockCount; //fine
+    
     // Vector for grouping blocks together
     std::deque<int> priorBlocks; //should be a dequeue
 
