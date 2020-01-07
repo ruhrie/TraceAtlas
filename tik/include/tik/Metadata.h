@@ -5,3 +5,11 @@ enum class TikMetadata : int
     MemoryWrite,
     MemoryRead
 };
+
+enum class TikSynthetic : int
+{
+    None,
+    Store,
+    Load,
+    Cast
+};

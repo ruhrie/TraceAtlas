@@ -369,6 +369,8 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
         if (GlobalMap.find(ExternalValues[i]) != GlobalMap.end())
         {
             auto b = builder.CreateStore(KernelFunction->arg_begin() + i, GlobalMap[ExternalValues[i]]);
+            MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Store))));
+            b->setMetadata("TikSynthetic", tikNode);
             newStores.insert(b);
         }
     }
@@ -939,6 +941,9 @@ void Kernel::GetMemoryFunctions()
                 Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
                 auto a = builder.CreateGEP(inst->getType(), GlobalMap[pair.first], constant);
                 auto b = builder.CreateStore(inst, a);
+
+                MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Store))));
+                b->setMetadata("TikSynthetic", tikNode);
                 globalSet.insert(b);
             }
         }
@@ -958,7 +963,9 @@ void Kernel::GetMemoryFunctions()
         if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
         {
             auto memCall = builder.CreateCall(MemoryRead, loadMap[newInst->getPointerOperand()]);
-            auto casted = builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType());
+            auto casted = cast<Instruction>(builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType()));
+            MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Cast))));
+            casted->setMetadata("TikSynthetic", tikNode);
             auto newLoad = builder.CreateLoad(casted);
             newInst->replaceAllUsesWith(newLoad);
             toRemove.push_back(newInst);
@@ -966,8 +973,10 @@ void Kernel::GetMemoryFunctions()
         else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
         {
             auto memCall = builder.CreateCall(MemoryWrite, storeMap[newInst->getPointerOperand()]);
-            auto casted = builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType());
-            auto newStore = builder.CreateStore(newInst->getValueOperand(), casted);
+            auto casted = cast<Instruction>(builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType()));
+            MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Cast))));
+            casted->setMetadata("TikSynthetic", tikNode);
+            auto newStore = builder.CreateStore(newInst->getValueOperand(), casted); //storee);
             toRemove.push_back(newInst);
         }
     }
