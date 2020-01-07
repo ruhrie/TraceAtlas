@@ -1,5 +1,6 @@
 #include "tik/Kernel.h"
 #include "tik/Exceptions.h"
+#include "tik/Metadata.h"
 #include "tik/Util.h"
 #include "tik/tik.h"
 #include <algorithm>
@@ -13,7 +14,6 @@
 #include <llvm/IR/Type.h>
 #include <llvm/Transforms/Utils/Cloning.h>
 #include <vector>
-
 using namespace llvm;
 using namespace std;
 
@@ -65,6 +65,8 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
     Remap();
 
     MorphKernelFunction(blocks);
+
+    ApplyMetadata();
 }
 
 nlohmann::json Kernel::GetJson()
@@ -1164,4 +1166,14 @@ vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blo
         throw TikException("Return instruction tree must have at least one result");
     }
     return result;
+}
+
+void Kernel::ApplyMetadata()
+{
+    MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::KernelFunction))));
+    MDNode *writeNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::MemoryRead))));
+    MDNode *readNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::MemoryWrite))));
+    KernelFunction->setMetadata("TikFunction", tikNode);
+    MemoryRead->setMetadata("TikFunction", readNode);
+    MemoryWrite->setMetadata("TikFunction", writeNode);
 }

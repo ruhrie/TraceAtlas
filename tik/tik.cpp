@@ -29,7 +29,7 @@ enum Filetype
 
 llvm::Module *TikModule;
 std::map<int, Kernel *> KernelMap;
-std::map<llvm::Function *, Kernel*> KfMap;
+std::map<llvm::Function *, Kernel *> KfMap;
 cl::opt<string> JsonFile("j", cl::desc("Specify input json filename"), cl::value_desc("json filename"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"));
 cl::opt<string> InputFile(cl::Positional, cl::Required, cl::desc("<input file>"));
@@ -187,16 +187,16 @@ int main(int argc, char *argv[])
     }
 
     // writing part
-    nlohmann::json finalJson;
-    for (Kernel *kern : results)
-    {
-        finalJson["Kernels"][kern->Name] = kern->GetJson();
-    }
 
     try
     {
         if (OutputType == "JSON")
         {
+            nlohmann::json finalJson;
+            for (Kernel *kern : results)
+            {
+                finalJson["Kernels"][kern->Name] = kern->GetJson();
+            }
             ofstream oStream(OutputFile);
             oStream << finalJson;
             oStream.close();
