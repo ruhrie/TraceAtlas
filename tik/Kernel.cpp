@@ -354,7 +354,6 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     Body = CloneBasicBlock(Body, localVMap, "", newFunc);
     Exit = CloneBasicBlock(Exit, localVMap, "", newFunc);
     Conditional = CloneBasicBlock(Conditional, localVMap, "", newFunc);
-
     // remove the old function from the parent but do not erase it
     KernelFunction->removeFromParent();
     newFunc->setName(KernelFunction->getName());
@@ -381,6 +380,10 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     auto a = initBuilder.CreateBr(Conditional);
     // loop->body or loop->exit (conditional)
     IRBuilder<> loopBuilder(Conditional);
+    if(VMap[LoopCondition] == NULL)
+    {
+        throw TikException("Condition not found in VMap");
+    }
     auto b = loopBuilder.CreateCondBr(VMap[LoopCondition], Body, Exit);
     // body->loop (unconditional)
     IRBuilder<> bodyBuilder(Body);
