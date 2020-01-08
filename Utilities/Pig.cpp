@@ -128,3 +128,23 @@ map<string, int> GetRatios(Function *F)
 
     return result;
 }
+
+int GetCrossProduct(Function *F)
+{
+    unsigned crossProduct = 0;
+    for (auto fi = F->begin(); fi != F->end(); fi++)
+    {
+        for (auto bi = fi->begin(); bi != fi->end(); bi++)
+        {
+            Instruction *i = cast<Instruction>(bi);
+            if (i->getMetadata("TikSynthetic"))
+            {
+                continue;
+            }
+            unsigned ops = i->getOpcode();
+
+            crossProduct += ops * i->getType()->getTypeID();
+        }
+    }
+    return crossProduct;
+}
