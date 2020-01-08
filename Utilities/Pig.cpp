@@ -60,16 +60,18 @@ int main(int argc, char **argv)
     }
 
     map<string, map<string, int>> TikCounters;
-
+    unsigned sumCrossProduct = 0;
     for (auto k : kernels)
     {
         TikCounters[k->getName()] = GetRatios(k);
+        sumCrossProduct += GetCrossProduct(k);
     }
 
     nlohmann::json outputJson = TikCounters;
 
     ofstream oStream(igFile);
     oStream << outputJson;
+    oStream << sumCrossProduct;
     oStream.close();
 }
 
