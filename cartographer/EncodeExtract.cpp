@@ -11,7 +11,7 @@
 
 #define BLOCK_SIZE 4096
 
-std::map<int, std::vector<int>> ExtractKernels(std::string sourceFile, std::vector<std::set<int>> kernels, bool newline)
+std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<std::set<int>> kernels, bool newline)
 {
     /* Data structures for grouping kernels */
     // Dictionary for holding the first blockID for each kernel
@@ -191,12 +191,12 @@ std::map<int, std::vector<int>> ExtractKernels(std::string sourceFile, std::vect
             checker.push_back(finalBlocks[i]);
         }
     }
-    std::map<int, std::vector<int>> finalMap;
+    std::map<int, std::set<int>> finalMap;
     for (int i = 0; i < checker.size(); i++)
     {
         //std::sort( checker[i].begin(), checker[i].end() );
-        std::vector<int> v(checker[i].begin(), checker[i].end());
-        finalMap[i] = v;
+        //std::vector<int> v(checker[i].begin(), checker[i].end());
+        finalMap[i] = checker[i];
     }
 
     return finalMap;

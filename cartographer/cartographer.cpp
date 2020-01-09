@@ -1,5 +1,6 @@
 #include "EncodeDetect.h"
 #include "EncodeExtract.h"
+#include "Smoothing.h"
 #include "profile.h"
 #include <iostream>
 #include <llvm/Bitcode/BitcodeReader.h>
@@ -20,18 +21,19 @@ llvm::cl::opt<float> threshold("t", cl::desc("The threshold of block grouping re
 llvm::cl::opt<int> hotThreshold("ht", cl::desc("The minimum instance count for a basic block to be a seed."), llvm::cl::init(512));
 llvm::cl::opt<string> kernelFile("k", llvm::cl::desc("Specify output json name"), llvm::cl::value_desc("kernel filename"), llvm::cl::init("kernel.json"));
 llvm::cl::opt<string> profileFile("p", llvm::cl::desc("Specify profile json name"), llvm::cl::value_desc("profile filename"));
-llvm::cl::opt<string> bitcodeFile("b", llvm::cl::desc("Specify bitcode name"), llvm::cl::value_desc("bitcode filename"));
+llvm::cl::opt<string> bitcodeFile("b", llvm::cl::desc("Specify bitcode name"), llvm::cl::value_desc("bitcode filename"), llvm::cl::Required);
 int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
     std::vector<std::set<int>> type1Kernels;
     type1Kernels = DetectKernels(inputTrace, threshold, hotThreshold, false);
     std::cout << "Detected " << type1Kernels.size() << " type 1 kernels." << std::endl;
-    std::map<int, std::vector<int>> type2Kernels = ExtractKernels(inputTrace, type1Kernels, false);
+    std::map<int, std::set<int>> type2Kernels = ExtractKernels(inputTrace, type1Kernels, false);
     std::cout << "Detected " << type2Kernels.size() << " type 2 kernels." << std::endl;
+    map<int, set<int>> type3Kernels = SmoothKernel(type2Kernels, bitcodeFile);
 
     nlohmann::json outputJson;
-    for (auto key : type2Kernels)
+    for (auto key : type3Kernels)
     {
         outputJson[to_string(key.first)] = key.second;
     }
@@ -53,7 +55,7 @@ int main(int argc, char **argv)
             std::cerr << "Couldn't open input bitcode file: " << bitcodeFile << "\n";
             return EXIT_FAILURE;
         }
-        nlohmann::json prof = ProfileKernels(type2Kernels, sourceBitcode.get());
+        nlohmann::json prof = ProfileKernels(type3Kernels, sourceBitcode.get());
         ofstream pStream(profileFile);
         pStream << prof;
         pStream.close();
