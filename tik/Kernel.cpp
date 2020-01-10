@@ -23,7 +23,6 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
 {
     MemoryRead = NULL;
     MemoryWrite = NULL;
-    Body = NULL;
     Init = NULL;
     Conditional = NULL;
     Exit = NULL;
@@ -32,7 +31,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
     FunctionType *mainType = FunctionType::get(Type::getVoidTy(TikModule->getContext()), false);
     KernelFunction = Function::Create(mainType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
     Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
-    Body = BasicBlock::Create(TikModule->getContext(), "Body", KernelFunction);
+    //Body = BasicBlock::Create(TikModule->getContext(), "Body", KernelFunction);
     Exit = BasicBlock::Create(TikModule->getContext(), "Exit", KernelFunction);
 
     vector<BasicBlock *> blocks;
@@ -85,9 +84,10 @@ nlohmann::json Kernel::GetJson()
     {
         j["Init"] = GetStrings(Init);
     }
-    if (Body != NULL)
+    if (Body.size() != 0)
     {
-        j["Body"] = GetStrings(Body);
+        throw TikException("Body cannot be converted to json yet");
+        //j["Body"] = GetStrings(Body);
     }
     if (Exit != NULL)
     {
@@ -117,10 +117,6 @@ Kernel::~Kernel()
     if (MemoryWrite != NULL)
     {
         delete MemoryWrite;
-    }
-    if (Body != NULL)
-    {
-        delete Body;
     }
     delete Conditional;
     delete KernelFunction;
@@ -351,7 +347,7 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     }
 
     Init = CloneBasicBlock(Init, localVMap, "", newFunc);
-    Body = CloneBasicBlock(Body, localVMap, "", newFunc);
+    //Body = CloneBasicBlock(Body, localVMap, "", newFunc);
     Exit = CloneBasicBlock(Exit, localVMap, "", newFunc);
     Conditional = CloneBasicBlock(Conditional, localVMap, "", newFunc);
     // remove the old function from the parent but do not erase it
@@ -380,10 +376,11 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
     auto a = initBuilder.CreateBr(Conditional);
     // loop->body or loop->exit (conditional)
     IRBuilder<> loopBuilder(Conditional);
-    if(VMap[LoopCondition] == NULL)
+    if (VMap[LoopCondition] == NULL)
     {
         throw TikException("Condition not found in VMap");
     }
+    /*
     auto b = loopBuilder.CreateCondBr(VMap[LoopCondition], Body, Exit);
     // body->loop (unconditional)
     IRBuilder<> bodyBuilder(Body);
@@ -461,6 +458,7 @@ void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
             RemapInstruction(inst, localVMap, llvm::RF_None);
         }
     }
+    */
 }
 
 void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
@@ -578,16 +576,19 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
     auto condList = &Conditional->getInstList();
     for (auto cond : result)
     {
-        for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
+        for (auto bb : Body)
         {
-            Instruction *I = cast<Instruction>(BI);
-            if (I->isIdenticalTo(cond))
+            for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
             {
-                I->removeFromParent();
-                Instruction *cl = cond->clone();
-                VMap[cond] = cl;
-                condList->push_back(cl);
-                break;
+                Instruction *I = cast<Instruction>(BI);
+                if (I->isIdenticalTo(cond))
+                {
+                    I->removeFromParent();
+                    Instruction *cl = cond->clone();
+                    VMap[cond] = cl;
+                    condList->push_back(cl);
+                    break;
+                }
             }
         }
     }
@@ -740,7 +741,7 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
 
     // next, find all the instructions in the entrance block bath who call functions, and make our own references to them
     auto path = getInstructionPath(currentBlock, blocks);
-    auto instList = &Body->getInstList();
+    /*auto instList = &Body->getInstList();
     for (Instruction *i : path)
     {
         if (CallInst *callInst = dyn_cast<CallInst>(i))
@@ -783,26 +784,29 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
             }
         }
         instList->push_back(i);
-    }
+    }*/
 }
 
 void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
 {
-    for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
+    for (auto bb : Body)
     {
-        Instruction *inst = cast<Instruction>(BI);
-        int numOps = inst->getNumOperands();
-        for (int i = 0; i < numOps; i++)
+        for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
         {
-            Value *op = inst->getOperand(i);
-            if (Instruction *operand = dyn_cast<Instruction>(op))
+            Instruction *inst = cast<Instruction>(BI);
+            int numOps = inst->getNumOperands();
+            for (int i = 0; i < numOps; i++)
             {
-                BasicBlock *parentBlock = operand->getParent();
-                if (std::find(blocks.begin(), blocks.end(), parentBlock) == blocks.end() && parentBlock != NULL)
+                Value *op = inst->getOperand(i);
+                if (Instruction *operand = dyn_cast<Instruction>(op))
                 {
-                    if (find(ExternalValues.begin(), ExternalValues.end(), operand) == ExternalValues.end())
+                    BasicBlock *parentBlock = operand->getParent();
+                    if (std::find(blocks.begin(), blocks.end(), parentBlock) == blocks.end() && parentBlock != NULL)
                     {
-                        ExternalValues.push_back(operand);
+                        if (find(ExternalValues.begin(), ExternalValues.end(), operand) == ExternalValues.end())
+                        {
+                            ExternalValues.push_back(operand);
+                        }
                     }
                 }
             }
@@ -817,16 +821,19 @@ void Kernel::GetMemoryFunctions()
 
     set<LoadInst *> loadInst;
     set<StoreInst *> storeInst;
-    for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
+    for (auto bb : Body)
     {
-        Instruction *inst = cast<Instruction>(BI);
-        if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
+        for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
         {
-            loadInst.insert(newInst);
-        }
-        else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
-        {
-            storeInst.insert(newInst);
+            Instruction *inst = cast<Instruction>(BI);
+            if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
+            {
+                loadInst.insert(newInst);
+            }
+            else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
+            {
+                storeInst.insert(newInst);
+            }
         }
     }
     for (BasicBlock::iterator BI = Conditional->begin(), BE = Conditional->end(); BI != BE; ++BI)
@@ -933,54 +940,60 @@ void Kernel::GetMemoryFunctions()
 
     // every time we use a global pointer in the body, store to it
     std::set<llvm::Value *> globalSet;
-    for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
+    for (auto bb : Body)
     {
-        Instruction *inst = cast<Instruction>(BI);
-        for (auto pair : GlobalMap)
+        for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
         {
-            if (llvm::cast<Instruction>(pair.first)->isIdenticalTo(inst))
+            Instruction *inst = cast<Instruction>(BI);
+            for (auto pair : GlobalMap)
             {
-                IRBuilder<> builder(inst->getNextNode());
-                Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
-                auto a = builder.CreateGEP(inst->getType(), GlobalMap[pair.first], constant);
-                auto b = builder.CreateStore(inst, a);
+                if (llvm::cast<Instruction>(pair.first)->isIdenticalTo(inst))
+                {
+                    IRBuilder<> builder(inst->getNextNode());
+                    Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
+                    auto a = builder.CreateGEP(inst->getType(), GlobalMap[pair.first], constant);
+                    auto b = builder.CreateStore(inst, a);
 
-                MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Store))));
-                b->setMetadata("TikSynthetic", tikNode);
-                globalSet.insert(b);
+                    MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Store))));
+                    b->setMetadata("TikSynthetic", tikNode);
+                    globalSet.insert(b);
+                }
             }
         }
     }
 
     // find instructions in body block not belonging to parent kernel
     vector<Instruction *> toRemove;
-    for (BasicBlock::iterator BI = Body->begin(), BE = Body->end(); BI != BE; ++BI)
+    for (auto bb : Body)
     {
-        Instruction *inst = cast<Instruction>(BI);
-        if (globalSet.find(inst) != globalSet.end())
+        for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
         {
-            continue;
-        }
+            Instruction *inst = cast<Instruction>(BI);
+            if (globalSet.find(inst) != globalSet.end())
+            {
+                continue;
+            }
 
-        IRBuilder<> builder(inst);
-        if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
-        {
-            auto memCall = builder.CreateCall(MemoryRead, loadMap[newInst->getPointerOperand()]);
-            auto casted = cast<Instruction>(builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType()));
-            MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Cast))));
-            casted->setMetadata("TikSynthetic", tikNode);
-            auto newLoad = builder.CreateLoad(casted);
-            newInst->replaceAllUsesWith(newLoad);
-            toRemove.push_back(newInst);
-        }
-        else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
-        {
-            auto memCall = builder.CreateCall(MemoryWrite, storeMap[newInst->getPointerOperand()]);
-            auto casted = cast<Instruction>(builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType()));
-            MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Cast))));
-            casted->setMetadata("TikSynthetic", tikNode);
-            auto newStore = builder.CreateStore(newInst->getValueOperand(), casted); //storee);
-            toRemove.push_back(newInst);
+            IRBuilder<> builder(inst);
+            if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
+            {
+                auto memCall = builder.CreateCall(MemoryRead, loadMap[newInst->getPointerOperand()]);
+                auto casted = cast<Instruction>(builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType()));
+                MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Cast))));
+                casted->setMetadata("TikSynthetic", tikNode);
+                auto newLoad = builder.CreateLoad(casted);
+                newInst->replaceAllUsesWith(newLoad);
+                toRemove.push_back(newInst);
+            }
+            else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
+            {
+                auto memCall = builder.CreateCall(MemoryWrite, storeMap[newInst->getPointerOperand()]);
+                auto casted = cast<Instruction>(builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType()));
+                MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Cast))));
+                casted->setMetadata("TikSynthetic", tikNode);
+                auto newStore = builder.CreateStore(newInst->getValueOperand(), casted); //storee);
+                toRemove.push_back(newInst);
+            }
         }
     }
 

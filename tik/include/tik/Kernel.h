@@ -14,7 +14,7 @@ public:
     nlohmann::json GetJson();
     llvm::BasicBlock *Conditional = NULL;
     llvm::BasicBlock *ExitTarget = NULL;
-    llvm::BasicBlock *Body = NULL;
+    std::vector<llvm::BasicBlock *> Body;
     llvm::BasicBlock *Init = NULL;
     llvm::BasicBlock *Exit = NULL;
     llvm::Function *MemoryRead = NULL;
