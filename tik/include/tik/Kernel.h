@@ -14,6 +14,7 @@ public:
     nlohmann::json GetJson();
     llvm::BasicBlock *Conditional = NULL;
     std::map<int, llvm::BasicBlock *> ExitTarget;
+    llvm::BasicBlock *EnterTarget;
     std::vector<llvm::BasicBlock *> Body;
     llvm::BasicBlock *Init = NULL;
     llvm::BasicBlock *Exit = NULL;
@@ -60,9 +61,7 @@ private:
     /// Later, the condition's user instructions are evaluated, and those that are eligible to be in the tik representation are cloned into the VMap.
     /// Eligible instructions are those that belong to the kernel's original basic blocks, and not eligible otherwise.
     /// This function assumes that we will only find one conditional exit instruction, because we assume that the kernel will not have embedded loops in it.
-    ///
-    /// @param   blocks     Vector of basic blocks in the module passed to the constructor.
-    void GetLoopInsts(std::vector<llvm::BasicBlock *> blocks);
+    void GetLoopInsts();
 
     /// @brief  Extracts instructions that will make up the core computations of the kernel.
     ///
@@ -77,18 +76,14 @@ private:
     ///
     /// The parent block of each instruction in Kernel::Body is checked for its membership in the tik representation.
     /// If it is not found, that instruction is added to Kernel::Init
-    ///
-    /// @param  blocks      Vector of basic blocks in the module passed to the constructor.
-    void GetInitInsts(std::vector<llvm::BasicBlock *> blocks);
+    void GetInitInsts();
 
     /// @brief  Looks through each block in blocks and checks their successors.
     ///
     /// This function checks if there is one and exactly one successor the condition at the end of the tik representation.
     /// This is because we assume that there are no embedded loops in the kernel code.
     /// Finally it assigns the one successor to Kernel::ExitTarget.
-    ///
-    /// @param  blocks      Vector of basic blocks in the module passed to the constructor.
-    void GetExits(std::vector<llvm::BasicBlock *> blocks);
+    void GetExits();
 
     /// @brief  Simply creates a basic block with a return instruction.
     ///         Used at the end of the tik representation.
@@ -109,9 +104,7 @@ private:
     /// This function replaces Kernel::KernelFunction with a new function that has the input args discovered by Kernel::getInitInsts.
     /// Then it assigns these input args to the appropriate global pointers.
     /// Finally, it remaps the new function, and the tik representation is done.
-    ///
-    /// @param  blocks      Vector of basic blocks in the module passed to the constructor.
-    void MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks);
+    void MorphKernelFunction();
 
     std::vector<llvm::Value *> BuildReturnTree(llvm::BasicBlock *bb, std::vector<llvm::BasicBlock *> blocks);
 
