@@ -188,144 +188,6 @@ BasicBlock *Kernel::getPathMerge(llvm::BasicBlock *start)
     return exit;
 }
 
-vector<Instruction *> Kernel::GetPathInstructions(BasicBlock *start, BasicBlock *end)
-{
-    //we now know the merge point so we will add all instructions to the result
-    //if it is a load we need to delay adding it till the end
-    //if we find another conditional we must recurse
-    vector<Instruction *> result;
-    BasicBlock *currentBlock;
-    Instruction *term = start->getTerminator();
-    Value *branchCondition = NULL;
-    if (BranchInst *brTerm = dyn_cast<BranchInst>(term))
-    {
-        branchCondition = brTerm->getCondition();
-    }
-    else
-    {
-        throw TikException("Not Implemented");
-    }
-
-    unsigned int pathCount = term->getNumSuccessors();
-    vector<BasicBlock *> currentBlocks(pathCount);
-    map<int, vector<StoreInst *>> stores;
-    for (int i = 0; i < pathCount; i++)
-    {
-        currentBlocks[i] = term->getSuccessor(i);
-        stores[i] = {};
-    }
-    bool done = false;
-    while (!done)
-    {
-        done = true;
-        for (int i = 0; i < currentBlocks.size(); i++)
-        {
-            currentBlock = currentBlocks[i];
-            if (currentBlock != end)
-            {
-                done = false;
-                for (BasicBlock::iterator BI = currentBlock->begin(), BE = currentBlock->end(); BI != BE; ++BI)
-                {
-                    Instruction *inst = cast<Instruction>(BI);
-                    if (StoreInst *lInst = dyn_cast<StoreInst>(inst))
-                    {
-                        //a load we need to buffer
-                        stores[i].push_back(lInst);
-                    }
-                    else if (!inst->isTerminator())
-                    {
-                        //the general case
-                        result.push_back(inst);
-                    }
-                }
-                Instruction *newTerm = currentBlock->getTerminator();
-                unsigned int subCount = newTerm->getNumSuccessors();
-                unsigned int validSuccessors = 0;
-                if (subCount > 1)
-                {
-                    throw TikException("Not Implemented");
-                }
-                else
-                {
-                    BasicBlock *newSuc = newTerm->getSuccessor(0);
-                    currentBlocks[i] = newSuc;
-                }
-            }
-        }
-    }
-
-    vector<StoreInst *> handledStores;
-    for (auto pair : stores)
-    {
-        auto storeVec = pair.second;
-        for (auto store : storeVec)
-        {
-            //we need to create this store somehow
-            //first check if it exists in the others, if so use it otherwise create a load
-            if (find(handledStores.begin(), handledStores.end(), store) == handledStores.end())
-            {
-                //not already handled so get check if there are others
-                vector<Value *> valsToSelect;
-                auto ptr = store->getPointerOperand();
-                LoadInst *lInst = new LoadInst(ptr);
-                bool loadUsed = false;
-
-                for (auto p2 : stores)
-                {
-                    StoreInst *sInst = NULL;
-                    //check each entry of the dictionary
-                    for (auto i : p2.second)
-                    {
-                        auto ptr2 = i->getPointerOperand();
-                        if (ptr2 == ptr) //these are writing to the same address (ideally a better check will exist)
-                        {
-                            sInst = i;
-                            break;
-                        }
-                    }
-                    if (sInst == NULL)
-                    {
-                        //we never found a match so we create a load instead
-                        valsToSelect.push_back(lInst);
-                        if (!loadUsed)
-                        {
-                            loadUsed = true;
-                            result.push_back(lInst);
-                        }
-                    }
-                    else
-                    {
-                        valsToSelect.push_back(sInst->getValueOperand());
-                        handledStores.push_back(sInst);
-                    }
-                }
-                //now that we have the values, create the select tree
-
-                Value *priorValue = NULL;
-                int i = 0;
-                for (auto v : valsToSelect)
-                {
-                    Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
-                    if (priorValue != NULL)
-                    {
-                        //this will need to be expanded for switch instructions
-                        SelectInst *sInst = SelectInst::Create(branchCondition, v, priorValue);
-                        priorValue = sInst;
-                        result.push_back(sInst);
-                    }
-                    else
-                    {
-                        priorValue = v;
-                    }
-                }
-                auto finStore = new StoreInst(priorValue, ptr);
-                result.push_back(finStore);
-            }
-        }
-    }
-    return result;
-}
-
 void Kernel::MorphKernelFunction(std::vector<llvm::BasicBlock *> blocks)
 {
     // localVMap is the new VMap for the new function
@@ -872,7 +734,7 @@ void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
 {
     // search for exit basic blocks
     vector<BasicBlock *> exits;
-    for (auto block : blocks)
+    for (auto block : Body)
     {
         Instruction *term = block->getTerminator();
         if (BranchInst *brInst = dyn_cast<BranchInst>(term))
@@ -938,8 +800,9 @@ void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
     {
         throw TikException("Kernel Exception: kernels must have one exit");
     }
+    PrintVal(exits[0]);
     assert(exits.size() == 1);
-    ExitTarget = exits[0];
+    ExitTarget[0] = exits[0];
 }
 
 void Kernel::CreateExitBlock(void)

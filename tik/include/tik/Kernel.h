@@ -13,7 +13,7 @@ public:
     std::string Name;
     nlohmann::json GetJson();
     llvm::BasicBlock *Conditional = NULL;
-    llvm::BasicBlock *ExitTarget = NULL;
+    std::map<int, llvm::BasicBlock *> ExitTarget;
     std::vector<llvm::BasicBlock *> Body;
     llvm::BasicBlock *Init = NULL;
     llvm::BasicBlock *Exit = NULL;
