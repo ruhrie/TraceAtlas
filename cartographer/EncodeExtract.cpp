@@ -27,8 +27,6 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
     int totalBlocks = traceSize / BLOCK_SIZE + 1;
     // File stuff for input trace and output decompressed file
     std::ifstream inputTrace;
-    std::ofstream outfile;
-    outfile.open("outfile.txt");
     inputTrace.open(sourceFile);
     inputTrace.seekg(0, std::ios_base::end);
     uint64_t size = inputTrace.tellg();

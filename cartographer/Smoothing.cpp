@@ -236,13 +236,21 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
                     toRemove.insert(block);
                 }
             }
-            if(toRemove.size() != 0)
+            if (toRemove.size() != 0)
             {
                 change = true;
-                for(auto b : toRemove)
+                set<BasicBlock *> bbn;
+                for (auto b : bbs)
                 {
-                    bbs.erase(bbs.find(b));
+                    if (toRemove.find(b) == toRemove.end())
+                    {
+                        bbn.insert(b);
+                    }
                 }
+                int a = bbs.size();
+                int z = bbn.size();
+                bbs = bbn;
+                toRemove.clear();
             }
         }
 
@@ -255,12 +263,10 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
         //result[index] = preR;
     }
     int i = 0;
-    for(auto kernel : tmpResults)
+    for (auto kernel : tmpResults)
     {
         result[i++] = kernel;
     }
-
-
 
     return result;
 }
