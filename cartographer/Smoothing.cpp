@@ -11,6 +11,7 @@ using namespace llvm;
 std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string bitcodeFile)
 {
     std::map<int, set<int>> result;
+    set<set<int>> tmpResults;
     LLVMContext context;
     SMDiagnostic smerror;
     unique_ptr<Module> sourceBitcode = parseIRFile(bitcodeFile, smerror, context);
@@ -250,9 +251,16 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
         {
             preR.insert(std::stoul(b->getName().substr(7)));
         }
-
-        result[index] = preR;
+        tmpResults.insert(preR);
+        //result[index] = preR;
     }
+    int i = 0;
+    for(auto kernel : tmpResults)
+    {
+        result[i++] = kernel;
+    }
+
+
 
     return result;
 }
