@@ -732,6 +732,7 @@ void Kernel::GetMemoryFunctions()
 
 void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
 {
+    int exitId = 0;
     // search for exit basic blocks
     vector<BasicBlock *> exits;
     for (auto block : Body)
@@ -746,6 +747,7 @@ void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
                 if (find(blocks.begin(), blocks.end(), succ) == blocks.end())
                 {
                     exits.push_back(succ);
+                    ExitTarget[exitId++] = succ;
                 }
             }
         }
@@ -802,7 +804,7 @@ void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
     }
     PrintVal(exits[0]);
     assert(exits.size() == 1);
-    ExitTarget[0] = exits[0];
+    //ExitTarget[0] = exits[0];
 }
 
 void Kernel::CreateExitBlock(void)
