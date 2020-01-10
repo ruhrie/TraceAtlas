@@ -784,6 +784,7 @@ void Kernel::GetExits(std::vector<llvm::BasicBlock *> blocks)
                 for (auto a : externalUse)
                 {
                     exits.push_back(a);
+                    ExitTarget[exitId++] = a;
                 }
             }
             else
