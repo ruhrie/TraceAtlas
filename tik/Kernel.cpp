@@ -50,6 +50,11 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
 
     GetBodyInsts(blocks);
 
+    for(auto b : Body)
+    {
+        PrintVal(b);
+    }
+
     GetExits();
 
     GetLoopInsts();
@@ -423,13 +428,48 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
     EnterTarget = entrances[0];
     // next, find all the instructions in the entrance block bath who call functions, and make our own references to them
     int id = 0;
-    for (auto bb : blocks)
+    for (auto b : blocks)
     {
-        auto cb = CloneBasicBlock(bb, VMap, Name, KernelFunction);
-        Body.push_back(cb);
-        VMap[bb] = cb;
+        string blockName = b->getName();
+        uint64_t id = std::stoul(blockName.substr(7));
+        if (KernelMap.find(id) == KernelMap.end())
+        {
+            //this hasn't already been mapped
+            auto cb = CloneBasicBlock(b, VMap, Name, KernelFunction);
+            Body.push_back(cb);
+            VMap[b] = cb;
+        }
     }
     Remap();
+    //now that we mapped we need to move all kernel calls into an actual function
+    for (auto b : Body)
+    {
+        auto term = b->getTerminator();
+        int sucCount = term->getNumSuccessors();
+        for (int i = 0; i < sucCount; i++)
+        {
+            auto suc = term->getSuccessor(i);
+            if (find(Body.begin(), Body.end(), suc) == Body.end())
+            {
+                //it isn't in the kernel, so its an exit or a subkernel
+                //we should be able to presume that if it isn't in the kernel map it must be an exit
+                //this is because kernels are built from the inside out
+                string blockName = suc->getName();
+                uint64_t id = std::stoul(blockName.substr(7, blockName.size() - 7 - Name.size()));
+                if (KernelMap.find(id) != KernelMap.end())
+                {
+                    //this belongs to a subkernel
+                    Kernel *nestedKernel = KernelMap[id];
+                    BasicBlock *intermediateBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
+                    IRBuilder<> intBuilder(intermediateBlock);
+                    intBuilder.CreateCall(nestedKernel->KernelFunction);
+                    intBuilder.CreateBr(cast<BasicBlock>(VMap[nestedKernel->ExitTarget[0]]));
+                    term->setSuccessor(i, intermediateBlock);
+                    Body.push_back(intermediateBlock);
+                }
+            }
+        }
+    }
 }
 
 void Kernel::GetInitInsts()
