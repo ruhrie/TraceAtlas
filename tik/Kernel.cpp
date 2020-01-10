@@ -594,130 +594,6 @@ void Kernel::GetLoopInsts(vector<BasicBlock *> blocks)
     }
 }
 
-vector<Instruction *> Kernel::getInstructionPath(BasicBlock *start, vector<BasicBlock *> validBlocks)
-{
-    vector<Instruction *> result;
-    //clone every instruction in the basic block
-    for (BasicBlock::iterator BI = start->begin(), BE = start->end(); BI != BE; ++BI)
-    {
-        Instruction *inst = cast<Instruction>(BI);
-        if (CallInst *ci = dyn_cast<CallInst>(inst))
-        {
-            Function *calledFunc = ci->getCalledFunction();
-            if (calledFunc->empty())
-            {
-                Instruction *cl = inst->clone();
-                VMap[inst] = cl;
-                result.push_back(cl);
-            }
-            else
-            {
-                auto subPath = getInstructionPath(&calledFunc->getEntryBlock(), validBlocks);
-                result.insert(result.end(), subPath.begin(), subPath.end());
-                int args = calledFunc->arg_size();
-                int i = 0;
-                for (auto ai = calledFunc->arg_begin(); ai < calledFunc->arg_end(); ai++, i++)
-                {
-                    Value *arg = cast<Value>(ai);
-                    VMap[arg] = VMap[ci->getOperand(i)];
-                }
-                Type *retType = calledFunc->getReturnType();
-                if (!retType->isVoidTy())
-                {
-                    BasicBlock *block = &calledFunc->getEntryBlock();
-                    auto retTree = BuildReturnTree(block, validBlocks);
-                    Value *toRemap = NULL;
-                    if (retTree.size() == 1)
-                    {
-                        //this is a single value
-                        toRemap = VMap[retTree[0]];
-                    }
-                    else
-                    {
-                        //this is a set of instructions where the last is the value of note
-                        toRemap = retTree.back();
-                        for (auto val : retTree)
-                        {
-                            result.push_back(cast<Instruction>(val));
-                        }
-                    }
-                    VMap[ci] = toRemap;
-                }
-            }
-        }
-        else if (!inst->isTerminator())
-        {
-            Instruction *cl = inst->clone();
-            VMap[inst] = cl;
-            result.push_back(cl);
-        }
-    }
-    Instruction *term = start->getTerminator();
-    unsigned int succCount = term->getNumSuccessors();
-    unsigned int validSuccessors = 0;
-    for (int i = 0; i < succCount; i++)
-    {
-        if (find(validBlocks.begin(), validBlocks.end(), term->getSuccessor(i)) != validBlocks.end())
-        {
-            validSuccessors++;
-        }
-    }
-    if (validSuccessors > 1)
-    {
-        //we have a branch
-        auto mergePoint = getPathMerge(start);
-        auto mergeInsts = GetPathInstructions(start, mergePoint);
-        for (auto a : mergeInsts)
-        {
-            Instruction *cl = a->clone();
-            VMap[a] = cl;
-            result.push_back(cl);
-        }
-        auto subPath = getInstructionPath(mergePoint, validBlocks);
-        result.insert(result.end(), subPath.begin(), subPath.end());
-    }
-    else if (validSuccessors == 0)
-    {
-        //we don't need to do anything unless we started in a function and exited outside of it
-        //basically that shouldn't happen so we don't do anything
-    }
-    else
-    {
-        //only one successor
-        BasicBlock *succ = term->getSuccessor(0);
-        string blockName = succ->getName();
-        uint64_t id = std::stoul(blockName.substr(7));
-        if (KernelMap.find(id) != KernelMap.end())
-        {
-            //we are in a kernel
-            Kernel *k = KernelMap[id];
-            std::vector<llvm::Value *> inargs;
-            for (auto ai = k->KernelFunction->arg_begin(); ai < k->KernelFunction->arg_end(); ai++)
-            {
-                inargs.push_back(cast<Value>(ai));
-            }
-            CallInst *ci = CallInst::Create(k->KernelFunction, inargs);
-            result.push_back(ci);
-            succ = k->ExitTarget;
-        }
-
-        vector<BasicBlock *> trimmed;
-        for (auto block : validBlocks)
-        {
-            if (block != start)
-            {
-                trimmed.push_back(block);
-            }
-        }
-        if (find(validBlocks.begin(), validBlocks.end(), succ) != validBlocks.end())
-        {
-            auto subResult = getInstructionPath(succ, trimmed);
-            result.insert(result.end(), subResult.begin(), subResult.end());
-        }
-    }
-    return result;
-}
-
 void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
 {
     // search blocks for BBs whose predecessors are not in blocks, this will be the entry block
@@ -740,51 +616,11 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
     BasicBlock *currentBlock = entrances[0];
 
     // next, find all the instructions in the entrance block bath who call functions, and make our own references to them
-    auto path = getInstructionPath(currentBlock, blocks);
-    /*auto instList = &Body->getInstList();
-    for (Instruction *i : path)
+    for(auto bb : blocks)
     {
-        if (CallInst *callInst = dyn_cast<CallInst>(i))
-        {
-            Function *funcCal = callInst->getCalledFunction();
-            llvm::Function *funcName = TikModule->getFunction(funcCal->getName());
-            if (!funcName)
-            {
-                llvm::Function *funcDec = llvm::Function::Create(funcCal->getFunctionType(), GlobalValue::LinkageTypes::ExternalLinkage, funcCal->getName(), TikModule);
-                funcDec->setAttributes(funcCal->getAttributes());
-                callInst->setCalledFunction(funcDec);
-            }
-            else // must be a kernel function call
-            {
-                auto calledFunc = callInst->getCalledFunction();
-                auto subK = KfMap[calledFunc];
-                for (auto ai = calledFunc->arg_begin(); ai < calledFunc->arg_end(); ai++)
-                {
-                    bool found = false;
-                    for (Instruction *j : path) // look through the entire body for this argument value
-                    {
-                        if (subK->ArgumentMap.find(ai) != subK->ArgumentMap.end())
-                        {
-                            if (subK->ArgumentMap[ai] == j)
-                            {
-                                // find the argument in our arguments that map to the subkernels arguments in MorphKernelFunction
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (!found)
-                    {
-                        if (subK->ArgumentMap.find(ai) != subK->ArgumentMap.end())
-                        {
-                            ExternalValues.push_back(subK->ArgumentMap[ai]);
-                        }
-                    }
-                }
-            }
-        }
-        instList->push_back(i);
-    }*/
+        auto cb = CloneBasicBlock(bb, VMap, Name, KernelFunction);
+        Body.push_back(cb);
+    }
 }
 
 void Kernel::GetInitInsts(vector<BasicBlock *> blocks)
