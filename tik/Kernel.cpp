@@ -195,7 +195,7 @@ void Kernel::MorphKernelFunction()
         throw TikException("Condition not found in VMap");
     }
 
-    auto b = loopBuilder.CreateCondBr(VMap[LoopCondition], EnterTarget, Exit);
+    auto b = loopBuilder.CreateCondBr(VMap[LoopCondition], cast<BasicBlock>(VMap[EnterTarget]), Exit);
     // body->loop (unconditional)
 
     // Now find all calls to the embedded kernel functions in the body, if any, and change their arguments to the new ones
