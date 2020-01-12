@@ -50,11 +50,6 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
 
     GetBodyInsts(blocks);
 
-    for(auto b : Body)
-    {
-        PrintVal(b);
-    }
-
     GetExits();
 
     GetLoopInsts();
@@ -230,40 +225,31 @@ void Kernel::MorphKernelFunction()
                             {
                                 for (BasicBlock::iterator j = b->begin(), BE2 = b->end(); j != BE2; ++j)
                                 {
-                                    if (subK->ArgumentMap.find(sarg) != subK->ArgumentMap.end())
+                                    //PrintVal(subK->ArgumentMap[sarg]);
+                                    if (subK->ArgumentMap[sarg] == cast<Instruction>(j))
                                     {
-                                        if (subK->ArgumentMap[sarg] == cast<Instruction>(j))
-                                        {
-                                            found = true;
-                                            embeddedCallArgs[sarg] = cast<Instruction>(j);
-                                        }
+                                        found = true;
+                                        embeddedCallArgs[sarg] = cast<Instruction>(j);
                                     }
                                 }
                             }
                         }
-                        if (!found)
+                        for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
                         {
-                            for (auto i : ExternalValues)
+                            for (auto arg = KernelFunction->arg_begin(); arg < KernelFunction->arg_end(); arg++)
                             {
-                                for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
+                                if (subK->ArgumentMap[sarg] == ArgumentMap[arg])
                                 {
-                                    for (auto arg = KernelFunction->arg_begin(); arg < KernelFunction->arg_end(); arg++)
-                                    {
-                                        if (subK->ArgumentMap[sarg] == ArgumentMap[arg])
-                                        {
-                                            embeddedCallArgs[arg] = subK->ArgumentMap[sarg];
-                                        }
-                                    }
+                                    embeddedCallArgs[sarg] = arg;
                                 }
                             }
                         }
-                        std::vector<Value *> embeddedArgs;
-                        unsigned int j = 0;
-                        for (auto &i : embeddedCallArgs)
+                        auto limit = callInst->getNumArgOperands();
+                        for (int k = 0; k < limit; k++)
                         {
-                            embeddedArgs.push_back(i.second);
-                            callInst->setOperand(j, i.second);
-                            j++;
+                            Argument *arg = cast<Argument>(callInst->getArgOperand(k));
+                            auto asdf = embeddedCallArgs[arg];
+                            callInst->setArgOperand(k, asdf);
                         }
                     }
                 }
@@ -343,6 +329,66 @@ void Kernel::GetLoopInsts()
     }
     LoopCondition = conditions[0];
 
+    //first we look for all potential users of the condition
+    vector<BasicBlock *> redirectedBlocks;
+    for (auto loopUse : LoopCondition->users())
+    {
+        auto priorBranch = cast<Instruction>(loopUse);
+        if (BranchInst *bi = dyn_cast<BranchInst>(priorBranch))
+        {
+            if (bi->isConditional())
+            {
+                BasicBlock *brTarget = NULL;
+                for (auto target : bi->successors())
+                {
+                    if (find(Body.begin(), Body.end(), target) != Body.end())
+                    {
+                        assert(brTarget == NULL);
+                        brTarget = target;
+                    }
+                }
+                BasicBlock *b = bi->getParent();
+                IRBuilder<> tBuilder(b);
+                tBuilder.CreateBr(brTarget);
+                bi->removeFromParent();
+                redirectedBlocks.push_back(b);
+            }
+            else
+            {
+                throw TikException("Loop branch is unconditional, unexpected");
+            }
+        }
+        else
+        {
+            throw TikException("Tik conitions must end with branches");
+        }
+    }
+
+    //now that it has been rerouted we need to reroute the actual kernel
+    for (auto b : Body)
+    {
+        auto term = b->getTerminator();
+        if (BranchInst *bi = dyn_cast<BranchInst>(term))
+        {
+            if (bi->isConditional())
+            {
+                throw TikException("Expected branch to be unconditional. Unimplemented");
+            }
+            else
+            {
+                auto suc = bi->getSuccessor(0);
+                if (find(redirectedBlocks.begin(), redirectedBlocks.end(), suc) != redirectedBlocks.end())
+                {
+                    bi->setSuccessor(0, Conditional);
+                }
+            }
+        }
+        else
+        {
+            throw TikException("Expected only branch instructions. Unimplemented");
+        }
+    }
+
     // now check if the condition instruction's users are eligible instructions themselves for out body block, and throw it out after
     while (conditions.size() != 0)
     {
@@ -414,9 +460,12 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
     {
         for (BasicBlock *pred : predecessors(block))
         {
-            if (find(blocks.begin(), blocks.end(), pred) == blocks.end())
+            if (pred)
             {
-                entrances.push_back(block);
+                if (find(blocks.begin(), blocks.end(), pred) == blocks.end())
+                {
+                    entrances.push_back(block);
+                }
             }
         }
     }
@@ -428,11 +477,12 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
     EnterTarget = entrances[0];
     // next, find all the instructions in the entrance block bath who call functions, and make our own references to them
     int id = 0;
+    vector<BasicBlock *> potentialBlocks;
     for (auto b : blocks)
     {
         string blockName = b->getName();
         uint64_t id = std::stoul(blockName.substr(7));
-        if (KernelMap.find(id) == KernelMap.end())
+        if (KernelMap.find(id) == KernelMap.end()) //only map blocks that haven't already been mapped
         {
             //this hasn't already been mapped
             auto cb = CloneBasicBlock(b, VMap, Name, KernelFunction);
@@ -460,9 +510,14 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
                 {
                     //this belongs to a subkernel
                     Kernel *nestedKernel = KernelMap[id];
+                    std::vector<llvm::Value *> inargs;
+                    for (auto ai = nestedKernel->KernelFunction->arg_begin(); ai < nestedKernel->KernelFunction->arg_end(); ai++)
+                    {
+                        inargs.push_back(cast<Value>(ai));
+                    }
                     BasicBlock *intermediateBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
                     IRBuilder<> intBuilder(intermediateBlock);
-                    intBuilder.CreateCall(nestedKernel->KernelFunction);
+                    intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
                     intBuilder.CreateBr(cast<BasicBlock>(VMap[nestedKernel->ExitTarget[0]]));
                     term->setSuccessor(i, intermediateBlock);
                     Body.push_back(intermediateBlock);
@@ -486,12 +541,42 @@ void Kernel::GetInitInsts()
                 if (Instruction *operand = dyn_cast<Instruction>(op))
                 {
                     BasicBlock *parentBlock = operand->getParent();
-                    if (std::find(Body.begin(), Body.end(), parentBlock) == Body.end() && parentBlock != NULL)
+                    if (std::find(Body.begin(), Body.end(), parentBlock) == Body.end())
                     {
                         if (find(ExternalValues.begin(), ExternalValues.end(), operand) == ExternalValues.end())
                         {
                             ExternalValues.push_back(operand);
                         }
+                    }
+                }
+                else if (Argument *ar = dyn_cast<Argument>(op))
+                {
+                    CallInst *ci = cast<CallInst>(inst);
+
+                    if (KfMap.find(ci->getCalledFunction()) != KfMap.end())
+                    {
+                        auto subKernel = KfMap[ci->getCalledFunction()];
+                        for (auto sExtVal : subKernel->ExternalValues)
+                        {
+                            //these are the arguments for the function call in order
+                            //we now can check if they are in our vmap, if so they aren't external
+                            //if not they are and should be mapped as is appropriate
+                            if (VMap[sExtVal] == NULL)
+                            {
+                                if (find(ExternalValues.begin(), ExternalValues.end(), sExtVal) == ExternalValues.end())
+                                {
+                                    ExternalValues.push_back(sExtVal);
+                                }
+                            }
+                            else
+                            {
+                                throw TikException("Unimplemented");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        throw TikException("Unimplemented");
                     }
                 }
             }
