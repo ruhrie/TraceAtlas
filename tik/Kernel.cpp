@@ -379,7 +379,7 @@ void Kernel::GetLoopInsts()
                 }
             }
         }
-        else if(SwitchInst *sw = dyn_cast<SwitchInst>(term))
+        else if (SwitchInst *sw = dyn_cast<SwitchInst>(term))
         {
             int sucCount = sw->getNumSuccessors();
             for (int i = 0; i < sucCount; i++)
@@ -515,7 +515,7 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
                     Body.push_back(phiBlock);
                     IRBuilder<> phiBuilder(phiBlock);
                     //first phi we need is the exit path, to know that we need the total entries
-                    int funcUseCount = 0;
+                    vector<BasicBlock *> funcUses;
                     for (auto user : calledFunc->users())
                     {
                         if (CallInst *callUse = dyn_cast<CallInst>(user))
@@ -523,7 +523,7 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
                             BasicBlock *parent = callUse->getParent();
                             if (find(blocks.begin(), blocks.end(), parent) != blocks.end())
                             {
-                                funcUseCount++;
+                                funcUses.push_back(parent);
                             }
                         }
                         else
@@ -531,8 +531,23 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
                             throw TikException("Only expected callInst");
                         }
                     }
-                    auto branchPhi = phiBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), funcUseCount);
+                    auto branchPhi = phiBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), funcUses.size());
+                    int i = 0;
+                    for(auto func : funcUses)
+                    {
+                        branchPhi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i++) , func);
+                    }
                     //this phi needs to be filled out
+                    int argIndex = 0;
+                    for(auto ai = calledFunc->arg_begin(); ai != calledFunc->arg_end(); ai++)
+                    {
+                        Argument *arg = cast<Argument>(ai);
+                        Value *passedValue = ci->getOperand(argIndex);
+                        auto argPhi = phiBuilder.CreatePHI(arg->getType(), funcUses.size());
+                        argPhi->addIncoming(passedValue, cb);
+                        VMap[arg] = argPhi;
+                        argIndex++;
+                    }
                     //we also need to do this for all the call args
                     phiBuilder.CreateBr(&calledFunc->getEntryBlock()); //needs phis before
 
@@ -568,7 +583,7 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
                         }
                         VMap[ci] = returnPhi;
                     }
-                    auto branchSwitch = returnBuilder.CreateSwitch(branchPhi, suffix, funcUseCount);
+                    auto branchSwitch = returnBuilder.CreateSwitch(branchPhi, suffix, funcUses.size());
 
                     //we now need to fill out the switch instructoin
 
