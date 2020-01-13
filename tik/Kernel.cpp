@@ -27,7 +27,6 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
     Conditional = NULL;
     Exit = NULL;
     Name = "Kernel_" + to_string(KernelUID++);
-
     FunctionType *mainType = FunctionType::get(Type::getVoidTy(TikModule->getContext()), false);
     KernelFunction = Function::Create(mainType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
     Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
@@ -225,7 +224,6 @@ void Kernel::MorphKernelFunction()
                             {
                                 for (BasicBlock::iterator j = b->begin(), BE2 = b->end(); j != BE2; ++j)
                                 {
-                                    //PrintVal(subK->ArgumentMap[sarg]);
                                     if (subK->ArgumentMap[sarg] == cast<Instruction>(j))
                                     {
                                         found = true;
@@ -263,7 +261,8 @@ void Kernel::MorphKernelFunction()
         for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
         {
             Instruction *inst = cast<Instruction>(BI);
-            RemapInstruction(inst, localVMap, llvm::RF_None);
+            //PrintVal(inst);
+            RemapInstruction(inst, localVMap, llvm::RF_IgnoreMissingLocals);
         }
     }
 }
@@ -380,6 +379,18 @@ void Kernel::GetLoopInsts()
                 }
             }
         }
+        else if(SwitchInst *sw = dyn_cast<SwitchInst>(term))
+        {
+            int sucCount = sw->getNumSuccessors();
+            for (int i = 0; i < sucCount; i++)
+            {
+                auto suc = sw->getSuccessor(i);
+                if (find(redirectedBlocks.begin(), redirectedBlocks.end(), suc) != redirectedBlocks.end())
+                {
+                    sw->setSuccessor(i, Conditional);
+                }
+            }
+        }
         else
         {
             throw TikException("Expected only branch instructions. Unimplemented");
@@ -483,6 +494,90 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
         {
             //this hasn't already been mapped
             auto cb = CloneBasicBlock(b, VMap, Name, KernelFunction);
+            vector<CallInst *> toInline;
+            for (auto bi = cb->begin(); bi != cb->end(); bi++)
+            {
+                if (CallInst *ci = dyn_cast<CallInst>(bi))
+                {
+                    toInline.push_back(ci);
+                }
+            }
+            for (auto ci : toInline)
+            {
+                auto calledFunc = ci->getCalledFunction();
+                if (!calledFunc->empty())
+                {
+                    //needs to be inlined
+                    BasicBlock *suffix = cb->splitBasicBlock(ci);
+                    Body.push_back(suffix);
+                    //first create the phi block
+                    BasicBlock *phiBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
+                    Body.push_back(phiBlock);
+                    IRBuilder<> phiBuilder(phiBlock);
+                    //first phi we need is the exit path, to know that we need the total entries
+                    int funcUseCount = 0;
+                    for (auto user : calledFunc->users())
+                    {
+                        if (CallInst *callUse = dyn_cast<CallInst>(user))
+                        {
+                            BasicBlock *parent = callUse->getParent();
+                            if (find(blocks.begin(), blocks.end(), parent) != blocks.end())
+                            {
+                                funcUseCount++;
+                            }
+                        }
+                        else
+                        {
+                            throw TikException("Only expected callInst");
+                        }
+                    }
+                    auto branchPhi = phiBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), funcUseCount);
+                    //this phi needs to be filled out
+                    //we also need to do this for all the call args
+                    phiBuilder.CreateBr(&calledFunc->getEntryBlock()); //needs phis before
+
+                    auto returnBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
+                    Body.push_back(returnBlock);
+                    int returnCount = 0;
+                    map<BasicBlock *, Value *> returnMap;
+                    for (auto fi = calledFunc->begin(); fi != calledFunc->end(); fi++)
+                    {
+                        BasicBlock *fBasicBlock = cast<BasicBlock>(fi);
+                        if (VMap.find(fBasicBlock) != VMap.end())
+                        {
+                            fBasicBlock = cast<BasicBlock>(VMap[fBasicBlock]);
+                        }
+                        if (ReturnInst *ri = dyn_cast<ReturnInst>(fBasicBlock->getTerminator()))
+                        {
+                            returnMap[fBasicBlock] = ri->getReturnValue();
+                            ri->removeFromParent();
+                            returnCount++;
+                            IRBuilder<> fIteratorBuilder(fBasicBlock);
+                            fIteratorBuilder.CreateBr(returnBlock);
+                        }
+                    }
+
+                    IRBuilder<> returnBuilder(returnBlock);
+                    if (calledFunc->getReturnType() != Type::getVoidTy(TikModule->getContext()))
+                    {
+                        auto returnPhi = returnBuilder.CreatePHI(calledFunc->getReturnType(), returnCount);
+                        int l = 0;
+                        for (auto pair : returnMap)
+                        {
+                            returnPhi->addIncoming(pair.second, pair.first);
+                        }
+                        VMap[ci] = returnPhi;
+                    }
+                    auto branchSwitch = returnBuilder.CreateSwitch(branchPhi, suffix, funcUseCount);
+
+                    //we now need to fill out the switch instructoin
+
+                    //redirect the first block
+                    BranchInst *priorBranch = cast<BranchInst>(cb->getTerminator());
+                    priorBranch->setSuccessor(0, phiBlock);
+                    ci->removeFromParent();
+                }
+            }
             Body.push_back(cb);
             VMap[b] = cb;
         }
@@ -548,32 +643,34 @@ void Kernel::GetInitInsts()
                 }
                 else if (Argument *ar = dyn_cast<Argument>(op))
                 {
-                    CallInst *ci = cast<CallInst>(inst);
-
-                    if (KfMap.find(ci->getCalledFunction()) != KfMap.end())
+                    if (CallInst *ci = dyn_cast<CallInst>(inst))
                     {
-                        auto subKernel = KfMap[ci->getCalledFunction()];
-                        for (auto sExtVal : subKernel->ExternalValues)
+
+                        if (KfMap.find(ci->getCalledFunction()) != KfMap.end())
                         {
-                            //these are the arguments for the function call in order
-                            //we now can check if they are in our vmap, if so they aren't external
-                            //if not they are and should be mapped as is appropriate
-                            if (VMap[sExtVal] == NULL)
+                            auto subKernel = KfMap[ci->getCalledFunction()];
+                            for (auto sExtVal : subKernel->ExternalValues)
                             {
-                                if (find(ExternalValues.begin(), ExternalValues.end(), sExtVal) == ExternalValues.end())
+                                //these are the arguments for the function call in order
+                                //we now can check if they are in our vmap, if so they aren't external
+                                //if not they are and should be mapped as is appropriate
+                                if (VMap[sExtVal] == NULL)
                                 {
-                                    ExternalValues.push_back(sExtVal);
+                                    if (find(ExternalValues.begin(), ExternalValues.end(), sExtVal) == ExternalValues.end())
+                                    {
+                                        ExternalValues.push_back(sExtVal);
+                                    }
+                                }
+                                else
+                                {
+                                    throw TikException("Unimplemented");
                                 }
                             }
-                            else
-                            {
-                                throw TikException("Unimplemented");
-                            }
                         }
-                    }
-                    else
-                    {
-                        throw TikException("Unimplemented");
+                        else
+                        {
+                            throw TikException("Unimplemented");
+                        }
                     }
                 }
             }
@@ -856,9 +953,21 @@ void Kernel::GetExits()
                     ExitTarget[exitId++] = a;
                 }
             }
-            else
+            else if (internalUse.size() != 0 && externalUse.size() != 0)
             {
                 throw TikException("Function called both externally and internally. Unimplemented.")
+            }
+        }
+        else if (SwitchInst *sw = dyn_cast<SwitchInst>(term))
+        {
+            for (unsigned int i = 0; i < sw->getNumSuccessors(); i++)
+            {
+                BasicBlock *succ = sw->getSuccessor(i);
+                if (find(Body.begin(), Body.end(), succ) == Body.end())
+                {
+                    exits.push_back(succ);
+                    ExitTarget[exitId++] = succ;
+                }
             }
         }
         else
