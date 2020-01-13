@@ -14,7 +14,6 @@
 #include <llvm/Support/raw_os_ostream.h>
 #include <llvm/Support/raw_ostream.h>
 #include <nlohmann/json.hpp>
-
 #include <set>
 #include <string>
 

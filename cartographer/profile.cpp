@@ -7,7 +7,7 @@ using namespace llvm;
 
 map<int, map<string, int>> rMap;
 
-map<int, map<string, int>> ProfileKernels(std::map<int, std::vector<int>> kernels, Module *M)
+map<int, map<string, int>> ProfileKernels(std::map<int, std::set<int>> kernels, Module *M)
 {
     //annotate it with the same algorithm used in the tracer
     static uint64_t UID = 0;

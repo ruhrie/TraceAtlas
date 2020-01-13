@@ -39,8 +39,6 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
     int blocks = traceSize / BLOCK_SIZE + 1;
     // File stuff for input trace and output decompressed file
     std::ifstream inputTrace;
-    std::ofstream outfile;
-    outfile.open("outfile.txt");
     inputTrace.open(sourceFile);
     inputTrace.seekg(0, std::ios_base::end);
     uint64_t size = inputTrace.tellg();
