@@ -370,16 +370,13 @@ void Kernel::GetLoopInsts()
         auto term = b->getTerminator();
         if (BranchInst *bi = dyn_cast<BranchInst>(term))
         {
-            if (bi->isConditional())
+            int sucCount = bi->getNumSuccessors();
+            for (int i = 0; i < sucCount; i++)
             {
-                throw TikException("Expected branch to be unconditional. Unimplemented");
-            }
-            else
-            {
-                auto suc = bi->getSuccessor(0);
+                auto suc = bi->getSuccessor(i);
                 if (find(redirectedBlocks.begin(), redirectedBlocks.end(), suc) != redirectedBlocks.end())
                 {
-                    bi->setSuccessor(0, Conditional);
+                    bi->setSuccessor(i, Conditional);
                 }
             }
         }
