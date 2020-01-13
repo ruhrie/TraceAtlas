@@ -1,5 +1,6 @@
 #include "tik/Kernel.h"
 #include "tik/Exceptions.h"
+#include "tik/InlineStruct.h"
 #include "tik/Metadata.h"
 #include "tik/Util.h"
 #include "tik/tik.h"
@@ -533,13 +534,13 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
                     }
                     auto branchPhi = phiBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), funcUses.size());
                     int i = 0;
-                    for(auto func : funcUses)
+                    for (auto func : funcUses)
                     {
-                        branchPhi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i++) , func);
+                        branchPhi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i++), func);
                     }
                     //this phi needs to be filled out
                     int argIndex = 0;
-                    for(auto ai = calledFunc->arg_begin(); ai != calledFunc->arg_end(); ai++)
+                    for (auto ai = calledFunc->arg_begin(); ai != calledFunc->arg_end(); ai++)
                     {
                         Argument *arg = cast<Argument>(ai);
                         Value *passedValue = ci->getOperand(argIndex);
@@ -549,7 +550,7 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
                         argIndex++;
                     }
                     //we also need to do this for all the call args
-                    phiBuilder.CreateBr(&calledFunc->getEntryBlock()); //needs phis before
+                    phiBuilder.CreateBr(&calledFunc->getEntryBlock());
 
                     auto returnBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
                     Body.push_back(returnBlock);
@@ -584,8 +585,7 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
                         VMap[ci] = returnPhi;
                     }
                     auto branchSwitch = returnBuilder.CreateSwitch(branchPhi, suffix, funcUses.size());
-
-                    //we now need to fill out the switch instructoin
+                    branchSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), 0), suffix);
 
                     //redirect the first block
                     BranchInst *priorBranch = cast<BranchInst>(cb->getTerminator());
