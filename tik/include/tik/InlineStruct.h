@@ -4,7 +4,7 @@
 
 struct InlineStruct
 {
-    llvm::Function *CalledFunction;
+    llvm::Function *CalledFunction = NULL;
     std::vector<llvm::PHINode *> ArgNodes;
-    llvm::PHINode *ReturnNode;
+    llvm::SwitchInst *SwitchInstruction = NULL;
 };

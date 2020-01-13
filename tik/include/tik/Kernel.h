@@ -1,4 +1,5 @@
 #pragma once
+#include "tik/InlineStruct.h"
 #include <llvm/IR/Module.h>
 #include <llvm/Transforms/Utils/ValueMapper.h>
 #include <map>
@@ -113,4 +114,6 @@ private:
     std::vector<llvm::Instruction *> GetPathInstructions(llvm::BasicBlock *start, llvm::BasicBlock *end);
 
     void ApplyMetadata();
+
+    std::vector<InlineStruct> InlinedFunctions;
 };
