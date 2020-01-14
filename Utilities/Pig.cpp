@@ -60,18 +60,24 @@ int main(int argc, char **argv)
     }
 
     map<string, map<string, int>> TikCounters;
-    map<string, map<string, map<string, int>>> TikCrossProducts;
+    map<string, map<string, map<string, int>>> TikCrossProductsTypePerOp;
+    map<string, map<string, map<string, int>>> TikCrossProductsOpPerType;
     for (auto k : kernels)
     {
         TikCounters[k->getName()] = GetRatios(k);
-        TikCrossProducts[k->getName()] = GetCrossProductTypePerOp(k);
+        TikCrossProductsTypePerOp[k->getName()] = GetCrossProductTypePerOp(k);
+        TikCrossProductsOpPerType[k->getName()] = GetCrossProductOpPerType(k);
     }
 
     nlohmann::json JsonTikCounters = TikCounters;
-    nlohmann::json JsonTikCrossProducts = TikCrossProducts;
+    nlohmann::json JsonTikCrossProductsTypePerOp = TikCrossProductsTypePerOp;
+    nlohmann::json JsonTikCrossProductsOpPerType = TikCrossProductsOpPerType;
     ofstream oStream(igFile);
     oStream << JsonTikCounters;
-    oStream << JsonTikCrossProducts;
+    oStream <<"\n";
+    oStream << JsonTikCrossProductsTypePerOp;
+     oStream <<"\n";
+    oStream << JsonTikCrossProductsOpPerType;
     oStream.close();
 }
 
@@ -171,6 +177,67 @@ map<string, map<string, int>> GetCrossProductTypePerOp(Function *F)
             else if (t->isPointerTy())
             {
                 result[name]["typePointer"]++;
+            }
+            else
+            {
+                std::string str;
+                llvm::raw_string_ostream rso(str);
+                t->print(rso);
+                cerr << "Unrecognized type: " + str + "\n";
+            }
+            result["instruction"]["Count"]++;
+        }
+    }
+
+    return result;
+}
+
+map<string, map<string, int>> GetCrossProductOpPerType(Function *F)
+{
+    map<string, map<string, int>> result;
+    for (auto fi = F->begin(); fi != F->end(); fi++)
+    {
+        for (auto bi = fi->begin(); bi != fi->end(); bi++)
+        {
+            Instruction *i = cast<Instruction>(bi);
+            if (i->getMetadata("TikSynthetic"))
+            {
+                continue;
+            }
+            //start with the opcodes
+            string name = string(i->getOpcodeName());
+            
+            //now check the type
+            Type *t = i->getType();
+            if (t->isVoidTy())
+            {
+                result["typeVoid"]["Count"]++;
+                result["typeVoid"][name]++;
+            }
+            else if (t->isFloatingPointTy())
+            {
+                result["typeFloat"]["Count"]++;
+                result["typeFloat"][name]++;
+            }
+            else if (t->isIntegerTy())
+            {
+                result["typeInt"]["Count"]++;
+                result["typeInt"][name]++;
+            }
+            else if (t->isArrayTy())
+            {
+                result["typeArray"]["Count"]++;
+                result["typeArray"][name]++;
+            }
+            else if (t->isVectorTy())
+            {
+                result["typeVector"]["Count"]++;
+                result["typeVector"][name]++;
+            }
+            else if (t->isPointerTy())
+            {
+                result["typePointer"]["Count"]++;
+                result["typePointer"][name]++;
             }
             else
             {
