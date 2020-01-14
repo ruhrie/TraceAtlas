@@ -15,6 +15,8 @@
 #include <llvm/Support/raw_ostream.h>
 #include <nlohmann/json.hpp>
 #include <set>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/spdlog.h>
 #include <string>
 
 using namespace std;
@@ -39,11 +41,60 @@ cl::opt<Filetype> InputType("t", cl::desc("Choose input file type"),
                             cl::init(LLVM));
 cl::opt<string> OutputType("f", cl::desc("Specify output file format. Can be either JSON or LLVM"), cl::value_desc("format"));
 cl::opt<bool> ASCIIFormat("S", cl::desc("output json as human-readable ASCII text"));
+cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
+cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
 
 int main(int argc, char *argv[])
 {
     bool error = false;
     cl::ParseCommandLineOptions(argc, argv);
+
+    if (!LogFile.empty())
+    {
+        auto file_logger = spdlog::basic_logger_mt("tik_logger", LogFile);
+        spdlog::set_default_logger(file_logger);
+    }
+    switch (LogLevel)
+    {
+        case 0:
+        {
+            spdlog::set_level(spdlog::level::off);
+            break;
+        }
+        case 1:
+        {
+            spdlog::set_level(spdlog::level::critical);
+            break;
+        }
+        case 2:
+        {
+            spdlog::set_level(spdlog::level::err);
+            break;
+        }
+        case 3:
+        {
+            spdlog::set_level(spdlog::level::warn);
+            break;
+        }
+        case 4:
+        {
+            spdlog::set_level(spdlog::level::info);
+            break;
+        }
+        case 5:
+        {
+            spdlog::set_level(spdlog::level::debug);
+        }
+        case 6:
+        {
+            spdlog::set_level(spdlog::level::trace);
+            break;
+        }
+        default:
+        {
+            spdlog::warn("Invalid logging level: " + to_string(LogLevel));
+        }
+    }
     ifstream inputJson;
     nlohmann::json j;
     try
@@ -56,8 +107,10 @@ int main(int argc, char *argv[])
     {
         std::cerr << "Couldn't open input json file: " << JsonFile << "\n";
         std::cerr << e.what() << '\n';
+        spdlog::critical("Failed to open kernel file: " + JsonFile);
         return EXIT_FAILURE;
     }
+    spdlog::info("Found " + to_string(j.size()) + " kernels in the kernel file");
 
     map<string, vector<int>> kernels;
 
@@ -101,6 +154,7 @@ int main(int argc, char *argv[])
     {
         std::cerr << "Couldn't open input bitcode file: " << InputFile << "\n";
         std::cerr << e.what() << '\n';
+        spdlog::critical("Failed to open source bitcode: " + InputFile);
         return EXIT_FAILURE;
     }
 
@@ -170,6 +224,7 @@ int main(int argc, char *argv[])
                     //and remove it from kernels
                     auto it = find(kernels.begin(), kernels.end(), kernel);
                     kernels.erase(it);
+                    spdlog::info("Succesfully converted kernel: " + kernel.first);
                     //and restart the iterator to ensure cohesion
                     break;
                 }
@@ -180,6 +235,7 @@ int main(int argc, char *argv[])
                               << "\n";
                     std::cerr << e.what() << '\n';
                     error = true;
+                    spdlog::error("Failed to convert kernel: " + kernel.first);
                 }
             }
         }
@@ -225,11 +281,13 @@ int main(int argc, char *argv[])
                 WriteBitcodeToFile(*TikModule, raw_stream);
             }
         }
+        spdlog::info("Succesfully wrote tik to file");
     }
     catch (TikException &e)
     {
         std::cerr << "Failed to open output file: " << OutputFile << "\n";
         std::cerr << e.what() << '\n';
+        spdlog::critical("Failed to write tik to output file: " + OutputFile);
         return EXIT_FAILURE;
     }
     if (error)
