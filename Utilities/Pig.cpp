@@ -60,18 +60,18 @@ int main(int argc, char **argv)
     }
 
     map<string, map<string, int>> TikCounters;
-    unsigned sumCrossProduct = 0;
+    map<string, map<string, map<string, int>>> TikCrossProducts;
     for (auto k : kernels)
     {
         TikCounters[k->getName()] = GetRatios(k);
-        sumCrossProduct += GetCrossProduct(k);
+        TikCrossProducts[k->getName()] = GetCrossProductTypePerOp(k);
     }
 
-    nlohmann::json outputJson = TikCounters;
-
+    nlohmann::json JsonTikCounters = TikCounters;
+    nlohmann::json JsonTikCrossProducts = TikCrossProducts;
     ofstream oStream(igFile);
-    oStream << outputJson;
-    oStream << sumCrossProduct;
+    oStream << JsonTikCounters;
+    oStream << JsonTikCrossProducts;
     oStream.close();
 }
 
@@ -131,9 +131,9 @@ map<string, int> GetRatios(Function *F)
     return result;
 }
 
-int GetCrossProduct(Function *F)
+map<string, map<string, int>> GetCrossProductTypePerOp(Function *F)
 {
-    unsigned crossProduct = 0;
+    map<string, map<string, int>> result;
     for (auto fi = F->begin(); fi != F->end(); fi++)
     {
         for (auto bi = fi->begin(); bi != fi->end(); bi++)
@@ -143,10 +143,45 @@ int GetCrossProduct(Function *F)
             {
                 continue;
             }
-            unsigned ops = i->getOpcode();
-
-            crossProduct += ops * i->getType()->getTypeID();
+            //start with the opcodes
+            string name = string(i->getOpcodeName());
+            result[name]["Count"]++;
+            //now check the type
+            Type *t = i->getType();
+            if (t->isVoidTy())
+            {
+                result[name]["typeVoid"]++;
+            }
+            else if (t->isFloatingPointTy())
+            {
+                result[name]["typeFloat"]++;
+            }
+            else if (t->isIntegerTy())
+            {
+                result[name]["typeInt"]++;
+            }
+            else if (t->isArrayTy())
+            {
+                result[name]["typeArray"]++;
+            }
+            else if (t->isVectorTy())
+            {
+                result[name]["typeVector"]++;
+            }
+            else if (t->isPointerTy())
+            {
+                result[name]["typePointer"]++;
+            }
+            else
+            {
+                std::string str;
+                llvm::raw_string_ostream rso(str);
+                t->print(rso);
+                cerr << "Unrecognized type: " + str + "\n";
+            }
+            result["instruction"]["Count"]++;
         }
     }
-    return crossProduct;
+
+    return result;
 }
