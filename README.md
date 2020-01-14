@@ -11,8 +11,9 @@ TraceAtlas requires a few of libraries:
 * [papi](https://icl.utk.edu/papi/)
 * [nlohmann-json](https://github.com/nlohmann/json)
 * [zlib](https://www.zlib.net/)
+* [spdlog](https://github.com/gabime/spdlog)
 
-The json library is currently expected to be installed via [vcpkg](https://github.com/Microsoft/vcpkg) and a future update will also move LLVM to vcpkg.
+The json libraryand spdlog are currently expected to be installed via [vcpkg](https://github.com/Microsoft/vcpkg) and a future update will also move LLVM to vcpkg.
 
 To build, simply create a build directory and run cmake (at least 3.10) against it with your build tool of choice. A couple of small unit tests are created for the tik tool, which is still in heavy development. These can be disabled with the `ENABLE_TESTING` option. Doxygen documentation is also available under the `doc` target. It is not built by default.
 

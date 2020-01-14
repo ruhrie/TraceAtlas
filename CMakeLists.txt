@@ -10,6 +10,7 @@ llvm_map_components_to_libnames(llvm_libs  support core irreader bitreader bitwr
 
 find_package(ZLIB REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
 option(ENABLE_TESTING "Build tests" ON)
 if(${ENABLE_TESTING})
     enable_testing()
