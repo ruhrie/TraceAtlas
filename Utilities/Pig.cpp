@@ -69,15 +69,12 @@ int main(int argc, char **argv)
         TikCrossProductsOpPerType[k->getName()] = GetCrossProductOpPerType(k);
     }
 
-    nlohmann::json JsonTikCounters = TikCounters;
-    nlohmann::json JsonTikCrossProductsTypePerOp = TikCrossProductsTypePerOp;
-    nlohmann::json JsonTikCrossProductsOpPerType = TikCrossProductsOpPerType;
+    nlohmann::json JsonTikCounters;
+    JsonTikCounters["Counters"] = TikCounters;
+    JsonTikCounters["TypePerOp"]= TikCrossProductsTypePerOp;
+    JsonTikCounters["OpPerType"]= TikCrossProductsOpPerType;
     ofstream oStream(igFile);
     oStream << JsonTikCounters;
-    oStream <<"\n";
-    oStream << JsonTikCrossProductsTypePerOp;
-     oStream <<"\n";
-    oStream << JsonTikCrossProductsOpPerType;
     oStream.close();
 }
 
