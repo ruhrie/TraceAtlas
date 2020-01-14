@@ -128,7 +128,7 @@ void Kernel::Remap()
         for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
         {
             Instruction *inst = cast<Instruction>(BI);
-            RemapInstruction(inst, VMap, llvm::RF_IgnoreMissingLocals);
+            RemapInstruction(inst, VMap, llvm::RF_None);
         }
     }
 }
@@ -262,8 +262,7 @@ void Kernel::MorphKernelFunction()
         for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
         {
             Instruction *inst = cast<Instruction>(BI);
-            //PrintVal(inst);
-            RemapInstruction(inst, localVMap, llvm::RF_IgnoreMissingLocals);
+            RemapInstruction(inst, localVMap, llvm::RF_None);
         }
     }
 }
@@ -592,12 +591,11 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
                         if (calledFunc->getReturnType() != Type::getVoidTy(TikModule->getContext()))
                         {
                             auto returnPhi = returnBuilder.CreatePHI(calledFunc->getReturnType(), returnCount);
-                            int l = 0;
                             for (auto pair : returnMap)
                             {
                                 returnPhi->addIncoming(pair.second, pair.first);
                             }
-                            VMap[ci] = returnPhi;
+                            ci->replaceAllUsesWith(returnPhi);
                         }
                         //finally we use the first phi we created to determine where we should return to
                         auto branchSwitch = returnBuilder.CreateSwitch(branchPhi, suffix, funcUses.size());
