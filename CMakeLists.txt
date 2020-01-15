@@ -16,6 +16,7 @@ if(${ENABLE_TESTING})
     enable_testing()
 endif()
 
+add_subdirectory("AtlasUtil")
 add_subdirectory("cartographer")
 add_subdirectory("TraceInfrastructure")
 add_subdirectory("tik")
