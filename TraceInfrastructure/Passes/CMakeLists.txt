@@ -7,6 +7,8 @@ set_target_properties(AtlasPasses
 	LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
 )
 
+target_link_libraries(AtlasPasses PRIVATE AtlasUtil)
+
 target_include_directories(AtlasPasses PRIVATE ${LLVM_INCLUDE_DIRS} ${TRACE_INC})
 install(TARGETS AtlasPasses
     LIBRARY DESTINATION lib

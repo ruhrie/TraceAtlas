@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <set>
+#include "AtlasUtil/Annotate.h"
 using namespace std;
 using namespace llvm;
 
@@ -43,17 +44,11 @@ int main(int argc, char *argv[])
         std::cerr << "Failed to load bitcode file\n";
         return -1;
     }
+    Module *M = sourceBitcode.get();
     //annotate it with the same algorithm used in the tracer
-    static uint64_t UID = 0;
-    for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
-    {
-        for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
-        {
-            BB->setName("BB_UID_" + std::to_string(UID++));
-        }
-    }	
+    Annotate(M);
     map<string, set<string>> kernelParents;
-    for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
+    for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
     {
         Function *f = cast<Function>(F);
         string functionName = f->getName();

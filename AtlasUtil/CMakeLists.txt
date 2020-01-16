@@ -1,4 +1,4 @@
-add_library(AtlasUtil STATIC Print.cpp)
+add_library(AtlasUtil STATIC Print.cpp Annotate.cpp)
 
 target_link_libraries(AtlasUtil PRIVATE ${llvm_libs})
 

@@ -1,4 +1,5 @@
 #include "Smoothing.h"
+#include "AtlasUtil/Annotate.h"
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
@@ -16,14 +17,7 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
     SMDiagnostic smerror;
     unique_ptr<Module> sourceBitcode = parseIRFile(bitcodeFile, smerror, context);
 
-    static uint64_t UID = 0;
-    for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
-    {
-        for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
-        {
-            BB->setName("BB_UID_" + std::to_string(UID++));
-        }
-    }
+    Annotate(sourceBitcode.get());
 
     for (auto pair : blocks)
     {

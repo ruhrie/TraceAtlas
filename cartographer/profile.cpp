@@ -1,5 +1,6 @@
 #include "profile.h"
 #include "EncodeDetect.h"
+#include "AtlasUtil/Annotate.h"
 #include <iostream>
 
 using namespace std;
@@ -10,14 +11,7 @@ map<int, map<string, int>> rMap;
 map<int, map<string, int>> ProfileKernels(std::map<int, std::set<int>> kernels, Module *M)
 {
     //annotate it with the same algorithm used in the tracer
-    static uint64_t UID = 0;
-    for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
-    {
-        for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
-        {
-            BB->setName("BB_UID_" + std::to_string(UID++));
-        }
-    }
+    Annotate(M);
     //start by profiling every basic block
     for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
     {
