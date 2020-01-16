@@ -1,4 +1,5 @@
 #include "tik/Kernel.h"
+#include "AtlasUtil/Print.h"
 #include "tik/Exceptions.h"
 #include "tik/InlineStruct.h"
 #include "tik/Metadata.h"
@@ -477,7 +478,15 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
             }
         }
     }
-    if (entrances.size() != 1)
+    if(entrances.size() == 0)
+    {
+        //there are no entrances, so we enter the kernel through a function call
+        for (BasicBlock *block : blocks)
+        {
+            Function *parent = block->getParent();
+        }
+    }
+    else if (entrances.size() != 1)
     {
         throw TikException("Kernel Exception: tik only supports single entrance kernels");
     }
