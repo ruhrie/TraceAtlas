@@ -3,5 +3,3 @@ build/
 *.pyc
 *.swp
 testing/
-*.trc
-*.native
