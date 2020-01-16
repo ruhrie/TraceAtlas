@@ -1,6 +1,6 @@
-#ifndef BACKENDTRACE_H
-#define BACKENDTRACE_H
+#pragma once
 #include <stdint.h>
+#include <stdbool.h>
 
 /// <summary>
 /// Writes the input string to the trace buffer.
@@ -49,6 +49,4 @@ void DumpLoadAddrValue(void *MemValue, int size);
 void StoreDump(void *address);
 void DumpStoreAddrValue(void *MemValue, int size);
 
-void BB_ID_Dump(uint64_t block);
-
-#endif
+void BB_ID_Dump(uint64_t block, bool enter);
