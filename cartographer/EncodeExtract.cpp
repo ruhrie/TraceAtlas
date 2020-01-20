@@ -27,15 +27,16 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
         }
     }
 
-    int openCount[blockCount];                                               // counter to know where we are in the callstack
-    set<int> finalBlocks[kernels.size()];                                    // final kernel definitions
-    set<int> openBlocks;                                                     // current blocks that are a child
-    set<int> kernelMap[blockCount];                                          // map between a block and the parent kernel
-    int kernelStarts[kernels.size()];                                        // map of a kernel index to the first block seen
-    set<int> *blocks = (set<int> *)calloc(kernels.size(), sizeof(set<int>)); //[blockCount];    // temporary kernel blocks
+    int openCount[blockCount];            // counter to know where we are in the callstack
+    set<int> finalBlocks[kernels.size()]; // final kernel definitions
+    set<int> openBlocks;                  // current blocks that are a child
+    set<int> kernelMap[blockCount];       // map between a block and the parent kernel
+    int kernelStarts[kernels.size()];     // map of a kernel index to the first block seen
+    set<int> blocks[kernels.size()];      // temporary kernel blocks
     for (int i = 0; i < blockCount; i++)
     {
         kernelMap[i] = set<int>();
+        openCount[i] = 0;
     }
     for (int i = 0; i < kernels.size(); i++)
     {
@@ -154,13 +155,17 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
                 openCount[block]++; //mark this block as being entered
                 openBlocks.insert(block);
 
-                for(int i = 0; i < kernels.size(); i++)
+                for (int i = 0; i < kernels.size(); i++)
                 {
                     blocks[i].insert(block);
                 }
 
                 for (auto ki : kernelMap[block])
                 {
+                    for (auto open : openBlocks)
+                    {
+                        finalBlocks[ki].insert(open);
+                    }
                     if (kernelStarts[ki] == -1)
                     {
                         kernelStarts[ki] = block;
@@ -184,12 +189,11 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
             }
             else if (key == "BBExit")
             {
-                int v = stoul(value);
-                openCount[v]--;
-                if (openCount[v] == 0)
+                int block = stoi(value, 0, 0);
+                openCount[block]--;
+                if (openCount[block] == 0)
                 {
-                    auto it = openBlocks.find(v);
-                    openBlocks.erase(it);
+                    openBlocks.erase(block);
                 }
             }
             else
