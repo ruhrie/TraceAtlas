@@ -10,8 +10,9 @@ message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 llvm_map_components_to_libnames(llvm_libs  support core irreader bitreader bitwriter transformutils)
 
 find_package(ZLIB REQUIRED)
-find_package(nlohmann_json CONFIG REQUIRED)
-find_package(spdlog CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED) #nlohmann_json
+find_package(spdlog CONFIG REQUIRED) #spdlog
+find_package(indica CONFIG REQUIRED) #indicators
 option(ENABLE_TESTING "Build tests" ON)
 if(${ENABLE_TESTING})
     enable_testing()

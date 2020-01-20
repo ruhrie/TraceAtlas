@@ -1,11 +1,14 @@
 #include "EncodeExtract.h"
 #include "EncodeDetect.h"
+#include "cartographer.h"
 #include <algorithm>
 #include <assert.h>
 #include <fstream>
 #include <functional>
+#include <indicators/progress_bar.hpp>
 #include <iostream>
 #include <list>
+#include <spdlog/spdlog.h>
 #include <sstream>
 #include <stdlib.h>
 #include <zlib.h>
@@ -17,6 +20,15 @@ using namespace llvm;
 
 std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<std::set<int>> kernels, Module *bitcode)
 {
+    indicators::ProgressBar bar;
+    int previousCount = 0;
+    if (!noProgressBar)
+    {
+        bar.set_prefix_text("Detecting type 2 kernels");
+        bar.show_elapsed_time();
+        bar.show_remaining_time();
+    }
+
     //first step is to find the total number of basic blocks for allocation
     int blockCount = 0;
     for (auto mi = bitcode->begin(); mi != bitcode->end(); mi++)
@@ -198,6 +210,7 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
             }
             else
             {
+                spdlog::critical("Unrecognized key: " + key);
                 throw 2;
             }
             splitIndex++;
@@ -218,9 +231,20 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
         {
             notDone = false;
         }
-        if (index % 1000 == 1)
+        float percent = (float)index / (float)totalBlocks * 100.0f;
+        if (!noProgressBar)
         {
-            std::cout << "Currently reading block " << index << " of " << totalBlocks << ".\n";
+            bar.set_progress(percent);
+            bar.set_postfix_text("Analyzing block " + to_string(index) + "/" + to_string(totalBlocks));
+        }
+        else
+        {
+            int iPercent = (int)percent;
+            if(iPercent > previousCount + 5)
+            {
+                previousCount = ((iPercent / 5) + 1) * 5;
+                spdlog::info("Completed block {0:d} of {1:d}", index, totalBlocks);
+            }            
         }
     }
 

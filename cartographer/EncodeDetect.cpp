@@ -1,12 +1,15 @@
 #include "EncodeDetect.h"
+#include "cartographer.h"
 #include <algorithm>
 #include <assert.h>
 #include <deque>
 #include <functional>
+#include <indicators/progress_bar.hpp>
+#include <iostream>
 #include <list>
 #include <map>
+#include <spdlog/spdlog.h>
 #include <sstream>
-#include <iostream>
 #include <zlib.h>
 
 #define BLOCK_SIZE 4096
@@ -23,13 +26,22 @@ std::ifstream::pos_type filesize(std::string filename)
 
 std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, int hotThresh, bool newline)
 {
+    indicators::ProgressBar bar;
+    int previousCount = 0;
+    if (!noProgressBar)
+    {
+        bar.set_prefix_text("Detecting type 1 kernels");
+        bar.show_elapsed_time();
+        bar.show_remaining_time();
+    }
+
     /* Structures for grouping kernels */
     // Tracer parameter, sets the maximum width that the parser can look for temporally affine blocks
     int radius = 5;
     // Maps a blockID to its vector of temporally affine blocks
     std::map<int, std::map<int, int>> blockMap; //should probably seperate the floating point values into a seperate structure
     // Holds the count of each blockID
-    
+
     // Vector for grouping blocks together
     std::deque<int> priorBlocks; //should be a dequeue
 
@@ -37,6 +49,7 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
     // Compute # of blocks in the trace
     std::ifstream::pos_type traceSize = filesize(sourceFile);
     int blocks = traceSize / BLOCK_SIZE + 1;
+    //bar.set_bar_width(blocks);
     // File stuff for input trace and output decompressed file
     std::ifstream inputTrace;
     inputTrace.open(sourceFile);
@@ -157,10 +170,10 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
             }
             else if (key == "BBExit")
             {
-                
             }
             else
             {
+                spdlog::critical("Unrecognized key: " + key);
                 throw 2;
             }
             splitIndex++;
@@ -180,9 +193,20 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
         {
             notDone = false;
         }
-        if (index % 1000 == 1)
+        float percent = (float)index / (float)blocks * 100.0f;
+        if (!noProgressBar)
         {
-            std::cout << "Currently reading block " << index << " of " << blocks << ".\n";
+            bar.set_progress(percent);
+            bar.set_postfix_text("Analyzing block " + to_string(index) + "/" + to_string(blocks));
+        }
+        else
+        {
+            int iPercent = (int)percent;
+            if (iPercent > previousCount + 5)
+            {
+                previousCount = ((iPercent / 5) + 1) * 5;
+                spdlog::info("Completed block {0:d} of {1:d}", index, blocks);
+            }
         }
     } // while( notDone )
 
