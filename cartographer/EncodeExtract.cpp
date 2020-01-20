@@ -172,12 +172,17 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
                     blocks[i].insert(block);
                 }
 
+                for (auto open : openBlocks)
+                {
+                    for (auto ki : kernelMap[open])
+                    {
+                        finalBlocks[ki].insert(block);
+                    }
+                }
+
                 for (auto ki : kernelMap[block])
                 {
-                    for (auto open : openBlocks)
-                    {
-                        finalBlocks[ki].insert(open);
-                    }
+
                     if (kernelStarts[ki] == -1)
                     {
                         kernelStarts[ki] = block;
@@ -240,12 +245,17 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
         else
         {
             int iPercent = (int)percent;
-            if(iPercent > previousCount + 5)
+            if (iPercent > previousCount + 5)
             {
                 previousCount = ((iPercent / 5) + 1) * 5;
                 spdlog::info("Completed block {0:d} of {1:d}", index, totalBlocks);
-            }            
+            }
         }
+    }
+
+    if (!noProgressBar && !bar.is_completed())
+    {
+        bar.mark_as_completed();
     }
 
     std::set<set<int>> finalSets;

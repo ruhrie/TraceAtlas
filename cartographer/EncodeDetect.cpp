@@ -210,6 +210,11 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
         }
     } // while( notDone )
 
+    if (!noProgressBar && !bar.is_completed())
+    {
+        bar.mark_as_completed();
+    }
+
     // assign to every index of every list value in blockMap a normalized amount
     std::map<int, std::vector<std::pair<int, float>>> fBlockMap; //really this is a matrix of floats
     for (auto &key : blockMap)
