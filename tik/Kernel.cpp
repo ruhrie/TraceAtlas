@@ -1,4 +1,5 @@
 #include "tik/Kernel.h"
+#include "AtlasUtil/Print.h"
 #include "tik/Exceptions.h"
 #include "tik/InlineStruct.h"
 #include "tik/Metadata.h"
@@ -273,7 +274,7 @@ void Kernel::GetLoopInsts()
     vector<Instruction *> result;
 
     // identify all exit blocks
-    vector<BasicBlock *> exits;
+    set<BasicBlock *> exits;
     for (BasicBlock *block : Body)
     {
         bool exit = false;
@@ -289,7 +290,7 @@ void Kernel::GetLoopInsts()
         }
         if (exit)
         {
-            exits.push_back(block);
+            exits.insert(block);
         }
     }
 
@@ -474,6 +475,29 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
                 {
                     entrances.push_back(block);
                 }
+            }
+        }
+
+        //we also check the entry blocks
+        Function *parent = block->getParent();
+        BasicBlock *entry = &parent->getEntryBlock();
+        if (block == entry)
+        {
+            //potential entrance
+            bool extUse = false;
+            for (auto user : parent->users())
+            {
+                Instruction *ci = cast<Instruction>(user);
+                BasicBlock *parentBlock = ci->getParent();
+                if (find(blocks.begin(), blocks.end(), parentBlock) == blocks.end())
+                {
+                    extUse = true;
+                    break;
+                }
+            }
+            if (extUse)
+            {
+                entrances.push_back(block);
             }
         }
     }
@@ -938,7 +962,7 @@ void Kernel::GetExits()
 {
     int exitId = 0;
     // search for exit basic blocks
-    vector<BasicBlock *> exits;
+    set<BasicBlock *> exits;
     for (auto block : Body)
     {
         Instruction *term = block->getTerminator();
@@ -950,7 +974,7 @@ void Kernel::GetExits()
                 BasicBlock *succ = brInst->getSuccessor(i);
                 if (find(Body.begin(), Body.end(), succ) == Body.end())
                 {
-                    exits.push_back(succ);
+                    exits.insert(succ);
                     ExitTarget[exitId++] = succ;
                 }
             }
@@ -987,7 +1011,7 @@ void Kernel::GetExits()
             {
                 for (auto a : externalUse)
                 {
-                    exits.push_back(a);
+                    exits.insert(a);
                     ExitTarget[exitId++] = a;
                 }
             }
@@ -1003,7 +1027,7 @@ void Kernel::GetExits()
                 BasicBlock *succ = sw->getSuccessor(i);
                 if (find(Body.begin(), Body.end(), succ) == Body.end())
                 {
-                    exits.push_back(succ);
+                    exits.insert(succ);
                     ExitTarget[exitId++] = succ;
                 }
             }

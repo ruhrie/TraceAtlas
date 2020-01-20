@@ -1,6 +1,7 @@
 #include "tik/tik.h"
 #include "tik/Exceptions.h"
 #include "tik/Util.h"
+#include "AtlasUtil/Annotate.h"
 #include <fstream>
 #include <iostream>
 #include <llvm/Bitcode/BitcodeReader.h>
@@ -159,14 +160,7 @@ int main(int argc, char *argv[])
     }
 
     //annotate it with the same algorithm used in the tracer
-    static uint64_t UID = 0;
-    for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
-    {
-        for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
-        {
-            BB->setName("BB_UID_" + std::to_string(UID++));
-        }
-    }
+    Annotate(sourceBitcode.get());
 
     TikModule = new Module(InputFile, context);
 

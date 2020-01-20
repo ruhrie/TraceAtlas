@@ -10,9 +10,6 @@
 #include <string>
 #include <set>
 
-void PrintVal(llvm::Value *val);
-void PrintVal(llvm::Type *val);
-void PrintVal(llvm::Module *mod);
 std::string GetString(llvm::Value *v);
 std::vector<std::string> GetStrings(llvm::BasicBlock *bb);
 std::vector<std::string> GetStrings(std::set<llvm::Instruction *> instructions);

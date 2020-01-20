@@ -8,6 +8,7 @@
 #include <llvm/Support/SourceMgr.h>
 #include <set>
 #include <string>
+#include "AtlasUtil/Annotate.h"
 using namespace std;
 using namespace llvm;
 
@@ -37,14 +38,7 @@ int main(int argc, char *argv[])
     SMDiagnostic smerror;
     unique_ptr<Module> sourceBitcode = parseIRFile(InputFile, smerror, context);
     //annotate it with the same algorithm used in the tracer
-    static uint64_t UID = 0;
-    for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
-    {
-        for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
-        {
-            BB->setName("BB_UID_" + std::to_string(UID++));
-        }
-    }
+    Annotate(sourceBitcode.get());
     map<string, set<string>> kernelParents;
     for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
     {

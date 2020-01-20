@@ -1,4 +1,5 @@
 #include "Smoothing.h"
+#include "AtlasUtil/Annotate.h"
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
@@ -16,14 +17,7 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
     SMDiagnostic smerror;
     unique_ptr<Module> sourceBitcode = parseIRFile(bitcodeFile, smerror, context);
 
-    static uint64_t UID = 0;
-    for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
-    {
-        for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
-        {
-            BB->setName("BB_UID_" + std::to_string(UID++));
-        }
-    }
+    Annotate(sourceBitcode.get());
 
     for (auto pair : blocks)
     {
@@ -233,7 +227,27 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
                 //now we add
                 if (!valid)
                 {
-                    toRemove.insert(block);
+                    //we didnt find a new kernel as the successor to the current block
+                    //but it can happen through recursion, so we need to check
+                    bool found = false;
+                    for (auto bi = block->begin(); bi != block->end(); bi++)
+                    {
+                        if (CallInst *ci = dyn_cast<CallInst>(bi))
+                        {
+                            Function *calledFunc = ci->getCalledFunction();
+                            BasicBlock *entryBlock = &calledFunc->getEntryBlock();
+                            if (bbs.find(entryBlock) != bbs.end())
+                            {
+                                //we found it
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!found)
+                    {
+                        toRemove.insert(block);
+                    }
                 }
             }
             if (toRemove.size() != 0)
@@ -259,8 +273,10 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
         {
             preR.insert(std::stoul(b->getName().substr(7)));
         }
-        tmpResults.insert(preR);
-        //result[index] = preR;
+        if(!preR.empty())
+        {
+            tmpResults.insert(preR);
+        }
     }
     int i = 0;
     for (auto kernel : tmpResults)

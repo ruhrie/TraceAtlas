@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(TraceAtlas VERSION 0.1.0)
 
 SET (CMAKE_CXX_STANDARD 17)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 find_package(LLVM 9 REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
@@ -16,6 +17,7 @@ if(${ENABLE_TESTING})
     enable_testing()
 endif()
 
+add_subdirectory("AtlasUtil")
 add_subdirectory("cartographer")
 add_subdirectory("TraceInfrastructure")
 add_subdirectory("tik")
