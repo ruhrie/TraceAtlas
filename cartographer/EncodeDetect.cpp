@@ -128,7 +128,7 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
                 break;
             }
             // If key is basic block, put it in our sorting dictionary
-            if (key == "BasicBlock")
+            if (key == "BBEnter")
             {
                 long int block = stoi(value, 0, 0);
                 blockCount[block] += 1;
@@ -154,6 +154,10 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
             }
             else if (key == "LoadAddress")
             {
+            }
+            else if (key == "BBExit")
+            {
+                
             }
             else
             {

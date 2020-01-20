@@ -7,22 +7,52 @@
 #include <iostream>
 #include <list>
 #include <sstream>
+#include <stdlib.h>
 #include <zlib.h>
 
 #define BLOCK_SIZE 4096
 
-std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<std::set<int>> kernels, bool newline)
-{
-    /* Data structures for grouping kernels */
-    // Dictionary for holding the first blockID for each kernel
-    std::map<int, int> kernStart;
-    // Dictionary the final set of kernels, [kernelID] -> [blockIDs]
-    std::map<int, std::set<int>> finalBlocks;
-    // Vector for holding blocks not belonging to a type 1 kernel
-    std::map<int, std::set<int>> blocks;
+using namespace std;
+using namespace llvm;
 
-    /* Read the Trace */
-    // Compute # of blocks in the trace
+std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<std::set<int>> kernels, Module *bitcode)
+{
+    //first step is to find the total number of basic blocks for allocation
+    int blockCount = 0;
+    for (auto mi = bitcode->begin(); mi != bitcode->end(); mi++)
+    {
+        for (auto fi = mi->begin(); fi != mi->end(); fi++)
+        {
+            blockCount++;
+        }
+    }
+
+    int openCount[blockCount];                                               // counter to know where we are in the callstack
+    set<int> finalBlocks[kernels.size()];                                    // final kernel definitions
+    set<int> openBlocks;                                                     // current blocks that are a child
+    set<int> kernelMap[blockCount];                                          // map between a block and the parent kernel
+    int kernelStarts[kernels.size()];                                        // map of a kernel index to the first block seen
+    set<int> *blocks = (set<int> *)calloc(kernels.size(), sizeof(set<int>)); //[blockCount];    // temporary kernel blocks
+    for (int i = 0; i < blockCount; i++)
+    {
+        kernelMap[i] = set<int>();
+    }
+    for (int i = 0; i < kernels.size(); i++)
+    {
+        blocks[i] = set<int>();
+        finalBlocks[i] = set<int>();
+        kernelStarts[i] = -1;
+    }
+
+    for (int i = 0; i < kernels.size(); i++)
+    {
+        set<int> kernel = kernels[i];
+        for (int block : kernel)
+        {
+            kernelMap[block].insert(i);
+        }
+    }
+
     std::ifstream::pos_type traceSize = filesize(sourceFile);
     int totalBlocks = traceSize / BLOCK_SIZE + 1;
     // File stuff for input trace and output decompressed file
@@ -115,36 +145,34 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
             {
                 break;
             }
-            // If key is basic block, put it in our sorting dictionary
-            if (key == "BasicBlock")
+
+            ///////////////////////////////////////////////
+            //This is the actual logic
+            if (key == "BBEnter")
             {
-                long int block = stoi(value, 0, 0);
-                for (int i = 0; i < kernels.size(); i++)
+                int block = stoi(value, 0, 0);
+                openCount[block]++; //mark this block as being entered
+                openBlocks.insert(block);
+
+                for(int i = 0; i < kernels.size(); i++)
                 {
-                    std::set<int> *kernel = &(kernels[i]);
-                    if ((kernStart.find(i) != kernStart.end()) && (block == kernStart[i])) //check if i is a key and if we are the start //only second half is needed
-                    {
-                        blocks[i].clear();
-                    }
-                    else
-                    {
-                        blocks[i].insert(block);
-                        if (kernel->find(block) != kernel->end()) //block is a part of kernel
-                        {
-                            if (kernStart.find(i) == kernStart.end()) //we haven't seen the start before ..so assign it
-                            {
-                                kernStart[i] = block;
-                                finalBlocks[i].insert(block);
-                            }
-                            else
-                            {
-                                finalBlocks[i].merge(blocks[i]);
-                            }
-                            blocks[i].clear();
-                        }
-                    }
+                    blocks[i].insert(block);
                 }
-            } // if key == BasicBlock
+
+                for (auto ki : kernelMap[block])
+                {
+                    if (kernelStarts[ki] == -1)
+                    {
+                        kernelStarts[ki] = block;
+                        finalBlocks[ki].insert(block);
+                    }
+                    if (kernelStarts[ki] != block)
+                    {
+                        finalBlocks[ki].insert(blocks[ki].begin(), blocks[ki].end());
+                    }
+                    blocks[ki].clear();
+                }
+            }
             else if (key == "TraceVersion")
             {
             }
@@ -154,12 +182,23 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
             else if (key == "LoadAddress")
             {
             }
+            else if (key == "BBExit")
+            {
+                int v = stoul(value);
+                openCount[v]--;
+                if (openCount[v] == 0)
+                {
+                    auto it = openBlocks.find(v);
+                    openBlocks.erase(it);
+                }
+            }
             else
             {
                 throw 2;
             }
             splitIndex++;
-        } // for it in split
+        }
+
         if (bufferString.back() != '\n')
         {
             priorLine = split.back();
@@ -181,20 +220,16 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
         }
     }
 
-    std::vector<std::set<int>> checker;
+    std::set<set<int>> finalSets;
     for (int i = 0; i < kernels.size(); i++)
     {
-        if (std::find(checker.begin(), checker.end(), finalBlocks[i]) == checker.end())
-        {
-            checker.push_back(finalBlocks[i]);
-        }
+        finalSets.insert(finalBlocks[i]);
     }
     std::map<int, std::set<int>> finalMap;
-    for (int i = 0; i < checker.size(); i++)
+    int i = 0;
+    for (auto fin : finalSets)
     {
-        //std::sort( checker[i].begin(), checker[i].end() );
-        //std::vector<int> v(checker[i].begin(), checker[i].end());
-        finalMap[i] = checker[i];
+        finalMap[i++] = fin;
     }
 
     return finalMap;

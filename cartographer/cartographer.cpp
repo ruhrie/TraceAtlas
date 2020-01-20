@@ -25,10 +25,24 @@ llvm::cl::opt<string> bitcodeFile("b", llvm::cl::desc("Specify bitcode name"), l
 int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
+
+    LLVMContext context;
+    SMDiagnostic smerror;
+    unique_ptr<Module> sourceBitcode;
+    try
+    {
+        sourceBitcode = parseIRFile(bitcodeFile, smerror, context);
+    }
+    catch (exception e)
+    {
+        std::cerr << "Couldn't open input bitcode file: " << bitcodeFile << "\n";
+        return EXIT_FAILURE;
+    }
+
     std::vector<std::set<int>> type1Kernels;
     type1Kernels = DetectKernels(inputTrace, threshold, hotThreshold, false);
     std::cout << "Detected " << type1Kernels.size() << " type 1 kernels." << std::endl;
-    std::map<int, std::set<int>> type2Kernels = ExtractKernels(inputTrace, type1Kernels, false);
+    std::map<int, std::set<int>> type2Kernels = ExtractKernels(inputTrace, type1Kernels, sourceBitcode.get());
     std::cout << "Detected " << type2Kernels.size() << " type 2 kernels." << std::endl;
     map<int, set<int>> type3Kernels = SmoothKernel(type2Kernels, bitcodeFile);
 
@@ -42,19 +56,6 @@ int main(int argc, char **argv)
     oStream.close();
     if (!profileFile.empty())
     {
-        assert(!bitcodeFile.empty());
-        LLVMContext context;
-        SMDiagnostic smerror;
-        unique_ptr<Module> sourceBitcode;
-        try
-        {
-            sourceBitcode = parseIRFile(bitcodeFile, smerror, context);
-        }
-        catch (exception e)
-        {
-            std::cerr << "Couldn't open input bitcode file: " << bitcodeFile << "\n";
-            return EXIT_FAILURE;
-        }
         nlohmann::json prof = ProfileKernels(type3Kernels, sourceBitcode.get());
         ofstream pStream(profileFile);
         pStream << prof;
