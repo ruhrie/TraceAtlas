@@ -33,6 +33,7 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
         bar.set_prefix_text("Detecting type 1 kernels");
         bar.show_elapsed_time();
         bar.show_remaining_time();
+        bar.set_bar_width(50);
     }
 
     /* Structures for grouping kernels */

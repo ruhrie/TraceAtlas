@@ -27,6 +27,7 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
         bar.set_prefix_text("Detecting type 2 kernels");
         bar.show_elapsed_time();
         bar.show_remaining_time();
+        bar.set_bar_width(50);
     }
 
     //first step is to find the total number of basic blocks for allocation
