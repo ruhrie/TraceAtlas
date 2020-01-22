@@ -89,6 +89,27 @@ nlohmann::json Kernel::GetJson()
             j["Body"].push_back(GetStrings(b));
         }
     }
+    if (Prequel.size() != 0)
+    {
+        for (auto b : Prequel)
+        {
+            j["Prequel"].push_back(GetStrings(b));
+        }
+    }
+    if (Epilogue.size() != 0)
+    {
+        for (auto b : Epilogue)
+        {
+            j["Epilogue"].push_back(GetStrings(b));
+        }
+    }
+    if (Termination.size() != 0)
+    {
+        for (auto b : Termination)
+        {
+            j["Termination"].push_back(GetStrings(b));
+        }
+    }
     if (Exit != NULL)
     {
         j["Exit"] = GetStrings(Exit);
@@ -103,7 +124,7 @@ nlohmann::json Kernel::GetJson()
     }
     if (Conditional != NULL)
     {
-        j["Loop"] = GetStrings(Conditional);
+        j["Conditional"] = GetStrings(Conditional);
     }
     return j;
 }
@@ -270,7 +291,7 @@ void Kernel::MorphKernelFunction()
 
 void Kernel::GetLoopInsts()
 {
-    Conditional = BasicBlock::Create(TikModule->getContext(), "Loop", KernelFunction);
+    Conditional = BasicBlock::Create(TikModule->getContext(), "Conditional", KernelFunction);
     vector<Instruction *> result;
 
     // identify all exit blocks

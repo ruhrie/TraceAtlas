@@ -17,6 +17,9 @@ public:
     std::map<int, llvm::BasicBlock *> ExitTarget;
     llvm::BasicBlock *EnterTarget;
     std::vector<llvm::BasicBlock *> Body;
+    std::vector<llvm::BasicBlock *> Prequel;
+    std::vector<llvm::BasicBlock *> Epilogue;
+    std::vector<llvm::BasicBlock *> Termination;
     llvm::BasicBlock *Init = NULL;
     llvm::BasicBlock *Exit = NULL;
     llvm::Function *MemoryRead = NULL;
