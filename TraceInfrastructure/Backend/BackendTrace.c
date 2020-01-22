@@ -104,7 +104,7 @@ void OpenFile(char *test)
     }
     else
     {
-        TraceCompressionLevel = 9;
+        TraceCompressionLevel = 5;
     }
     strm_DashTracer.zalloc = Z_NULL;
     strm_DashTracer.zfree = Z_NULL;
