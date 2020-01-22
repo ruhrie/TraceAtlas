@@ -235,6 +235,10 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
                         if (CallInst *ci = dyn_cast<CallInst>(bi))
                         {
                             Function *calledFunc = ci->getCalledFunction();
+                            if (calledFunc == NULL)
+                            {
+                                continue;
+                            }
                             BasicBlock *entryBlock = &calledFunc->getEntryBlock();
                             if (bbs.find(entryBlock) != bbs.end())
                             {
@@ -273,7 +277,7 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
         {
             preR.insert(std::stoul(b->getName().substr(7)));
         }
-        if(!preR.empty())
+        if (!preR.empty())
         {
             tmpResults.insert(preR);
         }
