@@ -1,6 +1,5 @@
 #include "Backend/BackendTrace.h"
 #include <assert.h>
-#include <semaphore.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +10,6 @@ FILE *myfile;
 
 //trace functions
 z_stream strm_DashTracer;
-sem_t semaphore_DashTracer;
 
 int TraceCompressionLevel;
 char *TraceFilename;
@@ -28,9 +26,7 @@ void WriteStream(char *input)
     size_t size = strlen(input);
     if (bufferIndex + size >= BUFSIZE)
     {
-        sem_wait(&semaphore_DashTracer);
         BufferData();
-        sem_post(&semaphore_DashTracer);
     }
     memcpy(storeBuffer + bufferIndex, input, size);
     bufferIndex += size;
@@ -108,9 +104,8 @@ void OpenFile()
     }
     else
     {
-        TraceCompressionLevel = 9;
+        TraceCompressionLevel = 5;
     }
-    sem_init(&semaphore_DashTracer, 1, 1);
     strm_DashTracer.zalloc = Z_NULL;
     strm_DashTracer.zfree = Z_NULL;
     strm_DashTracer.opaque = Z_NULL;
@@ -132,8 +127,6 @@ void OpenFile()
 
 void CloseFile()
 {
-    sem_wait(&semaphore_DashTracer);
-
     strm_DashTracer.next_in = storeBuffer;
     strm_DashTracer.avail_in = bufferIndex;
     strm_DashTracer.next_out = temp_buffer;
@@ -141,14 +134,11 @@ void CloseFile()
     int deflate_res = deflate(&strm_DashTracer, Z_FINISH);
     assert(deflate_res == Z_STREAM_END);
 
-    sem_post(&semaphore_DashTracer);
-
     for (int i = 0; i < BUFSIZE - strm_DashTracer.avail_out; i++)
     {
         fputc(temp_buffer[i], myfile);
     }
     deflateEnd(&strm_DashTracer);
-    sem_destroy(&semaphore_DashTracer);
     fclose(myfile); //breaks gsl occasionally for some reason. Likely a glibc error.
 }
 

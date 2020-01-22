@@ -6,7 +6,6 @@
 #include "tik/Util.h"
 #include "tik/tik.h"
 #include <algorithm>
-#include <iostream>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/Function.h>
@@ -193,16 +192,49 @@ void Kernel::MorphKernelFunction()
 
     // for each input instruction, store them into one of our global pointers
     // GlobalMap already contains the input arg->global pointer relationships we need
+    std::set<llvm::Value *> coveredGlobals;
     std::set<llvm::StoreInst *> newStores;
     for (int i = 0; i < ExternalValues.size(); i++)
     {
         IRBuilder<> builder(Init);
         if (GlobalMap.find(ExternalValues[i]) != GlobalMap.end())
         {
+            if (GlobalMap[ExternalValues[i]] == NULL)
+            {
+                throw TikException("External Value not found in GlobalMap.");
+            }
+            coveredGlobals.insert(GlobalMap[ExternalValues[i]]);
             auto b = builder.CreateStore(KernelFunction->arg_begin() + i, GlobalMap[ExternalValues[i]]);
             MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Store))));
             b->setMetadata("TikSynthetic", tikNode);
             newStores.insert(b);
+        }
+    }
+
+    // look through the body for pointer references
+    // every time we see a global reference who is not written to in MemRead, not stored to in Init, store to it in body
+
+    // every time we use a global pointer in the body that is not in MemWrite, store to it
+    for (Function::iterator bb = newFunc->begin(), be = newFunc->end(); bb != be; bb++)
+    {
+        for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
+        {
+            Instruction *inst = cast<Instruction>(BI);
+            for (auto pair : GlobalMap)
+            {
+                if (localVMap.find(pair.first) != localVMap.end() && llvm::cast<Instruction>(localVMap[pair.first]) == inst)
+                {
+                    if (coveredGlobals.find(pair.second) == coveredGlobals.end())
+                    {
+                        IRBuilder<> builder(inst->getNextNode());
+                        Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
+                        auto a = builder.CreateGEP(inst->getType(), GlobalMap[pair.first], constant);
+                        auto b = builder.CreateStore(inst, a);
+                        MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Store))));
+                        b->setMetadata("TikSynthetic", tikNode);
+                    }
+                }
+            }
         }
     }
 
@@ -216,7 +248,6 @@ void Kernel::MorphKernelFunction()
     {
         throw TikException("Condition not found in VMap");
     }
-
     auto b = loopBuilder.CreateCondBr(VMap[LoopCondition], cast<BasicBlock>(VMap[EnterTarget]), Exit);
     // body->loop (unconditional)
 
@@ -809,7 +840,7 @@ void Kernel::GetMemoryFunctions()
         storeValues.insert(storeVal);
     }
 
-    // now create MemoryRead and MemoryWrite functions
+    // create MemoryRead, MemoryWrite functions
     FunctionType *funcType = FunctionType::get(Type::getInt32Ty(TikModule->getContext()), Type::getInt32Ty(TikModule->getContext()), false);
     MemoryRead = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, "MemoryRead", TikModule);
     MemoryWrite = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, "MemoryWrite", TikModule);
@@ -818,6 +849,8 @@ void Kernel::GetMemoryFunctions()
     BasicBlock *loadBlock = BasicBlock::Create(TikModule->getContext(), "entry", MemoryRead);
     IRBuilder<> loadBuilder(loadBlock);
     Value *priorValue = NULL;
+
+    // Add ExternalValues to the global map
 
     // MemoryRead
     map<Value *, Value *> loadMap;
@@ -830,7 +863,7 @@ void Kernel::GetMemoryFunctions()
             llvm::GlobalVariable *g = new GlobalVariable(*TikModule, globalInt->getType(), false, llvm::GlobalValue::LinkageTypes::ExternalLinkage, globalInt);
             GlobalMap[lVal] = g;
         }
-        // create a load for every time we use these global pointers
+        VMap[lVal] = GlobalMap[lVal];
         Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
         auto a = loadBuilder.CreateGEP(lVal->getType(), GlobalMap[lVal], constant);
         auto b = loadBuilder.CreateLoad(a);
@@ -865,6 +898,10 @@ void Kernel::GetMemoryFunctions()
             llvm::GlobalVariable *g = new GlobalVariable(*TikModule, globalInt->getType(), false, llvm::GlobalValue::LinkageTypes::ExternalLinkage, globalInt);
             GlobalMap[sVal] = g;
         }
+        if (GlobalMap.find(sVal) == GlobalMap.end())
+        {
+            continue;
+        }
         Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
         auto a = storeBuilder.CreateGEP(sVal->getType(), GlobalMap[sVal], constant);
         auto b = storeBuilder.CreateLoad(a);
@@ -885,30 +922,6 @@ void Kernel::GetMemoryFunctions()
     }
     Instruction *storeRet = cast<ReturnInst>(storeBuilder.CreateRet(priorValue));
 
-    // every time we use a global pointer in the body, store to it
-    std::set<llvm::Value *> globalSet;
-    for (auto bb : Body)
-    {
-        for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
-        {
-            Instruction *inst = cast<Instruction>(BI);
-            for (auto pair : GlobalMap)
-            {
-                if (llvm::cast<Instruction>(pair.first)->isIdenticalTo(inst))
-                {
-                    IRBuilder<> builder(inst->getNextNode());
-                    Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
-                    auto a = builder.CreateGEP(inst->getType(), GlobalMap[pair.first], constant);
-                    auto b = builder.CreateStore(inst, a);
-
-                    MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Store))));
-                    b->setMetadata("TikSynthetic", tikNode);
-                    globalSet.insert(b);
-                }
-            }
-        }
-    }
-
     // find instructions in body block not belonging to parent kernel
     vector<Instruction *> toRemove;
     for (auto bb : Body)
@@ -916,11 +929,6 @@ void Kernel::GetMemoryFunctions()
         for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
         {
             Instruction *inst = cast<Instruction>(BI);
-            if (globalSet.find(inst) != globalSet.end())
-            {
-                continue;
-            }
-
             IRBuilder<> builder(inst);
             if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
             {
@@ -948,11 +956,6 @@ void Kernel::GetMemoryFunctions()
     for (BasicBlock::iterator BI = Conditional->begin(), BE = Conditional->end(); BI != BE; ++BI)
     {
         Instruction *inst = cast<Instruction>(BI);
-        if (globalSet.find(inst) != globalSet.end())
-        {
-            continue;
-        }
-
         IRBuilder<> builder(inst);
         if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
         {
