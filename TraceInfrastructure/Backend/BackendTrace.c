@@ -96,6 +96,16 @@ void WriteAddress(char *inst, int line, int block, uint64_t func, char *address)
 
 void OpenFile(char *test)
 {
+    char *tcl = getenv("TRACE_COMPRESSION");
+    if (tcl != NULL)
+    {
+        int l = atoi(tcl);
+        TraceCompressionLevel = l;
+    }
+    else
+    {
+        TraceCompressionLevel = 9;
+    }
     strm_DashTracer.zalloc = Z_NULL;
     strm_DashTracer.zfree = Z_NULL;
     strm_DashTracer.opaque = Z_NULL;
@@ -109,17 +119,6 @@ void OpenFile(char *test)
     else
     {
         TraceFilename = "raw.trc";
-    }
-
-    char *tcl = getenv("TRACE_COMPRESSION");
-    if (tcl != NULL)
-    {
-        int l = atoi(tcl);
-        TraceCompressionLevel = l;
-    }
-    else
-    {
-        TraceCompressionLevel = 9;
     }
 
     myfile = fopen(TraceFilename, "w");
