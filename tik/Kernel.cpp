@@ -349,7 +349,7 @@ void Kernel::MorphKernelFunction()
     }
 }
 
-set<BasicBlock*> Kernel::GetConditional(std::vector<llvm::BasicBlock *> blocks)
+set<BasicBlock *> Kernel::GetConditional(std::vector<llvm::BasicBlock *> blocks)
 {
     Conditional = BasicBlock::Create(TikModule->getContext(), "Conditional", KernelFunction);
     vector<Instruction *> result;
@@ -364,7 +364,7 @@ set<BasicBlock*> Kernel::GetConditional(std::vector<llvm::BasicBlock *> blocks)
             BasicBlock *suc = term->getSuccessor(i);
             if (find(blocks.begin(), blocks.end(), suc) == blocks.end())
             {
-                exitBlocks.insert(suc);
+                exitBlocks.insert(block);
             }
         }
     }
@@ -404,7 +404,7 @@ set<BasicBlock*> Kernel::GetConditional(std::vector<llvm::BasicBlock *> blocks)
             }
         }
     }
-    if(conditionBlocks.size() != 1)
+    if (conditionBlocks.size() != 1)
     {
         throw TikException("Only supports single condition kernels");
     }
