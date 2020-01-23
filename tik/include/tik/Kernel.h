@@ -4,6 +4,7 @@
 #include <llvm/Transforms/Utils/ValueMapper.h>
 #include <map>
 #include <nlohmann/json.hpp>
+#include <set>
 #include <string>
 #include <vector>
 class Kernel
@@ -65,7 +66,7 @@ private:
     /// Later, the condition's user instructions are evaluated, and those that are eligible to be in the tik representation are cloned into the VMap.
     /// Eligible instructions are those that belong to the kernel's original basic blocks, and not eligible otherwise.
     /// This function assumes that we will only find one conditional exit instruction, because we assume that the kernel will not have embedded loops in it.
-    void GetLoopInsts();
+    std::set<llvm::BasicBlock *> GetConditional(std::vector<llvm::BasicBlock *> blocks);
 
     /// @brief  Extracts instructions that will make up the core computations of the kernel.
     ///

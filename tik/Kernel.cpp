@@ -48,11 +48,16 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
         }
     }
 
+    //order should be getConditional (find the condition)
+    //then find body/prequel
+    //then find epilogue/termination
+    //then we can go to exits/init/memory like normal
+
+    GetConditional(blocks);
+
     GetBodyInsts(blocks);
 
     GetExits();
-
-    GetLoopInsts();
 
     GetInitInsts();
 
@@ -174,7 +179,7 @@ void Kernel::MorphKernelFunction()
         ArgumentMap[newFunc->arg_begin() + i] = ExternalValues[i];
     }
 
-    Init = CloneBasicBlock(Init, localVMap, "", newFunc);
+    EnterTarget = CloneBasicBlock(EnterTarget, localVMap, "", newFunc);
     vector<BasicBlock *> newBody;
     for (auto b : Body)
     {
@@ -183,6 +188,30 @@ void Kernel::MorphKernelFunction()
         localVMap[b] = cb;
     }
     Body = newBody;
+    vector<BasicBlock *> newPrequel;
+    for (auto b : Prequel)
+    {
+        auto cb = CloneBasicBlock(b, localVMap, "", newFunc);
+        newPrequel.push_back(cb);
+        localVMap[b] = cb;
+    }
+    Prequel = newPrequel;
+    vector<BasicBlock *> newEpilogue;
+    for (auto b : Epilogue)
+    {
+        auto cb = CloneBasicBlock(b, localVMap, "", newFunc);
+        newEpilogue.push_back(cb);
+        localVMap[b] = cb;
+    }
+    Epilogue = newEpilogue;
+    vector<BasicBlock *> newTermination;
+    for (auto b : Termination)
+    {
+        auto cb = CloneBasicBlock(b, localVMap, "", newFunc);
+        newTermination.push_back(cb);
+        localVMap[b] = cb;
+    }
+    Termination = newTermination;
     Exit = CloneBasicBlock(Exit, localVMap, "", newFunc);
     Conditional = CloneBasicBlock(Conditional, localVMap, "", newFunc);
     // remove the old function from the parent but do not erase it
@@ -320,13 +349,76 @@ void Kernel::MorphKernelFunction()
     }
 }
 
-void Kernel::GetLoopInsts()
+set<BasicBlock*> Kernel::GetConditional(std::vector<llvm::BasicBlock *> blocks)
 {
     Conditional = BasicBlock::Create(TikModule->getContext(), "Conditional", KernelFunction);
     vector<Instruction *> result;
 
+    set<BasicBlock *> exitBlocks;
+    for (auto block : blocks)
+    {
+        auto term = block->getTerminator();
+        int sucCount = term->getNumSuccessors();
+        for (int i = 0; i < sucCount; i++)
+        {
+            BasicBlock *suc = term->getSuccessor(i);
+            if (find(blocks.begin(), blocks.end(), suc) == blocks.end())
+            {
+                exitBlocks.insert(suc);
+            }
+        }
+    }
+
+    set<BasicBlock *> checkedConditions;
+    vector<BasicBlock *> toCheck(exitBlocks.begin(), exitBlocks.end());
+    set<BasicBlock *> conditionBlocks;
+    while (toCheck.size() != 0)
+    {
+        BasicBlock *checking = toCheck.back();
+        toCheck.pop_back();
+        checkedConditions.insert(checking);
+        Instruction *term = checking->getTerminator();
+        if (term->getNumSuccessors() > 1) //this works for most terminators
+        {
+            //this is a condition
+            conditionBlocks.insert(checking);
+        }
+        else if (term->getNumSuccessors() == 0) //this handles the return
+        {
+            Function *f = checking->getParent();
+            for (auto user : f->users())
+            {
+                BasicBlock *par = cast<CallInst>(user)->getParent();
+                if (checkedConditions.find(par) == checkedConditions.end())
+                {
+                    toCheck.push_back(par);
+                }
+            }
+        }
+        else //must be a single successor
+        {
+            auto suc = term->getSuccessor(0);
+            if (checkedConditions.find(suc) == checkedConditions.end())
+            {
+                toCheck.push_back(suc);
+            }
+        }
+    }
+    if(conditionBlocks.size() != 1)
+    {
+        throw TikException("Only supports single condition kernels");
+    }
+
+    return conditionBlocks;
+
+    //the below code is legacy, to be removed when new model is ready//////////////////////////////////////////////////////////////////
+    /*
+
     // identify all exit blocks
     set<BasicBlock *> exits;
+    for (auto block : blocks)
+    {
+    }
     for (BasicBlock *block : Body)
     {
         bool exit = false;
@@ -412,7 +504,7 @@ void Kernel::GetLoopInsts()
         }
         else
         {
-            throw TikException("Tik conitions must end with branches");
+            throw TikException("Tik conditions must end with branches");
         }
     }
 
@@ -483,8 +575,6 @@ void Kernel::GetLoopInsts()
         {
             result.push_back(check);
 
-            /** WHY DO WE NEED THE FOLLOWING EXTRA LOGIC **/
-
             // if we are eligible we can then check all ops
             int opCount = check->getNumOperands();
             for (int i = 0; i < opCount; i++)
@@ -510,6 +600,7 @@ void Kernel::GetLoopInsts()
         VMap[cond] = cl;
         condList->push_back(cl);
     }
+    */
 }
 
 void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
