@@ -14,7 +14,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Type.h>
 #include <llvm/Transforms/Utils/Cloning.h>
-#include <vector>
 using namespace llvm;
 using namespace std;
 
@@ -40,10 +39,14 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
         {
             BasicBlock *b = cast<BasicBlock>(BB);
             string blockName = b->getName();
-            uint64_t id = std::stoul(blockName.substr(7));
-            if (find(basicBlocks.begin(), basicBlocks.end(), id) != basicBlocks.end())
+            string pre = "BB_UID_";
+            if (blockName.compare(0, pre.size(), pre) == 0)
             {
-                blocks.push_back(b);
+                uint64_t id = std::stoul(blockName.substr(7));
+                if (find(basicBlocks.begin(), basicBlocks.end(), id) != basicBlocks.end())
+                {
+                    blocks.push_back(b);
+                }
             }
         }
     }
@@ -53,17 +56,30 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
     //then find epilogue/termination
     //then we can go to exits/init/memory like normal
 
-    GetConditional(blocks);
+    set<BasicBlock *> conditionalBlocks = GetConditional(blocks);
 
-    GetBodyInsts(blocks);
+    auto bodyPrequel = GetBodyPrequel(blocks, conditionalBlocks);
 
-    GetExits();
+    //for the moment I am going to skip the epilogue/termination and get the prequel stuff working
+    //its only necessary for recursion anyway
+
+    BuildBody(get<0>(bodyPrequel));
+
+    BuildPrequel(get<1>(bodyPrequel));
+
+    BuildCondition(conditionalBlocks);
+
+    BuildExit();
+
+    Remap();
+    //might be fused
+    Repipe();
 
     GetInitInsts();
 
     GetMemoryFunctions();
 
-    CreateExitBlock();
+    //CreateExitBlock();
 
     MorphKernelFunction();
 
@@ -135,16 +151,6 @@ nlohmann::json Kernel::GetJson()
 
 Kernel::~Kernel()
 {
-    if (MemoryRead != NULL)
-    {
-        delete MemoryRead;
-    }
-    if (MemoryWrite != NULL)
-    {
-        delete MemoryWrite;
-    }
-    delete Conditional;
-    delete KernelFunction;
 }
 
 void Kernel::Remap()
@@ -179,7 +185,6 @@ void Kernel::MorphKernelFunction()
         ArgumentMap[newFunc->arg_begin() + i] = ExternalValues[i];
     }
 
-    EnterTarget = CloneBasicBlock(EnterTarget, localVMap, "", newFunc);
     vector<BasicBlock *> newBody;
     for (auto b : Body)
     {
@@ -212,8 +217,12 @@ void Kernel::MorphKernelFunction()
         localVMap[b] = cb;
     }
     Termination = newTermination;
-    Exit = CloneBasicBlock(Exit, localVMap, "", newFunc);
-    Conditional = CloneBasicBlock(Conditional, localVMap, "", newFunc);
+    auto exitCloned = CloneBasicBlock(Exit, localVMap, "", newFunc);
+    localVMap[Exit] = exitCloned;
+    Exit = exitCloned;
+    auto concCloned = CloneBasicBlock(Conditional, localVMap, "", newFunc);
+    localVMap[Conditional] = concCloned;
+    Conditional = concCloned;
     // remove the old function from the parent but do not erase it
     KernelFunction->removeFromParent();
     newFunc->setName(KernelFunction->getName());
@@ -272,12 +281,6 @@ void Kernel::MorphKernelFunction()
     IRBuilder<> initBuilder(Init);
     auto a = initBuilder.CreateBr(Conditional);
     // loop->body or loop->exit (conditional)
-    IRBuilder<> loopBuilder(Conditional);
-    if (VMap[LoopCondition] == NULL)
-    {
-        throw TikException("Condition not found in VMap");
-    }
-    auto b = loopBuilder.CreateCondBr(VMap[LoopCondition], cast<BasicBlock>(VMap[EnterTarget]), Exit);
     // body->loop (unconditional)
 
     // Now find all calls to the embedded kernel functions in the body, if any, and change their arguments to the new ones
@@ -349,11 +352,9 @@ void Kernel::MorphKernelFunction()
     }
 }
 
-set<BasicBlock *> Kernel::GetConditional(std::vector<llvm::BasicBlock *> blocks)
+set<BasicBlock *> Kernel::GetConditional(std::vector<llvm::BasicBlock *> &blocks)
 {
-    Conditional = BasicBlock::Create(TikModule->getContext(), "Conditional", KernelFunction);
     vector<Instruction *> result;
-
     set<BasicBlock *> exitBlocks;
     for (auto block : blocks)
     {
@@ -381,7 +382,9 @@ set<BasicBlock *> Kernel::GetConditional(std::vector<llvm::BasicBlock *> blocks)
         if (term->getNumSuccessors() > 1) //this works for most terminators
         {
             //this is a condition
-            conditionBlocks.insert(checking);
+            auto split = checking->splitBasicBlock(term);
+            blocks.push_back(split);
+            conditionBlocks.insert(split);
         }
         else if (term->getNumSuccessors() == 0) //this handles the return
         {
@@ -407,6 +410,19 @@ set<BasicBlock *> Kernel::GetConditional(std::vector<llvm::BasicBlock *> blocks)
     if (conditionBlocks.size() != 1)
     {
         throw TikException("Only supports single condition kernels");
+    }
+
+    for (auto cond : conditionBlocks)
+    {
+        auto term = cond->getTerminator();
+        if (BranchInst *i = cast<BranchInst>(term))
+        {
+            LoopCondition = i->getCondition();
+        }
+        else
+        {
+            throw TikException("Non expected condition");
+        }
     }
 
     return conditionBlocks;
@@ -603,8 +619,135 @@ set<BasicBlock *> Kernel::GetConditional(std::vector<llvm::BasicBlock *> blocks)
     */
 }
 
-void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
+tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(vector<BasicBlock *> blocks, set<BasicBlock *> conditionalBlocks)
 {
+    set<BasicBlock *> body;
+    set<BasicBlock *> prequel;
+
+    //the jist here is to find any blocks that are not necessarily entered before a conditional block
+    //those that can be are in the prequel, otherwise they are in the body
+
+    //we will start by seeding the map with successor data
+    map<BasicBlock *, set<BasicBlock *>> sucMap;
+    for (auto block : blocks)
+    {
+        auto term = block->getTerminator();
+        int sucCount = term->getNumSuccessors();
+        for (int i = 0; i < sucCount; i++)
+        {
+            auto suc = term->getSuccessor(i);
+            if (find(blocks.begin(), blocks.end(), suc) != blocks.end())
+            {
+                sucMap[block].insert(suc);
+            }
+        }
+    }
+
+    //with the data seeded, we now go through and add the successors of successors until there are no more changes
+    bool change = true;
+    while (change)
+    {
+        change = false;
+        for (auto &pair : sucMap)
+        {
+            for (auto &block : pair.second)
+            {
+                auto term = block->getTerminator();
+                int sucCount = term->getNumSuccessors();
+                for (int i = 0; i < sucCount; i++)
+                {
+                    auto suc = term->getSuccessor(i);
+                    if (find(blocks.begin(), blocks.end(), suc) != blocks.end())
+                    {
+                        int oldSize = pair.second.size();
+                        pair.second.insert(suc);
+                        int newSize = pair.second.size();
+                        if (oldSize != newSize)
+                        {
+                            change = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    //now that we have the map we can go through all the blocks and assign them to the appropriate sets
+    //if it is in the successor of a conditional, it is part of the body, otherwise it is the prequel
+
+    for (auto block : blocks)
+    {
+        bool condSuc = false;
+        for (auto cond : conditionalBlocks)
+        {
+            if (sucMap[cond].find(block) != sucMap[cond].end())
+            {
+                condSuc = true;
+            }
+        }
+        if (conditionalBlocks.find(block) == conditionalBlocks.end())
+        {
+            if (condSuc)
+            {
+                body.insert(block);
+            }
+            else
+            {
+                prequel.insert(block);
+            }
+        }
+    }
+
+    // search blocks for BBs whose predecessors are not in blocks, this will be the entry block
+    //this is mostly a setup for later
+    set<BasicBlock *> entrances;
+    for (BasicBlock *block : blocks)
+    {
+        for (BasicBlock *pred : predecessors(block))
+        {
+            if (pred)
+            {
+                if (find(blocks.begin(), blocks.end(), pred) == blocks.end())
+                {
+                    entrances.insert(block);
+                }
+            }
+        }
+
+        //we also check the entry blocks
+        Function *parent = block->getParent();
+        BasicBlock *entry = &parent->getEntryBlock();
+        if (block == entry)
+        {
+            //potential entrance
+            bool extUse = false;
+            for (auto user : parent->users())
+            {
+                Instruction *ci = cast<Instruction>(user);
+                BasicBlock *parentBlock = ci->getParent();
+                if (find(blocks.begin(), blocks.end(), parentBlock) == blocks.end())
+                {
+                    extUse = true;
+                    break;
+                }
+            }
+            if (extUse)
+            {
+                entrances.insert(block);
+            }
+        }
+    }
+    if (entrances.size() != 1)
+    {
+        throw TikException("Kernel Exception: tik only supports single entrance kernels");
+    }
+    for (auto ent : entrances)
+    {
+        EnterTarget = ent;
+    }
+
+    return {body, prequel};
+    /*
     // search blocks for BBs whose predecessors are not in blocks, this will be the entry block
     std::vector<Instruction *> result;
     vector<BasicBlock *> entrances;
@@ -822,6 +965,29 @@ void Kernel::GetBodyInsts(vector<BasicBlock *> blocks)
             }
         }
     }
+    */
+}
+
+void Kernel::BuildCondition(std::set<llvm::BasicBlock *> blocks)
+{
+    assert(blocks.size() == 1);
+    for (auto block : blocks)
+    {
+        Conditional = CloneBasicBlock(block, VMap, "", KernelFunction);
+    }
+}
+void Kernel::BuildBody(std::set<llvm::BasicBlock *> blocks)
+{
+    for (auto block : blocks)
+    {
+        auto cb = CloneBasicBlock(block, VMap, "", KernelFunction);
+        VMap[block] = cb;
+        Body.push_back(cb);
+    }
+}
+void Kernel::BuildPrequel(std::set<llvm::BasicBlock *> blocks)
+{
+    assert(blocks.size() == 0);
 }
 
 void Kernel::GetInitInsts()
@@ -1073,10 +1239,24 @@ void Kernel::GetMemoryFunctions()
     }
 }
 
-void Kernel::GetExits()
+void Kernel::BuildExit()
 {
     int exitId = 0;
     // search for exit basic blocks
+    auto term = Conditional->getTerminator();
+    int sucCount = term->getNumSuccessors();
+    for (int i = 0; i < sucCount; i++)
+    {
+        auto suc = term->getSuccessor(i);
+        if (find(Body.begin(), Body.end(), suc) == Body.end())
+        {
+            ExitTarget[exitId++] = suc;
+        }
+    }
+
+    IRBuilder<> exitBuilder(Exit);
+    auto a = exitBuilder.CreateRetVoid();
+    /*
     set<BasicBlock *> exits;
     for (auto block : Body)
     {
@@ -1159,7 +1339,7 @@ void Kernel::GetExits()
         throw TikException("Kernel Exception: kernels must have one exit");
     }
     assert(exits.size() == 1);
-    //ExitTarget[0] = exits[0];
+    //ExitTarget[0] = exits[0];*/
 }
 
 void Kernel::CreateExitBlock(void)
@@ -1270,4 +1450,34 @@ void Kernel::ApplyMetadata()
     KernelFunction->setMetadata("TikFunction", tikNode);
     MemoryRead->setMetadata("TikFunction", readNode);
     MemoryWrite->setMetadata("TikFunction", writeNode);
+}
+
+void Kernel::Repipe()
+{
+    //remap the body stuff to the conditional
+    for (auto b : Body)
+    {
+        auto term = b->getTerminator();
+        int sucCount = term->getNumSuccessors();
+        for (int i = 0; i < sucCount; i++)
+        {
+            auto suc = term->getSuccessor(i);
+            if (find(Body.begin(), Body.end(), suc) == Body.end())
+            {
+                term->setSuccessor(i, Conditional);
+            }
+        }
+    }
+
+    //remap the conditional to the exit
+    auto cTerm = Conditional->getTerminator();
+    int cSuc = cTerm->getNumSuccessors();
+    for(int i = 0; i < cSuc; i++)
+    {
+        auto suc = cTerm->getSuccessor(i);
+        if(find(Body.begin(), Body.end(), suc) == Body.end())
+        {
+            cTerm->setSuccessor(i, Exit);
+        }
+    }
 }
