@@ -25,6 +25,7 @@ llvm::cl::opt<int> hotThreshold("ht", cl::desc("The minimum instance count for a
 llvm::cl::opt<string> kernelFile("k", llvm::cl::desc("Specify output json name"), llvm::cl::value_desc("kernel filename"), llvm::cl::init("kernel.json"));
 llvm::cl::opt<string> profileFile("p", llvm::cl::desc("Specify profile json name"), llvm::cl::value_desc("profile filename"));
 llvm::cl::opt<string> bitcodeFile("b", llvm::cl::desc("Specify bitcode name"), llvm::cl::value_desc("bitcode filename"), llvm::cl::Required);
+llvm::cl::opt<bool> label("l", llvm::cl::desc("ExportLabel"), llvm::cl::value_desc("Export library label"), cl::init(false));
 llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::value_desc("No progress bar"));
 int main(int argc, char **argv)
 {
@@ -48,15 +49,41 @@ int main(int argc, char **argv)
         spdlog::info("Started analysis");
         type1Kernels = DetectKernels(inputTrace, threshold, hotThreshold, false);
         spdlog::info("Detected " + to_string(type1Kernels.size()) + " type 1 kernels");
-        std::map<int, std::set<int>> type2Kernels = ExtractKernels(inputTrace, type1Kernels, sourceBitcode.get());
-        spdlog::info("Detected " + to_string(type2Kernels.size()) + " type 2 kernels");
-        map<int, set<int>> type3Kernels = SmoothKernel(type2Kernels, bitcodeFile);
+        auto type2Kernels = ExtractKernels(inputTrace, type1Kernels, sourceBitcode.get());
+        spdlog::info("Detected " + to_string(std::get<1>(type2Kernels).size()) + " type 2 kernels");
+        map<int, set<int>> type3Kernels = SmoothKernel(std::get<1>(type2Kernels), bitcodeFile);
         spdlog::info("Detected " + to_string(type3Kernels.size()) + " type 3 kernels");
 
         nlohmann::json outputJson;
         for (auto key : type3Kernels)
         {
-            outputJson[to_string(key.first)] = key.second;
+            if(label)
+            {
+                string label = "";
+                bool first  = true;
+                int i = 0;
+                for (auto entry : std::get<0>(type2Kernels)[key.first])
+                {
+                    if(entry.empty())
+                    {
+                        continue;
+                    }
+                    if (first)
+                    {
+                        first = false;
+                    }
+                    else
+                    {
+                        label += ";";
+                    }
+                    label += entry;
+                }
+                outputJson[to_string(key.first)] = {key.second, label};
+            }
+            else
+            {
+                outputJson[to_string(key.first)] = key.second;
+            }
         }
         ofstream oStream(kernelFile);
         oStream << outputJson;

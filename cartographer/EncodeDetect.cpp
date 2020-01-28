@@ -172,6 +172,12 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
             else if (key == "BBExit")
             {
             }
+            else if (key == "KernelEnter")
+            {
+            }
+            else if (key == "KernelExit")
+            {
+            }
             else
             {
                 spdlog::critical("Unrecognized key: " + key);

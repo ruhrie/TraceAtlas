@@ -18,7 +18,7 @@
 using namespace std;
 using namespace llvm;
 
-std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<std::set<int>> kernels, Module *bitcode)
+std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> ExtractKernels(std::string sourceFile, std::vector<std::set<int>> kernels, Module *bitcode)
 {
     indicators::ProgressBar bar;
     int previousCount = 0;
@@ -40,12 +40,14 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
         }
     }
 
-    int openCount[blockCount];            // counter to know where we are in the callstack
-    set<int> finalBlocks[kernels.size()]; // final kernel definitions
-    set<int> openBlocks;                  // current blocks that are a child
-    set<int> kernelMap[blockCount];       // map between a block and the parent kernel
-    int kernelStarts[kernels.size()];     // map of a kernel index to the first block seen
-    set<int> blocks[kernels.size()];      // temporary kernel blocks
+    int openCount[blockCount];              // counter to know where we are in the callstack
+    set<int> finalBlocks[kernels.size()];   // final kernel definitions
+    map<int, std::set<string>> functionMap; // maps a kernel index to its label
+    set<int> openBlocks;                    // current blocks that are a child
+    set<int> kernelMap[blockCount];         // map between a block and the parent kernel
+    int kernelStarts[kernels.size()];       // map of a kernel index to the first block seen
+    set<int> blocks[kernels.size()];        // temporary kernel blocks
+
     for (int i = 0; i < blockCount; i++)
     {
         kernelMap[i] = set<int>();
@@ -55,6 +57,7 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
     {
         blocks[i] = set<int>();
         finalBlocks[i] = set<int>();
+        functionMap[i].insert("");
         kernelStarts[i] = -1;
     }
 
@@ -93,6 +96,8 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
     bool notDone = true;
     // Shows whether we've seen the first block ID yet
     bool seenFirst;
+    // keeps track of which kernel function we are in. Initialized to None because we assume a program never starts immediately in a kernel
+    string currentKernel = "";
     while (notDone)
     {
         // read a block size of the trace
@@ -178,6 +183,10 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
                     for (auto ki : kernelMap[open])
                     {
                         finalBlocks[ki].insert(block);
+                        if (!currentKernel.empty())
+                        {
+                            functionMap[ki].insert(currentKernel);
+                        }
                     }
                 }
 
@@ -188,10 +197,18 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
                     {
                         kernelStarts[ki] = block;
                         finalBlocks[ki].insert(block);
+                        if (!currentKernel.empty())
+                        {
+                            functionMap[ki].insert(currentKernel);
+                        }
                     }
                     if (kernelStarts[ki] != block)
                     {
                         finalBlocks[ki].insert(blocks[ki].begin(), blocks[ki].end());
+                        if (!currentKernel.empty())
+                        {
+                            functionMap[ki].insert(currentKernel);
+                        }
                     }
                     blocks[ki].clear();
                 }
@@ -213,6 +230,14 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
                 {
                     openBlocks.erase(block);
                 }
+            }
+            else if (key == "KernelEnter")
+            {
+                currentKernel = value;
+            }
+            else if (key == "KernelExit")
+            {
+                currentKernel.clear();
             }
             else
             {
@@ -260,16 +285,15 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
     }
 
     std::set<set<int>> finalSets;
+    std::map<int, std::set<int>> finalMap;
     for (int i = 0; i < kernels.size(); i++)
     {
         finalSets.insert(finalBlocks[i]);
     }
-    std::map<int, std::set<int>> finalMap;
     int i = 0;
     for (auto fin : finalSets)
     {
         finalMap[i++] = fin;
     }
-
-    return finalMap;
+    return {functionMap, finalMap};
 }

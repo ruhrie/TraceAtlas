@@ -279,13 +279,14 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
         }
         if (!preR.empty())
         {
+            int oldSize = tmpResults.size();
             tmpResults.insert(preR);
+            int newSize = tmpResults.size();
+            if(newSize != oldSize)
+            {
+                result[pair.first] = preR;
+            }
         }
-    }
-    int i = 0;
-    for (auto kernel : tmpResults)
-    {
-        result[i++] = kernel;
     }
 
     return result;
