@@ -11,7 +11,7 @@
 class Kernel
 {
 public:
-    Kernel(std::vector<int> basicBlocks, llvm::Module *M);
+    Kernel(std::vector<int> basicBlocks, llvm::Module *M, std::string name = "");
     ~Kernel();
     std::string Name;
     nlohmann::json GetJson();

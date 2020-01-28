@@ -19,14 +19,29 @@ using namespace std;
 
 static int KernelUID = 0;
 
-Kernel::Kernel(std::vector<int> basicBlocks, Module *M)
+set<string> reservedNames;
+
+Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 {
     MemoryRead = NULL;
     MemoryWrite = NULL;
     Init = NULL;
     Conditional = NULL;
     Exit = NULL;
-    Name = "Kernel_" + to_string(KernelUID++);
+    if (name.empty())
+    {
+        Name = "Kernel_" + to_string(KernelUID++);
+    }
+    else
+    {
+        if (reservedNames.find(name) != reservedNames.end())
+        {
+            throw TikException("Kernel names must be unique!");
+        }
+        Name = name;
+    }
+    reservedNames.insert(Name);
+
     FunctionType *mainType = FunctionType::get(Type::getVoidTy(TikModule->getContext()), false);
     KernelFunction = Function::Create(mainType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
     Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
@@ -1472,10 +1487,10 @@ void Kernel::Repipe()
     //remap the conditional to the exit
     auto cTerm = Conditional->getTerminator();
     int cSuc = cTerm->getNumSuccessors();
-    for(int i = 0; i < cSuc; i++)
+    for (int i = 0; i < cSuc; i++)
     {
         auto suc = cTerm->getSuccessor(i);
-        if(find(Body.begin(), Body.end(), suc) == Body.end())
+        if (find(Body.begin(), Body.end(), suc) == Body.end())
         {
             cTerm->setSuccessor(i, Exit);
         }
