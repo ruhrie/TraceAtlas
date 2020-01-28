@@ -22,20 +22,49 @@ llvm::cl::opt<int> hotThreshold("ht", cl::desc("The minimum instance count for a
 llvm::cl::opt<string> kernelFile("k", llvm::cl::desc("Specify output json name"), llvm::cl::value_desc("kernel filename"), llvm::cl::init("kernel.json"));
 llvm::cl::opt<string> profileFile("p", llvm::cl::desc("Specify profile json name"), llvm::cl::value_desc("profile filename"));
 llvm::cl::opt<string> bitcodeFile("b", llvm::cl::desc("Specify bitcode name"), llvm::cl::value_desc("bitcode filename"), llvm::cl::Required);
+llvm::cl::opt<bool> label("l", llvm::cl::desc("ExportLabel"), llvm::cl::value_desc("Export library label"), cl::init(false));
+
 int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
     std::vector<std::set<int>> type1Kernels;
     type1Kernels = DetectKernels(inputTrace, threshold, hotThreshold, false);
     std::cout << "Detected " << type1Kernels.size() << " type 1 kernels." << std::endl;
-    std::map<int, std::set<int>> type2Kernels = ExtractKernels(inputTrace, type1Kernels, false);
-    std::cout << "Detected " << type2Kernels.size() << " type 2 kernels." << std::endl;
-    map<int, set<int>> type3Kernels = SmoothKernel(type2Kernels, bitcodeFile);
+    auto type2Kernels = ExtractKernels(inputTrace, type1Kernels);
+    std::cout << "Detected " << std::get<1>(type2Kernels).size() << " type 2 kernels." << std::endl;
+    map<int, set<int>> type3Kernels = SmoothKernel(std::get<1>(type2Kernels), bitcodeFile);
+    std::cout << "Detected " + to_string(type3Kernels.size()) + " type 3 kernels" << std::endl;
 
     nlohmann::json outputJson;
     for (auto key : type3Kernels)
     {
-        outputJson[to_string(key.first)] = key.second;
+        if(label)
+        {
+            string label = "";
+            bool first  = true;
+            int i = 0;
+            for (auto entry : std::get<0>(type2Kernels)[key.first])
+            {
+                if(entry.empty())
+                {
+                    continue;
+                }
+                if (first)
+                {
+                    first = false;
+                }
+                else
+                {
+                    label += ";";
+                }
+                label += entry;
+            }
+            outputJson[to_string(key.first)] = {key.second, label};
+        }
+        else
+        {
+            outputJson[to_string(key.first)] = key.second;
+        }
     }
     ofstream oStream(kernelFile);
     oStream << outputJson;

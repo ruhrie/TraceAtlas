@@ -194,3 +194,20 @@ void BB_ID_Dump(uint64_t block)
     sprintf(fin, "BasicBlock:%#lX\n", block);
     WriteStream(fin);
 }
+
+void KernelEnter(char *label)
+{
+    char fin[128];
+    strcpy(fin, "KernelEnter:");
+    strcat(fin, label);
+    strcat(fin, "\n");
+    WriteStream(fin);
+}
+void KernelExit(char *label)
+{
+    char fin[128];
+    strcpy(fin, "KernelExit:");
+    strcat(fin, label);
+    strcat(fin, "\n");
+    WriteStream(fin);
+}

@@ -1,6 +1,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "../../../TraceInfrastructure/include/Backend/BackendTrace.h"
 #define WIDTH 1024
 int main()
 {
@@ -17,14 +18,17 @@ int main()
     {
         input[i] = rand();
     }
-
+    KernelEnter("Outer Conv");
     for (int y = 0; y < (WIDTH - 1); y++)
     {
+    	KernelEnter("Inner Conv");
         for (int x = 0; x < (WIDTH - 1); x++)
         {
             output[y * (WIDTH - 1) + x] = a * input[x + y * WIDTH] + b * input[x + 1 + y * WIDTH] + c * input[x + (y + 1) * WIDTH] + d * input[x + 1 + (y + 1) * WIDTH];
         }
+    	KernelExit("Inner Conv");
     }
+    KernelExit("Outer Conv");
 
     printf("Success\n");
     return 0;

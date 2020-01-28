@@ -51,4 +51,8 @@ void DumpStoreAddrValue(void *MemValue, int size);
 
 void BB_ID_Dump(uint64_t block);
 
+
+void KernelEnter(char* label);
+void KernelExit(char* label);
+
 #endif

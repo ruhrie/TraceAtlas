@@ -155,6 +155,12 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
             else if (key == "LoadAddress")
             {
             }
+            else if (key == "KernelEnter")
+            {
+            }
+            else if (key == "KernelExit")
+            {
+            }
             else
             {
                 throw 2;

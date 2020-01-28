@@ -11,13 +11,14 @@
 
 #define BLOCK_SIZE 4096
 
-std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<std::set<int>> kernels, bool newline)
+std::tuple<std::map<int, std::set<std::string>>, std::map<int, std::set<int>>> ExtractKernels(std::string sourceFile, std::vector<std::set<int>> kernels)
 {
     /* Data structures for grouping kernels */
     // Dictionary for holding the first blockID for each kernel
     std::map<int, int> kernStart;
     // Dictionary the final set of kernels, [kernelID] -> [blockIDs]
     std::map<int, std::set<int>> finalBlocks;
+    std::map<int, std::set<std::string>> functionMap; // maps a kernel index to its label
     // Vector for holding blocks not belonging to a type 1 kernel
     std::map<int, std::set<int>> blocks;
 
@@ -49,6 +50,8 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
     bool notDone = true;
     // Shows whether we've seen the first block ID yet
     bool seenFirst;
+    // keeps track of which kernel function we are in. Initialized to None because we assume a program never starts immediately in a kernel
+    std::string currentKernel = "";
     while (notDone)
     {
         // read a block size of the trace
@@ -135,10 +138,18 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
                             {
                                 kernStart[i] = block;
                                 finalBlocks[i].insert(block);
+                                if (!currentKernel.empty())
+                                {
+                                    functionMap[i].insert(currentKernel);
+                                }
                             }
                             else
                             {
                                 finalBlocks[i].merge(blocks[i]);
+                                if (!currentKernel.empty())
+                                {
+                                    functionMap[i].insert(currentKernel);
+                                }
                             }
                             blocks[i].clear();
                         }
@@ -153,6 +164,14 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
             }
             else if (key == "LoadAddress")
             {
+            }
+            else if (key == "KernelEnter")
+            {
+                currentKernel = value;
+            }
+            else if (key == "KernelExit")
+            {
+                currentKernel.clear();
             }
             else
             {
@@ -192,10 +211,8 @@ std::map<int, std::set<int>> ExtractKernels(std::string sourceFile, std::vector<
     std::map<int, std::set<int>> finalMap;
     for (int i = 0; i < checker.size(); i++)
     {
-        //std::sort( checker[i].begin(), checker[i].end() );
-        //std::vector<int> v(checker[i].begin(), checker[i].end());
         finalMap[i] = checker[i];
     }
 
-    return finalMap;
+    return {functionMap, finalMap};
 }
