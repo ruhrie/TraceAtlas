@@ -87,8 +87,8 @@ namespace DashTracer
 
         bool EncodedTraceMemory::doInitialization(Module &M)
         {
-            DumpLoadAddrValue = dyn_cast<Function>(M.getOrInsertFunction("DumpLoadAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())));
-            DumpStoreAddrValue = dyn_cast<Function>(M.getOrInsertFunction("DumpStoreAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())));
+            DumpLoadAddrValue = cast<Function>(M.getOrInsertFunction("DumpLoadAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
+            DumpStoreAddrValue = cast<Function>(M.getOrInsertFunction("DumpStoreAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
 
             kernelBlockForValue.clear();
             std::ifstream inputStream(KernelFilename);
