@@ -1,1 +1,0 @@
-add_executable(1DBlur "1DBlur.c")

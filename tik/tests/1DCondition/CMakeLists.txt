@@ -1,1 +1,0 @@
-add_executable(1DCondition "1DCondition.c")

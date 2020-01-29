@@ -1,0 +1,12 @@
+add_executable(FunctionCall FunctionCall.c)
+set_target_properties(FunctionCall PROPERTIES LINK_FLAGS "-Wl,--plugin-opt=emit-llvm")
+target_compile_options(FunctionCall PRIVATE "-flto")
+InjectTracer(FunctionCall)
+
+add_test(NAME FunctionCall_Trace COMMAND FunctionCall-trace)
+
+add_test(NAME FunctionCall_cartographer COMMAND cartographer -i ${CMAKE_CURRENT_BINARY_DIR}/raw.trc -b $<TARGET_FILE:FunctionCall> -k ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
+set_tests_properties(FunctionCall_cartographer PROPERTIES DEPENDS FunctionCall_Trace)
+
+add_test(NAME FunctionCall_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:FunctionCall>)
+set_tests_properties(FunctionCall_tik PROPERTIES DEPENDS FunctionCall_cartographer)
