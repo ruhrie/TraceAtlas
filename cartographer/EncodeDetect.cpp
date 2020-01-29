@@ -103,43 +103,32 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
 
         } // while(strm.avail_in != 0)
 
+
         std::stringstream stringStream(bufferString);
-        std::vector<std::string> split;
         std::string segment;
-
-        while (std::getline(stringStream, segment, '\n'))
-        {
-            split.push_back(segment);
-        }
-
+        std::getline(stringStream, segment, '\n');
         seenFirst = false;
-        int splitIndex = 0;
-        for (std::string &it : split)
+
+        while (true)
         {
-            if (it == split.front() && !seenFirst)
+            if (!seenFirst)
             {
-                it = priorLine + it;
+                segment = priorLine + segment;
                 seenFirst = true;
             }
-            else if (splitIndex == split.size() - 1 && bufferString.back() != '\n')
-            {
-                seenLast = true;
-                break;
-            }
             // split it by the colon between the instruction and value
-            std::stringstream itstream(it);
-            std::vector<std::string> spl;
-            while (std::getline(itstream, segment, ':'))
-            {
-                spl.push_back(segment);
-            }
-
-            std::string key = spl.front();
-            std::string value = spl.back();
-
-            if (key == value)
+            std::stringstream itstream(segment);
+            std::string key;
+            std::string value;
+            std::string error;
+            std::getline(itstream, key, ':');
+            if(!std::getline(itstream, value, ':'))
             {
                 break;
+            }
+            if(std::getline(itstream, error, ':'))
+            {
+                throw 2;
             }
             // If key is basic block, put it in our sorting dictionary
             if (key == "BBEnter")
@@ -183,16 +172,12 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
                 spdlog::critical("Unrecognized key: " + key);
                 throw 2;
             }
-            splitIndex++;
-        } // for it in split
-        if (bufferString.back() != '\n')
-        {
-            priorLine = split.back();
-        }
-        else
-        {
-            priorLine = "";
-        }
+            if(!std::getline(stringStream, segment, '\n'))
+            {
+                break;
+            }
+        } // while()
+        priorLine = segment;
         index++;
 
         notDone = (ret != Z_STREAM_END);

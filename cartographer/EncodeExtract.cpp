@@ -127,44 +127,31 @@ std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> Extrac
         } // while(strm.avail_in != 0)
 
         std::stringstream stringStream(bufferString);
-        std::vector<std::string> split;
         std::string segment;
-
-        while (std::getline(stringStream, segment, '\n'))
-        {
-            split.push_back(segment);
-        }
-
+        std::getline(stringStream, segment, '\n');
         seenFirst = false;
-        int splitIndex = 0;
-        for (std::string &it : split)
+
+        while (true)
         {
-            auto pi = it;
-            if (it == split.front() && !seenFirst)
+            if (!seenFirst)
             {
-                it = priorLine + it;
+                segment = priorLine + segment;
                 seenFirst = true;
             }
-            else if (splitIndex == split.size() - 1 && bufferString.back() != '\n')
-            {
-                break;
-            }
             // split it by the colon between the instruction and value
-            std::stringstream itstream(it);
-            std::vector<std::string> spl;
-            while (std::getline(itstream, segment, ':'))
-            {
-                spl.push_back(segment);
-            }
-
-            std::string key = spl.front();
-            std::string value = spl.back();
-
-            if (key == value)
+            std::stringstream itstream(segment);
+            std::string key;
+            std::string value;
+            std::string error;
+            std::getline(itstream, key, ':');
+            if(!std::getline(itstream, value, ':'))
             {
                 break;
             }
-
+            if(std::getline(itstream, error, ':'))
+            {
+                throw 2;
+            }
             ///////////////////////////////////////////////
             //This is the actual logic
             if (key == "BBEnter")
@@ -244,17 +231,12 @@ std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> Extrac
                 spdlog::critical("Unrecognized key: " + key);
                 throw 2;
             }
-            splitIndex++;
-        }
-
-        if (bufferString.back() != '\n')
-        {
-            priorLine = split.back();
-        }
-        else
-        {
-            priorLine = "";
-        }
+            if(!std::getline(stringStream, segment, '\n'))
+            {
+                break;
+            }
+        } // while()
+        priorLine = segment;
         index++;
 
         notDone = (ret != Z_STREAM_END);
