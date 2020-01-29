@@ -5,7 +5,9 @@
 #include "tik/Metadata.h"
 #include "tik/Util.h"
 #include "tik/tik.h"
+#include "AtlasUtil/Annotate.h"
 #include <algorithm>
+#include <iostream>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/Function.h>
@@ -53,11 +55,9 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
         {
             BasicBlock *b = cast<BasicBlock>(BB);
-            string blockName = b->getName();
-            string pre = "BB_UID_";
-            if (blockName.compare(0, pre.size(), pre) == 0)
+            int64_t id = GetBlockID(b);
+            if (id != -1)
             {
-                uint64_t id = std::stoul(blockName.substr(7));
                 if (find(basicBlocks.begin(), basicBlocks.end(), id) != basicBlocks.end())
                 {
                     blocks.push_back(b);
@@ -397,7 +397,17 @@ set<BasicBlock *> Kernel::GetConditional(std::vector<llvm::BasicBlock *> &blocks
         if (term->getNumSuccessors() > 1) //this works for most terminators
         {
             //this is a condition
+            int64_t id = GetBlockID(checking);
+            if (id != -1)
+            {
+                if (KernelMap.find(id) != KernelMap.end())
+                {
+                    cout << "sub";
+                }
+            }
+
             auto split = checking->splitBasicBlock(term);
+            SetBlockID(split, id);
             blocks.push_back(split);
             conditionBlocks.insert(split);
         }
@@ -422,8 +432,13 @@ set<BasicBlock *> Kernel::GetConditional(std::vector<llvm::BasicBlock *> &blocks
             }
         }
     }
+
     if (conditionBlocks.size() != 1)
     {
+        for(auto cond : conditionBlocks)
+        {
+            PrintVal(cond);
+        }
         throw TikException("Only supports single condition kernels");
     }
 

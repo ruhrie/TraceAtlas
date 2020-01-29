@@ -55,8 +55,7 @@ int main(int argc, char *argv[])
         for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
         {
             BasicBlock *b = cast<BasicBlock>(BB);
-            string blockName = b->getName();
-            uint64_t id = std::stoul(blockName.substr(7));
+            int64_t id = GetBlockID(b);
             for(auto kernel : kernels)
             {
                 auto blocks = kernel.second;
