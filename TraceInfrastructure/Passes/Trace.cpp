@@ -3,6 +3,7 @@
 #include "Passes/CommandArgs.h"
 #include "Passes/Functions.h"
 #include "Passes/TraceIO.h"
+#include "AtlasUtil/Annotate.h"
 #include <llvm/IR/Function.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instruction.h>
@@ -28,8 +29,7 @@ namespace DashTracer
             Value *falseConst = ConstantInt::get(Type::getInt1Ty(BB.getContext()), 0);
 
             IRBuilder<> firstBuilder(firstInst);
-            std::string name = BB.getName();
-            uint64_t id = std::stoul(name.substr(7));
+            int64_t id = GetBlockID(&BB);
             Value *idValue = ConstantInt::get(Type::getInt64Ty(BB.getContext()), id);
             std::vector<Value *> args;
             args.push_back(idValue);

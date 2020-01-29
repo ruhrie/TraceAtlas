@@ -29,7 +29,7 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
         {
             for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
             {
-                uint64_t id = std::stoul(BB->getName().substr(7));
+                int64_t id = GetBlockID(cast<BasicBlock>(BB));
                 if (blk.find(id) != blk.end())
                 {
                     bbs.insert(cast<BasicBlock>(BB));
@@ -275,7 +275,8 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
         set<int> preR;
         for (auto b : bbs)
         {
-            preR.insert(std::stoul(b->getName().substr(7)));
+            int64_t id = GetBlockID(b);
+            preR.insert(id);
         }
         if (!preR.empty())
         {

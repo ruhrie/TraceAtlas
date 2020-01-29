@@ -42,8 +42,7 @@ map<int, map<string, int>> ProfileKernels(std::map<int, std::set<int>> kernels, 
 
 void ProfileBlock(BasicBlock *BB)
 {
-    string blockName = BB->getName();
-    uint64_t id = std::stoul(blockName.substr(7));
+    int64_t id = GetBlockID(BB);
     for (auto bi = BB->begin(); bi != BB->end(); bi++)
     {
         Instruction *i = cast<Instruction>(bi);
