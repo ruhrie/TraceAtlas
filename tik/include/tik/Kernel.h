@@ -84,10 +84,6 @@ private:
     /// If it is not found, that instruction is added to Kernel::Init
     void GetInitInsts();
 
-    /// @brief  Simply creates a basic block with a return instruction.
-    ///         Used at the end of the tik representation.
-    void CreateExitBlock(void);
-
     /// @brief  Defines Kernel::MemoryRead and Kernel::MemoryWrite.
     ///         Defines GlobalMap.
     ///

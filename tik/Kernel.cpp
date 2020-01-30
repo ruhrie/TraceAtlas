@@ -94,8 +94,6 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 
     GetMemoryFunctions();
 
-    //CreateExitBlock();
-
     MorphKernelFunction();
 
     ApplyMetadata();
@@ -447,197 +445,6 @@ set<BasicBlock *> Kernel::GetConditional(std::vector<llvm::BasicBlock *> &blocks
     }
 
     return conditionBlocks;
-
-    //the below code is legacy, to be removed when new model is ready//////////////////////////////////////////////////////////////////
-    /*
-
-    // identify all exit blocks
-    set<BasicBlock *> exits;
-    for (auto block : blocks)
-    {
-    }
-    for (BasicBlock *block : Body)
-    {
-        bool exit = false;
-        Instruction *term = block->getTerminator();
-        for (int i = 0; i < term->getNumSuccessors(); i++)
-        {
-            BasicBlock *succ = term->getSuccessor(i);
-            if (find(Body.begin(), Body.end(), succ) == Body.end())
-            {
-                // it isn't in the kernel
-                exit = true;
-            }
-        }
-        if (exit)
-        {
-            exits.insert(block);
-        }
-    }
-
-    //now that we have the exits we can get the conditional logic for them
-    if (exits.size() != 1)
-    {
-        throw TikException("Kernel Exception: tik only supports single exit kernels");
-    }
-    std::vector<Instruction *> conditions;
-    for (BasicBlock *exit : exits)
-    {
-        Instruction *inst = exit->getTerminator();
-        if (BranchInst *brInst = dyn_cast<BranchInst>(inst))
-        {
-            if (brInst->isConditional())
-            {
-                Instruction *condition = cast<Instruction>(brInst->getCondition());
-                conditions.push_back(condition);
-            }
-            else
-            {
-                // this means the block's terminator is the wrong, so the input bitcode is flawed
-                throw TikException("Not Implemented");
-            }
-        }
-        else
-        {
-            // same story
-            throw TikException("Not Implemented");
-        }
-    }
-    // we should only find one condition branch, because we assume that a detected kernel has no embedded loops
-    if (conditions.size() != 1)
-    {
-        throw TikException("Kernel Exception: tik only supports single condition kernels");
-    }
-    LoopCondition = conditions[0];
-
-    //first we look for all potential users of the condition
-    vector<BasicBlock *> redirectedBlocks;
-    for (auto loopUse : LoopCondition->users())
-    {
-        auto priorBranch = cast<Instruction>(loopUse);
-        if (BranchInst *bi = dyn_cast<BranchInst>(priorBranch))
-        {
-            if (bi->isConditional())
-            {
-                BasicBlock *brTarget = NULL;
-                for (auto target : bi->successors())
-                {
-                    if (find(Body.begin(), Body.end(), target) != Body.end())
-                    {
-                        assert(brTarget == NULL);
-                        brTarget = target;
-                    }
-                }
-                BasicBlock *b = bi->getParent();
-                IRBuilder<> tBuilder(b);
-                tBuilder.CreateBr(brTarget);
-                bi->removeFromParent();
-                redirectedBlocks.push_back(b);
-            }
-            else
-            {
-                throw TikException("Loop branch is unconditional, unexpected");
-            }
-        }
-        else
-        {
-            throw TikException("Tik conditions must end with branches");
-        }
-    }
-
-    //now that it has been rerouted we need to reroute the actual kernel
-    for (auto b : Body)
-    {
-        auto term = b->getTerminator();
-        if (BranchInst *bi = dyn_cast<BranchInst>(term))
-        {
-            int sucCount = bi->getNumSuccessors();
-            for (int i = 0; i < sucCount; i++)
-            {
-                auto suc = bi->getSuccessor(i);
-                if (find(redirectedBlocks.begin(), redirectedBlocks.end(), suc) != redirectedBlocks.end())
-                {
-                    bi->setSuccessor(i, Conditional);
-                }
-            }
-        }
-        else if (SwitchInst *sw = dyn_cast<SwitchInst>(term))
-        {
-            int sucCount = sw->getNumSuccessors();
-            for (int i = 0; i < sucCount; i++)
-            {
-                auto suc = sw->getSuccessor(i);
-                if (find(redirectedBlocks.begin(), redirectedBlocks.end(), suc) != redirectedBlocks.end())
-                {
-                    sw->setSuccessor(i, Conditional);
-                }
-            }
-        }
-        else
-        {
-            throw TikException("Expected only branch instructions. Unimplemented");
-        }
-    }
-
-    // now check if the condition instruction's users are eligible instructions themselves for out body block, and throw it out after
-    while (conditions.size() != 0)
-    {
-        Instruction *check = conditions.back();
-        conditions.pop_back();
-        bool eligible = true;
-        // a value is eligible only if all of its users are in the loop
-        for (auto user : check->users())
-        {
-            Instruction *usr = cast<Instruction>(user);
-            bool found = false;
-            for (auto i : result)
-            {
-                if (i->isIdenticalTo(usr))
-                {
-                    found = true;
-                }
-            }
-            if (!found && result.size()) // we haven't already done it
-            {
-                if (BranchInst *br = dyn_cast<BranchInst>(usr))
-                {
-                }
-                else
-                {
-                    eligible = false;
-                }
-            }
-        }
-        if (eligible)
-        {
-            result.push_back(check);
-
-            // if we are eligible we can then check all ops
-            int opCount = check->getNumOperands();
-            for (int i = 0; i < opCount; i++)
-            {
-                Value *opValue = check->getOperand(i);
-                if (Instruction *op = dyn_cast<Instruction>(opValue))
-                {
-                    // assuming it is an instruction we should check it
-                    conditions.push_back(op);
-                }
-            }
-        }
-    }
-
-    // now clone the old instructions into the body block
-    reverse(result.begin(), result.end());
-    auto condList = &Conditional->getInstList();
-    for (auto cond : result)
-    {
-        Instruction *cl = cond->clone();
-        cond->replaceAllUsesWith(cl);
-        cond->removeFromParent();
-        VMap[cond] = cl;
-        condList->push_back(cl);
-    }
-    */
 }
 
 tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(vector<BasicBlock *> blocks, set<BasicBlock *> conditionalBlocks)
@@ -654,12 +461,41 @@ tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(vector<BasicB
     {
         auto term = block->getTerminator();
         int sucCount = term->getNumSuccessors();
-        for (int i = 0; i < sucCount; i++)
+        if (sucCount > 0)
         {
-            auto suc = term->getSuccessor(i);
-            if (find(blocks.begin(), blocks.end(), suc) != blocks.end())
+            for (int i = 0; i < sucCount; i++)
             {
-                sucMap[block].insert(suc);
+                auto suc = term->getSuccessor(i);
+                if (find(blocks.begin(), blocks.end(), suc) != blocks.end())
+                {
+                    sucMap[block].insert(suc);
+                }
+            }
+        }
+        else
+        {
+            //I presume that this must be a return
+            assert(isa<ReturnInst>(term));
+            Function *F = block->getParent();
+            for (auto user : F->users())
+            {
+                BasicBlock *b = cast<Instruction>(user)->getParent();
+                sucMap[block].insert(b);
+            }
+        }
+
+        //now check if we call a function in this block and if so make it a successor
+        for (auto bi = block->begin(); bi != block->end(); bi++)
+        {
+            if (CallInst *ci = dyn_cast<CallInst>(bi))
+            {
+                Function *F = ci->getCalledFunction();
+                if (F->empty())
+                {
+                    continue;
+                }
+                BasicBlock *b = &F->getEntryBlock();
+                sucMap[block].insert(b);
             }
         }
     }
@@ -675,13 +511,52 @@ tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(vector<BasicB
             {
                 auto term = block->getTerminator();
                 int sucCount = term->getNumSuccessors();
-                for (int i = 0; i < sucCount; i++)
+                if (sucCount > 0)
                 {
-                    auto suc = term->getSuccessor(i);
-                    if (find(blocks.begin(), blocks.end(), suc) != blocks.end())
+                    for (int i = 0; i < sucCount; i++)
                     {
+                        auto suc = term->getSuccessor(i);
+                        if (find(blocks.begin(), blocks.end(), suc) != blocks.end())
+                        {
+                            int oldSize = pair.second.size();
+                            pair.second.insert(suc);
+                            int newSize = pair.second.size();
+                            if (oldSize != newSize)
+                            {
+                                change = true;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    //I presume that this must be a return
+                    assert(isa<ReturnInst>(term));
+                    Function *F = block->getParent();
+                    for (auto user : F->users())
+                    {
+                        BasicBlock *b = cast<Instruction>(user)->getParent();
                         int oldSize = pair.second.size();
-                        pair.second.insert(suc);
+                        pair.second.insert(b);
+                        int newSize = pair.second.size();
+                        if (oldSize != newSize)
+                        {
+                            change = true;
+                        }
+                    }
+                }
+                for (auto bi = block->begin(); bi != block->end(); bi++)
+                {
+                    if (CallInst *ci = dyn_cast<CallInst>(bi))
+                    {
+                        Function *F = ci->getCalledFunction();
+                        if (F->empty())
+                        {
+                            continue;
+                        }
+                        BasicBlock *b = &F->getEntryBlock();
+                        int oldSize = pair.second.size();
+                        pair.second.insert(b);
                         int newSize = pair.second.size();
                         if (oldSize != newSize)
                         {
@@ -768,63 +643,44 @@ tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(vector<BasicB
     }
 
     return {body, prequel};
-    /*
-    // search blocks for BBs whose predecessors are not in blocks, this will be the entry block
-    std::vector<Instruction *> result;
-    vector<BasicBlock *> entrances;
-    for (BasicBlock *block : blocks)
-    {
-        for (BasicBlock *pred : predecessors(block))
-        {
-            if (pred)
-            {
-                if (find(blocks.begin(), blocks.end(), pred) == blocks.end())
-                {
-                    entrances.push_back(block);
-                }
-            }
-        }
+}
 
-        //we also check the entry blocks
-        Function *parent = block->getParent();
-        BasicBlock *entry = &parent->getEntryBlock();
-        if (block == entry)
+void Kernel::BuildCondition(std::set<llvm::BasicBlock *> blocks)
+{
+    assert(blocks.size() == 1);
+    for (auto block : blocks)
+    {
+        Conditional = CloneBasicBlock(block, VMap, "", KernelFunction);
+    }
+}
+void Kernel::BuildBody(std::set<llvm::BasicBlock *> blocks)
+{
+    for (auto block : blocks)
+    {
+        int64_t id = GetBlockID(block);
+        if (KernelMap.find(id) != KernelMap.end())
         {
-            //potential entrance
-            bool extUse = false;
-            for (auto user : parent->users())
+            //this belongs to a subkernel
+            Kernel *nestedKernel = KernelMap[id];
+            if (nestedKernel->EnterTarget == block)
             {
-                Instruction *ci = cast<Instruction>(user);
-                BasicBlock *parentBlock = ci->getParent();
-                if (find(blocks.begin(), blocks.end(), parentBlock) == blocks.end())
+                //we need to make a unique block for each entrance (there is currently only one)
+                std::vector<llvm::Value *> inargs;
+                for (auto ai = nestedKernel->KernelFunction->arg_begin(); ai < nestedKernel->KernelFunction->arg_end(); ai++)
                 {
-                    extUse = true;
-                    break;
+                    inargs.push_back(cast<Value>(ai));
                 }
-            }
-            if (extUse)
-            {
-                entrances.push_back(block);
+                BasicBlock *intermediateBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
+                IRBuilder<> intBuilder(intermediateBlock);
+                intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
+                intBuilder.CreateBr(cast<BasicBlock>(nestedKernel->ExitTarget[0]));
+                VMap[block] = intermediateBlock;
+                Body.push_back(intermediateBlock);
             }
         }
-    }
-    if (entrances.size() != 1)
-    {
-        throw TikException("Kernel Exception: tik only supports single entrance kernels");
-    }
-    BasicBlock *currentBlock = entrances[0];
-    EnterTarget = entrances[0];
-    // next, find all the instructions in the entrance block bath who call functions, and make our own references to them
-    int id = 0;
-    vector<BasicBlock *> potentialBlocks;
-    for (auto b : blocks)
-    {
-        string blockName = b->getName();
-        uint64_t id = std::stoul(blockName.substr(7));
-        if (KernelMap.find(id) == KernelMap.end()) //only map blocks that haven't already been mapped
+        else
         {
-            //this hasn't already been mapped
-            auto cb = CloneBasicBlock(b, VMap, Name, KernelFunction);
+            auto cb = CloneBasicBlock(block, VMap, "", KernelFunction);
             vector<CallInst *> toInline;
             for (auto bi = cb->begin(); bi != cb->end(); bi++)
             {
@@ -948,85 +804,7 @@ tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(vector<BasicB
                 }
             }
             Body.push_back(cb);
-            VMap[b] = cb;
-        }
-    }
-    Remap();
-    //now that we mapped we need to move all kernel calls into an actual function
-    for (auto b : Body)
-    {
-        auto term = b->getTerminator();
-        int sucCount = term->getNumSuccessors();
-        for (int i = 0; i < sucCount; i++)
-        {
-            auto suc = term->getSuccessor(i);
-            if (find(Body.begin(), Body.end(), suc) == Body.end())
-            {
-                //it isn't in the kernel, so its an exit or a subkernel
-                //we should be able to presume that if it isn't in the kernel map it must be an exit
-                //this is because kernels are built from the inside out
-                string blockName = suc->getName();
-                uint64_t id = std::stoul(blockName.substr(7, blockName.size() - 7 - Name.size()));
-                if (KernelMap.find(id) != KernelMap.end())
-                {
-                    //this belongs to a subkernel
-                    Kernel *nestedKernel = KernelMap[id];
-                    std::vector<llvm::Value *> inargs;
-                    for (auto ai = nestedKernel->KernelFunction->arg_begin(); ai < nestedKernel->KernelFunction->arg_end(); ai++)
-                    {
-                        inargs.push_back(cast<Value>(ai));
-                    }
-                    BasicBlock *intermediateBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-                    IRBuilder<> intBuilder(intermediateBlock);
-                    intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
-                    intBuilder.CreateBr(cast<BasicBlock>(VMap[nestedKernel->ExitTarget[0]]));
-                    term->setSuccessor(i, intermediateBlock);
-                    Body.push_back(intermediateBlock);
-                }
-            }
-        }
-    }
-    */
-}
-
-void Kernel::BuildCondition(std::set<llvm::BasicBlock *> blocks)
-{
-    assert(blocks.size() == 1);
-    for (auto block : blocks)
-    {
-        Conditional = CloneBasicBlock(block, VMap, "", KernelFunction);
-    }
-}
-void Kernel::BuildBody(std::set<llvm::BasicBlock *> blocks)
-{
-    for (auto block : blocks)
-    {
-        int64_t id = GetBlockID(block);
-        if (KernelMap.find(id) != KernelMap.end())
-        {
-            //this belongs to a subkernel
-            Kernel *nestedKernel = KernelMap[id];
-            if (nestedKernel->EnterTarget == block)
-            {
-                //we need to make a unique block for each entrance (there is currently only one)
-                std::vector<llvm::Value *> inargs;
-                for (auto ai = nestedKernel->KernelFunction->arg_begin(); ai < nestedKernel->KernelFunction->arg_end(); ai++)
-                {
-                    inargs.push_back(cast<Value>(ai));
-                }
-                BasicBlock *intermediateBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-                IRBuilder<> intBuilder(intermediateBlock);
-                intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
-                intBuilder.CreateBr(cast<BasicBlock>(nestedKernel->ExitTarget[0]));
-                VMap[block] = intermediateBlock;
-                Body.push_back(intermediateBlock);
-            }
-        }
-        else
-        {
-            auto cb = CloneBasicBlock(block, VMap, "", KernelFunction);
             VMap[block] = cb;
-            Body.push_back(cb);
         }
     }
 }
@@ -1385,25 +1163,6 @@ void Kernel::BuildExit()
     }
     assert(exits.size() == 1);
     //ExitTarget[0] = exits[0];*/
-}
-
-void Kernel::CreateExitBlock(void)
-{
-    for (auto b : Body)
-    {
-        auto term = b->getTerminator();
-        int sucCount = term->getNumSuccessors();
-        for (int i = 0; i < sucCount; i++)
-        {
-            auto suc = term->getSuccessor(i);
-            if (find(Body.begin(), Body.end(), suc) == Body.end())
-            {
-                term->setSuccessor(i, Conditional);
-            }
-        }
-    }
-    IRBuilder<> exitBuilder(Exit);
-    auto a = exitBuilder.CreateRetVoid();
 }
 
 //if the result is one entry long it is a value. Otherwise its a list of instructions
