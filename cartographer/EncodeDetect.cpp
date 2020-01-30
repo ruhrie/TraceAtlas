@@ -75,13 +75,14 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
     bool notDone = true;
     // Shows whether we've seen the first block ID yet
     bool seenFirst, seenLast;
+    std::string segment;
     while (notDone)
     {
         // read a block size of the trace
         inputTrace.readsome(dataArray, BLOCK_SIZE);
         strm.next_in = (Bytef *)dataArray;   // input data to z_lib for decompression
         strm.avail_in = inputTrace.gcount(); // remaining characters in the compressed inputTrace
-        std::string bufferString = "";
+        //std::string bufferString = "";
         while (strm.avail_in != 0)
         {
             std::string strresult;
@@ -94,86 +95,80 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
             // put decompressed data into a string for splitting
             unsigned int have = BLOCK_SIZE - strm.avail_out;
             decompressedArray[have] = '\0';
-            bufferString += string(decompressedArray);
-            continue;
+            string bufferString = string(decompressedArray);
+            //continue;
 
-        } // while(strm.avail_in != 0)
+            std::stringstream stringStream(bufferString);
+            //std::stringstream stringStream(string(decompressedArray));
+            //char* segment;
+            //strsep(&decompressedArray, '\n');
+            std::getline(stringStream, segment, '\n');
+            seenFirst = false;
 
-
-        std::stringstream stringStream(bufferString);
-        std::string segment;
-        std::getline(stringStream, segment, '\n');
-        seenFirst = false;
-
-        while (true)
-        {
-            if (!seenFirst)
+            while (true)
             {
-                segment = priorLine + segment;
-                seenFirst = true;
-            }
-            // split it by the colon between the instruction and value
-            std::stringstream itstream(segment);
-            std::string key;
-            std::string value;
-            std::string error;
-            std::getline(itstream, key, ':');
-            if(!std::getline(itstream, value, ':'))
-            {
-                break;
-            }
-            if(std::getline(itstream, error, ':'))
-            {
-                throw 2;
-            }
-            // If key is basic block, put it in our sorting dictionary
-            if (key == "BBEnter")
-            {
-                long int block = stoi(value, 0, 0);
-                blockCount[block] += 1;
-                priorBlocks.push_back(block);
-
-                if (priorBlocks.size() > (2 * radius + 1))
+                if (!seenFirst)
                 {
-                    priorBlocks.pop_front();
+                    segment = priorLine + segment;
+                    seenFirst = true;
                 }
-                if (priorBlocks.size() > radius)
+                // split it by the colon between the instruction and value
+                std::stringstream itstream(segment);
+                std::string key;
+                std::string value;
+                std::string error;
+                std::getline(itstream, key, ':');
+                std::getline(itstream, value, ':');
+                if (!std::getline(stringStream, segment, '\n'))
                 {
-                    for (auto i : priorBlocks)
+                    break;
+                }
+                // If key is basic block, put it in our sorting dictionary
+                if (key == "BBEnter")
+                {
+                    long int block = stoi(value, 0, 0);
+                    blockCount[block] += 1;
+                    priorBlocks.push_back(block);
+
+                    if (priorBlocks.size() > (2 * radius + 1))
                     {
-                        blockMap[block][i]++;
+                        priorBlocks.pop_front();
                     }
-                } // if priorBlocks.size > radius
-            }     // if key == BasicBlock
-            else if (key == "TraceVersion")
-            {
-            }
-            else if (key == "StoreAddress")
-            {
-            }
-            else if (key == "LoadAddress")
-            {
-            }
-            else if (key == "BBExit")
-            {
-            }
-            else if (key == "KernelEnter")
-            {
-            }
-            else if (key == "KernelExit")
-            {
-            }
-            else
-            {
-                spdlog::critical("Unrecognized key: " + key);
-                throw 2;
-            }
-            if(!std::getline(stringStream, segment, '\n'))
-            {
-                break;
-            }
-        } // while()
-        priorLine = segment;
+                    if (priorBlocks.size() > radius)
+                    {
+                        for (auto i : priorBlocks)
+                        {
+                            blockMap[block][i]++;
+                        }
+                    } // if priorBlocks.size > radius
+                }     // if key == BasicBlock
+                else if (key == "TraceVersion")
+                {
+                }
+                else if (key == "StoreAddress")
+                {
+                }
+                else if (key == "LoadAddress")
+                {
+                }
+                else if (key == "BBExit")
+                {
+                }
+                else if (key == "KernelEnter")
+                {
+                }
+                else if (key == "KernelExit")
+                {
+                }
+                else
+                {
+                    spdlog::critical("Unrecognized key: " + key);
+                    throw 2;
+                }
+            } // while()
+            priorLine = segment;
+
+        } // while (strm.avail_in != 0)
         index++;
 
         notDone = (ret != Z_STREAM_END);
