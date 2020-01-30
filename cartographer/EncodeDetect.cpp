@@ -93,12 +93,8 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
 
             // put decompressed data into a string for splitting
             unsigned int have = BLOCK_SIZE - strm.avail_out;
-
-            for (int i = 0; i < have; i++)
-            {
-                strresult += decompressedArray[i];
-            }
-            bufferString += strresult;
+            decompressedArray[have] = '\0';
+            bufferString += string(decompressedArray);
             continue;
 
         } // while(strm.avail_in != 0)
