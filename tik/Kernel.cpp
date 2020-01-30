@@ -1,11 +1,11 @@
 #include "tik/Kernel.h"
+#include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Print.h"
 #include "tik/Exceptions.h"
 #include "tik/InlineStruct.h"
 #include "tik/Metadata.h"
 #include "tik/Util.h"
 #include "tik/tik.h"
-#include "AtlasUtil/Annotate.h"
 #include <algorithm>
 #include <iostream>
 #include <llvm/ADT/SmallVector.h>
@@ -200,6 +200,10 @@ void Kernel::MorphKernelFunction()
         ArgumentMap[newFunc->arg_begin() + i] = ExternalValues[i];
     }
 
+    auto newInit = CloneBasicBlock(Init, localVMap, "", newFunc);
+    localVMap[Conditional] = newInit;
+    Init = newInit;
+
     vector<BasicBlock *> newBody;
     for (auto b : Body)
     {
@@ -247,9 +251,9 @@ void Kernel::MorphKernelFunction()
     // GlobalMap already contains the input arg->global pointer relationships we need
     std::set<llvm::Value *> coveredGlobals;
     std::set<llvm::StoreInst *> newStores;
+    IRBuilder<> initBuilder(Init);
     for (int i = 0; i < ExternalValues.size(); i++)
     {
-        IRBuilder<> builder(Init);
         if (GlobalMap.find(ExternalValues[i]) != GlobalMap.end())
         {
             if (GlobalMap[ExternalValues[i]] == NULL)
@@ -257,7 +261,7 @@ void Kernel::MorphKernelFunction()
                 throw TikException("External Value not found in GlobalMap.");
             }
             coveredGlobals.insert(GlobalMap[ExternalValues[i]]);
-            auto b = builder.CreateStore(KernelFunction->arg_begin() + i, GlobalMap[ExternalValues[i]]);
+            auto b = initBuilder.CreateStore(KernelFunction->arg_begin() + i, GlobalMap[ExternalValues[i]]);
             MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Store))));
             b->setMetadata("TikSynthetic", tikNode);
             newStores.insert(b);
@@ -293,7 +297,6 @@ void Kernel::MorphKernelFunction()
 
     // now create the branches between basic blocks
     // init->loop (unconditional)
-    IRBuilder<> initBuilder(Init);
     auto a = initBuilder.CreateBr(Conditional);
     // loop->body or loop->exit (conditional)
     // body->loop (unconditional)
@@ -398,14 +401,6 @@ set<BasicBlock *> Kernel::GetConditional(std::vector<llvm::BasicBlock *> &blocks
         {
             //this is a condition
             int64_t id = GetBlockID(checking);
-            if (id != -1)
-            {
-                if (KernelMap.find(id) != KernelMap.end())
-                {
-                    cout << "sub";
-                }
-            }
-
             auto split = checking->splitBasicBlock(term);
             SetBlockID(split, id);
             blocks.push_back(split);
@@ -435,10 +430,6 @@ set<BasicBlock *> Kernel::GetConditional(std::vector<llvm::BasicBlock *> &blocks
 
     if (conditionBlocks.size() != 1)
     {
-        for(auto cond : conditionBlocks)
-        {
-            PrintVal(cond);
-        }
         throw TikException("Only supports single condition kernels");
     }
 
@@ -1010,9 +1001,33 @@ void Kernel::BuildBody(std::set<llvm::BasicBlock *> blocks)
 {
     for (auto block : blocks)
     {
-        auto cb = CloneBasicBlock(block, VMap, "", KernelFunction);
-        VMap[block] = cb;
-        Body.push_back(cb);
+        int64_t id = GetBlockID(block);
+        if (KernelMap.find(id) != KernelMap.end())
+        {
+            //this belongs to a subkernel
+            Kernel *nestedKernel = KernelMap[id];
+            if (nestedKernel->EnterTarget == block)
+            {
+                //we need to make a unique block for each entrance (there is currently only one)
+                std::vector<llvm::Value *> inargs;
+                for (auto ai = nestedKernel->KernelFunction->arg_begin(); ai < nestedKernel->KernelFunction->arg_end(); ai++)
+                {
+                    inargs.push_back(cast<Value>(ai));
+                }
+                BasicBlock *intermediateBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
+                IRBuilder<> intBuilder(intermediateBlock);
+                intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
+                intBuilder.CreateBr(cast<BasicBlock>(nestedKernel->ExitTarget[0]));
+                VMap[block] = intermediateBlock;
+                Body.push_back(intermediateBlock);
+            }
+        }
+        else
+        {
+            auto cb = CloneBasicBlock(block, VMap, "", KernelFunction);
+            VMap[block] = cb;
+            Body.push_back(cb);
+        }
     }
 }
 void Kernel::BuildPrequel(std::set<llvm::BasicBlock *> blocks)
@@ -1278,7 +1293,7 @@ void Kernel::BuildExit()
     for (int i = 0; i < sucCount; i++)
     {
         auto suc = term->getSuccessor(i);
-        if (find(Body.begin(), Body.end(), suc) == Body.end())
+        if (find(Body.begin(), Body.end(), VMap[suc]) == Body.end())
         {
             ExitTarget[exitId++] = suc;
         }
