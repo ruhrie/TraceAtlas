@@ -1,14 +1,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include "input.h"
+
+int* get_input(int n)
+{
+	int* in = (int* )malloc( sizeof(int)*n );
+	for(int i = 0; i < n; i++) 
+	{
+		*(in + i) = rand(); 
+	}
+	return in;
+}
 
 int main(int argc, char* argv[])
 {
-	// for segfault example
-	//int* foo = 0;
 	int SIZE;
-	if(argc >= 1)
+	if(argc > 1)
 	{
 		SIZE = atoi(argv[1]);
 	}
@@ -17,9 +24,8 @@ int main(int argc, char* argv[])
 		SIZE = 1000;
 	}
 	printf("\nSIZE = %d", SIZE);
-	// allocate and read input from stdin
-	int in[SIZE];
-	get_input(SIZE, in);
+	int* in = get_input(SIZE);
+
 	// bubble sort
 	int swap;
 	for(int i = 0; i < SIZE; i++)
@@ -34,10 +40,7 @@ int main(int argc, char* argv[])
 			}
 		}
 	}
-	/*if(*foo)
-	{
-		return 0;
-	}*/
+
 	printf("\nSorting Done");
 	return 0;
 }
