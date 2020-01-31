@@ -43,8 +43,8 @@ std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> Extrac
     int openCount[blockCount];              // counter to know where we are in the callstack
     set<int> finalBlocks[kernels.size()];   // final kernel definitions
     map<int, std::set<string>> functionMap; // maps a kernel index to its label
-    set<int> openBlocks;                    // current blocks that are a child
-    set<int> kernelMap[blockCount];         // map between a block and the parent kernel
+    set<int> openBlocks;    
+    set<int>* kernelMap = (set<int>*)calloc(sizeof(set<int>), blockCount);
     int kernelStarts[kernels.size()];       // map of a kernel index to the first block seen
     set<int> blocks[kernels.size()];        // temporary kernel blocks
 
@@ -278,5 +278,6 @@ std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> Extrac
     {
         finalMap[i++] = fin;
     }
+    free(kernelMap);
     return {functionMap, finalMap};
 }
