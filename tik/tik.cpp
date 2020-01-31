@@ -183,7 +183,7 @@ int main(int argc, char *argv[])
                 try
                 {
                     //this kernel has no unexplained parents
-                    Kernel *kern = new Kernel(kernel.second, sourceBitcode.get());
+                    Kernel *kern = new Kernel(kernel.second, sourceBitcode.get(), kernel.first);
                     KfMap[kern->KernelFunction] = kern;
                     //so we remove its blocks from all parents
                     vector<string> toRemove;

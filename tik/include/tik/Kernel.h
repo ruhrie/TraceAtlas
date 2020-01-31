@@ -4,12 +4,14 @@
 #include <llvm/Transforms/Utils/ValueMapper.h>
 #include <map>
 #include <nlohmann/json.hpp>
+#include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 class Kernel
 {
 public:
-    Kernel(std::vector<int> basicBlocks, llvm::Module *M);
+    Kernel(std::vector<int> basicBlocks, llvm::Module *M, std::string name = "");
     ~Kernel();
     std::string Name;
     nlohmann::json GetJson();
@@ -17,6 +19,9 @@ public:
     std::map<int, llvm::BasicBlock *> ExitTarget;
     llvm::BasicBlock *EnterTarget;
     std::vector<llvm::BasicBlock *> Body;
+    std::vector<llvm::BasicBlock *> Prequel;
+    std::vector<llvm::BasicBlock *> Epilogue;
+    std::vector<llvm::BasicBlock *> Termination;
     llvm::BasicBlock *Init = NULL;
     llvm::BasicBlock *Exit = NULL;
     llvm::Function *MemoryRead = NULL;
@@ -62,7 +67,7 @@ private:
     /// Later, the condition's user instructions are evaluated, and those that are eligible to be in the tik representation are cloned into the VMap.
     /// Eligible instructions are those that belong to the kernel's original basic blocks, and not eligible otherwise.
     /// This function assumes that we will only find one conditional exit instruction, because we assume that the kernel will not have embedded loops in it.
-    void GetLoopInsts();
+    std::set<llvm::BasicBlock *> GetConditional(std::vector<llvm::BasicBlock *> &blocks);
 
     /// @brief  Extracts instructions that will make up the core computations of the kernel.
     ///
@@ -71,24 +76,13 @@ private:
     /// This code, as of this version, does not support internal loops.
     ///
     /// @param  blocks      Vector of basic blocks in the module passed to the constructor.
-    void GetBodyInsts(std::vector<llvm::BasicBlock *> blocks);
+    std::tuple<std::set<llvm::BasicBlock *>, std::set<llvm::BasicBlock *>> GetBodyPrequel(std::vector<llvm::BasicBlock *> blocks, std::set<llvm::BasicBlock *> conditionalBlocks);
 
     /// @brief  Find all instructions not initialized in the kernel representation.
     ///
     /// The parent block of each instruction in Kernel::Body is checked for its membership in the tik representation.
     /// If it is not found, that instruction is added to Kernel::Init
     void GetInitInsts();
-
-    /// @brief  Looks through each block in blocks and checks their successors.
-    ///
-    /// This function checks if there is one and exactly one successor the condition at the end of the tik representation.
-    /// This is because we assume that there are no embedded loops in the kernel code.
-    /// Finally it assigns the one successor to Kernel::ExitTarget.
-    void GetExits();
-
-    /// @brief  Simply creates a basic block with a return instruction.
-    ///         Used at the end of the tik representation.
-    void CreateExitBlock(void);
 
     /// @brief  Defines Kernel::MemoryRead and Kernel::MemoryWrite.
     ///         Defines GlobalMap.
@@ -116,4 +110,11 @@ private:
     void ApplyMetadata();
 
     std::vector<InlineStruct> InlinedFunctions;
+
+    void BuildCondition(std::set<llvm::BasicBlock *>);
+    void BuildBody(std::set<llvm::BasicBlock *>);
+    void BuildPrequel(std::set<llvm::BasicBlock *>);
+    void BuildExit();
+
+    void Repipe();
 };

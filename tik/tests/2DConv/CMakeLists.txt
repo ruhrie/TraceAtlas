@@ -1,1 +1,0 @@
-add_executable(2DConv 2DConv.c)

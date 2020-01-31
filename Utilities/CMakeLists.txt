@@ -20,7 +20,7 @@ add_executable(dagExtractor DagExtractor.cpp)
 
 set_target_properties(dagExtractor PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 target_compile_definitions(dagExtractor PUBLIC ${LLVM_DEFINITIONS})
-target_link_libraries(dagExtractor ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json)
+target_link_libraries(dagExtractor ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json spdlog::spdlog spdlog::spdlog_header_only indica::indica)
 target_include_directories(dagExtractor PRIVATE ${LLVM_INCLUDE_DIRS})
 
 install(TARGETS dagExtractor RUNTIME DESTINATION bin)

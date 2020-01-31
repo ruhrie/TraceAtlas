@@ -1,10 +1,10 @@
 #include "Backend/BackendTrace.h"
-#include "zlib.h"
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <zlib.h>
 
 FILE *myfile;
 
@@ -94,7 +94,7 @@ void WriteAddress(char *inst, int line, int block, uint64_t func, char *address)
     WriteStream(fin);
 }
 
-void OpenFile(char *test)
+void OpenFile()
 {
     char *tcl = getenv("TRACE_COMPRESSION");
     if (tcl != NULL)
@@ -122,7 +122,7 @@ void OpenFile(char *test)
     }
 
     myfile = fopen(TraceFilename, "w");
-    WriteStream("TraceVersion:2\n");
+    WriteStream("TraceVersion:3\n");
 }
 
 void CloseFile()
@@ -188,10 +188,17 @@ void DumpStoreAddrValue(void *MemValue, int size)
     WriteStream(fin);
 }
 
-void BB_ID_Dump(uint64_t block)
+void BB_ID_Dump(uint64_t block, bool enter)
 {
     char fin[128];
-    sprintf(fin, "BasicBlock:%#lX\n", block);
+    if (enter)
+    {
+        sprintf(fin, "BBEnter:%#lX\n", block);
+    }
+    else
+    {
+        sprintf(fin, "BBExit:%#lX\n", block);
+    }
     WriteStream(fin);
 }
 
