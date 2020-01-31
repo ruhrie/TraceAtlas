@@ -60,16 +60,21 @@ int main(int argc, char **argv)
     }
 
     map<string, map<string, int>> TikCounters;
-
+    map<string, map<string, map<string, int>>> TikCrossProductsTypePerOp;
+    map<string, map<string, map<string, int>>> TikCrossProductsOpPerType;
     for (auto k : kernels)
     {
         TikCounters[k->getName()] = GetRatios(k);
+        TikCrossProductsTypePerOp[k->getName()] = GetCrossProductTypePerOp(k);
+        TikCrossProductsOpPerType[k->getName()] = GetCrossProductOpPerType(k);
     }
 
-    nlohmann::json outputJson = TikCounters;
-
+    nlohmann::json JsonTikCounters;
+    JsonTikCounters["Counters"] = TikCounters;
+    JsonTikCounters["TypePerOp"]= TikCrossProductsTypePerOp;
+    JsonTikCounters["OpPerType"]= TikCrossProductsOpPerType;
     ofstream oStream(igFile);
-    oStream << outputJson;
+    oStream << JsonTikCounters;
     oStream.close();
 }
 
@@ -123,6 +128,122 @@ map<string, int> GetRatios(Function *F)
                 cerr << "Unrecognized type: " + str + "\n";
             }
             result["instructionCount"]++;
+        }
+    }
+
+    return result;
+}
+
+map<string, map<string, int>> GetCrossProductTypePerOp(Function *F)
+{
+    map<string, map<string, int>> result;
+    for (auto fi = F->begin(); fi != F->end(); fi++)
+    {
+        for (auto bi = fi->begin(); bi != fi->end(); bi++)
+        {
+            Instruction *i = cast<Instruction>(bi);
+            if (i->getMetadata("TikSynthetic"))
+            {
+                continue;
+            }
+            //start with the opcodes
+            string name = string(i->getOpcodeName());
+            result[name]["Count"]++;
+            //now check the type
+            Type *t = i->getType();
+            if (t->isVoidTy())
+            {
+                result[name]["typeVoid"]++;
+            }
+            else if (t->isFloatingPointTy())
+            {
+                result[name]["typeFloat"]++;
+            }
+            else if (t->isIntegerTy())
+            {
+                result[name]["typeInt"]++;
+            }
+            else if (t->isArrayTy())
+            {
+                result[name]["typeArray"]++;
+            }
+            else if (t->isVectorTy())
+            {
+                result[name]["typeVector"]++;
+            }
+            else if (t->isPointerTy())
+            {
+                result[name]["typePointer"]++;
+            }
+            else
+            {
+                std::string str;
+                llvm::raw_string_ostream rso(str);
+                t->print(rso);
+                cerr << "Unrecognized type: " + str + "\n";
+            }
+            result["instruction"]["Count"]++;
+        }
+    }
+
+    return result;
+}
+
+map<string, map<string, int>> GetCrossProductOpPerType(Function *F)
+{
+    map<string, map<string, int>> result;
+    for (auto fi = F->begin(); fi != F->end(); fi++)
+    {
+        for (auto bi = fi->begin(); bi != fi->end(); bi++)
+        {
+            Instruction *i = cast<Instruction>(bi);
+            if (i->getMetadata("TikSynthetic"))
+            {
+                continue;
+            }
+            //start with the opcodes
+            string name = string(i->getOpcodeName());
+            
+            //now check the type
+            Type *t = i->getType();
+            if (t->isVoidTy())
+            {
+                result["typeVoid"]["Count"]++;
+                result["typeVoid"][name]++;
+            }
+            else if (t->isFloatingPointTy())
+            {
+                result["typeFloat"]["Count"]++;
+                result["typeFloat"][name]++;
+            }
+            else if (t->isIntegerTy())
+            {
+                result["typeInt"]["Count"]++;
+                result["typeInt"][name]++;
+            }
+            else if (t->isArrayTy())
+            {
+                result["typeArray"]["Count"]++;
+                result["typeArray"][name]++;
+            }
+            else if (t->isVectorTy())
+            {
+                result["typeVector"]["Count"]++;
+                result["typeVector"][name]++;
+            }
+            else if (t->isPointerTy())
+            {
+                result["typePointer"]["Count"]++;
+                result["typePointer"][name]++;
+            }
+            else
+            {
+                std::string str;
+                llvm::raw_string_ostream rso(str);
+                t->print(rso);
+                cerr << "Unrecognized type: " + str + "\n";
+            }
+            result["instruction"]["Count"]++;
         }
     }
 
