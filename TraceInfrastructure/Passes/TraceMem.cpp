@@ -49,6 +49,13 @@ namespace DashTracer
                             {
                                 IRBuilder<> builder(load);
                                 Value *addr = load->getPointerOperand();
+                                Value *addr2 = load->getOperand(0);
+                                errs()<<"load instr:";
+                                errs()<< *load << '\n';
+                                // errs()<<"load value:";
+                                // errs()<< *addr << '\n';
+                                // errs()<<"load value2:";
+                                // errs()<< *addr2 << '\n';
                                 Type *tyaddr = addr->getType();
                                 Type *tyaddrContain = tyaddr->getContainedType(0);
                                 int sizeSig = dl.getTypeAllocSize(tyaddrContain);

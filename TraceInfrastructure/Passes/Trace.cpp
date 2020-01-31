@@ -76,6 +76,8 @@ namespace DashTracer
                     if (LoadInst *load = dyn_cast<LoadInst>(CI))
                     {
                         Value *addr = load->getPointerOperand();
+                        errs()<<"load instr:";
+                        errs()<< *load << '\n';
                         auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0), true);
                         Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB.getContext()));
                         values.push_back(cast);
@@ -144,6 +146,8 @@ namespace DashTracer
                     {
                         IRBuilder<> builder(load);
                         Value *addr = load->getPointerOperand();
+                        errs()<<"load instr:";
+                        errs()<< *load << '\n';
                         auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB.getContext()), 0), true);
                         Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB.getContext()));
                         builder.CreateCall(LoadDump, cast);
