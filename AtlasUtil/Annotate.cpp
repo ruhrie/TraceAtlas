@@ -3,14 +3,14 @@ using namespace llvm;
 
 void Annotate(llvm::Module *M)
 {
-    int index = 0;
+    uint64_t index = 0;
     for (auto mi = M->begin(); mi != M->end(); mi++)
     {
         Function *F = cast<Function>(mi);
         Annotate(F, index);
     }
 }
-void Annotate(llvm::Function *F, int &startingIndex)
+void Annotate(llvm::Function *F, uint64_t &startingIndex)
 {
     for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
     {
@@ -30,7 +30,7 @@ int64_t GetBlockID(llvm::BasicBlock *BB)
     return result;
 }
 
-void SetBlockID(llvm::BasicBlock *BB, int64_t i)
+void SetBlockID(llvm::BasicBlock *BB, uint64_t i)
 {
     MDNode *idNode = MDNode::get(BB->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(BB->getContext()), i++)));
     BB->getFirstInsertionPt()->setMetadata("BlockID", idNode);
