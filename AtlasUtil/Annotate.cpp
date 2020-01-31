@@ -1,4 +1,5 @@
 #include "AtlasUtil/Annotate.h"
+#include <iostream>
 using namespace llvm;
 
 void Annotate(llvm::Module *M)
@@ -20,18 +21,22 @@ void Annotate(llvm::Function *F, uint64_t &startingIndex)
 
 int64_t GetBlockID(llvm::BasicBlock *BB)
 {
-    int result = -1;
+    int64_t result = -1;
     Instruction *first = cast<Instruction>(BB->getFirstInsertionPt());
     if (MDNode *node = first->getMetadata("BlockID"))
     {
         auto ci = cast<ConstantInt>(cast<ConstantAsMetadata>(node->getOperand(0))->getValue());
         result = ci->getSExtValue();
     }
+    if(result == -1)
+    {
+        std::cout << "grr\n";
+    }
     return result;
 }
 
 void SetBlockID(llvm::BasicBlock *BB, uint64_t i)
 {
-    MDNode *idNode = MDNode::get(BB->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(BB->getContext()), i++)));
+    MDNode *idNode = MDNode::get(BB->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt64Ty(BB->getContext()), i)));
     BB->getFirstInsertionPt()->setMetadata("BlockID", idNode);
 }
