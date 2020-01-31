@@ -27,10 +27,54 @@ llvm::cl::opt<string> profileFile("p", llvm::cl::desc("Specify profile json name
 llvm::cl::opt<string> bitcodeFile("b", llvm::cl::desc("Specify bitcode name"), llvm::cl::value_desc("bitcode filename"), llvm::cl::Required);
 llvm::cl::opt<bool> label("l", llvm::cl::desc("ExportLabel"), llvm::cl::value_desc("Export library label"), cl::init(false));
 llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::value_desc("No progress bar"));
+cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
 int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
     noProgressBar = noBar;
+
+    switch (LogLevel)
+    {
+        case 0:
+        {
+            spdlog::set_level(spdlog::level::off);
+            break;
+        }
+        case 1:
+        {
+            spdlog::set_level(spdlog::level::critical);
+            break;
+        }
+        case 2:
+        {
+            spdlog::set_level(spdlog::level::err);
+            break;
+        }
+        case 3:
+        {
+            spdlog::set_level(spdlog::level::warn);
+            break;
+        }
+        case 4:
+        {
+            spdlog::set_level(spdlog::level::info);
+            break;
+        }
+        case 5:
+        {
+            spdlog::set_level(spdlog::level::debug);
+        }
+        case 6:
+        {
+            spdlog::set_level(spdlog::level::trace);
+            break;
+        }
+        default:
+        {
+            spdlog::warn("Invalid logging level: " + to_string(LogLevel));
+        }
+    }
+
     LLVMContext context;
     SMDiagnostic smerror;
     unique_ptr<Module> sourceBitcode;
@@ -47,7 +91,7 @@ int main(int argc, char **argv)
     {
         std::vector<std::set<int>> type1Kernels;
         spdlog::info("Started analysis");
-        type1Kernels = DetectKernels(inputTrace, threshold, hotThreshold, false);
+        type1Kernels = DetectKernels(inputTrace, threshold, hotThreshold);
         spdlog::info("Detected " + to_string(type1Kernels.size()) + " type 1 kernels");
         auto type2Kernels = ExtractKernels(inputTrace, type1Kernels, sourceBitcode.get());
         spdlog::info("Detected " + to_string(std::get<1>(type2Kernels).size()) + " type 2 kernels");
@@ -57,14 +101,14 @@ int main(int argc, char **argv)
         nlohmann::json outputJson;
         for (auto key : type3Kernels)
         {
-            if(label)
+            if (label)
             {
                 string label = "";
-                bool first  = true;
+                bool first = true;
                 int i = 0;
                 for (auto entry : std::get<0>(type2Kernels)[key.first])
                 {
-                    if(entry.empty())
+                    if (entry.empty())
                     {
                         continue;
                     }

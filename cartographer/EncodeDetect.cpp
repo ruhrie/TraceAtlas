@@ -24,7 +24,7 @@ std::ifstream::pos_type filesize(std::string filename)
     return in.tellg();
 }
 
-std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, int hotThresh, bool newline)
+std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, int hotThresh)
 {
     indicators::ProgressBar bar;
     int previousCount = 0;
