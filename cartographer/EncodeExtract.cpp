@@ -98,145 +98,147 @@ std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> Extrac
     bool seenFirst;
     // keeps track of which kernel function we are in. Initialized to None because we assume a program never starts immediately in a kernel
     string currentKernel = "";
+    string segment;
     while (notDone)
     {
         // read a block size of the trace
         inputTrace.readsome(dataArray, BLOCK_SIZE);
         strm.next_in = (Bytef *)dataArray;   // input data to z_lib for decompression
         strm.avail_in = inputTrace.gcount(); // remaining characters in the compressed inputTrace
-        std::string bufferString = "";
         while (strm.avail_in != 0)
         {
-            std::string strresult;
             // decompress our data
             strm.next_out = (Bytef *)decompressedArray; // pointer where uncompressed data is written to
-            strm.avail_out = BLOCK_SIZE;                // remaining space in decompressedArray
+            strm.avail_out = BLOCK_SIZE - 1;            // remaining space in decompressedArray
             ret = inflate(&strm, Z_NO_FLUSH);
             assert(ret != Z_STREAM_ERROR);
 
             // put decompressed data into a string for splitting
             unsigned int have = BLOCK_SIZE - strm.avail_out;
+            decompressedArray[have - 1] = '\0';
+            string bufferString(decompressedArray);
+            std::stringstream stringStream(bufferString);
+            std::string segment;
+            std::getline(stringStream, segment, '\n');
+            char back = bufferString.back();
+            seenFirst = false;
 
-            for (int i = 0; i < have; i++)
+            while (true)
             {
-                strresult += decompressedArray[i];
-            }
-            bufferString += strresult;
-            continue;
+                if (!seenFirst)
+                {
+                    segment = priorLine + segment;
+                    seenFirst = true;
+                    //cout << "restored" << segment << "\n";
+                }
+                // split it by the colon between the instruction and value
+                std::stringstream itstream(segment);
+                std::string key;
+                std::string value;
+                std::string error;
+                std::getline(itstream, key, ':');
+                std::getline(itstream, value, ':');
+                bool fin = false;
+                if (!std::getline(stringStream, segment, '\n'))
+                {
+                    //cout << "broke" << segment << "\n";
+                    if (back == '\n')
+                    {
+                        fin = true;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                ///////////////////////////////////////////////
+                //This is the actual logic
+                if (key == "BBEnter")
+                {
+                    int block = stoi(value, 0, 0);
+                    openCount[block]++; //mark this block as being entered
+                    openBlocks.insert(block);
+
+                    for (int i = 0; i < kernels.size(); i++)
+                    {
+                        blocks[i].insert(block);
+                    }
+
+                    for (auto open : openBlocks)
+                    {
+                        for (auto ki : kernelMap[open])
+                        {
+                            finalBlocks[ki].insert(block);
+                            if (!currentKernel.empty())
+                            {
+                                functionMap[ki].insert(currentKernel);
+                            }
+                        }
+                    }
+
+                    for (auto ki : kernelMap[block])
+                    {
+
+                        if (kernelStarts[ki] == -1)
+                        {
+                            kernelStarts[ki] = block;
+                            finalBlocks[ki].insert(block);
+                            if (!currentKernel.empty())
+                            {
+                                functionMap[ki].insert(currentKernel);
+                            }
+                        }
+                        if (kernelStarts[ki] != block)
+                        {
+                            finalBlocks[ki].insert(blocks[ki].begin(), blocks[ki].end());
+                            if (!currentKernel.empty())
+                            {
+                                functionMap[ki].insert(currentKernel);
+                            }
+                        }
+                        blocks[ki].clear();
+                    }
+                }
+                else if (key == "TraceVersion")
+                {
+                }
+                else if (key == "StoreAddress")
+                {
+                }
+                else if (key == "LoadAddress")
+                {
+                }
+                else if (key == "BBExit")
+                {
+                    int block = stoi(value, 0, 0);
+                    openCount[block]--;
+                    if (openCount[block] == 0)
+                    {
+                        openBlocks.erase(block);
+                    }
+                }
+                else if (key == "KernelEnter")
+                {
+                    currentKernel = value;
+                }
+                else if (key == "KernelExit")
+                {
+                    currentKernel.clear();
+                }
+                else
+                {
+                    spdlog::critical("Unrecognized key: " + key);
+                    throw 2;
+                }
+                if(fin)
+                {
+                    break;
+                }
+            } // while()
+            priorLine = segment;
 
         } // while(strm.avail_in != 0)
 
-        std::stringstream stringStream(bufferString);
-        std::string segment;
-        std::getline(stringStream, segment, '\n');
-        seenFirst = false;
-
-        while (true)
-        {
-            if (!seenFirst)
-            {
-                segment = priorLine + segment;
-                seenFirst = true;
-            }
-            // split it by the colon between the instruction and value
-            std::stringstream itstream(segment);
-            std::string key;
-            std::string value;
-            std::string error;
-            std::getline(itstream, key, ':');
-            if(!std::getline(itstream, value, ':'))
-            {
-                break;
-            }
-            if(std::getline(itstream, error, ':'))
-            {
-                throw 2;
-            }
-            ///////////////////////////////////////////////
-            //This is the actual logic
-            if (key == "BBEnter")
-            {
-                int block = stoi(value, 0, 0);
-                openCount[block]++; //mark this block as being entered
-                openBlocks.insert(block);
-
-                for (int i = 0; i < kernels.size(); i++)
-                {
-                    blocks[i].insert(block);
-                }
-
-                for (auto open : openBlocks)
-                {
-                    for (auto ki : kernelMap[open])
-                    {
-                        finalBlocks[ki].insert(block);
-                        if (!currentKernel.empty())
-                        {
-                            functionMap[ki].insert(currentKernel);
-                        }
-                    }
-                }
-
-                for (auto ki : kernelMap[block])
-                {
-
-                    if (kernelStarts[ki] == -1)
-                    {
-                        kernelStarts[ki] = block;
-                        finalBlocks[ki].insert(block);
-                        if (!currentKernel.empty())
-                        {
-                            functionMap[ki].insert(currentKernel);
-                        }
-                    }
-                    if (kernelStarts[ki] != block)
-                    {
-                        finalBlocks[ki].insert(blocks[ki].begin(), blocks[ki].end());
-                        if (!currentKernel.empty())
-                        {
-                            functionMap[ki].insert(currentKernel);
-                        }
-                    }
-                    blocks[ki].clear();
-                }
-            }
-            else if (key == "TraceVersion")
-            {
-            }
-            else if (key == "StoreAddress")
-            {
-            }
-            else if (key == "LoadAddress")
-            {
-            }
-            else if (key == "BBExit")
-            {
-                int block = stoi(value, 0, 0);
-                openCount[block]--;
-                if (openCount[block] == 0)
-                {
-                    openBlocks.erase(block);
-                }
-            }
-            else if (key == "KernelEnter")
-            {
-                currentKernel = value;
-            }
-            else if (key == "KernelExit")
-            {
-                currentKernel.clear();
-            }
-            else
-            {
-                spdlog::critical("Unrecognized key: " + key);
-                throw 2;
-            }
-            if(!std::getline(stringStream, segment, '\n'))
-            {
-                break;
-            }
-        } // while()
-        priorLine = segment;
         index++;
 
         notDone = (ret != Z_STREAM_END);
