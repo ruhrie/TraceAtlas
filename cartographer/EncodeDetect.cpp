@@ -50,7 +50,6 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
     // Compute # of blocks in the trace
     std::ifstream::pos_type traceSize = filesize(sourceFile);
     int blocks = traceSize / BLOCK_SIZE + 1;
-    //bar.set_bar_width(blocks);
     // File stuff for input trace and output decompressed file
     std::ifstream inputTrace;
     inputTrace.open(sourceFile);
@@ -99,10 +98,8 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
             //continue;
 
             std::stringstream stringStream(bufferString);
-            //std::stringstream stringStream(string(decompressedArray));
-            //char* segment;
-            //strsep(&decompressedArray, '\n');
             std::getline(stringStream, segment, '\n');
+            char back = bufferString.back();
             seenFirst = false;
 
             while (true)
@@ -119,9 +116,17 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
                 std::string error;
                 std::getline(itstream, key, ':');
                 std::getline(itstream, value, ':');
+                bool fin = false;
                 if (!std::getline(stringStream, segment, '\n'))
                 {
-                    break;
+                    if (back == '\n')
+                    {
+                        fin = true;
+                    }
+                    else
+                    {
+                        break;
+                    }
                 }
                 // If key is basic block, put it in our sorting dictionary
                 if (key == "BBEnter")
@@ -164,6 +169,10 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
                 {
                     spdlog::critical("Unrecognized key: " + key);
                     throw 2;
+                }
+                if (fin)
+                {
+                    break;
                 }
             } // while()
             priorLine = segment;

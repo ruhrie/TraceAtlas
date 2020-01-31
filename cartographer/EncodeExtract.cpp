@@ -129,7 +129,6 @@ std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> Extrac
                 {
                     segment = priorLine + segment;
                     seenFirst = true;
-                    //cout << "restored" << segment << "\n";
                 }
                 // split it by the colon between the instruction and value
                 std::stringstream itstream(segment);
