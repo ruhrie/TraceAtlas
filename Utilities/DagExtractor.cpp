@@ -1,7 +1,6 @@
 #include <algorithm>
 #include <fstream>
 #include <indicators/progress_bar.hpp>
-#include <iostream>
 #include <llvm/Support/CommandLine.h>
 #include <map>
 #include <nlohmann/json.hpp>

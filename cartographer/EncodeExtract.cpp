@@ -6,7 +6,6 @@
 #include <fstream>
 #include <functional>
 #include <indicators/progress_bar.hpp>
-#include <iostream>
 #include <list>
 #include <spdlog/spdlog.h>
 #include <sstream>

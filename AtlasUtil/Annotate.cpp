@@ -1,5 +1,4 @@
 #include "AtlasUtil/Annotate.h"
-#include <iostream>
 using namespace llvm;
 
 void Annotate(llvm::Module *M)
@@ -27,10 +26,6 @@ int64_t GetBlockID(llvm::BasicBlock *BB)
     {
         auto ci = cast<ConstantInt>(cast<ConstantAsMetadata>(node->getOperand(0))->getValue());
         result = ci->getSExtValue();
-    }
-    if(result == -1)
-    {
-        std::cout << "grr\n";
     }
     return result;
 }

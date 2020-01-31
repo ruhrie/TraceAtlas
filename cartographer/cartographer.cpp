@@ -2,7 +2,6 @@
 #include "EncodeExtract.h"
 #include "Smoothing.h"
 #include "profile.h"
-#include <iostream>
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>

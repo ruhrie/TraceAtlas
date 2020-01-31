@@ -5,7 +5,6 @@
 #include <deque>
 #include <functional>
 #include <indicators/progress_bar.hpp>
-#include <iostream>
 #include <list>
 #include <map>
 #include <spdlog/spdlog.h>

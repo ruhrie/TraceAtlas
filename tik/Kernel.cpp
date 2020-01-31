@@ -7,7 +7,6 @@
 #include "tik/Util.h"
 #include "tik/tik.h"
 #include <algorithm>
-#include <iostream>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/Function.h>
