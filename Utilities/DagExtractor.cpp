@@ -1,10 +1,13 @@
-#include <nlohmann/json.hpp>
 #include <algorithm>
 #include <fstream>
+#include <indicators/progress_bar.hpp>
 #include <iostream>
 #include <llvm/Support/CommandLine.h>
 #include <map>
+#include <nlohmann/json.hpp>
 #include <set>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/spdlog.h>
 #include <sstream>
 #include <vector>
 #include <zlib.h>
@@ -14,14 +17,64 @@ using namespace std;
 #define BLOCK_SIZE 4096
 
 cl::opt<std::string> InputFilename("t", cl::desc("Specify input trace"), cl::value_desc("trace filename"), cl::Required);
-cl::opt<std::string> OutputFilename("o", cl::desc("Specify output json"), cl::value_desc("output filename"));
+cl::opt<std::string> OutputFilename("o", cl::desc("Specify output json"), cl::value_desc("output filename"), cl::Required);
 cl::opt<std::string> KernelFilename("k", cl::desc("Specify kernel json"), cl::value_desc("kernel filename"), cl::Required);
-
+llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::value_desc("No progress bar"));
+cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
+cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 static int UID = 0;
 
 int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
+
+    if (!LogFile.empty())
+    {
+        auto file_logger = spdlog::basic_logger_mt("dag_logger", LogFile);
+        spdlog::set_default_logger(file_logger);
+    }
+
+    switch (LogLevel)
+    {
+        case 0:
+        {
+            spdlog::set_level(spdlog::level::off);
+            break;
+        }
+        case 1:
+        {
+            spdlog::set_level(spdlog::level::critical);
+            break;
+        }
+        case 2:
+        {
+            spdlog::set_level(spdlog::level::err);
+            break;
+        }
+        case 3:
+        {
+            spdlog::set_level(spdlog::level::warn);
+            break;
+        }
+        case 4:
+        {
+            spdlog::set_level(spdlog::level::info);
+            break;
+        }
+        case 5:
+        {
+            spdlog::set_level(spdlog::level::debug);
+        }
+        case 6:
+        {
+            spdlog::set_level(spdlog::level::trace);
+            break;
+        }
+        default:
+        {
+            spdlog::warn("Invalid logging level: " + to_string(LogLevel));
+        }
+    }
 
     //maps
     map<uint64_t, int> writeMap;
@@ -94,104 +147,140 @@ int main(int argc, char **argv)
     string currentKernel = "-1";
     uint64_t status = 0;
     int currentUid = -1;
+    std::string priorLine = "";
+    bool seenFirst;
+    string segment;
+
+    indicators::ProgressBar bar;
+    int previousCount = 0;
+    if (!noBar)
+    {
+        bar.set_prefix_text("Extracting DAG");
+        bar.show_elapsed_time();
+        bar.show_remaining_time();
+        bar.set_bar_width(50);
+    }
+    int index = 0;
+
     while (notDone)
     {
-        status++;
+        // read a block size of the trace
         inputTrace.readsome(dataArray, BLOCK_SIZE);
-        strm.next_in = (Bytef *)dataArray;
-        strm.avail_in = inputTrace.gcount();
+        strm.next_in = (Bytef *)dataArray;   // input data to z_lib for decompression
+        strm.avail_in = inputTrace.gcount(); // remaining characters in the compressed inputTrace
         while (strm.avail_in != 0)
         {
-            strm.next_out = (Bytef *)decompressedArray;
-            strm.avail_out = BLOCK_SIZE;
+            // decompress our data
+            strm.next_out = (Bytef *)decompressedArray; // pointer where uncompressed data is written to
+            strm.avail_out = BLOCK_SIZE - 1;            // remaining space in decompressedArray
             ret = inflate(&strm, Z_NO_FLUSH);
             assert(ret != Z_STREAM_ERROR);
-            //we have now decompressed the data
+
+            // put decompressed data into a string for splitting
             unsigned int have = BLOCK_SIZE - strm.avail_out;
-	    //cout << "have is " << have << "\n";
-	    //cout << "avail_in is " << strm.avail_in << "\n";
-            for (int i = 0; i < have; i++)
+            decompressedArray[have - 1] = '\0';
+            string bufferString(decompressedArray);
+            std::stringstream stringStream(bufferString);
+            std::string segment;
+            std::getline(stringStream, segment, '\n');
+            char back = bufferString.back();
+            seenFirst = false;
+
+            while (true)
             {
-                result += decompressedArray[i];
-            }
-            std::stringstream stringStream(result);
-            std::vector<std::string> split;
-            string segment;
-            while (getline(stringStream, segment, '\n'))
-            {
-                split.push_back(segment);
-            }
-            int l = 0;
-            for (string line : split)
-            {
-                l++;
-                if (line == split.back() && result.back() != '\n')
+                if (!seenFirst)
                 {
-                    result = line;
+                    segment = priorLine + segment;
+                    seenFirst = true;
                 }
-                else
+                // split it by the colon between the instruction and value
+                std::stringstream itstream(segment);
+                std::string key;
+                std::string value;
+                std::string error;
+                std::getline(itstream, key, ':');
+                std::getline(itstream, value, ':');
+                bool fin = false;
+                if (!std::getline(stringStream, segment, '\n'))
                 {
-                    std::stringstream lineStream(line);
-                    string key, value;
-                    getline(lineStream, key, ':');
-                    getline(lineStream, value, ':');
-                    if (key == "BasicBlock")
+                    //cout << "broke" << segment << "\n";
+                    if (back == '\n')
                     {
-                        int block = stoi(value, 0, 0);
-                        lastBlock = block;
-                        if (currentKernel == "-1" || kernelMap[currentKernel].find(block) == kernelMap[currentKernel].end())
-                        {
-                            //we aren't in the same kernel as last time
-                            string innerKernel = "-1";
-                            for (auto k : kernelMap)
-                            {
-                                if (k.second.find(block) != k.second.end())
-                                {
-                                    //we have a matching kernel
-                                    innerKernel = k.first;
-                                    break;
-                                }
-                            }
-                            currentKernel = innerKernel;
-                            if (innerKernel != "-1")
-                            {
-                                currentUid = UID;
-                                kernelIdMap[UID++] = currentKernel;
-                            }
-                        }
-                        basicBlocks.push_back(block);
+                        fin = true;
                     }
-                    else if (key == "LoadAddress")
+                    else
                     {
-                        uint64_t address = stoul(value, 0, 0);
-                        int prodUid = writeMap[address];
-                        if (prodUid != -1 && prodUid != currentUid)
-                        {
-                            consumerMap[currentUid].insert(prodUid);
-                        }
-                    }
-                    else if (key == "StoreAddress")
-                    {
-                        uint64_t address = stoul(value, 0, 0);
-                        writeMap[address] = currentUid;
+                        break;
                     }
                 }
-            }
-            if (result.back() == '\n')
-            {
-                result = "";
+                if (key == "BBEnter")
+                {
+                    int block = stoi(value, 0, 0);
+                    lastBlock = block;
+                    if (currentKernel == "-1" || kernelMap[currentKernel].find(block) == kernelMap[currentKernel].end())
+                    {
+                        //we aren't in the same kernel as last time
+                        string innerKernel = "-1";
+                        for (auto k : kernelMap)
+                        {
+                            if (k.second.find(block) != k.second.end())
+                            {
+                                //we have a matching kernel
+                                innerKernel = k.first;
+                                break;
+                            }
+                        }
+                        currentKernel = innerKernel;
+                        if (innerKernel != "-1")
+                        {
+                            currentUid = UID;
+                            kernelIdMap[UID++] = currentKernel;
+                        }
+                    }
+                    basicBlocks.push_back(block);
+                }
+                else if (key == "LoadAddress")
+                {
+                    uint64_t address = stoul(value, 0, 0);
+                    int prodUid = writeMap[address];
+                    if (prodUid != -1 && prodUid != currentUid)
+                    {
+                        consumerMap[currentUid].insert(prodUid);
+                    }
+                }
+                else if (key == "StoreAddress")
+                {
+                    uint64_t address = stoul(value, 0, 0);
+                    writeMap[address] = currentUid;
+                }
+                if (fin)
+                {
+                    break;
+                }
             }
         }
 
-        notDone = (ret != Z_STREAM_END);// && (status <= (size / BLOCK_SIZE));
-	cout << "status is " << status << ".\n";
-        if(status > (size / BLOCK_SIZE))
+        index++;
+        notDone = (ret != Z_STREAM_END);
+        if (status > (size / BLOCK_SIZE))
         {
             notDone = false;
         }
-        if (status % 100 == 0)
+        int blocks = size / BLOCK_SIZE;
+        float percent = (float)index / (float)blocks * 100.0f;
+        if (!noBar)
         {
-            std::cout << "Currently reading block " << to_string(status) << " of " << to_string(size / BLOCK_SIZE) << "\n";
+            bar.set_progress(percent);
+            bar.set_postfix_text("Analyzing block " + to_string(index) + "/" + to_string(blocks));
+        }
+        else
+        {
+            int iPercent = (int)percent;
+            if (iPercent > previousCount + 5)
+            {
+                previousCount = ((iPercent / 5) + 1) * 5;
+                spdlog::info("Completed block {0:d} of {1:d}", index, blocks);
+            }
         }
     }
     //trace is now fully read
@@ -202,17 +291,10 @@ int main(int argc, char **argv)
     jOut["KernelInstanceMap"] = kernelIdMap;
     jOut["ConsumerMap"] = consumerMap;
 
-    if (OutputFilename != "")
-    {
-        std::ofstream file;
-        file.open(OutputFilename);
-        file << jOut;
-        file.close();
-    }
-    else
-    {
-        cout << jOut << "\n";
-    }
+    std::ofstream file;
+    file.open(OutputFilename);
+    file << jOut;
+    file.close();
 
     return 0;
 }

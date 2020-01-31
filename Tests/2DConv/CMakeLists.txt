@@ -10,3 +10,6 @@ set_tests_properties(2DConv_cartographer PROPERTIES DEPENDS 2DConv_Trace)
 
 add_test(NAME 2DConv_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:2DConv>)
 set_tests_properties(2DConv_tik PROPERTIES DEPENDS 2DConv_cartographer)
+
+add_test(NAME 2DConv_dag COMMAND dagExtractor -t ${CMAKE_CURRENT_BINARY_DIR}/raw.trc -o ${CMAKE_CURRENT_BINARY_DIR}/dag.json -k ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
+set_tests_properties(2DConv_dag PROPERTIES DEPENDS 2DConv_cartographer)

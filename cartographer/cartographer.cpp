@@ -9,6 +9,7 @@
 #include <llvm/Support/SourceMgr.h>
 #include <nlohmann/json.hpp>
 #include <set>
+#include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
 #include <string>
 #include <tuple>
@@ -25,13 +26,20 @@ llvm::cl::opt<int> hotThreshold("ht", cl::desc("The minimum instance count for a
 llvm::cl::opt<string> kernelFile("k", llvm::cl::desc("Specify output json name"), llvm::cl::value_desc("kernel filename"), llvm::cl::init("kernel.json"));
 llvm::cl::opt<string> profileFile("p", llvm::cl::desc("Specify profile json name"), llvm::cl::value_desc("profile filename"));
 llvm::cl::opt<string> bitcodeFile("b", llvm::cl::desc("Specify bitcode name"), llvm::cl::value_desc("bitcode filename"), llvm::cl::Required);
-llvm::cl::opt<bool> label("l", llvm::cl::desc("ExportLabel"), llvm::cl::value_desc("Export library label"), cl::init(false));
+llvm::cl::opt<bool> label("L", llvm::cl::desc("ExportLabel"), llvm::cl::value_desc("Export library label"), cl::init(false));
 llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::value_desc("No progress bar"));
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
+cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
     noProgressBar = noBar;
+
+    if (!LogFile.empty())
+    {
+        auto file_logger = spdlog::basic_logger_mt("cartographer_logger", LogFile);
+        spdlog::set_default_logger(file_logger);
+    }
 
     switch (LogLevel)
     {

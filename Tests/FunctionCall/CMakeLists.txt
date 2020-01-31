@@ -10,3 +10,6 @@ set_tests_properties(FunctionCall_cartographer PROPERTIES DEPENDS FunctionCall_T
 
 add_test(NAME FunctionCall_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:FunctionCall>)
 set_tests_properties(FunctionCall_tik PROPERTIES DEPENDS FunctionCall_cartographer)
+
+add_test(NAME FunctionCall_dag COMMAND dagExtractor -t ${CMAKE_CURRENT_BINARY_DIR}/raw.trc -o ${CMAKE_CURRENT_BINARY_DIR}/dag.json -k ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
+set_tests_properties(FunctionCall_dag PROPERTIES DEPENDS FunctionCall_cartographer)
