@@ -2,11 +2,10 @@
 #include "cartographer.h"
 #include <algorithm>
 #include <assert.h>
-#include <deque>
 #include <functional>
 #include <indicators/progress_bar.hpp>
-#include <list>
 #include <map>
+#include <queue>
 #include <spdlog/spdlog.h>
 #include <sstream>
 #include <zlib.h>
