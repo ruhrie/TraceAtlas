@@ -1,16 +1,31 @@
 #include "Smoothing.h"
 #include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Print.h"
+#include "cartographer.h"
+#include <indicators/progress_bar.hpp>
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/SourceMgr.h>
-
+#include <spdlog/spdlog.h>
 using namespace std;
 using namespace llvm;
 
 std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string bitcodeFile)
 {
+    indicators::ProgressBar bar;
+    if (!noProgressBar)
+    {
+        bar.set_prefix_text("Detecting type 3 kernels");
+        bar.set_bar_width(50);
+        bar.show_elapsed_time();
+        bar.show_remaining_time();
+    }
+
+    int status = 0;
+    int total = blocks.size();
+
     std::map<int, set<int>> result;
     set<set<int>> tmpResults;
     LLVMContext context;
@@ -18,11 +33,16 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
     unique_ptr<Module> sourceBitcode = parseIRFile(bitcodeFile, smerror, context);
 
     Annotate(sourceBitcode.get());
+    float percent;
 
-    for (auto pair : blocks)
+    for (const auto &[index, blk] : blocks)
     {
-        int index = pair.first;
-        set<int> blk = pair.second;
+        percent = (float)status / (float)total * 100;
+        if (!noProgressBar)
+        {
+            bar.set_progress(percent);
+        }
+        //for every kernel do this
         set<BasicBlock *> bbs;
         set<BasicBlock *> toRemove;
         for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
@@ -38,12 +58,13 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
         }
 
         bool change = true;
-
+        int trimCount = 0;
+        int totalCount = bbs.size();
         while (change)
         {
             change = false;
 
-            for (auto block : bbs)
+            for (auto &block : bbs)
             {
                 //this is each block in the kernel
                 //we need to check the entrance and exits
@@ -67,18 +88,24 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
                         //it is an entry block so it may still be valid
                         //we now need to check if there are any calls to this function in the code
                         bool called = false;
-                        for (auto block2 : bbs)
+                        for (auto user : f->users())
                         {
-                            for (auto bi = block2->begin(); bi != block2->end(); bi++)
+                            if (auto ui = dyn_cast<CallInst>(user))
                             {
-                                if (CallInst *ci = dyn_cast<CallInst>(bi))
+                                BasicBlock *par = ui->getParent();
+                                if (bbs.find(par) != bbs.end())
                                 {
-                                    if (ci->getCalledFunction() == f)
-                                    {
-                                        //we do call so we do add it
-                                        called = true;
-                                        break;
-                                    }
+                                    called = true;
+                                    break;
+                                }
+                            }
+                            else if (auto ui = dyn_cast<InvokeInst>(user))
+                            {
+                                BasicBlock *par = ui->getParent();
+                                if (bbs.find(par) != bbs.end())
+                                {
+                                    called = true;
+                                    break;
                                 }
                             }
                         }
@@ -93,10 +120,31 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
                 Instruction *term = block->getTerminator();
                 if (ReturnInst *r = dyn_cast<ReturnInst>(term))
                 {
-                    BasicBlock *b = &(r->getParent()->getParent()->getEntryBlock());
-                    if (bbs.find(b) == bbs.end())
+                    bool called = false;
+                    Function *f = r->getParent()->getParent();
+                    for (auto user : f->users())
                     {
-                        //it should not be there
+                        if (auto ui = dyn_cast<CallInst>(user))
+                        {
+                            BasicBlock *par = ui->getParent();
+                            if (bbs.find(par) != bbs.end())
+                            {
+                                called = true;
+                                break;
+                            }
+                        }
+                        else if (auto ui = dyn_cast<InvokeInst>(user))
+                        {
+                            BasicBlock *par = ui->getParent();
+                            if (bbs.find(par) != bbs.end())
+                            {
+                                called = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!called)
+                    {
                         valid = false;
                     }
                 }
@@ -227,47 +275,22 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
                 //now we add
                 if (!valid)
                 {
-                    //we didnt find a new kernel as the successor to the current block
-                    //but it can happen through recursion, so we need to check
-                    bool found = false;
-                    for (auto bi = block->begin(); bi != block->end(); bi++)
-                    {
-                        if (CallInst *ci = dyn_cast<CallInst>(bi))
-                        {
-                            Function *calledFunc = ci->getCalledFunction();
-                            if (calledFunc == NULL)
-                            {
-                                continue;
-                            }
-                            BasicBlock *entryBlock = &calledFunc->getEntryBlock();
-                            if (bbs.find(entryBlock) != bbs.end())
-                            {
-                                //we found it
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (!found)
-                    {
-                        toRemove.insert(block);
-                    }
+                    toRemove.insert(block);
                 }
             }
             if (toRemove.size() != 0)
             {
                 change = true;
-                set<BasicBlock *> bbn;
-                for (auto b : bbs)
+                for (auto b : toRemove)
                 {
-                    if (toRemove.find(b) == toRemove.end())
-                    {
-                        bbn.insert(b);
-                    }
+                    bbs.erase(b);
                 }
-                int a = bbs.size();
-                int z = bbn.size();
-                bbs = bbn;
+                trimCount += toRemove.size();
+                if (!noProgressBar)
+                {
+                    bar.set_postfix_text("Trimmed " + to_string(trimCount) + "/" + to_string(totalCount) + " blocks, Kernel " + to_string(status) + "/" + to_string(total));
+                    bar.set_progress(percent);
+                }
                 toRemove.clear();
             }
         }
@@ -283,11 +306,19 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
             int oldSize = tmpResults.size();
             tmpResults.insert(preR);
             int newSize = tmpResults.size();
-            if(newSize != oldSize)
+            if (newSize != oldSize)
             {
-                result[pair.first] = preR;
+                result[index] = preR;
             }
         }
+        status++;
+    }
+
+    if (!noProgressBar && !bar.is_completed())
+    {
+        bar.set_postfix_text("Kernel " + to_string(status) + "/" + to_string(total));
+        bar.set_progress(100);
+        bar.mark_as_completed();
     }
 
     return result;
