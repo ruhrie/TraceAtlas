@@ -1,6 +1,7 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
+#include <string>
 
 /// <summary>
 /// Writes the input string to the trace buffer.
@@ -51,5 +52,11 @@ extern "C" void DumpStoreAddrValue(void *MemValue, int size);
 
 extern "C" void BB_ID_Dump(uint64_t block, bool enter);
 
-extern "C" void KernelEnter(char* label);
-extern "C" void KernelExit(char* label);
+extern "C" void KernelEnter(char *label);
+extern "C" void KernelExit(char *label);
+
+bool taFifoEmpty();
+
+void taFifoPush(char *input);
+
+char *taFifoPop();

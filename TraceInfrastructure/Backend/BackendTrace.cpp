@@ -1,24 +1,32 @@
 #include "Backend/BackendTrace.h"
+#include "Backend/Fifo.h"
 #include <assert.h>
+#include <atomic>
+#include <iostream>
 #include <mutex>
+#include <queue>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <thread>
 #include <zlib.h>
 
+using namespace std;
+
+queue<string> writeQueue;
+
+pthread_t tracingThread;
 FILE *myfile;
-std::mutex tracingMutex;
+pthread_mutex_t tracingMutex;
 pthread_mutexattr_t tracingAttr;
 std::hash<std::thread::id> threadHasher;
 //trace functions
 z_stream strm_DashTracer;
+std::atomic<bool> stopTracing = false;
+atomic<bool> initialized = false;
 
 int TraceCompressionLevel;
 char *TraceFilename;
-/// <summary>
-/// The maximum ammount of bytes to store in a buffer before flushing it.
-/// </summary>
 #define BUFSIZE 128 * 1024
 unsigned int bufferIndex = 0;
 uint8_t temp_buffer[BUFSIZE];
@@ -26,16 +34,94 @@ uint8_t storeBuffer[BUFSIZE];
 
 void WriteStream(char *input)
 {
+    /*
     size_t size = strlen(input);
-    tracingMutex.lock();
-    uint64_t thId = threadHasher(std::this_thread::get_id());
+    pthread_mutex_lock(&tracingMutex);
     if (bufferIndex + size >= BUFSIZE)
     {
         BufferData();
     }
     memcpy(storeBuffer + bufferIndex, input, size);
     bufferIndex += size;
-    tracingMutex.unlock();
+    pthread_mutex_unlock(&tracingMutex);
+    */
+    //if (input != NULL)
+
+    pthread_mutex_lock(&tracingMutex);
+    //printf("%s", input);
+    taFifoPush(input);
+    pthread_mutex_unlock(&tracingMutex);
+}
+
+void *ProcessTrace(void *arg)
+{
+    char *tcl = getenv("TRACE_COMPRESSION");
+    if (tcl != NULL)
+    {
+        int l = atoi(tcl);
+        TraceCompressionLevel = l;
+    }
+    else
+    {
+        TraceCompressionLevel = 5;
+    }
+    strm_DashTracer.zalloc = Z_NULL;
+    strm_DashTracer.zfree = Z_NULL;
+    strm_DashTracer.opaque = Z_NULL;
+    int ret = deflateInit(&strm_DashTracer, TraceCompressionLevel);
+    assert(ret == Z_OK);
+
+    initialized = true;
+    while (true)
+    {
+        while (taFifoEmpty())
+        {
+            if (stopTracing)
+            {
+                printf("here");
+                strm_DashTracer.next_in = storeBuffer;
+                strm_DashTracer.avail_in = bufferIndex;
+                strm_DashTracer.next_out = temp_buffer;
+                strm_DashTracer.avail_out = BUFSIZE;
+                int deflate_res = deflate(&strm_DashTracer, Z_FINISH);
+                assert(deflate_res == Z_STREAM_END);
+
+                deflateEnd(&strm_DashTracer);
+                for (int i = 0; i < BUFSIZE - strm_DashTracer.avail_out; i++)
+                {
+                    fputc(temp_buffer[i], myfile);
+                }
+
+                return NULL;
+            }
+        }
+        while (true)
+        {
+            if (taFifoEmpty())
+            {
+                printf("exit");
+                break;
+            }
+            else
+            {
+                printf("enter");
+                char* input = taFifoPop();
+                printf("%s", input);
+                //printf("hi %s%lu\n", input.c_str(), writeQueue.size());
+            }
+        }
+
+        /*
+            size_t size = strlen(input);
+            if (bufferIndex + size >= BUFSIZE)
+            {
+                BufferData();
+            }
+            memcpy(storeBuffer + bufferIndex, input, size);
+            bufferIndex += size;
+            */
+        //writeQueue.pop();
+    }
 }
 
 ///Modified from https://stackoverflow.com/questions/4538586/how-to-compress-a-buffer-with-zlib
@@ -102,21 +188,6 @@ void WriteAddress(char *inst, int line, int block, uint64_t func, char *address)
 
 extern "C" void OpenFile()
 {
-    char *tcl = getenv("TRACE_COMPRESSION");
-    if (tcl != NULL)
-    {
-        int l = atoi(tcl);
-        TraceCompressionLevel = l;
-    }
-    else
-    {
-        TraceCompressionLevel = 5;
-    }
-    strm_DashTracer.zalloc = Z_NULL;
-    strm_DashTracer.zfree = Z_NULL;
-    strm_DashTracer.opaque = Z_NULL;
-    int ret = deflateInit(&strm_DashTracer, TraceCompressionLevel);
-    assert(ret == Z_OK);
     char *tfn = getenv("TRACE_NAME");
     if (tfn != NULL)
     {
@@ -127,25 +198,17 @@ extern "C" void OpenFile()
         TraceFilename = const_cast<char *>("raw.trc");
     }
 
-    //pthread_mutex_init(&tracingMutex, &tracingAttr);
+    pthread_create(&tracingThread, NULL, &ProcessTrace, NULL);
+    while (!initialized)
+        ;
     myfile = fopen(TraceFilename, "w");
     WriteStream(const_cast<char *>("TraceVersion:4\n"));
 }
 
 extern "C" void CloseFile()
 {
-    strm_DashTracer.next_in = storeBuffer;
-    strm_DashTracer.avail_in = bufferIndex;
-    strm_DashTracer.next_out = temp_buffer;
-    strm_DashTracer.avail_out = BUFSIZE;
-    int deflate_res = deflate(&strm_DashTracer, Z_FINISH);
-    assert(deflate_res == Z_STREAM_END);
-    for (int i = 0; i < BUFSIZE - strm_DashTracer.avail_out; i++)
-    {
-        fputc(temp_buffer[i], myfile);
-    }
-
-    deflateEnd(&strm_DashTracer);
+    stopTracing = true;
+    pthread_join(tracingThread, NULL);
     //fclose(myfile); //breaks occasionally for some reason. Likely a glibc error.
 }
 
@@ -226,4 +289,28 @@ extern "C" void KernelExit(char *label)
     uint64_t thId = threadHasher(std::this_thread::get_id());
     sprintf(fin, "KernelExit:%s:%#lX\n", label, thId);
     WriteStream(fin);
+}
+
+#define FIFO_SIZE 1024
+
+int taFifoRead = 0;
+int taFifoWrite = 0;
+char *taFifoData[FIFO_SIZE];
+
+bool taFifoEmpty()
+{
+    return taFifoRead == taFifoWrite;
+}
+
+void taFifoPush(char *input)
+{
+    taFifoData[taFifoWrite] = input;
+    taFifoWrite = (taFifoWrite + 1) % FIFO_SIZE;
+}
+
+char *taFifoPop()
+{
+    char* result = taFifoData[taFifoRead];
+    taFifoRead = (taFifoRead + 1) % FIFO_SIZE;
+    return result;
 }
