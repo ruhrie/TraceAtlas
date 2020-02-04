@@ -1,5 +1,6 @@
 #include "Backend/BackendTrace.h"
 #include <assert.h>
+#include <condition_variable>
 #include <mutex>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +12,7 @@ FILE *myfile;
 std::mutex tracingMutex;
 pthread_mutexattr_t tracingAttr;
 std::hash<std::thread::id> threadHasher;
-
+std::condition_variable cv;
 //trace functions
 z_stream strm_DashTracer;
 
@@ -28,7 +29,8 @@ uint8_t storeBuffer[BUFSIZE];
 void WriteStream(char *input)
 {
     size_t size = strlen(input);
-    tracingMutex.lock();
+    std::unique_lock<std::mutex> pk(tracingMutex);
+    cv.wait(pk);
     //pthread_mutex_lock(&tracingMutex);
     uint64_t thId = threadHasher(std::this_thread::get_id());
     if (bufferIndex + size >= BUFSIZE)
@@ -37,7 +39,7 @@ void WriteStream(char *input)
     }
     memcpy(storeBuffer + bufferIndex, input, size);
     bufferIndex += size;
-    tracingMutex.unlock();
+    cv.notify_one();
     //pthread_mutex_unlock(&tracingMutex);
 }
 
