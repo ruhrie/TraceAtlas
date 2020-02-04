@@ -1,6 +1,5 @@
 #include "Backend/BackendTrace.h"
 #include <assert.h>
-#include <condition_variable>
 #include <mutex>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,7 +11,6 @@ FILE *myfile;
 std::mutex tracingMutex;
 pthread_mutexattr_t tracingAttr;
 std::hash<std::thread::id> threadHasher;
-std::condition_variable cv;
 //trace functions
 z_stream strm_DashTracer;
 
@@ -29,9 +27,7 @@ uint8_t storeBuffer[BUFSIZE];
 void WriteStream(char *input)
 {
     size_t size = strlen(input);
-    std::unique_lock<std::mutex> pk(tracingMutex);
-    cv.wait(pk);
-    //pthread_mutex_lock(&tracingMutex);
+    tracingMutex.lock();
     uint64_t thId = threadHasher(std::this_thread::get_id());
     if (bufferIndex + size >= BUFSIZE)
     {
@@ -39,8 +35,7 @@ void WriteStream(char *input)
     }
     memcpy(storeBuffer + bufferIndex, input, size);
     bufferIndex += size;
-    cv.notify_one();
-    //pthread_mutex_unlock(&tracingMutex);
+    tracingMutex.unlock();
 }
 
 ///Modified from https://stackoverflow.com/questions/4538586/how-to-compress-a-buffer-with-zlib
@@ -151,7 +146,6 @@ extern "C" void CloseFile()
     }
 
     deflateEnd(&strm_DashTracer);
-    //pthread_mutex_destroy(&tracingMutex);
     //fclose(myfile); //breaks occasionally for some reason. Likely a glibc error.
 }
 
