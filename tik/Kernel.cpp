@@ -378,9 +378,34 @@ set<BasicBlock *> Kernel::GetConditional(std::vector<llvm::BasicBlock *> &blocks
         for (int i = 0; i < sucCount; i++)
         {
             BasicBlock *suc = term->getSuccessor(i);
+            auto term = suc->getTerminator();
             if (find(blocks.begin(), blocks.end(), suc) == blocks.end())
             {
                 exitBlocks.insert(block);
+                continue;
+            }
+            if (auto ci = dyn_cast<ReturnInst>(term))
+            {
+                auto f = suc->getParent();
+                for (auto user : f->users())
+                {
+                    if (auto ui = dyn_cast<CallInst>(user))
+                    {
+                        if (find(blocks.begin(), blocks.end(), ui->getParent()) == blocks.end())
+                        {
+                            exitBlocks.insert(block);
+                            break;
+                        }
+                    }
+                    else if (auto ui = dyn_cast<InvokeInst>(user))
+                    {
+                        if (find(blocks.begin(), blocks.end(), ui->getParent()) == blocks.end())
+                        {
+                            exitBlocks.insert(block);
+                            break;
+                        }
+                    }
+                }
             }
         }
     }
