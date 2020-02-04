@@ -1,4 +1,4 @@
-add_library(AtlasBackend STATIC BackendTrace.c BackendPapi.c)
+add_library(AtlasBackend STATIC BackendTrace.cpp BackendPapi.c)
 set_target_properties(
     AtlasBackend PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"

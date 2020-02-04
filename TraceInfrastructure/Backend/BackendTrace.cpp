@@ -1,15 +1,16 @@
 #include "Backend/BackendTrace.h"
 #include <assert.h>
-#include <pthread.h>
-#include <stdbool.h>
+#include <mutex>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <thread>
 #include <zlib.h>
 
 FILE *myfile;
-pthread_mutex_t tracingMutex;
+std::mutex tracingMutex;
 pthread_mutexattr_t tracingAttr;
+std::hash<std::thread::id> threadHasher;
 
 //trace functions
 z_stream strm_DashTracer;
@@ -27,15 +28,17 @@ uint8_t storeBuffer[BUFSIZE];
 void WriteStream(char *input)
 {
     size_t size = strlen(input);
-    pthread_mutex_lock(&tracingMutex);
-    pthread_t thId = pthread_self();
+    tracingMutex.lock();
+    //pthread_mutex_lock(&tracingMutex);
+    uint64_t thId = threadHasher(std::this_thread::get_id());
     if (bufferIndex + size >= BUFSIZE)
     {
         BufferData();
     }
     memcpy(storeBuffer + bufferIndex, input, size);
     bufferIndex += size;
-    pthread_mutex_unlock(&tracingMutex);
+    tracingMutex.unlock();
+    //pthread_mutex_unlock(&tracingMutex);
 }
 
 ///Modified from https://stackoverflow.com/questions/4538586/how-to-compress-a-buffer-with-zlib
@@ -100,7 +103,7 @@ void WriteAddress(char *inst, int line, int block, uint64_t func, char *address)
     WriteStream(fin);
 }
 
-void OpenFile()
+extern "C" void OpenFile()
 {
     char *tcl = getenv("TRACE_COMPRESSION");
     if (tcl != NULL)
@@ -124,15 +127,15 @@ void OpenFile()
     }
     else
     {
-        TraceFilename = "raw.trc";
+        TraceFilename = const_cast<char *>("raw.trc");
     }
 
-    pthread_mutex_init(&tracingMutex, &tracingAttr);
+    //pthread_mutex_init(&tracingMutex, &tracingAttr);
     myfile = fopen(TraceFilename, "w");
-    WriteStream("TraceVersion:4\n");
+    WriteStream(const_cast<char *>("TraceVersion:4\n"));
 }
 
-void CloseFile()
+extern "C" void CloseFile()
 {
     strm_DashTracer.next_in = storeBuffer;
     strm_DashTracer.avail_in = bufferIndex;
@@ -146,21 +149,21 @@ void CloseFile()
     }
 
     deflateEnd(&strm_DashTracer);
-    pthread_mutex_destroy(&tracingMutex);
+    //pthread_mutex_destroy(&tracingMutex);
     //fclose(myfile); //breaks occasionally for some reason. Likely a glibc error.
 }
 
-void LoadDump(void *address)
+extern "C" void LoadDump(void *address)
 {
     char fin[128];
-    uint64_t thId = pthread_self();
+    uint64_t thId = threadHasher(std::this_thread::get_id());
     sprintf(fin, "LoadAddress:%#lX:%#lX\n", (uint64_t)address, thId);
     WriteStream(fin);
 }
-void DumpLoadAddrValue(void *MemValue, int size)
+extern "C" void DumpLoadAddrValue(void *MemValue, int size)
 {
     char fin[128];
-    pthread_t thId = pthread_self();
+    uint64_t thId = threadHasher(std::this_thread::get_id());
     sprintf(fin, "LoadAddress:%#lX\n", (uint64_t)MemValue);
     WriteStream(fin);
     uint8_t *bitwisePrint = (uint8_t *)MemValue;
@@ -174,15 +177,15 @@ void DumpLoadAddrValue(void *MemValue, int size)
     sprintf(fin, "\n");
     WriteStream(fin);
 }
-void StoreDump(void *address)
+extern "C" void StoreDump(void *address)
 {
     char fin[128];
-    uint64_t thId = pthread_self();
+    uint64_t thId = threadHasher(std::this_thread::get_id());
     sprintf(fin, "StoreAddress:%#lX:%#lX\n", (uint64_t)address, thId);
     WriteStream(fin);
 }
 
-void DumpStoreAddrValue(void *MemValue, int size)
+extern "C" void DumpStoreAddrValue(void *MemValue, int size)
 {
     char fin[128];
     sprintf(fin, "StoreAddress:%#lX\n", (uint64_t)MemValue);
@@ -199,10 +202,10 @@ void DumpStoreAddrValue(void *MemValue, int size)
     WriteStream(fin);
 }
 
-void BB_ID_Dump(uint64_t block, bool enter)
+extern "C" void BB_ID_Dump(uint64_t block, bool enter)
 {
     char fin[128];
-    uint64_t thId = pthread_self();
+    uint64_t thId = threadHasher(std::this_thread::get_id());
     if (enter)
     {
         sprintf(fin, "BBEnter:%#lX:%#lX\n", block, thId);
@@ -214,17 +217,17 @@ void BB_ID_Dump(uint64_t block, bool enter)
     WriteStream(fin);
 }
 
-void KernelEnter(char *label)
+extern "C" void KernelEnter(char *label)
 {
     char fin[128];
-    uint64_t thId = pthread_self();
+    uint64_t thId = threadHasher(std::this_thread::get_id());
     sprintf(fin, "KernelEnter:%s:%#lX\n", label, thId);
     WriteStream(fin);
 }
-void KernelExit(char *label)
+extern "C" void KernelExit(char *label)
 {
     char fin[128];
-    uint64_t thId = pthread_self();
+    uint64_t thId = threadHasher(std::this_thread::get_id());
     sprintf(fin, "KernelExit:%s:%#lX\n", label, thId);
     WriteStream(fin);
 }

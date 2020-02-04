@@ -37,19 +37,19 @@ void WriteAddress(char *inst, int line, int block, uint64_t func, char *address)
 /// </summary>
 /// <param name="fileName">The string to be written</param>
 /// <param name="compressionLevel">The zlib compression level to be used.</param>
-void OpenFile();
+extern "C" void OpenFile();
 
 /// <summary>
 /// Flushes the compression stream and closes the trace file.
 /// </summary>
-void CloseFile();
+extern "C" void CloseFile();
 
-void LoadDump(void *address);
-void DumpLoadAddrValue(void *MemValue, int size);
-void StoreDump(void *address);
-void DumpStoreAddrValue(void *MemValue, int size);
+extern "C" void LoadDump(void *address);
+extern "C" void DumpLoadAddrValue(void *MemValue, int size);
+extern "C" void StoreDump(void *address);
+extern "C" void DumpStoreAddrValue(void *MemValue, int size);
 
-void BB_ID_Dump(uint64_t block, bool enter);
+extern "C" void BB_ID_Dump(uint64_t block, bool enter);
 
-void KernelEnter(char* label);
-void KernelExit(char* label);
+extern "C" void KernelEnter(char* label);
+extern "C" void KernelExit(char* label);
