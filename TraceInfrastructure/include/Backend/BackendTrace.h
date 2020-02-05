@@ -7,7 +7,7 @@
 /// Writes the input string to the trace buffer.
 /// </summary>
 /// <param name="input">The string to be written</param>
-void WriteStream(char *input);
+void WriteStream();
 
 /// <summary>
 /// Compresses the trace buffer and writes it to the destination file.
@@ -57,7 +57,7 @@ extern "C" void KernelExit(char *label);
 
 bool taFifoEmpty();
 bool taFifoFull();
-
-void taFifoPush(char *input);
-
+char *taFifoPush();
 char *taFifoPop();
+void taFifoInit();
+void taFifoTerm();
