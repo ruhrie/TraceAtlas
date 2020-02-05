@@ -29,13 +29,6 @@ uint8_t storeBuffer[BUFSIZE];
 
 atomic<int> taWriting = 0;
 
-void WriteStream()
-{
-    while (taFifoFull())
-    {
-    };
-}
-
 void *ProcessTrace(void *arg)
 {
     char *tcl = getenv("TRACE_COMPRESSION");
@@ -132,20 +125,6 @@ void BufferData()
     bufferIndex = 0;
 }
 
-void Write(char *inst, int line, int block, uint64_t func)
-{
-    char *suffix = taFifoPush();
-    sprintf(suffix, "%s;line:%d;block:%d;function:%lu\n", inst, line, block, func);
-    WriteStream();
-}
-
-void WriteAddress(char *inst, int line, int block, uint64_t func, char *address)
-{
-    char *suffix = taFifoPush();
-    sprintf(suffix, "%s;line:%d;block:%d;function:%lu;address:%lu\n", inst, line, block, func, (uint64_t)address);
-    WriteStream();
-}
-
 extern "C" void OpenFile()
 {
     char *tfn = getenv("TRACE_NAME");
@@ -159,20 +138,21 @@ extern "C" void OpenFile()
     }
     taFifoInit();
 
-    param.sched_priority = SCHED_FIFO;
-    pthread_attr_setschedpolicy(&attr, SCHED_FIFO);
-    pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED);
-    param.sched_priority = sched_get_priority_max(SCHED_FIFO);
-    pthread_attr_setschedparam(&attr, &param);
+    //param.sched_priority = SCHED_FIFO;
+    //pthread_attr_setschedpolicy(&attr, SCHED_FIFO);
+    //pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED);
+    //param.sched_priority = sched_get_priority_max(SCHED_FIFO);
+    //pthread_attr_setschedparam(&attr, &param);
 
-    pthread_create(&tracingThread, &attr, &ProcessTrace, NULL);
+    //pthread_create(&tracingThread, &attr, &ProcessTrace, NULL);
+    pthread_create(&tracingThread, NULL, &ProcessTrace, NULL);
     while (!initialized)
     {
     }
     myfile = fopen(TraceFilename, "w");
-    char *suffix = taFifoPush();
+    char suffix[MAX_STR];
     sprintf(suffix, "%s", const_cast<char *>("TraceVersion:4\n"));
-    WriteStream();
+    taFifoPush(suffix);
 }
 
 extern "C" void CloseFile()
@@ -185,62 +165,59 @@ extern "C" void CloseFile()
 
 extern "C" void LoadDump(void *address)
 {
-    char *fin = taFifoPush();
+    char fin[MAX_STR];
     uint64_t thId = pthread_self();
     sprintf(fin, "LoadAddress:%#lX:%#lX\n", (uint64_t)address, thId);
-    WriteStream();
+    taFifoPush(fin);
 }
 extern "C" void DumpLoadAddrValue(void *MemValue, int size)
 {
-    char *fin = taFifoPush();
+    char fin[MAX_STR];
     uint64_t thId = pthread_self();
     sprintf(fin, "LoadAddress:%#lX\n", (uint64_t)MemValue);
-    WriteStream();
+    taFifoPush(fin);
+
     uint8_t *bitwisePrint = (uint8_t *)MemValue;
-    fin = taFifoPush();
     sprintf(fin, "size:%d, LoadMemValue:", size);
-    WriteStream();
+    taFifoPush(fin);
+
     for (int i = 0; i < size; i++)
     {
-        fin = taFifoPush();
         sprintf(fin, "%u ", bitwisePrint[i]);
-        WriteStream();
+        taFifoPush(fin);
     }
-    fin = taFifoPush();
     sprintf(fin, "\n");
-    WriteStream();
+    taFifoPush(fin);
 }
 extern "C" void StoreDump(void *address)
 {
-    char *fin = taFifoPush();
+    char fin[MAX_STR];
     uint64_t thId = pthread_self();
     sprintf(fin, "StoreAddress:%#lX:%#lX\n", (uint64_t)address, thId);
-    WriteStream();
+    taFifoPush(fin);
 }
 
 extern "C" void DumpStoreAddrValue(void *MemValue, int size)
 {
-    char *fin = taFifoPush();
+    char fin[MAX_STR];
     sprintf(fin, "StoreAddress:%#lX\n", (uint64_t)MemValue);
-    WriteStream();
-    fin = taFifoPush();
+    taFifoPush(fin);
+
     uint8_t *bitwisePrint = (uint8_t *)MemValue;
     sprintf(fin, "size:%d, StoreMemValue:", size);
-    fin = taFifoPush();
+    taFifoPush(fin);
     for (int i = 0; i < size; i++)
     {
-        fin = taFifoPush();
         sprintf(fin, "%u ", bitwisePrint[i]);
-        WriteStream();
+        taFifoPush(fin);
     }
-    fin = taFifoPush();
     sprintf(fin, "\n");
-    WriteStream();
+    taFifoPush(fin);
 }
 
 extern "C" void BB_ID_Dump(uint64_t block, bool enter)
 {
-    char *fin = taFifoPush();
+    char fin[MAX_STR];
     uint64_t thId = pthread_self();
     if (enter)
     {
@@ -250,22 +227,22 @@ extern "C" void BB_ID_Dump(uint64_t block, bool enter)
     {
         sprintf(fin, "BBExit:%#lX:%#lX\n", block, thId);
     }
-    WriteStream();
+    taFifoPush(fin);
 }
 
 extern "C" void KernelEnter(char *label)
 {
-    char *fin = taFifoPush();
+    char fin[MAX_STR];
     uint64_t thId = pthread_self();
     sprintf(fin, "KernelEnter:%s:%#lX\n", label, thId);
-    WriteStream();
+    taFifoPush(fin);
 }
 extern "C" void KernelExit(char *label)
 {
-    char *fin = taFifoPush();
+    char fin[MAX_STR];
     uint64_t thId = pthread_self();
     sprintf(fin, "KernelExit:%s:%#lX\n", label, thId);
-    WriteStream();
+    taFifoPush(fin);
 }
 
 #define FIFO_SIZE 1024
@@ -299,16 +276,25 @@ bool taFifoEmpty()
     return taFifoRead == taFifoWrite;
 }
 
-char *taFifoPush()
+void taFifoPush(char *input)
 {
+    while (taFifoFull())
+    {
+        usleep(100);
+    };
+    pthread_mutex_lock(&tracingMutex);
+    strcpy(taFifoData[taFifoWrite], input);
     taFifoWrite = (taFifoWrite + 1) % FIFO_SIZE;
-    return taFifoData[taFifoWrite];
+    pthread_mutex_unlock(&tracingMutex);
+    return;
 }
 
 char *taFifoPop()
 {
+    pthread_mutex_lock(&tracingMutex);
     char *result = taFifoData[taFifoRead];
     taFifoRead = (taFifoRead + 1) % FIFO_SIZE;
+    pthread_mutex_unlock(&tracingMutex);
     return result;
 }
 
