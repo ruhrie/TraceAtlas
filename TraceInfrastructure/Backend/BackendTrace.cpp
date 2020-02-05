@@ -1,5 +1,4 @@
 #include "Backend/BackendTrace.h"
-#include "Backend/Fifo.h"
 #include <assert.h>
 #include <atomic>
 #include <iostream>
@@ -34,21 +33,8 @@ uint8_t storeBuffer[BUFSIZE];
 
 void WriteStream(char *input)
 {
-    /*
-    size_t size = strlen(input);
     pthread_mutex_lock(&tracingMutex);
-    if (bufferIndex + size >= BUFSIZE)
-    {
-        BufferData();
-    }
-    memcpy(storeBuffer + bufferIndex, input, size);
-    bufferIndex += size;
-    pthread_mutex_unlock(&tracingMutex);
-    */
-    //if (input != NULL)
-
-    pthread_mutex_lock(&tracingMutex);
-    //printf("%s", input);
+    while(taFifoFull());
     taFifoPush(input);
     pthread_mutex_unlock(&tracingMutex);
 }
@@ -78,7 +64,6 @@ void *ProcessTrace(void *arg)
         {
             if (stopTracing)
             {
-                printf("here");
                 strm_DashTracer.next_in = storeBuffer;
                 strm_DashTracer.avail_in = bufferIndex;
                 strm_DashTracer.next_out = temp_buffer;
@@ -99,19 +84,11 @@ void *ProcessTrace(void *arg)
         {
             if (taFifoEmpty())
             {
-                printf("exit");
                 break;
             }
             else
             {
-                printf("enter");
-                char* input = taFifoPop();
-                printf("%s", input);
-                //printf("hi %s%lu\n", input.c_str(), writeQueue.size());
-            }
-        }
-
-        /*
+                char *input = taFifoPop();
             size_t size = strlen(input);
             if (bufferIndex + size >= BUFSIZE)
             {
@@ -119,8 +96,8 @@ void *ProcessTrace(void *arg)
             }
             memcpy(storeBuffer + bufferIndex, input, size);
             bufferIndex += size;
-            */
-        //writeQueue.pop();
+            }
+        }
     }
 }
 
@@ -304,13 +281,22 @@ bool taFifoEmpty()
 
 void taFifoPush(char *input)
 {
-    taFifoData[taFifoWrite] = input;
+    int size = strlen(input);
+    char *dest = (char *)calloc(sizeof(char), size);
+    strcpy(dest, input);
+    taFifoData[taFifoWrite] = dest;
     taFifoWrite = (taFifoWrite + 1) % FIFO_SIZE;
 }
 
 char *taFifoPop()
 {
-    char* result = taFifoData[taFifoRead];
+    char *result = taFifoData[taFifoRead];
     taFifoRead = (taFifoRead + 1) % FIFO_SIZE;
     return result;
+}
+
+bool taFifoFull()
+{
+    int dif = taFifoRead - taFifoWrite;
+    return dif == -1 || dif == FIFO_SIZE - 1;
 }

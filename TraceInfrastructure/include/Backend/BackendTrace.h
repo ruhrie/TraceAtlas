@@ -56,6 +56,7 @@ extern "C" void KernelEnter(char *label);
 extern "C" void KernelExit(char *label);
 
 bool taFifoEmpty();
+bool taFifoFull();
 
 void taFifoPush(char *input);
 
