@@ -12,4 +12,4 @@ install(TARGETS AtlasBackend
 )
 
 file(GLOB GR ${TRACE_INC}/Backend/*.h)
-install (FILES ${GR} DESTINATION "Backend")
+install (FILES ${GR} DESTINATION "include/Backend")
