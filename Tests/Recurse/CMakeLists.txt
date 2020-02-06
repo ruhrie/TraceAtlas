@@ -4,12 +4,25 @@ target_compile_options(Recurse PRIVATE "-flto")
 InjectTracer(Recurse)
 
 add_test(NAME Recurse_Trace COMMAND Recurse-trace)
+set_tests_properties(Recurse_Trace PROPERTIES 
+    FIXTURES_SETUP recurse_trace_fixutre
+    )
 
 add_test(NAME Recurse_cartographer COMMAND cartographer -i ${CMAKE_CURRENT_BINARY_DIR}/raw.trc -b $<TARGET_FILE:Recurse> -k ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
-set_tests_properties(Recurse_cartographer PROPERTIES DEPENDS Recurse_Trace)
+set_tests_properties(Recurse_cartographer PROPERTIES 
+    DEPENDS Recurse_Trace
+    FIXTURES_REQUIRED recurse_trace_fixutre
+    FIXTURES_SETUP recurse_cartographer_fixutre
+    )
 
 add_test(NAME Recurse_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:Recurse>)
-set_tests_properties(Recurse_tik PROPERTIES DEPENDS Recurse_cartographer)
+set_tests_properties(Recurse_tik PROPERTIES
+    DEPENDS Recurse_cartographer
+    FIXTURES_REQUIRED  recurse_cartographer_fixutre
+    )
 
 add_test(NAME Recurse_dag COMMAND dagExtractor -t ${CMAKE_CURRENT_BINARY_DIR}/raw.trc -o ${CMAKE_CURRENT_BINARY_DIR}/dag.json -k ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
-set_tests_properties(Recurse_dag PROPERTIES DEPENDS Recurse_cartographer)
+set_tests_properties(Recurse_dag PROPERTIES 
+    DEPENDS Recurse_cartographer
+    FIXTURES_REQUIRED recurse_cartographer_fixutre
+    )
