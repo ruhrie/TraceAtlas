@@ -51,5 +51,12 @@ void DumpStoreAddrValue(void *MemValue, int size);
 
 void BB_ID_Dump(uint64_t block, bool enter);
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 void KernelEnter(char* label);
 void KernelExit(char* label);
+#ifdef __cplusplus
+}
+#endif
