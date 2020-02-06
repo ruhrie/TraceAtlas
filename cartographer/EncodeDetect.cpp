@@ -14,7 +14,7 @@
 
 using namespace std;
 
-std::map<int, int> blockCount; //fine
+std::map<int, uint64_t> blockCount; //fine
 
 std::ifstream::pos_type filesize(std::string filename)
 {
@@ -38,7 +38,7 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
     // Tracer parameter, sets the maximum width that the parser can look for temporally affine blocks
     int radius = 5;
     // Maps a blockID to its vector of temporally affine blocks
-    std::map<int, std::map<int, int>> blockMap; //should probably seperate the floating point values into a seperate structure
+    std::map<int, std::map<int, uint64_t>> blockMap; //should probably seperate the floating point values into a seperate structure
     // Holds the count of each blockID
 
     // Vector for grouping blocks together
@@ -209,14 +209,15 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
     std::map<int, std::vector<std::pair<int, float>>> fBlockMap; //really this is a matrix of floats
     for (auto &key : blockMap)
     {
-        int total = 0;
+        uint64_t total = 0;
         for (auto &sub : key.second)
         {
             total += sub.second;
         }
         for (auto &sub : key.second)
         {
-            fBlockMap[key.first].push_back(std::pair<int, float>(sub.first, (float)sub.second / (float)total));
+            float val = (float)sub.second / (float)total;
+            fBlockMap[key.first].push_back(std::pair<int, float>(sub.first, val));
         }
     }
 
