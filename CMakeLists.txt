@@ -50,11 +50,11 @@ function(InjectTracer tar)
 endfunction()
 
 option(ENABLE_TESTING "Build tests" ON)
+option(ENABLE_TESTING_LONG "Build tests long" OFF)
 if(${ENABLE_TESTING})
     enable_testing()
     add_subdirectory(Tests)
 endif()
-
 
 find_package(Doxygen)
 if(DOXYGEN_FOUND)

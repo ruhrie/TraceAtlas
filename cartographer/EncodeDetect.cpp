@@ -254,7 +254,7 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
     });
     for (auto &it : blockPairs)
     {
-        if (it.second > hotThresh)
+        if (it.second >= hotThresh)
         {
             if (covered.find(it.first) == covered.end())
             {
