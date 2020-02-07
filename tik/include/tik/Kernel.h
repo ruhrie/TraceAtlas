@@ -67,7 +67,7 @@ private:
     /// Later, the condition's user instructions are evaluated, and those that are eligible to be in the tik representation are cloned into the VMap.
     /// Eligible instructions are those that belong to the kernel's original basic blocks, and not eligible otherwise.
     /// This function assumes that we will only find one conditional exit instruction, because we assume that the kernel will not have embedded loops in it.
-    std::set<llvm::BasicBlock *> GetConditional(std::vector<llvm::BasicBlock *> &blocks);
+    std::set<llvm::BasicBlock *> GetConditional(std::set<llvm::BasicBlock *> &blocks);
 
     /// @brief  Extracts instructions that will make up the core computations of the kernel.
     ///
@@ -76,7 +76,7 @@ private:
     /// This code, as of this version, does not support internal loops.
     ///
     /// @param  blocks      Vector of basic blocks in the module passed to the constructor.
-    std::tuple<std::set<llvm::BasicBlock *>, std::set<llvm::BasicBlock *>> GetBodyPrequel(std::vector<llvm::BasicBlock *> blocks, std::set<llvm::BasicBlock *> conditionalBlocks);
+    std::tuple<std::set<llvm::BasicBlock *>, std::set<llvm::BasicBlock *>> GetBodyPrequel(std::set<llvm::BasicBlock *> blocks, std::set<llvm::BasicBlock *> conditionalBlocks);
 
     /// @brief  Find all instructions not initialized in the kernel representation.
     ///
@@ -106,6 +106,7 @@ private:
     std::vector<llvm::Instruction *> getInstructionPath(llvm::BasicBlock *start, std::vector<llvm::BasicBlock *> validBlocks);
     llvm::BasicBlock *getPathMerge(llvm::BasicBlock *start);
     std::vector<llvm::Instruction *> GetPathInstructions(llvm::BasicBlock *start, llvm::BasicBlock *end);
+    std::tuple<std::set<llvm::BasicBlock *>, std::set<llvm::BasicBlock *>> GetPrePostConditionBlocks(std::set<llvm::BasicBlock *> blocks, std::set<llvm::BasicBlock *> conditionalBlocks);
 
     void ApplyMetadata();
 

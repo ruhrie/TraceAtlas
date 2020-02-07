@@ -1,6 +1,7 @@
 #include "tik/Kernel.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Print.h"
+#include "tik/Dijkstra.h"
 #include "tik/Exceptions.h"
 #include "tik/InlineStruct.h"
 #include "tik/Metadata.h"
@@ -15,6 +16,7 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Type.h>
 #include <llvm/Transforms/Utils/Cloning.h>
+#include <queue>
 using namespace llvm;
 using namespace std;
 
@@ -48,7 +50,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
     Exit = BasicBlock::Create(TikModule->getContext(), "Exit", KernelFunction);
 
-    vector<BasicBlock *> blocks;
+    set<BasicBlock *> blocks;
     for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
     {
         for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
@@ -59,7 +61,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
             {
                 if (find(basicBlocks.begin(), basicBlocks.end(), id) != basicBlocks.end())
                 {
-                    blocks.push_back(b);
+                    blocks.insert(b);
                 }
             }
         }
@@ -72,7 +74,9 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 
     set<BasicBlock *> conditionalBlocks = GetConditional(blocks);
 
-    auto bodyPrequel = GetBodyPrequel(blocks, conditionalBlocks);
+    auto prePostCondition = GetPrePostConditionBlocks(blocks, conditionalBlocks);
+
+    auto bodyPrequel = GetBodyPrequel(get<0>(prePostCondition), conditionalBlocks);
 
     //for the moment I am going to skip the epilogue/termination and get the prequel stuff working
     //its only necessary for recursion anyway
@@ -96,6 +100,77 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     MorphKernelFunction();
 
     ApplyMetadata();
+}
+
+tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetPrePostConditionBlocks(set<BasicBlock *> blocks, set<BasicBlock *> conditionalBlocks)
+{
+    set<BasicBlock *> exits;
+    for (auto block : blocks)
+    {
+        auto term = block->getTerminator();
+        for (int i = 0; i < term->getNumSuccessors(); i++)
+        {
+            auto suc = term->getSuccessor(i);
+            if (find(blocks.begin(), blocks.end(), suc) == blocks.end())
+            {
+                exits.insert(suc);
+            }
+        }
+        if (isa<ReturnInst>(term))
+        {
+            Function *f = block->getParent();
+            for (auto user : f->users())
+            {
+                if (auto ui = dyn_cast<CallInst>(user))
+                {
+                    if (find(blocks.begin(), blocks.end(), ui->getParent()) == blocks.end())
+                    {
+                        exits.insert(block);
+                        break;
+                    }
+                }
+                else if (auto ui = dyn_cast<InvokeInst>(user))
+                {
+                    if (find(blocks.begin(), blocks.end(), ui->getParent()) == blocks.end())
+                    {
+                        exits.insert(block);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    assert(exits.size() == 1);
+    BasicBlock *currentBlock;
+
+    auto blockDistances = SolveDijkstraBack(exits, blocks);
+
+    int condDistance;
+    for (auto c : conditionalBlocks)
+    {
+        condDistance = blockDistances[c];
+    }
+
+    set<BasicBlock *> pre;
+    set<BasicBlock *> post;
+    for (auto b : blocks)
+    {
+        int dist = blockDistances[b];
+        PrintVal(b);
+        assert(dist != INT32_MAX);
+        if (dist < condDistance)
+        {
+            //this implies that we are in the post
+            post.insert(b);
+        }
+        else if (dist > condDistance)
+        {
+            //this is before the condition
+            pre.insert(b);
+        }
+    }
+
+    return {pre, post};
 }
 
 nlohmann::json Kernel::GetJson()
@@ -367,7 +442,7 @@ void Kernel::MorphKernelFunction()
     }
 }
 
-set<BasicBlock *> Kernel::GetConditional(std::vector<llvm::BasicBlock *> &blocks)
+set<BasicBlock *> Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
 {
     vector<Instruction *> result;
     set<BasicBlock *> exitBlocks;
@@ -425,7 +500,7 @@ set<BasicBlock *> Kernel::GetConditional(std::vector<llvm::BasicBlock *> &blocks
             int64_t id = GetBlockID(checking);
             auto split = checking->splitBasicBlock(term);
             SetBlockID(split, id);
-            blocks.push_back(split);
+            blocks.insert(split);
             conditionBlocks.insert(split);
         }
         else if (term->getNumSuccessors() == 0) //this handles the return
@@ -471,155 +546,10 @@ set<BasicBlock *> Kernel::GetConditional(std::vector<llvm::BasicBlock *> &blocks
     return conditionBlocks;
 }
 
-tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(vector<BasicBlock *> blocks, set<BasicBlock *> conditionalBlocks)
+tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(set<BasicBlock *> blocks, set<BasicBlock *> conditionalBlocks)
 {
     set<BasicBlock *> body;
     set<BasicBlock *> prequel;
-
-    //the jist here is to find any blocks that are not necessarily entered before a conditional block
-    //those that can be are in the prequel, otherwise they are in the body
-
-    //we will start by seeding the map with successor data
-    map<BasicBlock *, set<BasicBlock *>> sucMap;
-    for (auto block : blocks)
-    {
-        auto term = block->getTerminator();
-        int sucCount = term->getNumSuccessors();
-        if (sucCount > 0)
-        {
-            for (int i = 0; i < sucCount; i++)
-            {
-                auto suc = term->getSuccessor(i);
-                if (find(blocks.begin(), blocks.end(), suc) != blocks.end())
-                {
-                    sucMap[block].insert(suc);
-                }
-            }
-        }
-        else
-        {
-            //I presume that this must be a return
-            assert(isa<ReturnInst>(term));
-            Function *F = block->getParent();
-            for (auto user : F->users())
-            {
-                BasicBlock *b = cast<Instruction>(user)->getParent();
-                sucMap[block].insert(b);
-            }
-        }
-
-        //now check if we call a function in this block and if so make it a successor
-        for (auto bi = block->begin(); bi != block->end(); bi++)
-        {
-            if (CallInst *ci = dyn_cast<CallInst>(bi))
-            {
-                Function *F = ci->getCalledFunction();
-                if (F->empty())
-                {
-                    continue;
-                }
-                BasicBlock *b = &F->getEntryBlock();
-                sucMap[block].insert(b);
-            }
-        }
-    }
-
-    //with the data seeded, we now go through and add the successors of successors until there are no more changes
-    bool change = true;
-    while (change)
-    {
-        change = false;
-        for (auto &pair : sucMap)
-        {
-            for (auto &block : pair.second)
-            {
-                auto term = block->getTerminator();
-                int sucCount = term->getNumSuccessors();
-                if (sucCount > 0)
-                {
-                    for (int i = 0; i < sucCount; i++)
-                    {
-                        auto suc = term->getSuccessor(i);
-                        if (find(blocks.begin(), blocks.end(), suc) != blocks.end())
-                        {
-                            int oldSize = pair.second.size();
-                            pair.second.insert(suc);
-                            int newSize = pair.second.size();
-                            if (oldSize != newSize)
-                            {
-                                change = true;
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    //I presume that this must be a return
-                    assert(isa<ReturnInst>(term));
-                    Function *F = block->getParent();
-                    for (auto user : F->users())
-                    {
-                        BasicBlock *b = cast<Instruction>(user)->getParent();
-                        int oldSize = pair.second.size();
-                        pair.second.insert(b);
-                        int newSize = pair.second.size();
-                        if (oldSize != newSize)
-                        {
-                            change = true;
-                        }
-                    }
-                }
-                for (auto bi = block->begin(); bi != block->end(); bi++)
-                {
-                    if (CallInst *ci = dyn_cast<CallInst>(bi))
-                    {
-                        Function *F = ci->getCalledFunction();
-                        if (F->empty())
-                        {
-                            continue;
-                        }
-                        BasicBlock *b = &F->getEntryBlock();
-                        int oldSize = pair.second.size();
-                        pair.second.insert(b);
-                        int newSize = pair.second.size();
-                        if (oldSize != newSize)
-                        {
-                            change = true;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    //now that we have the map we can go through all the blocks and assign them to the appropriate sets
-    //if it is in the successor of a conditional, it is part of the body, otherwise it is the prequel
-
-    for (auto block : blocks)
-    {
-        bool condSuc = false;
-        for (auto cond : conditionalBlocks)
-        {
-            if (sucMap[cond].find(block) != sucMap[cond].end())
-            {
-                condSuc = true;
-            }
-        }
-        if (conditionalBlocks.find(block) == conditionalBlocks.end())
-        {
-            if (condSuc)
-            {
-                body.insert(block);
-            }
-            else
-            {
-                prequel.insert(block);
-            }
-        }
-    }
-
-    // search blocks for BBs whose predecessors are not in blocks, this will be the entry block
-    //this is mostly a setup for later
     set<BasicBlock *> entrances;
     for (BasicBlock *block : blocks)
     {
@@ -627,7 +557,7 @@ tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(vector<BasicB
         {
             if (pred)
             {
-                if (find(blocks.begin(), blocks.end(), pred) == blocks.end())
+                if (blocks.find(pred) == blocks.end() && conditionalBlocks.find(pred) == conditionalBlocks.end())
                 {
                     entrances.insert(block);
                 }
@@ -645,7 +575,7 @@ tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(vector<BasicB
             {
                 Instruction *ci = cast<Instruction>(user);
                 BasicBlock *parentBlock = ci->getParent();
-                if (find(blocks.begin(), blocks.end(), parentBlock) == blocks.end())
+                if (blocks.find(parentBlock) == blocks.end() && conditionalBlocks.find(parentBlock) == conditionalBlocks.end())
                 {
                     extUse = true;
                     break;
@@ -661,6 +591,25 @@ tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(vector<BasicB
     {
         throw TikException("Kernel Exception: tik only supports single entrance kernels");
     }
+
+    //now that we have the entrances we can do dijkstras
+    auto blockDist = SolveDijkstraFront(entrances, blocks);
+
+    for (auto p : blockDist)
+    {
+        if (entrances.find(p.first) == entrances.end())
+        {
+            if (p.second == INT32_MAX)
+            {
+                body.insert(p.first);
+            }
+            else
+            {
+                prequel.insert(p.first);
+            }
+        }
+    }
+
     for (auto ent : entrances)
     {
         EnterTarget = ent;
