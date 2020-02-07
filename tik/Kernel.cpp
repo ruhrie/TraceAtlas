@@ -72,6 +72,8 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     //then find epilogue/termination
     //then we can go to exits/init/memory like normal
 
+    SplitBlocks(blocks);
+
     set<BasicBlock *> conditionalBlocks = GetConditional(blocks);
 
     auto prePostCondition = GetPrePostConditionBlocks(blocks, conditionalBlocks);
@@ -1255,6 +1257,36 @@ void Kernel::Repipe()
         if (find(Body.begin(), Body.end(), suc) == Body.end())
         {
             cTerm->setSuccessor(i, Exit);
+        }
+    }
+}
+
+void Kernel::SplitBlocks(set<BasicBlock *> &blocks)
+{
+    vector<BasicBlock *> toProcess;
+    for (auto block : blocks)
+    {
+        toProcess.push_back(block);
+    }
+
+    while (toProcess.size() != 0)
+    {
+        BasicBlock *next = toProcess.back();
+        toProcess.pop_back();
+        for (auto bi = next->begin(); bi != next->end(); bi++)
+        {
+            if (auto ci = dyn_cast<CallInst>(bi))
+            {
+                auto spl = next->splitBasicBlock(ci->getNextNode());
+                blocks.insert(spl);
+                toProcess.push_back(spl);
+            }
+            else if (auto ci = dyn_cast<InvokeInst>(bi))
+            {
+                auto spl = next->splitBasicBlock(ci->getNextNode());
+                blocks.insert(spl);
+                toProcess.push_back(spl);
+            }
         }
     }
 }

@@ -118,4 +118,5 @@ private:
     void BuildExit();
 
     void Repipe();
+    void SplitBlocks(std::set<llvm::BasicBlock *> &blocks);
 };

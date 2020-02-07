@@ -1,7 +1,8 @@
 #include "tik/Dijkstra.h"
-#include "tik/Exceptions.h"
 #include "AtlasUtil/Print.h"
+#include "tik/Exceptions.h"
 #include <llvm/IR/CFG.h>
+#include <llvm/IR/Instructions.h>
 #include <queue>
 using namespace std;
 using namespace llvm;
@@ -9,12 +10,12 @@ using namespace llvm;
 map<BasicBlock *, int> SolveDijkstraBack(set<BasicBlock *> exits, set<BasicBlock *> blocks)
 {
     map<BasicBlock *, int> blockDistances;
-    for(auto block : blocks)
+    for (auto block : blocks)
     {
         blockDistances[block] = INT32_MAX;
     }
     queue<BasicBlock *> dijQueue;
-    for(auto exit : exits)
+    for (auto exit : exits)
     {
         blockDistances[exit] = 0;
         dijQueue.push(exit);
@@ -37,6 +38,19 @@ map<BasicBlock *, int> SolveDijkstraBack(set<BasicBlock *> exits, set<BasicBlock
             {
                 blockDistances[pred] = min(currentDistance + 1, blockDistances[pred]);
                 dijQueue.push(pred);
+
+                for (auto bi = pred->begin(); bi != pred->end(); bi++)
+                {
+                    if (auto ci = dyn_cast<CallInst>(bi))
+                    {
+                        Function *f = ci->getCalledFunction();
+                        if (!f->empty())
+                        {
+                            auto entry = &f->getEntryBlock();
+                            throw 2;
+                        }
+                    }
+                }
             }
             predCount++;
         }
@@ -58,12 +72,12 @@ map<BasicBlock *, int> SolveDijkstraBack(set<BasicBlock *> exits, set<BasicBlock
 map<BasicBlock *, int> SolveDijkstraFront(set<BasicBlock *> entrances, set<BasicBlock *> blocks)
 {
     map<BasicBlock *, int> blockDistances;
-    for(auto block : blocks)
+    for (auto block : blocks)
     {
         blockDistances[block] = INT32_MAX;
     }
     queue<BasicBlock *> dijQueue;
-    for(auto ent : entrances)
+    for (auto ent : entrances)
     {
         blockDistances[ent] = 0;
         dijQueue.push(ent);
@@ -81,7 +95,7 @@ map<BasicBlock *, int> SolveDijkstraFront(set<BasicBlock *> entrances, set<Basic
         int currentDistance = blockDistances[currentBlock];
         int sucCount = 0;
         auto term = currentBlock->getTerminator();
-        for(int i = 0; i < term->getNumSuccessors(); i++)
+        for (int i = 0; i < term->getNumSuccessors(); i++)
         {
             auto suc = term->getSuccessor(i);
             if (blocks.find(suc) != blocks.end() || entrances.find(suc) != entrances.end())
