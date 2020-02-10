@@ -1,7 +1,7 @@
 #include "tik/tik.h"
+#include "AtlasUtil/Annotate.h"
 #include "tik/Exceptions.h"
 #include "tik/Util.h"
-#include "AtlasUtil/Annotate.h"
 #include <fstream>
 #include <iostream>
 #include <llvm/Bitcode/BitcodeReader.h>
