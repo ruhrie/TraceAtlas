@@ -29,8 +29,20 @@ int main(int argc, char *argv[])
     for (auto &[key, value] : j.items())
     {
         string index = key;
-        vector<int> kernel = value;
-        kernels[index] = kernel;
+        
+        nlohmann::json kernel;
+
+        if(!value[0].empty() && value[0].is_array())
+        {
+            //embedded layout
+            kernel = value[0];
+        }
+        else
+        {  
+            kernel = value;
+        }
+
+        kernels[index] = kernel.get<vector<int>>();
     }
 
     //load the llvm file
