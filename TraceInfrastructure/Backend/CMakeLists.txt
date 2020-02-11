@@ -6,7 +6,10 @@ set_target_properties(
 )
 
 target_link_libraries(AtlasBackend ${llvm_libs} ZLIB::ZLIB)
-target_include_directories(AtlasBackend PRIVATE ${TRACE_INC})
+target_include_directories(AtlasBackend PUBLIC ${TRACE_INC})
 install(TARGETS AtlasBackend
     ARCHIVE DESTINATION lib
 )
+
+file(GLOB GR ${TRACE_INC}/Backend/*.h)
+install (FILES ${GR} DESTINATION "include/Backend")

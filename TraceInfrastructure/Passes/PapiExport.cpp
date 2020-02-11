@@ -2,9 +2,9 @@
 #include "Passes/Annotate.h"
 #include "Passes/CommandArgs.h"
 #include "Passes/PapiIO.h"
-#include "llvm/IR/CFG.h"
 #include <fstream>
 #include <iostream>
+#include <llvm/IR/CFG.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instruction.h>

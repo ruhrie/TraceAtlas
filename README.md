@@ -2,7 +2,7 @@
 
 ## Overview
 
-TraceAtlas is a tool that generates a dynamic application trace from source code and extracts kernels from it. There is a paper currently under review by TPDS that goes into depth upon this process. Its title is "Automated Parallel Kernel Extraction from Dynamic Application Traces."
+TraceAtlas is a tool that generates a dynamic application trace from source code and extracts kernels from it. There is a paper currently under review by TPDS that goes into depth upon this process. Its title is "Automated Parallel Kernel Extraction from Dynamic Application Traces." It is available at [arxiv](https://arxiv.org/abs/2001.09995). If you use this work in your research please cite this paper.
 
 ## Building
 
@@ -11,10 +11,11 @@ TraceAtlas requires a few of libraries:
 * [papi](https://icl.utk.edu/papi/)
 * [nlohmann-json](https://github.com/nlohmann/json)
 * [zlib](https://www.zlib.net/)
+* [spdlog](https://github.com/gabime/spdlog)
 
-The json library is currently expected to be installed via [vcpkg](https://github.com/Microsoft/vcpkg) and a future update will also move LLVM to vcpkg.
+The json library, spdlog, and indicators are expected to be installed via [vcpkg](https://github.com/Microsoft/vcpkg). A future update will also move LLVM to vcpkg.
 
-To build, simply create a build directory and run cmake (at least 3.10) against it with your build tool of choice. A couple of small unit tests are created for the tik tool, which is still in heavy development. These can be disabled with the `ENABLE_TESTING` option. Doxygen documentation is also available under the `doc` target. It is not built by default.
+To build, simply create a build directory and run cmake (at least 3.10) against it with your build tool of choice. A couple of small unit tests are created. These can be disabled with the `ENABLE_TESTING` option. Note that they do not work properly on the release version due to optimization of the inputs. Doxygen documentation is also available under the `doc` target. It is not built by default.
 
 ## Tracing
 

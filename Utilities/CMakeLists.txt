@@ -2,7 +2,7 @@ add_executable(libDetector libDetector.cpp)
 
 set_target_properties(libDetector PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 target_compile_definitions(libDetector PUBLIC ${LLVM_DEFINITIONS})
-target_link_libraries(libDetector ${llvm_libs}  nlohmann_json nlohmann_json::nlohmann_json)
+target_link_libraries(libDetector ${llvm_libs}  nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
 target_include_directories(libDetector PRIVATE ${LLVM_INCLUDE_DIRS})
 
 install(TARGETS libDetector RUNTIME DESTINATION bin)
@@ -20,7 +20,7 @@ add_executable(dagExtractor DagExtractor.cpp)
 
 set_target_properties(dagExtractor PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 target_compile_definitions(dagExtractor PUBLIC ${LLVM_DEFINITIONS})
-target_link_libraries(dagExtractor ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json)
+target_link_libraries(dagExtractor ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json spdlog::spdlog spdlog::spdlog_header_only indica::indica)
 target_include_directories(dagExtractor PRIVATE ${LLVM_INCLUDE_DIRS})
 
 install(TARGETS dagExtractor RUNTIME DESTINATION bin)
@@ -35,7 +35,7 @@ target_include_directories(sizeEmitter PRIVATE ${LLVM_INCLUDE_DIRS})
 install(TARGETS sizeEmitter RUNTIME DESTINATION bin)
 
 add_executable(bow Bow.cpp)
-target_link_libraries(bow ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json)
+target_link_libraries(bow ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
 target_include_directories(bow PRIVATE ${LLVM_INCLUDE_DIRS})
 target_compile_definitions(bow PRIVATE ${LLVM_DEFINITIONS})
 
@@ -45,3 +45,12 @@ set_target_properties(bow
 )
 
 install(TARGETS bow RUNTIME DESTINATION bin)
+
+add_executable(pig Pig.cpp)
+
+set_target_properties(pig PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+target_compile_definitions(pig PUBLIC ${LLVM_DEFINITIONS})
+target_link_libraries(pig ${llvm_libs}  nlohmann_json nlohmann_json::nlohmann_json)
+target_include_directories(pig PRIVATE ${LLVM_INCLUDE_DIRS} ${TIK_INCLUDE} "include")
+
+install(TARGETS pig RUNTIME DESTINATION bin)
