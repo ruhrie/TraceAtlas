@@ -507,10 +507,13 @@ set<BasicBlock *> Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
             Function *f = checking->getParent();
             for (auto user : f->users())
             {
-                BasicBlock *par = cast<CallInst>(user)->getParent();
-                if (checkedConditions.find(par) == checkedConditions.end())
+                if (auto cb = dyn_cast<CallBase>(user))
                 {
-                    toCheck.push_back(par);
+                    BasicBlock *par = cb->getParent();
+                    if (checkedConditions.find(par) == checkedConditions.end())
+                    {
+                        toCheck.push_back(par);
+                    }
                 }
             }
         }
@@ -1462,14 +1465,17 @@ void Kernel::SplitBlocks(set<BasicBlock *> &blocks)
         {
             if (auto ci = dyn_cast<CallBase>(bi))
             {
-                Function *f = ci->getCalledFunction();
-                if (!f->empty())
+                if (!ci->isTerminator())
                 {
-                    int64_t id = GetBlockID(next);
-                    auto spl = next->splitBasicBlock(ci->getNextNode());
-                    SetBlockID(spl, id);
-                    blocks.insert(spl);
-                    toProcess.push_back(spl);
+                    Function *f = ci->getCalledFunction();
+                    if (f && !f->empty())
+                    {
+                        int64_t id = GetBlockID(next);
+                        auto spl = next->splitBasicBlock(ci->getNextNode());
+                        SetBlockID(spl, id);
+                        blocks.insert(spl);
+                        toProcess.push_back(spl);
+                    }
                 }
             }
         }
