@@ -78,12 +78,19 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 
     auto bodyPrequel = GetBodyPrequel(blocks, conditionalBlocks);
 
+    set<BasicBlock *> bblocks;
+    for (auto block : blocks)
+    {
+        if (conditionalBlocks.find(block) == conditionalBlocks.end())
+            bblocks.insert(block);
+    }
+
     //for the moment I am going to skip the epilogue/termination and get the prequel stuff working
     //its only necessary for recursion anyway
+    BuildBody(bblocks);
+    //BuildBody(get<0>(bodyPrequel));
 
-    BuildBody(get<0>(bodyPrequel));
-
-    BuildPrequel(get<1>(bodyPrequel));
+    //BuildPrequel(get<1>(bodyPrequel));
 
     BuildCondition(conditionalBlocks);
 
