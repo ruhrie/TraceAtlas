@@ -1,7 +1,6 @@
 #include "tik/Kernel.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Print.h"
-#include "tik/Dijkstra.h"
 #include "tik/Exceptions.h"
 #include "tik/InlineStruct.h"
 #include "tik/Metadata.h"
@@ -150,31 +149,8 @@ tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetPrePostConditionBlocks(se
     assert(exits.size() == 1);
     BasicBlock *currentBlock;
 
-    auto blockDistances = SolveDijkstraBack(exits, blocks);
-
-    int condDistance;
-    for (auto c : conditionalBlocks)
-    {
-        condDistance = blockDistances[c];
-    }
-
     set<BasicBlock *> pre;
     set<BasicBlock *> post;
-    for (auto b : blocks)
-    {
-        int dist = blockDistances[b];
-        assert(dist != INT32_MAX);
-        if (dist < condDistance)
-        {
-            //this implies that we are in the post
-            post.insert(b);
-        }
-        else if (dist > condDistance)
-        {
-            //this is before the condition
-            pre.insert(b);
-        }
-    }
 
     return {pre, post};
 }
@@ -602,7 +578,6 @@ tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(set<BasicBloc
     }
 
     //now that we have the entrances we can do dijkstras
-    auto blockDDD = DijkstraIII(conditionalBlocks, blocks);
     Function *parentFunc;
     for (auto c : conditionalBlocks)
     {
@@ -628,31 +603,6 @@ tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(set<BasicBloc
         if (isRecursive)
         {
             break;
-        }
-    }
-
-    if (isRecursive)
-    {
-        for (auto p : blockDDD)
-        {
-            if (p.second == INT32_MAX)
-            {
-                body.insert(p.first);
-            }
-            else
-            {
-                prequel.insert(p.first);
-            }
-        }
-    }
-    else
-    {
-        for (auto p : blockDDD)
-        {
-            if (p.second != INT32_MAX)
-            {
-                body.insert(p.first);
-            }
         }
     }
 
