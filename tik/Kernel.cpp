@@ -77,24 +77,11 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 
     GetConditional(blocks);
 
-    GetPrequel(blocks);
-
-    auto bodyPrequel = GetBodyPrequel(blocks);
-
-    set<BasicBlock *> bblocks;
-    for (auto block : blocks)
-    {
-        if (block != Conditional)
-        {
-            bblocks.insert(block);
-        }
-    }
-
-    //for the moment I am going to skip the epilogue/termination and get the prequel stuff working
-    //its only necessary for recursion anyway
-    BuildBody(bblocks);
+    //GetPrequel(blocks);
 
     BuildCondition();
+
+    BuildBody();
 
     BuildExit();
 
@@ -109,53 +96,6 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     MorphKernelFunction();
 
     ApplyMetadata();
-}
-
-tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetPrePostConditionBlocks(set<BasicBlock *> blocks, set<BasicBlock *> conditionalBlocks)
-{
-    set<BasicBlock *> exits;
-    for (auto block : blocks)
-    {
-        auto term = block->getTerminator();
-        for (int i = 0; i < term->getNumSuccessors(); i++)
-        {
-            auto suc = term->getSuccessor(i);
-            if (find(blocks.begin(), blocks.end(), suc) == blocks.end())
-            {
-                exits.insert(suc);
-            }
-        }
-        if (isa<ReturnInst>(term))
-        {
-            Function *f = block->getParent();
-            for (auto user : f->users())
-            {
-                if (auto ui = dyn_cast<CallInst>(user))
-                {
-                    if (find(blocks.begin(), blocks.end(), ui->getParent()) == blocks.end())
-                    {
-                        exits.insert(block);
-                        break;
-                    }
-                }
-                else if (auto ui = dyn_cast<InvokeInst>(user))
-                {
-                    if (find(blocks.begin(), blocks.end(), ui->getParent()) == blocks.end())
-                    {
-                        exits.insert(block);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    assert(exits.size() == 1);
-    BasicBlock *currentBlock;
-
-    set<BasicBlock *> pre;
-    set<BasicBlock *> post;
-
-    return {pre, post};
 }
 
 nlohmann::json Kernel::GetJson()
@@ -430,10 +370,16 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
 
     //now that we have these conditions we will go a depth search to see if it is a successor of itself
     set<BasicBlock *> validConditions;
+    map<BasicBlock *, set<BasicBlock *>> exitDict;
+    map<BasicBlock *, set<BasicBlock *>> recurseDict;
     for (auto cond : conditions)
     {
         bool exRecurses = false;
         bool exExit = false;
+
+        set<BasicBlock *> exitPaths;
+        set<BasicBlock *> recursePaths;
+
         //ideally one of them will recurse and one of them will exit
         for (auto suc : successors(cond))
         {
@@ -449,7 +395,7 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
                 BasicBlock *processing = toProcess.front();
                 toProcess.pop();
                 auto term = processing->getTerminator();
-                if(term->getNumSuccessors() == 0)
+                if (term->getNumSuccessors() == 0)
                 {
                     exit = true;
                 }
@@ -470,24 +416,30 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
                     }
                 }
             }
-            if(recurses && exit)
+            if (recurses && exit)
             {
                 //this did both which implies that it can't be the condition
                 continue;
             }
-            if(recurses)
+            if (recurses)
             {
                 exRecurses = true;
+                //this branch is the body branch
+                recursePaths.insert(suc);
             }
-            if(exit)
+            if (exit)
             {
                 exExit = true;
+                //and this one exits
+                exitPaths.insert(suc);
             }
         }
 
-        if(exExit && exRecurses)
+        if (exExit && exRecurses)
         {
             validConditions.insert(cond);
+            recurseDict[cond] = recursePaths;
+            exitDict[cond] = exitPaths;
         }
     }
 
@@ -499,95 +451,92 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
     for (auto b : validConditions)
     {
         Conditional = b;
-    }
-}
 
-tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(set<BasicBlock *> blocks)
-{
-    set<BasicBlock *> body;
-    set<BasicBlock *> prequel;
-    set<BasicBlock *> entrances;
-    for (BasicBlock *block : blocks)
-    {
-        for (BasicBlock *pred : predecessors(block))
+        auto exitPaths = exitDict[b];
+        auto recPaths = recurseDict[b];
+        //now process the body
         {
-            if (pred)
+            queue<BasicBlock *> processing;
+            set<BasicBlock *> visited;
+            for (auto block : recPaths)
             {
-                if (blocks.find(pred) == blocks.end() && pred != Conditional)
+                processing.push(block);
+                visited.insert(block);
+            }
+            for (auto c : validConditions)
+            {
+                visited.insert(c);
+            }
+            while (!processing.empty())
+            {
+                auto a = processing.front();
+                processing.pop();
+                visited.insert(a);
+                if (find(Body.begin(), Body.end(), a) == Body.end())
                 {
-                    entrances.insert(block);
+                    if (blocks.find(a) != blocks.end())
+                    {
+                        Body.push_back(a);
+                    }
+                }
+                for (auto suc : successors(a))
+                {
+                    if (validConditions.find(suc) == validConditions.end())
+                    {
+                        if (visited.find(suc) == visited.end())
+                        {
+                            processing.push(suc);
+                        }
+                    }
                 }
             }
         }
 
-        //we also check the entry blocks
-        Function *parent = block->getParent();
-        BasicBlock *entry = &parent->getEntryBlock();
-        if (block == entry)
+        //and the terminus
         {
-            //potential entrance
-            bool extUse = false;
-            for (auto user : parent->users())
+            queue<BasicBlock *> processing;
+            set<BasicBlock *> visited;
+            for (auto block : exitPaths)
             {
-                Instruction *ci = cast<Instruction>(user);
-                BasicBlock *parentBlock = ci->getParent();
-                if (blocks.find(parentBlock) == blocks.end() && parentBlock != Conditional)
+                processing.push(block);
+                visited.insert(block);
+            }
+            while (!processing.empty())
+            {
+                auto a = processing.front();
+                processing.pop();
+                visited.insert(a);
+                if (find(Termination.begin(), Termination.end(), a) == Termination.end())
                 {
-                    extUse = true;
-                    break;
+                    if (blocks.find(a) != blocks.end())
+                    {
+                        throw TikException("Detected terminus block");
+                        Termination.push_back(a);
+                    }
                 }
-            }
-            if (extUse)
-            {
-                entrances.insert(block);
-            }
-        }
-    }
-    if (entrances.size() != 1)
-    {
-        throw TikException("Kernel Exception: tik only supports single entrance kernels");
-    }
-
-    //now that we have the entrances we can do dijkstras
-    Function *parentFunc;
-    parentFunc = Conditional->getParent();
-
-    bool isRecursive = false;
-
-    for (auto block : blocks)
-    {
-        for (auto bi = block->begin(); bi != block->end(); bi++)
-        {
-            if (auto ci = dyn_cast<CallBase>(bi))
-            {
-                Function *f = ci->getCalledFunction();
-                if (f == parentFunc)
+                for (auto suc : successors(a))
                 {
-                    isRecursive = true;
-                    break;
+                    if (validConditions.find(suc) == validConditions.end())
+                    {
+                        if (visited.find(suc) == visited.end())
+                        {
+                            processing.push(suc);
+                        }
+                    }
                 }
             }
         }
-        if (isRecursive)
-        {
-            break;
-        }
     }
-
-    for (auto ent : entrances)
-    {
-        EnterTarget = ent;
-    }
-
-    return {body, prequel};
 }
 
 void Kernel::BuildCondition()
 {
     Conditional = CloneBasicBlock(Conditional, VMap, "", KernelFunction);
 }
-void Kernel::BuildBody(std::set<llvm::BasicBlock *> blocks)
+void Kernel::BuildBody()
 {
+    auto blocks = Body;
+    Body.clear();
     for (auto block : blocks)
     {
         int64_t id = GetBlockID(block);
@@ -654,7 +603,7 @@ void Kernel::BuildBody(std::set<llvm::BasicBlock *> blocks)
                             if (CallInst *callUse = dyn_cast<CallInst>(user))
                             {
                                 BasicBlock *parent = callUse->getParent();
-                                if (find(blocks.begin(), blocks.end(), parent) != blocks.end())
+                                if (find(Body.begin(), Body.end(), parent) != Body.end())
                                 {
                                     funcUses.push_back(parent);
                                 }
