@@ -38,7 +38,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     {
         if (reservedNames.find(name) != reservedNames.end())
         {
-            throw TikException("Kernel names must be unique!");
+            throw TikException("Kernel Error: Kernel names must be unique!");
         }
         Name = name;
     }
@@ -66,11 +66,22 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         }
     }
 
-    //order should be getConditional (find the condition)
-    //then find body/prequel
-    //then find epilogue/termination
-    //then we can go to exits/init/memory like normal
-
+    //this is a recursion check, just so we can enumerate issues
+    for(auto block : blocks)
+    {
+        Function *f = block->getParent();
+        for(auto bi = block->begin(); bi != block->end(); bi++)
+        {
+            if(CallBase *cb = dyn_cast<CallBase>(bi))
+            {
+                if(cb->getCalledFunction() == f)
+                {
+                    throw TikException("Tik Error: Recursion is unimplemented")
+                }
+            }
+        }
+    }
+    
     //SplitBlocks(blocks);
 
     GetEntrances(blocks);
@@ -241,7 +252,7 @@ void Kernel::MorphKernelFunction()
         {
             if (GlobalMap[ExternalValues[i]] == NULL)
             {
-                throw TikException("External Value not found in GlobalMap.");
+                throw TikException("Tik Error: External Value not found in GlobalMap.");
             }
             coveredGlobals.insert(GlobalMap[ExternalValues[i]]);
             auto b = initBuilder.CreateStore(KernelFunction->arg_begin() + i, GlobalMap[ExternalValues[i]]);
@@ -445,7 +456,7 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
 
     if (validConditions.size() != 1)
     {
-        throw TikException("Only supports single condition kernels");
+        throw TikException("Tik Error: Only supports single condition kernels");
     }
 
     for (auto b : validConditions)
@@ -510,7 +521,7 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
                 {
                     if (blocks.find(a) != blocks.end())
                     {
-                        throw TikException("Detected terminus block");
+                        throw TikException("Tik Error: Detected terminus block");
                         Termination.push_back(a);
                     }
                 }
@@ -610,7 +621,7 @@ void Kernel::BuildBody()
                             }
                             else
                             {
-                                throw TikException("Only expected callInst");
+                                throw TikException("Tik Error: Only expected callInst");
                             }
                         }
                         //now that we know that we can create the phi for where to branch to
@@ -681,7 +692,7 @@ void Kernel::BuildBody()
                     else
                     {
                         //we already inlined this one and need to add the appropriate entries to teh argnodes and the switch instruction
-                        throw TikException("Not Implemented");
+                        throw TikException("Tik Error: Not Implemented");
                     }
                 }
             }
@@ -765,7 +776,7 @@ void Kernel::BuildPrequel(std::set<llvm::BasicBlock *> blocks)
                             }
                             else
                             {
-                                throw TikException("Only expected callInst");
+                                throw TikException("Tik Error Only expected callInst");
                             }
                         }
                         //now that we know that we can create the phi for where to branch to
@@ -836,7 +847,7 @@ void Kernel::BuildPrequel(std::set<llvm::BasicBlock *> blocks)
                     else
                     {
                         //we already inlined this one and need to add the appropriate entries to teh argnodes and the switch instruction
-                        throw TikException("Not Implemented");
+                        throw TikException("Tik Error: Not Implemented");
                     }
                 }
             }
@@ -890,13 +901,13 @@ void Kernel::GetInitInsts()
                                 }
                                 else
                                 {
-                                    throw TikException("Unimplemented");
+                                    throw TikException("Tik Error: Not Implemented");
                                 }
                             }
                         }
                         else
                         {
-                            throw TikException("Unimplemented");
+                            throw TikException("Tik Error: Not Implemented");
                         }
                     }
                 }
@@ -1112,90 +1123,6 @@ void Kernel::BuildExit()
 
     IRBuilder<> exitBuilder(Exit);
     auto a = exitBuilder.CreateRetVoid();
-    /*
-    set<BasicBlock *> exits;
-    for (auto block : Body)
-    {
-        Instruction *term = block->getTerminator();
-        if (BranchInst *brInst = dyn_cast<BranchInst>(term))
-        {
-            // put the successors of the exit block in a unique-entry vector
-            for (unsigned int i = 0; i < brInst->getNumSuccessors(); i++)
-            {
-                BasicBlock *succ = brInst->getSuccessor(i);
-                if (find(Body.begin(), Body.end(), succ) == Body.end())
-                {
-                    exits.insert(succ);
-                    ExitTarget[exitId++] = succ;
-                }
-            }
-        }
-        else if (ReturnInst *rInst = dyn_cast<ReturnInst>(term))
-        {
-            Function *parentFunction = block->getParent();
-            vector<BasicBlock *> internalUse;
-            vector<BasicBlock *> externalUse;
-            for (auto user : parentFunction->users())
-            {
-                if (CallInst *ci = dyn_cast<CallInst>(user))
-                {
-                    BasicBlock *parent = ci->getParent();
-                    if (find(Body.begin(), Body.end(), parent) == Body.end())
-                    {
-                        externalUse.push_back(parent);
-                    }
-                    else
-                    {
-                        internalUse.push_back(parent);
-                    }
-                }
-                else
-                {
-                    throw TikException("Function not called from callinst. Unexpected behavior.");
-                }
-            }
-            if (internalUse.size() != 0 && externalUse.size() == 0)
-            {
-                //use is internal so ignore
-            }
-            else if (internalUse.size() == 0 && externalUse.size() != 0)
-            {
-                for (auto a : externalUse)
-                {
-                    exits.insert(a);
-                    ExitTarget[exitId++] = a;
-                }
-            }
-            else if (internalUse.size() != 0 && externalUse.size() != 0)
-            {
-                throw TikException("Function called both externally and internally. Unimplemented.")
-            }
-        }
-        else if (SwitchInst *sw = dyn_cast<SwitchInst>(term))
-        {
-            for (unsigned int i = 0; i < sw->getNumSuccessors(); i++)
-            {
-                BasicBlock *succ = sw->getSuccessor(i);
-                if (find(Body.begin(), Body.end(), succ) == Body.end())
-                {
-                    exits.insert(succ);
-                    ExitTarget[exitId++] = succ;
-                }
-            }
-        }
-        else
-        {
-            throw TikException("Not Implemented");
-        }
-    }
-
-    // we should have exactly one successor to our tik representation because we assume there are no embedded loops
-    if (exits.size() != 1)
-    {
-        throw TikException("Kernel Exception: kernels must have one exit");
-    }
-    assert(exits.size() == 1);
-    //ExitTarget[0] = exits[0];*/
 }
 
 //if the result is one entry long it is a value. Otherwise its a list of instructions
@@ -1218,18 +1145,13 @@ vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blo
             //we have a conditional so select between return vals
             //still need to check if successors are valid though
             Value *cond = brInst->getCondition();
-            if (brInst->getNumSuccessors() != 2)
-            {
-                //sanity check
-                throw TikException("Unexpected number of brInst successors");
-            }
             auto suc0 = brInst->getSuccessor(0);
             auto suc1 = brInst->getSuccessor(1);
             bool valid0 = find(blocks.begin(), blocks.end(), suc0) != blocks.end();
             bool valid1 = find(blocks.begin(), blocks.end(), suc1) != blocks.end();
             if (!(valid0 || valid1))
             {
-                throw TikException("Branch instruction with no valid successors reached");
+                throw TikException("Tik Error: Branch instruction with no valid successors reached");
             }
             Value *c0 = NULL;
             Value *c1 = NULL;
@@ -1270,11 +1192,11 @@ vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blo
     }
     else
     {
-        throw TikException("Not Implemented");
+        throw TikException("Tik Error: Not Implemented");
     }
     if (result.size() == 0)
     {
-        throw TikException("Return instruction tree must have at least one result");
+        throw TikException("Tik Error: Return instruction tree must have at least one result");
     }
     return result;
 }
