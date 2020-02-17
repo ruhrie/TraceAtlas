@@ -73,25 +73,28 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 
     SplitBlocks(blocks);
 
-    set<BasicBlock *> conditionalBlocks = GetConditional(blocks);
+    GetEntrances(blocks);
 
-    auto bodyPrequel = GetBodyPrequel(blocks, conditionalBlocks);
+    GetConditional(blocks);
+
+    GetPrequel(blocks);
+
+    auto bodyPrequel = GetBodyPrequel(blocks);
 
     set<BasicBlock *> bblocks;
     for (auto block : blocks)
     {
-        if (conditionalBlocks.find(block) == conditionalBlocks.end())
+        if (block != Conditional)
+        {
             bblocks.insert(block);
+        }
     }
 
     //for the moment I am going to skip the epilogue/termination and get the prequel stuff working
     //its only necessary for recursion anyway
     BuildBody(bblocks);
-    //BuildBody(get<0>(bodyPrequel));
 
-    //BuildPrequel(get<1>(bodyPrequel));
-
-    BuildCondition(conditionalBlocks);
+    BuildCondition();
 
     BuildExit();
 
@@ -410,7 +413,7 @@ void Kernel::MorphKernelFunction()
     }
 }
 
-set<BasicBlock *> Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
+void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
 {
     vector<Instruction *> result;
     set<BasicBlock *> exitBlocks;
@@ -503,21 +506,11 @@ set<BasicBlock *> Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
 
     for (auto cond : conditionBlocks)
     {
-        auto term = cond->getTerminator();
-        if (BranchInst *i = cast<BranchInst>(term))
-        {
-            LoopCondition = i->getCondition();
-        }
-        else
-        {
-            throw TikException("Non expected condition");
-        }
+        Conditional = cond;
     }
-
-    return conditionBlocks;
 }
 
-tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(set<BasicBlock *> blocks, set<BasicBlock *> conditionalBlocks)
+tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(set<BasicBlock *> blocks)
 {
     set<BasicBlock *> body;
     set<BasicBlock *> prequel;
@@ -528,7 +521,7 @@ tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(set<BasicBloc
         {
             if (pred)
             {
-                if (blocks.find(pred) == blocks.end() && conditionalBlocks.find(pred) == conditionalBlocks.end())
+                if (blocks.find(pred) == blocks.end() && pred != Conditional)
                 {
                     entrances.insert(block);
                 }
@@ -546,7 +539,7 @@ tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(set<BasicBloc
             {
                 Instruction *ci = cast<Instruction>(user);
                 BasicBlock *parentBlock = ci->getParent();
-                if (blocks.find(parentBlock) == blocks.end() && conditionalBlocks.find(parentBlock) == conditionalBlocks.end())
+                if (blocks.find(parentBlock) == blocks.end() && parentBlock != Conditional)
                 {
                     extUse = true;
                     break;
@@ -565,10 +558,7 @@ tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(set<BasicBloc
 
     //now that we have the entrances we can do dijkstras
     Function *parentFunc;
-    for (auto c : conditionalBlocks)
-    {
-        parentFunc = c->getParent();
-    }
+    parentFunc = Conditional->getParent();
 
     bool isRecursive = false;
 
@@ -600,13 +590,9 @@ tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(set<BasicBloc
     return {body, prequel};
 }
 
-void Kernel::BuildCondition(std::set<llvm::BasicBlock *> blocks)
+void Kernel::BuildCondition()
 {
-    assert(blocks.size() == 1);
-    for (auto block : blocks)
-    {
-        Conditional = CloneBasicBlock(block, VMap, "", KernelFunction);
-    }
+    Conditional = CloneBasicBlock(Conditional, VMap, "", KernelFunction);
 }
 void Kernel::BuildBody(std::set<llvm::BasicBlock *> blocks)
 {
@@ -1422,5 +1408,78 @@ void Kernel::SplitBlocks(set<BasicBlock *> &blocks)
                 }
             }
         }
+    }
+}
+
+void Kernel::GetPrequel(set<BasicBlock *> &blocks)
+{
+    queue<BasicBlock *> toProcess;
+    set<BasicBlock *> pushedBlocks;
+    for (auto b : Entrances)
+    {
+        if (b != Conditional)
+        {
+            toProcess.push(b);
+            pushedBlocks.insert(b);
+        }
+    }
+
+    while (toProcess.size() != 0)
+    {
+        BasicBlock *processing = toProcess.front();
+        toProcess.pop();
+        for (auto b : successors(processing))
+        {
+            if (b != Conditional && pushedBlocks.find(b) == pushedBlocks.end())
+            {
+                toProcess.push(b);
+                pushedBlocks.insert(b);
+            }
+        }
+        Prequel.push_back(processing);
+    }
+}
+
+void Kernel::GetEntrances(set<BasicBlock *> &blocks)
+{
+    for (BasicBlock *block : blocks)
+    {
+        for (BasicBlock *pred : predecessors(block))
+        {
+            if (pred)
+            {
+                if (blocks.find(pred) == blocks.end())
+                {
+                    Entrances.insert(block);
+                }
+            }
+        }
+
+        //we also check the entry blocks
+        Function *parent = block->getParent();
+        BasicBlock *entry = &parent->getEntryBlock();
+        if (block == entry)
+        {
+            //potential entrance
+            bool extUse = false;
+            for (auto user : parent->users())
+            {
+                Instruction *ci = cast<Instruction>(user);
+                BasicBlock *parentBlock = ci->getParent();
+                if (blocks.find(parentBlock) == blocks.end())
+                {
+                    extUse = true;
+                    break;
+                }
+            }
+            if (extUse)
+            {
+                Entrances.insert(block);
+            }
+        }
+    }
+    if (Entrances.size() != 1)
+    {
+        throw TikException("Kernel Exception: tik only supports single entrance kernels");
     }
 }
