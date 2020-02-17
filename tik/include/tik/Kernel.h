@@ -124,4 +124,6 @@ private:
 
     void Repipe();
     void SplitBlocks(std::set<llvm::BasicBlock *> &blocks);
+
+    std::set<llvm::BasicBlock *> conditionExits;
 };

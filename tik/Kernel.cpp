@@ -71,7 +71,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     //then find epilogue/termination
     //then we can go to exits/init/memory like normal
 
-    SplitBlocks(blocks);
+    //SplitBlocks(blocks);
 
     GetEntrances(blocks);
 
@@ -415,98 +415,90 @@ void Kernel::MorphKernelFunction()
 
 void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
 {
-    vector<Instruction *> result;
-    set<BasicBlock *> exitBlocks;
+    set<BasicBlock *> conditions;
+
+    //start by marking all blocks that have conditions
     for (auto block : blocks)
     {
         auto term = block->getTerminator();
         int sucCount = term->getNumSuccessors();
-        for (int i = 0; i < sucCount; i++)
+        if (sucCount > 1)
         {
-            BasicBlock *suc = term->getSuccessor(i);
-            auto term = suc->getTerminator();
-            if (find(blocks.begin(), blocks.end(), suc) == blocks.end())
+            conditions.insert(block);
+        }
+    }
+
+    //now that we have these conditions we will go a depth search to see if it is a successor of itself
+    set<BasicBlock *> validConditions;
+    for (auto cond : conditions)
+    {
+        bool exRecurses = false;
+        bool exExit = false;
+        //ideally one of them will recurse and one of them will exit
+        for (auto suc : successors(cond))
+        {
+            queue<BasicBlock *> toProcess;
+            set<BasicBlock *> checked;
+            toProcess.push(suc);
+            checked.insert(suc);
+            checked.insert(cond);
+            bool recurses = false;
+            bool exit = false;
+            while (!toProcess.empty())
             {
-                exitBlocks.insert(block);
+                BasicBlock *processing = toProcess.front();
+                toProcess.pop();
+                auto term = processing->getTerminator();
+                if(term->getNumSuccessors() == 0)
+                {
+                    exit = true;
+                }
+                for (auto succ : successors(processing))
+                {
+                    if (succ == cond)
+                    {
+                        recurses = true;
+                    }
+                    if (blocks.find(succ) == blocks.end())
+                    {
+                        exit = true;
+                    }
+                    if (checked.find(succ) == checked.end() && blocks.find(succ) != blocks.end())
+                    {
+                        toProcess.push(succ);
+                        checked.insert(succ);
+                    }
+                }
+            }
+            if(recurses && exit)
+            {
+                //this did both which implies that it can't be the condition
                 continue;
             }
-            if (auto ci = dyn_cast<ReturnInst>(term))
+            if(recurses)
             {
-                auto f = suc->getParent();
-                for (auto user : f->users())
-                {
-                    if (auto ui = dyn_cast<CallInst>(user))
-                    {
-                        if (find(blocks.begin(), blocks.end(), ui->getParent()) == blocks.end())
-                        {
-                            exitBlocks.insert(block);
-                            break;
-                        }
-                    }
-                    else if (auto ui = dyn_cast<InvokeInst>(user))
-                    {
-                        if (find(blocks.begin(), blocks.end(), ui->getParent()) == blocks.end())
-                        {
-                            exitBlocks.insert(block);
-                            break;
-                        }
-                    }
-                }
+                exRecurses = true;
             }
+            if(exit)
+            {
+                exExit = true;
+            }
+        }
+
+        if(exExit && exRecurses)
+        {
+            validConditions.insert(cond);
         }
     }
 
-    set<BasicBlock *> checkedConditions;
-    vector<BasicBlock *> toCheck(exitBlocks.begin(), exitBlocks.end());
-    set<BasicBlock *> conditionBlocks;
-    while (toCheck.size() != 0)
-    {
-        BasicBlock *checking = toCheck.back();
-        toCheck.pop_back();
-        checkedConditions.insert(checking);
-        Instruction *term = checking->getTerminator();
-        if (term->getNumSuccessors() > 1) //this works for most terminators
-        {
-            //this is a condition
-            int64_t id = GetBlockID(checking);
-            auto split = checking->splitBasicBlock(term);
-            SetBlockID(split, id);
-            blocks.insert(split);
-            conditionBlocks.insert(split);
-        }
-        else if (term->getNumSuccessors() == 0) //this handles the return
-        {
-            Function *f = checking->getParent();
-            for (auto user : f->users())
-            {
-                if (auto cb = dyn_cast<CallBase>(user))
-                {
-                    BasicBlock *par = cb->getParent();
-                    if (checkedConditions.find(par) == checkedConditions.end())
-                    {
-                        toCheck.push_back(par);
-                    }
-                }
-            }
-        }
-        else //must be a single successor
-        {
-            auto suc = term->getSuccessor(0);
-            if (checkedConditions.find(suc) == checkedConditions.end())
-            {
-                toCheck.push_back(suc);
-            }
-        }
-    }
-
-    if (conditionBlocks.size() != 1)
+    if (validConditions.size() != 1)
     {
         throw TikException("Only supports single condition kernels");
     }
 
-    for (auto cond : conditionBlocks)
+    for (auto b : validConditions)
     {
-        Conditional = cond;
+        Conditional = b;
     }
 }
 
