@@ -185,13 +185,6 @@ nlohmann::json Kernel::GetJson()
             j["Prequel"].push_back(GetStrings(b));
         }
     }
-    if (Epilogue.size() != 0)
-    {
-        for (auto b : Epilogue)
-        {
-            j["Epilogue"].push_back(GetStrings(b));
-        }
-    }
     if (Termination.size() != 0)
     {
         for (auto b : Termination)
@@ -275,13 +268,6 @@ void Kernel::MorphKernelFunction()
     }
     Prequel = newPrequel;
     vector<BasicBlock *> newEpilogue;
-    for (auto b : Epilogue)
-    {
-        auto cb = CloneBasicBlock(b, localVMap, "", newFunc);
-        newEpilogue.push_back(cb);
-        localVMap[b] = cb;
-    }
-    Epilogue = newEpilogue;
     vector<BasicBlock *> newTermination;
     for (auto b : Termination)
     {
