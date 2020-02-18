@@ -1,15 +1,15 @@
 #include "profile.h"
-#include "EncodeDetect.h"
 #include "AtlasUtil/Annotate.h"
+#include "EncodeDetect.h"
 #include <iostream>
 
 using namespace std;
 using namespace llvm;
 
-map<int, map<string, int>> rMap;
-
-map<int, map<string, int>> ProfileKernels(std::map<int, std::set<int>> kernels, Module *M)
+map<string, map<string, map<string, int>>> ProfileKernels(std::map<int, std::set<int>> kernels, Module *M)
 {
+    map<int, map<string, int>> rMap; //dictionary which keeps track of the actual information per block
+
     //annotate it with the same algorithm used in the tracer
     Annotate(M);
     //start by profiling every basic block
@@ -17,30 +17,36 @@ map<int, map<string, int>> ProfileKernels(std::map<int, std::set<int>> kernels, 
     {
         for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
         {
-            ProfileBlock(cast<BasicBlock>(BB));
+            ProfileBlock(cast<BasicBlock>(BB), rMap);
         }
     }
 
-    map<int, map<string, int>> result;
+    map<string, map<string, map<string, int>>> fin;
 
-    for(auto kernel : kernels)
+    map<string, map<string, int>> cPigData; //from the trace
+    map<string, map<string, int>> pigData;  //from the bitcode
+    for (auto kernel : kernels)
     {
         int index = kernel.first;
+        string iString = to_string(index);
         auto blocks = kernel.second;
-        for(auto block : blocks)
+        for (auto block : blocks)
         {
             int count = blockCount[block];
-            for(auto pair : rMap[block])
+            for (auto pair : rMap[block])
             {
-                result[index][pair.first] += pair.second * count;
+                cPigData[iString][pair.first] += pair.second * count;
+                pigData[iString][pair.first] += pair.second;
             }
         }
     }
-    
-    return result;
+
+    fin["CPig"] = cPigData;
+    fin["Pig"] = pigData;
+    return fin;
 }
 
-void ProfileBlock(BasicBlock *BB)
+void ProfileBlock(BasicBlock *BB, map<int, map<string, int>> &rMap)
 {
     int64_t id = GetBlockID(BB);
     for (auto bi = BB->begin(); bi != BB->end(); bi++)
