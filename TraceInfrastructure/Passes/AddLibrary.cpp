@@ -15,15 +15,10 @@ namespace DashTracer
         MDNode *libName;
         bool AddLibrary::runOnFunction(Function &F)
         {
-            if (MDNode *N = F.getMetadata("libs"))
-            {
-                //ignore
-            }
-            else
+            if (!F.empty())
             {
                 F.setMetadata("libs", libName);
             }
-
             return false;
         }
 

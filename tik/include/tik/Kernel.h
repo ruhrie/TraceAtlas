@@ -20,28 +20,23 @@ public:
     llvm::BasicBlock *EnterTarget;
     std::vector<llvm::BasicBlock *> Body;
     std::vector<llvm::BasicBlock *> Prequel;
-    std::vector<llvm::BasicBlock *> Epilogue;
     std::vector<llvm::BasicBlock *> Termination;
     llvm::BasicBlock *Init = NULL;
     llvm::BasicBlock *Exit = NULL;
     llvm::Function *MemoryRead = NULL;
     llvm::Function *MemoryWrite = NULL;
-    /// @brief  Pointer to the current kernel function.
-    ///
-    /// This pointer contains all basic blocks of the current tik representation being built.
     llvm::Function *KernelFunction = NULL;
 
 private:
+
+    std::set<llvm::BasicBlock*> Entrances;
+    void GetEntrances(std::set<llvm::BasicBlock*>&);
+
     /// @brief  Maps old instructions to new instructions.
     ///
     /// Special LLVM map containing old instructions (from the original bitcode) as keys and new instructions as values.
     /// The kernel function's values will be remapped according to this data structure at the end of the Kernel class.
     llvm::ValueToValueMapTy VMap;
-
-    /// @brief  Instruction specifying the condition of the loop.
-    ///
-    /// When generating the condition in the Loop block at the end of MorphKernelFunction, this global variable is used as a key in the global VMap to get the proper operand for the new branch instruction.
-    llvm::Value *LoopCondition = NULL;
 
     /// @brief  Map containing old load and store instructions as keys and new global pointers as values.
     ///
@@ -67,16 +62,7 @@ private:
     /// Later, the condition's user instructions are evaluated, and those that are eligible to be in the tik representation are cloned into the VMap.
     /// Eligible instructions are those that belong to the kernel's original basic blocks, and not eligible otherwise.
     /// This function assumes that we will only find one conditional exit instruction, because we assume that the kernel will not have embedded loops in it.
-    std::set<llvm::BasicBlock *> GetConditional(std::set<llvm::BasicBlock *> &blocks);
-
-    /// @brief  Extracts instructions that will make up the core computations of the kernel.
-    ///
-    /// The function finds our first block, or entrance block, of the kernel.
-    /// Then it searches the instruction path of that block for any function calls, and creates representations of those calls in the tik module.
-    /// This code, as of this version, does not support internal loops.
-    ///
-    /// @param  blocks      Vector of basic blocks in the module passed to the constructor.
-    std::tuple<std::set<llvm::BasicBlock *>, std::set<llvm::BasicBlock *>> GetBodyPrequel(std::set<llvm::BasicBlock *> blocks, std::set<llvm::BasicBlock *> conditionalBlocks);
+    void GetConditional(std::set<llvm::BasicBlock *> &blocks);
 
     /// @brief  Find all instructions not initialized in the kernel representation.
     ///
@@ -92,7 +78,7 @@ private:
     /// GlobalMap maps relative pointers from load and store instructions to globally defined pointers.
     /// Every time we use one of these pointers in the body, we have to store to its global pointer.
     /// Finally, we find all instructions not belonging to the parent block and remove them.
-    void GetMemoryFunctions(void);
+    void GetMemoryFunctions();
 
     /// @brief  Creates a new kernel function with appropriate input args, assigns inputs to global pointers, and remaps the new function.
     ///
@@ -103,19 +89,19 @@ private:
 
     std::vector<llvm::Value *> BuildReturnTree(llvm::BasicBlock *bb, std::vector<llvm::BasicBlock *> blocks);
 
-    std::vector<llvm::Instruction *> getInstructionPath(llvm::BasicBlock *start, std::vector<llvm::BasicBlock *> validBlocks);
+    
     llvm::BasicBlock *getPathMerge(llvm::BasicBlock *start);
-    std::vector<llvm::Instruction *> GetPathInstructions(llvm::BasicBlock *start, llvm::BasicBlock *end);
-    std::tuple<std::set<llvm::BasicBlock *>, std::set<llvm::BasicBlock *>> GetPrePostConditionBlocks(std::set<llvm::BasicBlock *> blocks, std::set<llvm::BasicBlock *> conditionalBlocks);
 
     void ApplyMetadata();
 
     std::vector<InlineStruct> InlinedFunctions;
 
-    void BuildCondition(std::set<llvm::BasicBlock *>);
-    void BuildBody(std::set<llvm::BasicBlock *>);
+    void BuildCondition();
+    void BuildBody();
     void BuildPrequel(std::set<llvm::BasicBlock *>);
     void BuildExit();
+
+    void GetPrequel(std::set<llvm::BasicBlock*>&);
 
     void Repipe();
     void SplitBlocks(std::set<llvm::BasicBlock *> &blocks);

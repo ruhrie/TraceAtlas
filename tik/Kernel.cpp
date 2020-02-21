@@ -1,7 +1,6 @@
 #include "tik/Kernel.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Print.h"
-#include "tik/Dijkstra.h"
 #include "tik/Exceptions.h"
 #include "tik/InlineStruct.h"
 #include "tik/Metadata.h"
@@ -39,7 +38,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     {
         if (reservedNames.find(name) != reservedNames.end())
         {
-            throw TikException("Kernel names must be unique!");
+            throw TikException("Kernel Error: Kernel names must be unique!");
         }
         Name = name;
     }
@@ -67,25 +66,33 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         }
     }
 
-    //order should be getConditional (find the condition)
-    //then find body/prequel
-    //then find epilogue/termination
-    //then we can go to exits/init/memory like normal
+    //this is a recursion check, just so we can enumerate issues
+    for(auto block : blocks)
+    {
+        Function *f = block->getParent();
+        for(auto bi = block->begin(); bi != block->end(); bi++)
+        {
+            if(CallBase *cb = dyn_cast<CallBase>(bi))
+            {
+                if(cb->getCalledFunction() == f)
+                {
+                    throw TikException("Tik Error: Recursion is unimplemented")
+                }
+            }
+        }
+    }
+    
+    //SplitBlocks(blocks);
 
-    SplitBlocks(blocks);
+    GetEntrances(blocks);
 
-    set<BasicBlock *> conditionalBlocks = GetConditional(blocks);
+    GetConditional(blocks);
 
-    auto bodyPrequel = GetBodyPrequel(blocks, conditionalBlocks);
+    //GetPrequel(blocks);
 
-    //for the moment I am going to skip the epilogue/termination and get the prequel stuff working
-    //its only necessary for recursion anyway
+    BuildCondition();
 
-    BuildBody(get<0>(bodyPrequel));
-
-    BuildPrequel(get<1>(bodyPrequel));
-
-    BuildCondition(conditionalBlocks);
+    BuildBody();
 
     BuildExit();
 
@@ -100,76 +107,6 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     MorphKernelFunction();
 
     ApplyMetadata();
-}
-
-tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetPrePostConditionBlocks(set<BasicBlock *> blocks, set<BasicBlock *> conditionalBlocks)
-{
-    set<BasicBlock *> exits;
-    for (auto block : blocks)
-    {
-        auto term = block->getTerminator();
-        for (int i = 0; i < term->getNumSuccessors(); i++)
-        {
-            auto suc = term->getSuccessor(i);
-            if (find(blocks.begin(), blocks.end(), suc) == blocks.end())
-            {
-                exits.insert(suc);
-            }
-        }
-        if (isa<ReturnInst>(term))
-        {
-            Function *f = block->getParent();
-            for (auto user : f->users())
-            {
-                if (auto ui = dyn_cast<CallInst>(user))
-                {
-                    if (find(blocks.begin(), blocks.end(), ui->getParent()) == blocks.end())
-                    {
-                        exits.insert(block);
-                        break;
-                    }
-                }
-                else if (auto ui = dyn_cast<InvokeInst>(user))
-                {
-                    if (find(blocks.begin(), blocks.end(), ui->getParent()) == blocks.end())
-                    {
-                        exits.insert(block);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    assert(exits.size() == 1);
-    BasicBlock *currentBlock;
-
-    auto blockDistances = SolveDijkstraBack(exits, blocks);
-
-    int condDistance;
-    for (auto c : conditionalBlocks)
-    {
-        condDistance = blockDistances[c];
-    }
-
-    set<BasicBlock *> pre;
-    set<BasicBlock *> post;
-    for (auto b : blocks)
-    {
-        int dist = blockDistances[b];
-        assert(dist != INT32_MAX);
-        if (dist < condDistance)
-        {
-            //this implies that we are in the post
-            post.insert(b);
-        }
-        else if (dist > condDistance)
-        {
-            //this is before the condition
-            pre.insert(b);
-        }
-    }
-
-    return {pre, post};
 }
 
 nlohmann::json Kernel::GetJson()
@@ -200,13 +137,6 @@ nlohmann::json Kernel::GetJson()
         for (auto b : Prequel)
         {
             j["Prequel"].push_back(GetStrings(b));
-        }
-    }
-    if (Epilogue.size() != 0)
-    {
-        for (auto b : Epilogue)
-        {
-            j["Epilogue"].push_back(GetStrings(b));
         }
     }
     if (Termination.size() != 0)
@@ -292,13 +222,6 @@ void Kernel::MorphKernelFunction()
     }
     Prequel = newPrequel;
     vector<BasicBlock *> newEpilogue;
-    for (auto b : Epilogue)
-    {
-        auto cb = CloneBasicBlock(b, localVMap, "", newFunc);
-        newEpilogue.push_back(cb);
-        localVMap[b] = cb;
-    }
-    Epilogue = newEpilogue;
     vector<BasicBlock *> newTermination;
     for (auto b : Termination)
     {
@@ -329,7 +252,7 @@ void Kernel::MorphKernelFunction()
         {
             if (GlobalMap[ExternalValues[i]] == NULL)
             {
-                throw TikException("External Value not found in GlobalMap.");
+                throw TikException("Tik Error: External Value not found in GlobalMap.");
             }
             coveredGlobals.insert(GlobalMap[ExternalValues[i]]);
             auto b = initBuilder.CreateStore(KernelFunction->arg_begin() + i, GlobalMap[ExternalValues[i]]);
@@ -441,232 +364,190 @@ void Kernel::MorphKernelFunction()
     }
 }
 
-set<BasicBlock *> Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
+void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
 {
-    vector<Instruction *> result;
-    set<BasicBlock *> exitBlocks;
+    set<BasicBlock *> conditions;
+
+    //start by marking all blocks that have conditions
     for (auto block : blocks)
     {
         auto term = block->getTerminator();
         int sucCount = term->getNumSuccessors();
-        for (int i = 0; i < sucCount; i++)
+        if (sucCount > 1)
         {
-            BasicBlock *suc = term->getSuccessor(i);
-            auto term = suc->getTerminator();
-            if (find(blocks.begin(), blocks.end(), suc) == blocks.end())
+            conditions.insert(block);
+        }
+    }
+
+    //now that we have these conditions we will go a depth search to see if it is a successor of itself
+    set<BasicBlock *> validConditions;
+    map<BasicBlock *, set<BasicBlock *>> exitDict;
+    map<BasicBlock *, set<BasicBlock *>> recurseDict;
+    for (auto cond : conditions)
+    {
+        bool exRecurses = false;
+        bool exExit = false;
+
+        set<BasicBlock *> exitPaths;
+        set<BasicBlock *> recursePaths;
+
+        //ideally one of them will recurse and one of them will exit
+        for (auto suc : successors(cond))
+        {
+            queue<BasicBlock *> toProcess;
+            set<BasicBlock *> checked;
+            toProcess.push(suc);
+            checked.insert(suc);
+            checked.insert(cond);
+            bool recurses = false;
+            bool exit = false;
+            while (!toProcess.empty())
             {
-                exitBlocks.insert(block);
+                BasicBlock *processing = toProcess.front();
+                toProcess.pop();
+                auto term = processing->getTerminator();
+                if (term->getNumSuccessors() == 0)
+                {
+                    exit = true;
+                }
+                for (auto succ : successors(processing))
+                {
+                    if (succ == cond)
+                    {
+                        recurses = true;
+                    }
+                    if (blocks.find(succ) == blocks.end())
+                    {
+                        exit = true;
+                    }
+                    if (checked.find(succ) == checked.end() && blocks.find(succ) != blocks.end())
+                    {
+                        toProcess.push(succ);
+                        checked.insert(succ);
+                    }
+                }
+            }
+            if (recurses && exit)
+            {
+                //this did both which implies that it can't be the condition
                 continue;
             }
-            if (auto ci = dyn_cast<ReturnInst>(term))
+            if (recurses)
             {
-                auto f = suc->getParent();
-                for (auto user : f->users())
+                exRecurses = true;
+                //this branch is the body branch
+                recursePaths.insert(suc);
+            }
+            if (exit)
+            {
+                exExit = true;
+                //and this one exits
+                exitPaths.insert(suc);
+            }
+        }
+
+        if (exExit && exRecurses)
+        {
+            validConditions.insert(cond);
+            recurseDict[cond] = recursePaths;
+            exitDict[cond] = exitPaths;
+        }
+    }
+
+    if (validConditions.size() != 1)
+    {
+        throw TikException("Tik Error: Only supports single condition kernels");
+    }
+
+    for (auto b : validConditions)
+    {
+        Conditional = b;
+
+        auto exitPaths = exitDict[b];
+        auto recPaths = recurseDict[b];
+        //now process the body
+        {
+            queue<BasicBlock *> processing;
+            set<BasicBlock *> visited;
+            for (auto block : recPaths)
+            {
+                processing.push(block);
+                visited.insert(block);
+            }
+            for (auto c : validConditions)
+            {
+                visited.insert(c);
+            }
+            while (!processing.empty())
+            {
+                auto a = processing.front();
+                processing.pop();
+                visited.insert(a);
+                if (find(Body.begin(), Body.end(), a) == Body.end())
                 {
-                    if (auto ui = dyn_cast<CallInst>(user))
+                    if (blocks.find(a) != blocks.end())
                     {
-                        if (find(blocks.begin(), blocks.end(), ui->getParent()) == blocks.end())
+                        Body.push_back(a);
+                    }
+                }
+                for (auto suc : successors(a))
+                {
+                    if (validConditions.find(suc) == validConditions.end())
+                    {
+                        if (visited.find(suc) == visited.end())
                         {
-                            exitBlocks.insert(block);
-                            break;
+                            processing.push(suc);
                         }
                     }
-                    else if (auto ui = dyn_cast<InvokeInst>(user))
+                }
+            }
+        }
+
+        //and the terminus
+        {
+            queue<BasicBlock *> processing;
+            set<BasicBlock *> visited;
+            for (auto block : exitPaths)
+            {
+                processing.push(block);
+                visited.insert(block);
+            }
+            while (!processing.empty())
+            {
+                auto a = processing.front();
+                processing.pop();
+                visited.insert(a);
+                if (find(Termination.begin(), Termination.end(), a) == Termination.end())
+                {
+                    if (blocks.find(a) != blocks.end())
                     {
-                        if (find(blocks.begin(), blocks.end(), ui->getParent()) == blocks.end())
+                        throw TikException("Tik Error: Detected terminus block");
+                        Termination.push_back(a);
+                    }
+                }
+                for (auto suc : successors(a))
+                {
+                    if (validConditions.find(suc) == validConditions.end())
+                    {
+                        if (visited.find(suc) == visited.end())
                         {
-                            exitBlocks.insert(block);
-                            break;
+                            processing.push(suc);
                         }
                     }
                 }
             }
         }
     }
-
-    set<BasicBlock *> checkedConditions;
-    vector<BasicBlock *> toCheck(exitBlocks.begin(), exitBlocks.end());
-    set<BasicBlock *> conditionBlocks;
-    while (toCheck.size() != 0)
-    {
-        BasicBlock *checking = toCheck.back();
-        toCheck.pop_back();
-        checkedConditions.insert(checking);
-        Instruction *term = checking->getTerminator();
-        if (term->getNumSuccessors() > 1) //this works for most terminators
-        {
-            //this is a condition
-            int64_t id = GetBlockID(checking);
-            auto split = checking->splitBasicBlock(term);
-            SetBlockID(split, id);
-            blocks.insert(split);
-            conditionBlocks.insert(split);
-        }
-        else if (term->getNumSuccessors() == 0) //this handles the return
-        {
-            Function *f = checking->getParent();
-            for (auto user : f->users())
-            {
-                if (auto cb = dyn_cast<CallBase>(user))
-                {
-                    BasicBlock *par = cb->getParent();
-                    if (checkedConditions.find(par) == checkedConditions.end())
-                    {
-                        toCheck.push_back(par);
-                    }
-                }
-            }
-        }
-        else //must be a single successor
-        {
-            auto suc = term->getSuccessor(0);
-            if (checkedConditions.find(suc) == checkedConditions.end())
-            {
-                toCheck.push_back(suc);
-            }
-        }
-    }
-
-    if (conditionBlocks.size() != 1)
-    {
-        throw TikException("Only supports single condition kernels");
-    }
-
-    for (auto cond : conditionBlocks)
-    {
-        auto term = cond->getTerminator();
-        if (BranchInst *i = cast<BranchInst>(term))
-        {
-            LoopCondition = i->getCondition();
-        }
-        else
-        {
-            throw TikException("Non expected condition");
-        }
-    }
-
-    return conditionBlocks;
 }
 
-tuple<set<BasicBlock *>, set<BasicBlock *>> Kernel::GetBodyPrequel(set<BasicBlock *> blocks, set<BasicBlock *> conditionalBlocks)
+void Kernel::BuildCondition()
 {
-    set<BasicBlock *> body;
-    set<BasicBlock *> prequel;
-    set<BasicBlock *> entrances;
-    for (BasicBlock *block : blocks)
-    {
-        for (BasicBlock *pred : predecessors(block))
-        {
-            if (pred)
-            {
-                if (blocks.find(pred) == blocks.end() && conditionalBlocks.find(pred) == conditionalBlocks.end())
-                {
-                    entrances.insert(block);
-                }
-            }
-        }
-
-        //we also check the entry blocks
-        Function *parent = block->getParent();
-        BasicBlock *entry = &parent->getEntryBlock();
-        if (block == entry)
-        {
-            //potential entrance
-            bool extUse = false;
-            for (auto user : parent->users())
-            {
-                Instruction *ci = cast<Instruction>(user);
-                BasicBlock *parentBlock = ci->getParent();
-                if (blocks.find(parentBlock) == blocks.end() && conditionalBlocks.find(parentBlock) == conditionalBlocks.end())
-                {
-                    extUse = true;
-                    break;
-                }
-            }
-            if (extUse)
-            {
-                entrances.insert(block);
-            }
-        }
-    }
-    if (entrances.size() != 1)
-    {
-        throw TikException("Kernel Exception: tik only supports single entrance kernels");
-    }
-
-    //now that we have the entrances we can do dijkstras
-    auto blockDDD = DijkstraIII(conditionalBlocks, blocks);
-    Function *parentFunc;
-    for (auto c : conditionalBlocks)
-    {
-        parentFunc = c->getParent();
-    }
-
-    bool isRecursive = false;
-
-    for (auto block : blocks)
-    {
-        for (auto bi = block->begin(); bi != block->end(); bi++)
-        {
-            if (auto ci = dyn_cast<CallBase>(bi))
-            {
-                Function *f = ci->getCalledFunction();
-                if (f == parentFunc)
-                {
-                    isRecursive = true;
-                    break;
-                }
-            }
-        }
-        if (isRecursive)
-        {
-            break;
-        }
-    }
-
-    if (isRecursive)
-    {
-        for (auto p : blockDDD)
-        {
-            if (p.second == INT32_MAX)
-            {
-                body.insert(p.first);
-            }
-            else
-            {
-                prequel.insert(p.first);
-            }
-        }
-    }
-    else
-    {
-        for (auto p : blockDDD)
-        {
-            if (p.second != INT32_MAX)
-            {
-                body.insert(p.first);
-            }
-        }
-    }
-
-    for (auto ent : entrances)
-    {
-        EnterTarget = ent;
-    }
-
-    return {body, prequel};
+    Conditional = CloneBasicBlock(Conditional, VMap, "", KernelFunction);
 }
-
-void Kernel::BuildCondition(std::set<llvm::BasicBlock *> blocks)
+void Kernel::BuildBody()
 {
-    assert(blocks.size() == 1);
-    for (auto block : blocks)
-    {
-        Conditional = CloneBasicBlock(block, VMap, "", KernelFunction);
-    }
-}
-void Kernel::BuildBody(std::set<llvm::BasicBlock *> blocks)
-{
+    auto blocks = Body;
+    Body.clear();
     for (auto block : blocks)
     {
         int64_t id = GetBlockID(block);
@@ -733,14 +614,14 @@ void Kernel::BuildBody(std::set<llvm::BasicBlock *> blocks)
                             if (CallInst *callUse = dyn_cast<CallInst>(user))
                             {
                                 BasicBlock *parent = callUse->getParent();
-                                if (find(blocks.begin(), blocks.end(), parent) != blocks.end())
+                                if (find(Body.begin(), Body.end(), parent) != Body.end())
                                 {
                                     funcUses.push_back(parent);
                                 }
                             }
                             else
                             {
-                                throw TikException("Only expected callInst");
+                                throw TikException("Tik Error: Only expected callInst");
                             }
                         }
                         //now that we know that we can create the phi for where to branch to
@@ -811,7 +692,7 @@ void Kernel::BuildBody(std::set<llvm::BasicBlock *> blocks)
                     else
                     {
                         //we already inlined this one and need to add the appropriate entries to teh argnodes and the switch instruction
-                        throw TikException("Not Implemented");
+                        throw TikException("Tik Error: Not Implemented");
                     }
                 }
             }
@@ -895,7 +776,7 @@ void Kernel::BuildPrequel(std::set<llvm::BasicBlock *> blocks)
                             }
                             else
                             {
-                                throw TikException("Only expected callInst");
+                                throw TikException("Tik Error Only expected callInst");
                             }
                         }
                         //now that we know that we can create the phi for where to branch to
@@ -966,7 +847,7 @@ void Kernel::BuildPrequel(std::set<llvm::BasicBlock *> blocks)
                     else
                     {
                         //we already inlined this one and need to add the appropriate entries to teh argnodes and the switch instruction
-                        throw TikException("Not Implemented");
+                        throw TikException("Tik Error: Not Implemented");
                     }
                 }
             }
@@ -1020,13 +901,13 @@ void Kernel::GetInitInsts()
                                 }
                                 else
                                 {
-                                    throw TikException("Unimplemented");
+                                    throw TikException("Tik Error: Not Implemented");
                                 }
                             }
                         }
                         else
                         {
-                            throw TikException("Unimplemented");
+                            throw TikException("Tik Error: Not Implemented");
                         }
                     }
                 }
@@ -1242,90 +1123,6 @@ void Kernel::BuildExit()
 
     IRBuilder<> exitBuilder(Exit);
     auto a = exitBuilder.CreateRetVoid();
-    /*
-    set<BasicBlock *> exits;
-    for (auto block : Body)
-    {
-        Instruction *term = block->getTerminator();
-        if (BranchInst *brInst = dyn_cast<BranchInst>(term))
-        {
-            // put the successors of the exit block in a unique-entry vector
-            for (unsigned int i = 0; i < brInst->getNumSuccessors(); i++)
-            {
-                BasicBlock *succ = brInst->getSuccessor(i);
-                if (find(Body.begin(), Body.end(), succ) == Body.end())
-                {
-                    exits.insert(succ);
-                    ExitTarget[exitId++] = succ;
-                }
-            }
-        }
-        else if (ReturnInst *rInst = dyn_cast<ReturnInst>(term))
-        {
-            Function *parentFunction = block->getParent();
-            vector<BasicBlock *> internalUse;
-            vector<BasicBlock *> externalUse;
-            for (auto user : parentFunction->users())
-            {
-                if (CallInst *ci = dyn_cast<CallInst>(user))
-                {
-                    BasicBlock *parent = ci->getParent();
-                    if (find(Body.begin(), Body.end(), parent) == Body.end())
-                    {
-                        externalUse.push_back(parent);
-                    }
-                    else
-                    {
-                        internalUse.push_back(parent);
-                    }
-                }
-                else
-                {
-                    throw TikException("Function not called from callinst. Unexpected behavior.");
-                }
-            }
-            if (internalUse.size() != 0 && externalUse.size() == 0)
-            {
-                //use is internal so ignore
-            }
-            else if (internalUse.size() == 0 && externalUse.size() != 0)
-            {
-                for (auto a : externalUse)
-                {
-                    exits.insert(a);
-                    ExitTarget[exitId++] = a;
-                }
-            }
-            else if (internalUse.size() != 0 && externalUse.size() != 0)
-            {
-                throw TikException("Function called both externally and internally. Unimplemented.")
-            }
-        }
-        else if (SwitchInst *sw = dyn_cast<SwitchInst>(term))
-        {
-            for (unsigned int i = 0; i < sw->getNumSuccessors(); i++)
-            {
-                BasicBlock *succ = sw->getSuccessor(i);
-                if (find(Body.begin(), Body.end(), succ) == Body.end())
-                {
-                    exits.insert(succ);
-                    ExitTarget[exitId++] = succ;
-                }
-            }
-        }
-        else
-        {
-            throw TikException("Not Implemented");
-        }
-    }
-
-    // we should have exactly one successor to our tik representation because we assume there are no embedded loops
-    if (exits.size() != 1)
-    {
-        throw TikException("Kernel Exception: kernels must have one exit");
-    }
-    assert(exits.size() == 1);
-    //ExitTarget[0] = exits[0];*/
 }
 
 //if the result is one entry long it is a value. Otherwise its a list of instructions
@@ -1348,18 +1145,13 @@ vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blo
             //we have a conditional so select between return vals
             //still need to check if successors are valid though
             Value *cond = brInst->getCondition();
-            if (brInst->getNumSuccessors() != 2)
-            {
-                //sanity check
-                throw TikException("Unexpected number of brInst successors");
-            }
             auto suc0 = brInst->getSuccessor(0);
             auto suc1 = brInst->getSuccessor(1);
             bool valid0 = find(blocks.begin(), blocks.end(), suc0) != blocks.end();
             bool valid1 = find(blocks.begin(), blocks.end(), suc1) != blocks.end();
             if (!(valid0 || valid1))
             {
-                throw TikException("Branch instruction with no valid successors reached");
+                throw TikException("Tik Error: Branch instruction with no valid successors reached");
             }
             Value *c0 = NULL;
             Value *c1 = NULL;
@@ -1400,11 +1192,11 @@ vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blo
     }
     else
     {
-        throw TikException("Not Implemented");
+        throw TikException("Tik Error: Not Implemented");
     }
     if (result.size() == 0)
     {
-        throw TikException("Return instruction tree must have at least one result");
+        throw TikException("Tik Error: Return instruction tree must have at least one result");
     }
     return result;
 }
@@ -1479,5 +1271,78 @@ void Kernel::SplitBlocks(set<BasicBlock *> &blocks)
                 }
             }
         }
+    }
+}
+
+void Kernel::GetPrequel(set<BasicBlock *> &blocks)
+{
+    queue<BasicBlock *> toProcess;
+    set<BasicBlock *> pushedBlocks;
+    for (auto b : Entrances)
+    {
+        if (b != Conditional)
+        {
+            toProcess.push(b);
+            pushedBlocks.insert(b);
+        }
+    }
+
+    while (toProcess.size() != 0)
+    {
+        BasicBlock *processing = toProcess.front();
+        toProcess.pop();
+        for (auto b : successors(processing))
+        {
+            if (b != Conditional && pushedBlocks.find(b) == pushedBlocks.end())
+            {
+                toProcess.push(b);
+                pushedBlocks.insert(b);
+            }
+        }
+        Prequel.push_back(processing);
+    }
+}
+
+void Kernel::GetEntrances(set<BasicBlock *> &blocks)
+{
+    for (BasicBlock *block : blocks)
+    {
+        for (BasicBlock *pred : predecessors(block))
+        {
+            if (pred)
+            {
+                if (blocks.find(pred) == blocks.end())
+                {
+                    Entrances.insert(block);
+                }
+            }
+        }
+
+        //we also check the entry blocks
+        Function *parent = block->getParent();
+        BasicBlock *entry = &parent->getEntryBlock();
+        if (block == entry)
+        {
+            //potential entrance
+            bool extUse = false;
+            for (auto user : parent->users())
+            {
+                Instruction *ci = cast<Instruction>(user);
+                BasicBlock *parentBlock = ci->getParent();
+                if (blocks.find(parentBlock) == blocks.end())
+                {
+                    extUse = true;
+                    break;
+                }
+            }
+            if (extUse)
+            {
+                Entrances.insert(block);
+            }
+        }
+    }
+    if (Entrances.size() != 1)
+    {
+        throw TikException("Kernel Exception: tik only supports single entrance kernels");
     }
 }
