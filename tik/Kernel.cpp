@@ -67,21 +67,21 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     }
 
     //this is a recursion check, just so we can enumerate issues
-    for(auto block : blocks)
+    for (auto block : blocks)
     {
         Function *f = block->getParent();
-        for(auto bi = block->begin(); bi != block->end(); bi++)
+        for (auto bi = block->begin(); bi != block->end(); bi++)
         {
-            if(CallBase *cb = dyn_cast<CallBase>(bi))
+            if (CallBase *cb = dyn_cast<CallBase>(bi))
             {
-                if(cb->getCalledFunction() == f)
+                if (cb->getCalledFunction() == f)
                 {
                     throw TikException("Tik Error: Recursion is unimplemented")
                 }
             }
         }
     }
-    
+
     //SplitBlocks(blocks);
 
     GetEntrances(blocks);
@@ -188,6 +188,7 @@ void Kernel::MorphKernelFunction()
 
     // capture all the input args our kernel function will need
     std::vector<llvm::Type *> inputArgs;
+    inputArgs.push_back(Type::getInt8Ty(TikModule->getContext()));
     for (auto inst : ExternalValues)
     {
         inputArgs.push_back(inst->getType());
@@ -198,7 +199,7 @@ void Kernel::MorphKernelFunction()
     llvm::Function *newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName() + "_tmp", TikModule);
     for (int i = 0; i < ExternalValues.size(); i++)
     {
-        ArgumentMap[newFunc->arg_begin() + i] = ExternalValues[i];
+        ArgumentMap[newFunc->arg_begin() + 1 + i] = ExternalValues[i];
     }
 
     auto newInit = CloneBasicBlock(Init, localVMap, "", newFunc);
@@ -262,6 +263,15 @@ void Kernel::MorphKernelFunction()
         }
     }
 
+    //add a switch for the init
+    auto initSwitch = initBuilder.CreateSwitch(newFunc->arg_begin(), Exit, Entrances.size());
+    int i = 0;
+    for(auto ent : Entrances)
+    {
+        initSwitch->setSuccessor(i, cast<BasicBlock>(VMap[ent]));
+        i++;
+    }
+
     // look through the body for pointer references
     // every time we see a global reference who is not written to in MemRead, not stored to in Init, store to it in body
 
@@ -289,9 +299,6 @@ void Kernel::MorphKernelFunction()
         }
     }
 
-    // now create the branches between basic blocks
-    // init->loop (unconditional)
-    auto a = initBuilder.CreateBr(Conditional);
     // loop->body or loop->exit (conditional)
     // body->loop (unconditional)
 
@@ -343,9 +350,20 @@ void Kernel::MorphKernelFunction()
                         auto limit = callInst->getNumArgOperands();
                         for (int k = 0; k < limit; k++)
                         {
-                            Argument *arg = cast<Argument>(callInst->getArgOperand(k));
-                            auto asdf = embeddedCallArgs[arg];
-                            callInst->setArgOperand(k, asdf);
+                            Value *op = callInst->getArgOperand(k);
+                            if (Argument *arg = dyn_cast<Argument>(op))
+                            {
+                                auto asdf = embeddedCallArgs[arg];
+                                callInst->setArgOperand(k, asdf);
+                            }
+                            else if(Constant *c = dyn_cast<Constant>(op))
+                            {
+                                //we don't have to do anything so ignore
+                            }
+                            else
+                            {
+                                throw TikException("Tik Error: Unexpected value passed to function");
+                            }
                         }
                     }
                 }
@@ -461,7 +479,8 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
 
     for (auto b : validConditions)
     {
-        Conditional = b;
+        Conditional = CloneBasicBlock(b, VMap);
+        VMap[b] = Conditional;
 
         auto exitPaths = exitDict[b];
         auto recPaths = recurseDict[b];
@@ -555,20 +574,32 @@ void Kernel::BuildBody()
         {
             //this belongs to a subkernel
             Kernel *nestedKernel = KernelMap[id];
-            if (nestedKernel->EnterTarget == block)
+            if (nestedKernel->Entrances.find(block) == nestedKernel->Entrances.end())
             {
                 //we need to make a unique block for each entrance (there is currently only one)
-                std::vector<llvm::Value *> inargs;
-                for (auto ai = nestedKernel->KernelFunction->arg_begin(); ai < nestedKernel->KernelFunction->arg_end(); ai++)
+                int i = 0;
+                for (auto ent : nestedKernel->Entrances)
                 {
-                    inargs.push_back(cast<Value>(ai));
+                    std::vector<llvm::Value *> inargs;
+                    for (auto ai = nestedKernel->KernelFunction->arg_begin(); ai < nestedKernel->KernelFunction->arg_end(); ai++)
+                    {
+                        if (ai == nestedKernel->KernelFunction->arg_begin())
+                        {
+                            inargs.push_back(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i));
+                        }
+                        else
+                        {
+                            inargs.push_back(cast<Value>(ai));
+                        }
+                    }
+                    BasicBlock *intermediateBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
+                    IRBuilder<> intBuilder(intermediateBlock);
+                    intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
+                    intBuilder.CreateBr(cast<BasicBlock>(nestedKernel->ExitTarget[0]));
+                    VMap[block] = intermediateBlock;
+                    Body.push_back(intermediateBlock);
+                    i++;
                 }
-                BasicBlock *intermediateBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-                IRBuilder<> intBuilder(intermediateBlock);
-                intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
-                intBuilder.CreateBr(cast<BasicBlock>(nestedKernel->ExitTarget[0]));
-                VMap[block] = intermediateBlock;
-                Body.push_back(intermediateBlock);
             }
         }
         else
@@ -710,20 +741,32 @@ void Kernel::BuildPrequel(std::set<llvm::BasicBlock *> blocks)
         {
             //this belongs to a subkernel
             Kernel *nestedKernel = KernelMap[id];
-            if (nestedKernel->EnterTarget == block)
+            if (nestedKernel->Entrances.find(block) == nestedKernel->Entrances.end())
             {
                 //we need to make a unique block for each entrance (there is currently only one)
-                std::vector<llvm::Value *> inargs;
-                for (auto ai = nestedKernel->KernelFunction->arg_begin(); ai < nestedKernel->KernelFunction->arg_end(); ai++)
+                int i = 0;
+                for (auto ent : nestedKernel->Entrances)
                 {
-                    inargs.push_back(cast<Value>(ai));
+                    std::vector<llvm::Value *> inargs;
+                    for (auto ai = nestedKernel->KernelFunction->arg_begin(); ai < nestedKernel->KernelFunction->arg_end(); ai++)
+                    {
+                        if (ai == nestedKernel->KernelFunction->arg_begin())
+                        {
+                            inargs.push_back(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i));
+                        }
+                        else
+                        {
+                            inargs.push_back(cast<Value>(ai));
+                        }
+                    }
+                    BasicBlock *intermediateBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
+                    IRBuilder<> intBuilder(intermediateBlock);
+                    intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
+                    intBuilder.CreateBr(cast<BasicBlock>(nestedKernel->ExitTarget[0]));
+                    VMap[block] = intermediateBlock;
+                    Body.push_back(intermediateBlock);
+                    i++;
                 }
-                BasicBlock *intermediateBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-                IRBuilder<> intBuilder(intermediateBlock);
-                intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
-                intBuilder.CreateBr(cast<BasicBlock>(nestedKernel->ExitTarget[0]));
-                VMap[block] = intermediateBlock;
-                Body.push_back(intermediateBlock);
             }
         }
         else
@@ -1311,7 +1354,9 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
         {
             if (pred)
             {
-                if (blocks.find(pred) == blocks.end())
+                //strange bug here that leaves a predecessor in place, even if we remove the parent
+                //not sure about the solution
+                if (blocks.find(pred) == blocks.end() && pred->getParent() != NULL)
                 {
                     Entrances.insert(block);
                 }
@@ -1341,8 +1386,12 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
             }
         }
     }
-    if (Entrances.size() != 1)
+    if(Entrances.size() != 1)
     {
-        throw TikException("Kernel Exception: tik only supports single entrance kernels");
+        throw TikException("Kernel Exception: tik requires a body entrance");
+    }
+    if (Entrances.size() == 0)
+    {
+        throw TikException("Kernel Exception: tik requires a body entrance");
     }
 }

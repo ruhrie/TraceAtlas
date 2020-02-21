@@ -16,8 +16,8 @@ public:
     std::string Name;
     nlohmann::json GetJson();
     llvm::BasicBlock *Conditional = NULL;
+    std::set<llvm::BasicBlock *> Entrances;
     std::map<int, llvm::BasicBlock *> ExitTarget;
-    llvm::BasicBlock *EnterTarget;
     std::vector<llvm::BasicBlock *> Body;
     std::vector<llvm::BasicBlock *> Prequel;
     std::vector<llvm::BasicBlock *> Termination;
@@ -28,10 +28,7 @@ public:
     llvm::Function *KernelFunction = NULL;
 
 private:
-
-    std::set<llvm::BasicBlock*> Entrances;
-    void GetEntrances(std::set<llvm::BasicBlock*>&);
-
+    void GetEntrances(std::set<llvm::BasicBlock *> &);
     /// @brief  Maps old instructions to new instructions.
     ///
     /// Special LLVM map containing old instructions (from the original bitcode) as keys and new instructions as values.
@@ -89,7 +86,6 @@ private:
 
     std::vector<llvm::Value *> BuildReturnTree(llvm::BasicBlock *bb, std::vector<llvm::BasicBlock *> blocks);
 
-    
     llvm::BasicBlock *getPathMerge(llvm::BasicBlock *start);
 
     void ApplyMetadata();
@@ -101,7 +97,7 @@ private:
     void BuildPrequel(std::set<llvm::BasicBlock *>);
     void BuildExit();
 
-    void GetPrequel(std::set<llvm::BasicBlock*>&);
+    void GetPrequel(std::set<llvm::BasicBlock *> &);
 
     void Repipe();
     void SplitBlocks(std::set<llvm::BasicBlock *> &blocks);
