@@ -163,8 +163,8 @@ void DumpLoadAddrValue(void *MemValue, int size)
 {
     char fin[128];
     //sprintf(fin, "LoadAddress:%#lX\n", (uint64_t)MemValue);
-    int out = (uint64_t)MemValue;
-    sprintf(fin, "LoadAddress:%d\n", out);
+    uint64_t out = (uint64_t)MemValue;
+    sprintf(fin, "LoadAddress:%ld\n", out);
 
     WriteStream(fin);
     // uint8_t *bitwisePrint = (uint8_t *)MemValue;
@@ -191,8 +191,8 @@ void DumpStoreAddrValue(void *MemValue, int size)
     // sprintf(fin, "StoreAddress:%#lX\n", (uint64_t)MemValue);
 
 
-    int out = (uint64_t)MemValue;
-    sprintf(fin, "StoreAddress:%d\n", out);
+    uint64_t out = (uint64_t)MemValue;
+    sprintf(fin, "StoreAddress:%ld\n", out);
     WriteStream(fin);
     // uint8_t *bitwisePrint = (uint8_t *)MemValue;
     // sprintf(fin, "size:%d, StoreMemValue:", size);
