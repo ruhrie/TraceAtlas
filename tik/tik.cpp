@@ -247,8 +247,20 @@ int main(int argc, char *argv[])
         }
     }
 
-    // writing part
+    // generate a C header file declaring each tik function
+    std::string headerFile = "\n// Auto-generated header for the tik representations of "+InputFile+"\n";
+    for( auto kernel : results )
+    {
+        headerFile+="\n" + kernel->getHeaderDeclaration();
+    }
+    // write the header file
+    std::ofstream header;
+    header.open(OutputFile+".h");
+    cout << headerFile;
+    header << headerFile;
+    header.close();
 
+    // write the json file
     try
     {
         if (OutputType == "JSON")

@@ -13,6 +13,7 @@ class Kernel
 public:
     Kernel(std::vector<int> basicBlocks, llvm::Module *M, std::string name = "");
     ~Kernel();
+    std::string getHeaderDeclaration(void);
     std::string Name;
     nlohmann::json GetJson();
     llvm::BasicBlock *Conditional = NULL;

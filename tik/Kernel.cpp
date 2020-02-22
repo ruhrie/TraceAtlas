@@ -191,6 +191,7 @@ void Kernel::MorphKernelFunction()
     for (auto inst : ExternalValues)
     {
         inputArgs.push_back(inst->getType());
+        
     }
 
     // create our new function with input args and clone our basic blocks into it
@@ -1345,4 +1346,81 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
     {
         throw TikException("Kernel Exception: tik only supports single entrance kernels");
     }
+}
+
+std::string getCType(llvm::Type* param)
+{
+    std::string retType;
+    if (param->isVoidTy())
+    {
+        return "void";
+    }
+    else if(param->isHalfTy())
+    {
+        return "half";
+    }
+    else if(param->isFloatTy())
+    {
+        return "float";
+    }
+    else if(param->isDoubleTy())
+    {
+        return "double";
+    }
+    else if(param->isX86_FP80Ty())
+    {
+        return "long double";
+    }
+    else if(param->isFP128Ty())
+    {
+        return "__float128";
+    }
+    else if(param->isIntegerTy(8))
+    {
+        return "uint8_t";
+    }
+    else if(param->isIntegerTy(16))
+    {
+        return "uint16_t";
+    }
+    else if(param->isIntegerTy(32))
+    {
+        return "uint32_t";
+    }
+    else if(param->isIntegerTy(64))
+    {
+        return "uint64_t";
+    }
+    else if(param->isPointerTy())
+    {
+        llvm::PointerType* newType = dyn_cast<llvm::PointerType>(param);
+        llvm::Type* memberType = newType->getElementType();
+        return getCType(memberType)+"*";
+    }
+    else
+    {
+        throw TikException("This type of argument is not supported for header generation.");
+    }
+}
+
+std::string Kernel::getHeaderDeclaration(void)
+{
+    std::string headerString = getCType(KernelFunction->getReturnType())+" ";
+    headerString += "Kernel";
+    headerString += KernelFunction->getName();
+    headerString += "(";
+    int i = 0;
+    for( auto ai = KernelFunction->arg_begin(); ai < KernelFunction->arg_end(); ai++ )
+    {
+        if (i > 0)
+        {
+            headerString+=", ";
+        }
+        headerString += getCType(ai->getType());
+        headerString += " arg";
+        headerString += std::to_string(i);
+        i++;
+    }
+    headerString+=");\n";
+    return headerString;
 }
