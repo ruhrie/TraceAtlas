@@ -19,7 +19,6 @@ public:
     std::set<llvm::BasicBlock *> Entrances;
     std::map<int, llvm::BasicBlock *> ExitTarget;
     std::vector<llvm::BasicBlock *> Body;
-    std::vector<llvm::BasicBlock *> Prequel;
     std::vector<llvm::BasicBlock *> Termination;
     llvm::BasicBlock *Init = NULL;
     llvm::BasicBlock *Exit = NULL;
@@ -93,10 +92,7 @@ private:
     std::vector<InlineStruct> InlinedFunctions;
 
     void BuildBody();
-    void BuildPrequel(std::set<llvm::BasicBlock *>);
     void BuildExit();
-
-    void GetPrequel(std::set<llvm::BasicBlock *> &);
 
     void Repipe();
     void SplitBlocks(std::set<llvm::BasicBlock *> &blocks);
