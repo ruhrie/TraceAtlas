@@ -90,8 +90,6 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 
     //GetPrequel(blocks);
 
-    BuildCondition();
-
     BuildBody();
 
     BuildExit();
@@ -474,13 +472,19 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
 
     if (validConditions.size() != 1)
     {
+        for(auto c : validConditions)
+        {
+            PrintVal(c);
+        }
         throw TikException("Tik Error: Only supports single condition kernels");
     }
 
     for (auto b : validConditions)
     {
-        Conditional = CloneBasicBlock(b, VMap);
-        VMap[b] = Conditional;
+        Conditional = b;
+        //Body.push_back(b);
+        //Conditional = CloneBasicBlock(b, VMap);
+        //VMap[b] = Conditional;
 
         auto exitPaths = exitDict[b];
         auto recPaths = recurseDict[b];
@@ -556,13 +560,11 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
                 }
             }
         }
+
+        Body.push_back(b);
     }
 }
 
-void Kernel::BuildCondition()
-{
-    Conditional = CloneBasicBlock(Conditional, VMap, "", KernelFunction);
-}
 void Kernel::BuildBody()
 {
     auto blocks = Body;
@@ -605,6 +607,10 @@ void Kernel::BuildBody()
         else
         {
             auto cb = CloneBasicBlock(block, VMap, "", KernelFunction);
+            if(block == Conditional)
+            {
+                Conditional = cb;
+            }
             vector<CallInst *> toInline;
             for (auto bi = cb->begin(); bi != cb->end(); bi++)
             {
@@ -1116,29 +1122,6 @@ void Kernel::GetMemoryFunctions()
                 auto newStore = builder.CreateStore(newInst->getValueOperand(), casted); //storee);
                 toRemove.push_back(newInst);
             }
-        }
-    }
-
-    // find instructions in Conditional block not belonging to parent
-    for (BasicBlock::iterator BI = Conditional->begin(), BE = Conditional->end(); BI != BE; ++BI)
-    {
-        Instruction *inst = cast<Instruction>(BI);
-        IRBuilder<> builder(inst);
-        if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
-        {
-            auto memCall = builder.CreateCall(MemoryRead, loadMap[newInst->getPointerOperand()]);
-            auto casted = builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType());
-            auto newLoad = builder.CreateLoad(casted);
-            newInst->replaceAllUsesWith(newLoad);
-            VMap[inst] = newLoad;
-            toRemove.push_back(inst);
-        }
-        else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
-        {
-            auto memCall = builder.CreateCall(MemoryWrite, storeMap[newInst->getPointerOperand()]);
-            auto casted = builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType());
-            auto newStore = builder.CreateStore(newInst->getValueOperand(), casted);
-            toRemove.push_back(inst);
         }
     }
 

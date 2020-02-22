@@ -92,7 +92,6 @@ private:
 
     std::vector<InlineStruct> InlinedFunctions;
 
-    void BuildCondition();
     void BuildBody();
     void BuildPrequel(std::set<llvm::BasicBlock *>);
     void BuildExit();
