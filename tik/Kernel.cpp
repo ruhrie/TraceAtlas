@@ -256,7 +256,7 @@ void Kernel::MorphKernelFunction()
                 throw TikException("Tik Error: External Value not found in GlobalMap.");
             }
             coveredGlobals.insert(GlobalMap[ExternalValues[i]]);
-            auto b = initBuilder.CreateStore(KernelFunction->arg_begin() + i, GlobalMap[ExternalValues[i]]);
+            auto b = initBuilder.CreateStore(KernelFunction->arg_begin() + i + 1, GlobalMap[ExternalValues[i]]);
             MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Store))));
             b->setMetadata("TikSynthetic", tikNode);
             newStores.insert(b);
@@ -1385,10 +1385,6 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
                 Entrances.insert(block);
             }
         }
-    }
-    if(Entrances.size() != 1)
-    {
-        throw TikException("Kernel Exception: tik requires a body entrance");
     }
     if (Entrances.size() == 0)
     {
