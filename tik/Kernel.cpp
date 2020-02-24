@@ -16,6 +16,7 @@
 #include <llvm/IR/Type.h>
 #include <llvm/Transforms/Utils/Cloning.h>
 #include <queue>
+#include <iostream>
 using namespace llvm;
 using namespace std;
 
@@ -29,17 +30,23 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     MemoryWrite = NULL;
     Init = NULL;
     Exit = NULL;
+    string Name = "";
     if (name.empty())
     {
         Name = "Kernel_" + to_string(KernelUID++);
     }
+    else if (name.front() >= '0' && name.front() <= '9')
+    {
+        Name = "K" + name;
+    }
     else
     {
-        if (reservedNames.find(name) != reservedNames.end())
-        {
-            throw TikException("Kernel Error: Kernel names must be unique!");
-        }
         Name = name;
+    }
+    cout << Name << endl;
+    if (reservedNames.find(Name) != reservedNames.end())
+    {
+        throw TikException("Kernel Error: Kernel names must be unique!");
     }
     reservedNames.insert(Name);
 

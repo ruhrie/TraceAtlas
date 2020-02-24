@@ -249,6 +249,7 @@ int main(int argc, char *argv[])
 
     // generate a C header file declaring each tik function
     std::string headerFile = "\n// Auto-generated header for the tik representations of "+InputFile+"\n";
+    headerFile += "#include <stdint.h>\n";
     for( auto kernel : results )
     {
         headerFile+="\n" + kernel->getHeaderDeclaration();
