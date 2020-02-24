@@ -28,7 +28,6 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     MemoryRead = NULL;
     MemoryWrite = NULL;
     Init = NULL;
-    Conditional = NULL;
     Exit = NULL;
     if (name.empty())
     {
@@ -147,9 +146,12 @@ nlohmann::json Kernel::GetJson()
     {
         j["MemoryWrite"] = GetStrings(MemoryWrite);
     }
-    if (Conditional != NULL)
+    if (!Conditional.empty())
     {
-        j["Conditional"] = GetStrings(Conditional);
+        for (auto cond : Conditional)
+        {
+            j["Conditional"].push_back(GetStrings(cond));
+        }
     }
     return j;
 }
@@ -201,9 +203,10 @@ void Kernel::MorphKernelFunction()
         auto cb = CloneBasicBlock(b, localVMap, "", newFunc);
         newBody.push_back(cb);
         localVMap[b] = cb;
-        if(b == Conditional)
+        if (Conditional.find(b) != Conditional.end())
         {
-            Conditional = cb;
+            Conditional.erase(b);
+            Conditional.insert(cb);
         }
     }
     Body = newBody;
@@ -247,7 +250,7 @@ void Kernel::MorphKernelFunction()
     //add a switch for the init
     auto initSwitch = initBuilder.CreateSwitch(newFunc->arg_begin(), Exit, Entrances.size());
     int i = 0;
-    for(auto ent : Entrances)
+    for (auto ent : Entrances)
     {
         initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[ent]));
         i++;
@@ -337,7 +340,7 @@ void Kernel::MorphKernelFunction()
                                 auto asdf = embeddedCallArgs[arg];
                                 callInst->setArgOperand(k, asdf);
                             }
-                            else if(Constant *c = dyn_cast<Constant>(op))
+                            else if (Constant *c = dyn_cast<Constant>(op))
                             {
                                 //we don't have to do anything so ignore
                             }
@@ -453,14 +456,9 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
         }
     }
 
-    if (validConditions.size() != 1)
-    {
-        throw TikException("Tik Error: Only supports single condition kernels");
-    }
-
     for (auto b : validConditions)
     {
-        Conditional = b;
+        Conditional.insert(b);
 
         auto exitPaths = exitDict[b];
         auto recPaths = recurseDict[b];
@@ -582,9 +580,10 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
         else
         {
             auto cb = CloneBasicBlock(block, VMap, "", KernelFunction);
-            if(block == Conditional)
+            if (Conditional.find(block) != Conditional.end())
             {
-                Conditional = cb;
+                Conditional.erase(block);
+                Conditional.insert(cb);
             }
             vector<CallInst *> toInline;
             for (auto bi = cb->begin(); bi != cb->end(); bi++)
@@ -795,18 +794,6 @@ void Kernel::GetMemoryFunctions()
             }
         }
     }
-    for (BasicBlock::iterator BI = Conditional->begin(), BE = Conditional->end(); BI != BE; ++BI)
-    {
-        Instruction *inst = cast<Instruction>(BI);
-        if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
-        {
-            loadInst.insert(newInst);
-        }
-        else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
-        {
-            storeInst.insert(newInst);
-        }
-    }
     set<Value *> loadValues;
     set<Value *> storeValues;
     for (LoadInst *load : loadInst)
@@ -944,14 +931,17 @@ void Kernel::BuildExit()
 {
     int exitId = 0;
     // search for exit basic blocks
-    auto term = Conditional->getTerminator();
-    int sucCount = term->getNumSuccessors();
-    for (int i = 0; i < sucCount; i++)
+    for (auto c : Conditional)
     {
-        auto suc = term->getSuccessor(i);
-        if (find(Body.begin(), Body.end(), VMap[suc]) == Body.end())
+        auto term = c->getTerminator();
+        int sucCount = term->getNumSuccessors();
+        for (int i = 0; i < sucCount; i++)
         {
-            ExitTarget[exitId++] = suc;
+            auto suc = term->getSuccessor(i);
+            if (find(Body.begin(), Body.end(), VMap[suc]) == Body.end())
+            {
+                ExitTarget[exitId++] = suc;
+            }
         }
     }
 
@@ -1048,14 +1038,17 @@ void Kernel::ApplyMetadata()
 void Kernel::Repipe()
 {
     //remap the conditional to the exit
-    auto cTerm = Conditional->getTerminator();
-    int cSuc = cTerm->getNumSuccessors();
-    for (int i = 0; i < cSuc; i++)
+    for (auto c : Conditional)
     {
-        auto suc = cTerm->getSuccessor(i);
-        if (find(Body.begin(), Body.end(), suc) == Body.end())
+        auto cTerm = c->getTerminator();
+        int cSuc = cTerm->getNumSuccessors();
+        for (int i = 0; i < cSuc; i++)
         {
-            cTerm->setSuccessor(i, Exit);
+            auto suc = cTerm->getSuccessor(i);
+            if (find(Body.begin(), Body.end(), suc) == Body.end())
+            {
+                cTerm->setSuccessor(i, Exit);
+            }
         }
     }
 }
@@ -1092,7 +1085,6 @@ void Kernel::SplitBlocks(set<BasicBlock *> &blocks)
         }
     }
 }
-
 
 void Kernel::GetEntrances(set<BasicBlock *> &blocks)
 {

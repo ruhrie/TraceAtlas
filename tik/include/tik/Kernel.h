@@ -15,7 +15,7 @@ public:
     ~Kernel();
     std::string Name;
     nlohmann::json GetJson();
-    llvm::BasicBlock *Conditional = NULL;
+    std::set<llvm::BasicBlock *> Conditional;
     std::set<llvm::BasicBlock *> Entrances;
     std::map<int, llvm::BasicBlock *> ExitTarget;
     std::vector<llvm::BasicBlock *> Body;
