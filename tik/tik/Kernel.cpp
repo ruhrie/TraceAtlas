@@ -43,7 +43,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     }
     reservedNames.insert(Name);
 
-    FunctionType *mainType = FunctionType::get(Type::getVoidTy(TikModule->getContext()), false);
+    FunctionType *mainType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), false);
     KernelFunction = Function::Create(mainType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
     Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
     Exit = BasicBlock::Create(TikModule->getContext(), "Exit", KernelFunction);
@@ -187,7 +187,7 @@ void Kernel::MorphKernelFunction()
     }
 
     // create our new function with input args and clone our basic blocks into it
-    FunctionType *funcType = FunctionType::get(Type::getVoidTy(TikModule->getContext()), inputArgs, false);
+    FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
     llvm::Function *newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName() + "_tmp", TikModule);
     for (int i = 0; i < ExternalValues.size(); i++)
     {
@@ -953,7 +953,13 @@ void Kernel::GetMemoryFunctions()
 void Kernel::BuildExit()
 {
     IRBuilder<> exitBuilder(Exit);
-    auto a = exitBuilder.CreateRetVoid();
+    auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), ExitMap.size());
+    for (auto pair : ExitMap)
+    {
+        phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.second), cast<BasicBlock>(VMap[pair.first]));
+    }
+    phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), -1), Init);
+    auto a = exitBuilder.CreateRet(phi);
 }
 
 //if the result is one entry long it is a value. Otherwise its a list of instructions
@@ -1171,18 +1177,24 @@ void Kernel::GetExits(set<BasicBlock *> &blocks)
 {
     int exitId = 0;
     // search for exit basic blocks
-    for(auto block : blocks)
+    set<BasicBlock *> coveredExits;
+    for (auto block : blocks)
     {
-        for(auto suc : successors(block))
+        for (auto suc : successors(block))
         {
-            if(blocks.find(suc) == blocks.end())
+            if (blocks.find(suc) == blocks.end())
             {
-                ExitTarget[exitId++] = suc;    
+                if (coveredExits.find(suc) == coveredExits.end())
+                {
+                    ExitTarget[exitId] = suc;
+                    coveredExits.insert(suc);
+                    ExitMap[block] = exitId++;
+                }
             }
         }
     }
 
-    if(exitId != 1)
+    if (exitId != 1)
     {
         throw TikException("Tik Error: tik only supports single exit kernels")
     }

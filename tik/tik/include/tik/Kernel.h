@@ -29,6 +29,7 @@ public:
 private:
     void GetEntrances(std::set<llvm::BasicBlock *> &);
     void GetExits(std::set<llvm::BasicBlock *> &);
+    std::map<llvm::BasicBlock*, int> ExitMap;
     /// @brief  Maps old instructions to new instructions.
     ///
     /// Special LLVM map containing old instructions (from the original bitcode) as keys and new instructions as values.
