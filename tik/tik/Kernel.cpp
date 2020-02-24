@@ -570,8 +570,13 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                     }
                     BasicBlock *intermediateBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
                     IRBuilder<> intBuilder(intermediateBlock);
-                    intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
-                    intBuilder.CreateBr(cast<BasicBlock>(nestedKernel->ExitTarget[0]));
+                    auto cc = intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
+                    auto sw = intBuilder.CreateSwitch(cc, Exit, nestedKernel->ExitTarget.size());
+                    for(auto pair : nestedKernel->ExitTarget)
+                    {
+                        sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.first), pair.second);
+                    }
+                    //intBuilder.CreateBr(cast<BasicBlock>(nestedKernel->ExitTarget[0]));
                     VMap[block] = intermediateBlock;
                     Body.push_back(intermediateBlock);
                     i++;
@@ -1193,7 +1198,10 @@ void Kernel::GetExits(set<BasicBlock *> &blocks)
             }
         }
     }
-
+    if(exitId == 0)
+    {
+        throw TikException("Tik Error: tik found no kernel exits")
+    }
     if (exitId != 1)
     {
         throw TikException("Tik Error: tik only supports single exit kernels")
