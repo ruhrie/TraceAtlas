@@ -28,7 +28,6 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     MemoryRead = NULL;
     MemoryWrite = NULL;
     Init = NULL;
-    Conditional = NULL;
     Exit = NULL;
     if (name.empty())
     {
@@ -88,7 +87,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 
     GetConditional(blocks);
 
-    BuildBody();
+    BuildKernel(blocks);
 
     BuildExit();
     
@@ -150,9 +149,12 @@ nlohmann::json Kernel::GetJson()
     {
         j["MemoryWrite"] = GetStrings(MemoryWrite);
     }
-    if (Conditional != NULL)
+    if (!Conditional.empty())
     {
-        j["Conditional"] = GetStrings(Conditional);
+        for (auto cond : Conditional)
+        {
+            j["Conditional"].push_back(GetStrings(cond));
+        }
     }
     return j;
 }
@@ -212,7 +214,7 @@ void Kernel::MorphKernelFunction()
     }
 
     auto newInit = CloneBasicBlock(Init, localVMap, "", newFunc);
-    localVMap[Conditional] = newInit;
+    localVMap[Init] = newInit;
     Init = newInit;
 
     vector<BasicBlock *> newBody;
@@ -221,9 +223,13 @@ void Kernel::MorphKernelFunction()
         auto cb = CloneBasicBlock(b, localVMap, "", newFunc);
         newBody.push_back(cb);
         localVMap[b] = cb;
+        if (Conditional.find(b) != Conditional.end())
+        {
+            Conditional.erase(b);
+            Conditional.insert(cb);
+        }
     }
     Body = newBody;
-    vector<BasicBlock *> newEpilogue;
     vector<BasicBlock *> newTermination;
     for (auto b : Termination)
     {
@@ -235,9 +241,6 @@ void Kernel::MorphKernelFunction()
     auto exitCloned = CloneBasicBlock(Exit, localVMap, "", newFunc);
     localVMap[Exit] = exitCloned;
     Exit = exitCloned;
-    auto concCloned = CloneBasicBlock(Conditional, localVMap, "", newFunc);
-    localVMap[Conditional] = concCloned;
-    Conditional = concCloned;
     // remove the old function from the parent but do not erase it
     KernelFunction->removeFromParent();
     newFunc->setName(KernelFunction->getName());
@@ -267,9 +270,9 @@ void Kernel::MorphKernelFunction()
     //add a switch for the init
     auto initSwitch = initBuilder.CreateSwitch(newFunc->arg_begin(), Exit, Entrances.size());
     int i = 0;
-    for(auto ent : Entrances)
+    for (auto ent : Entrances)
     {
-        initSwitch->setSuccessor(i, cast<BasicBlock>(VMap[ent]));
+        initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[ent]));
         i++;
     }
 
@@ -357,7 +360,7 @@ void Kernel::MorphKernelFunction()
                                 auto asdf = embeddedCallArgs[arg];
                                 callInst->setArgOperand(k, asdf);
                             }
-                            else if(Constant *c = dyn_cast<Constant>(op))
+                            else if (Constant *c = dyn_cast<Constant>(op))
                             {
                                 //we don't have to do anything so ignore
                             }
@@ -473,17 +476,9 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
         }
     }
 
-    if (validConditions.size() != 1)
-    {
-        throw TikException("Tik Error: Only supports single condition kernels");
-    }
-
     for (auto b : validConditions)
     {
-        Conditional = b;
-        //Body.push_back(b);
-        //Conditional = CloneBasicBlock(b, VMap);
-        //VMap[b] = Conditional;
+        Conditional.insert(b);
 
         auto exitPaths = exitDict[b];
         auto recPaths = recurseDict[b];
@@ -564,9 +559,8 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
     }
 }
 
-void Kernel::BuildBody()
+void Kernel::BuildKernel(set<BasicBlock *> &blocks)
 {
-    auto blocks = Body;
     Body.clear();
     for (auto block : blocks)
     {
@@ -606,9 +600,10 @@ void Kernel::BuildBody()
         else
         {
             auto cb = CloneBasicBlock(block, VMap, "", KernelFunction);
-            if(block == Conditional)
+            if (Conditional.find(block) != Conditional.end())
             {
-                Conditional = cb;
+                Conditional.erase(block);
+                Conditional.insert(cb);
             }
             vector<CallInst *> toInline;
             for (auto bi = cb->begin(); bi != cb->end(); bi++)
@@ -819,18 +814,6 @@ void Kernel::GetMemoryFunctions()
             }
         }
     }
-    for (BasicBlock::iterator BI = Conditional->begin(), BE = Conditional->end(); BI != BE; ++BI)
-    {
-        Instruction *inst = cast<Instruction>(BI);
-        if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
-        {
-            loadInst.insert(newInst);
-        }
-        else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
-        {
-            storeInst.insert(newInst);
-        }
-    }
     set<Value *> loadValues;
     set<Value *> storeValues;
     for (LoadInst *load : loadInst)
@@ -968,14 +951,17 @@ void Kernel::BuildExit()
 {
     int exitId = 0;
     // search for exit basic blocks
-    auto term = Conditional->getTerminator();
-    int sucCount = term->getNumSuccessors();
-    for (int i = 0; i < sucCount; i++)
+    for (auto c : Conditional)
     {
-        auto suc = term->getSuccessor(i);
-        if (find(Body.begin(), Body.end(), VMap[suc]) == Body.end())
+        auto term = c->getTerminator();
+        int sucCount = term->getNumSuccessors();
+        for (int i = 0; i < sucCount; i++)
         {
-            ExitTarget[exitId++] = suc;
+            auto suc = term->getSuccessor(i);
+            if (find(Body.begin(), Body.end(), VMap[suc]) == Body.end())
+            {
+                ExitTarget[exitId++] = suc;
+            }
         }
     }
 
@@ -1071,30 +1057,18 @@ void Kernel::ApplyMetadata()
 
 void Kernel::Repipe()
 {
-    //remap the body stuff to the conditional
-    for (auto b : Body)
+    //remap the conditional to the exit
+    for (auto c : Conditional)
     {
-        auto term = b->getTerminator();
-        int sucCount = term->getNumSuccessors();
-        for (int i = 0; i < sucCount; i++)
+        auto cTerm = c->getTerminator();
+        int cSuc = cTerm->getNumSuccessors();
+        for (int i = 0; i < cSuc; i++)
         {
-            auto suc = term->getSuccessor(i);
+            auto suc = cTerm->getSuccessor(i);
             if (find(Body.begin(), Body.end(), suc) == Body.end())
             {
-                term->setSuccessor(i, Conditional);
+                cTerm->setSuccessor(i, Exit);
             }
-        }
-    }
-
-    //remap the conditional to the exit
-    auto cTerm = Conditional->getTerminator();
-    int cSuc = cTerm->getNumSuccessors();
-    for (int i = 0; i < cSuc; i++)
-    {
-        auto suc = cTerm->getSuccessor(i);
-        if (find(Body.begin(), Body.end(), suc) == Body.end())
-        {
-            cTerm->setSuccessor(i, Exit);
         }
     }
 }
@@ -1131,7 +1105,6 @@ void Kernel::SplitBlocks(set<BasicBlock *> &blocks)
         }
     }
 }
-
 
 void Kernel::GetEntrances(set<BasicBlock *> &blocks)
 {
@@ -1253,4 +1226,24 @@ std::string Kernel::getHeaderDeclaration(void)
     }
     headerString+=");\n";
     return headerString;
+}
+
+void Kernel::SanityChecks()
+{
+    for(auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+    {
+        BasicBlock *BB = cast<BasicBlock>(fi);
+        int predCount = 0;
+        for(auto pred : predecessors(BB))
+        {
+            predCount++;
+        }
+        if(predCount == 0)
+        {
+            if(BB != Init)
+            {
+                throw TikException("Tik Sanity Failure: No predecessors");
+            }
+        }
+    }
 }
