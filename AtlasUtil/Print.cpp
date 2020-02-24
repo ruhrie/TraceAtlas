@@ -1,6 +1,7 @@
 #include "AtlasUtil/Print.h"
 #include <iostream>
 #include <llvm/IR/AssemblyAnnotationWriter.h>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
 

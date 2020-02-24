@@ -119,16 +119,16 @@ int main(int argc, char *argv[])
     {
         string index = key;
         nlohmann::json kernel;
-        if(!value[0].empty() && value[0].is_array())
+        if (!value[0].empty() && value[0].is_array())
         {
             //embedded layout
             kernel = value[0];
         }
         else
-        {  
+        {
             kernel = value;
         }
-        
+
         //std::cout << value;
         //vector<int> kernel = value;
         kernels[index] = kernel.get<vector<int>>();

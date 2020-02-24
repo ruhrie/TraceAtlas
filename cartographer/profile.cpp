@@ -2,6 +2,7 @@
 #include "AtlasUtil/Annotate.h"
 #include "EncodeDetect.h"
 #include <iostream>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace std;
 using namespace llvm;

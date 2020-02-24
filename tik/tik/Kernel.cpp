@@ -574,9 +574,16 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                     auto sw = intBuilder.CreateSwitch(cc, Exit, nestedKernel->ExitTarget.size());
                     for(auto pair : nestedKernel->ExitTarget)
                     {
-                        sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.first), pair.second);
+                        if(blocks.find(pair.second) != blocks.end())
+                        {
+                            sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.first), pair.second);
+                        }
+                        else
+                        {
+                            sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.first), pair.second);
+                            throw TikException("Tik Error: Nested kernel exiting parent directly");
+                        }
                     }
-                    //intBuilder.CreateBr(cast<BasicBlock>(nestedKernel->ExitTarget[0]));
                     VMap[block] = intermediateBlock;
                     Body.push_back(intermediateBlock);
                     i++;
@@ -958,7 +965,7 @@ void Kernel::GetMemoryFunctions()
 void Kernel::BuildExit()
 {
     IRBuilder<> exitBuilder(Exit);
-    auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), ExitMap.size());
+    auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), ExitMap.size() + 1);
     for (auto pair : ExitMap)
     {
         phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.second), cast<BasicBlock>(VMap[pair.first]));
@@ -1204,6 +1211,8 @@ void Kernel::GetExits(set<BasicBlock *> &blocks)
     }
     if (exitId != 1)
     {
+        //removing this is exposing an llvm bug: corrupted double-linked list
+        //we just won't support it for the moment
         throw TikException("Tik Error: tik only supports single exit kernels")
     }
 }
