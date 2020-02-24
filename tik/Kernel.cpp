@@ -91,6 +91,8 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     BuildBody();
 
     BuildExit();
+    
+    ExportFunctionSignatures();
 
     Remap();
     //might be fused
@@ -101,6 +103,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     GetMemoryFunctions();
 
     MorphKernelFunction();
+
 
     ApplyMetadata();
 }
@@ -166,6 +169,22 @@ void Kernel::Remap()
         {
             Instruction *inst = cast<Instruction>(BI);
             RemapInstruction(inst, VMap, llvm::RF_None);
+        }
+    }
+}
+
+void Kernel::ExportFunctionSignatures()
+{
+    for( auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++ )
+    {
+        for( auto inst = bi->begin(); inst != bi->end(); inst++ )
+        {
+            if(CallBase* callInst = dyn_cast<CallBase>(inst))
+            {
+                llvm::Function *funcDec = llvm::Function::Create(callInst->getCalledFunction()->getFunctionType(), GlobalValue::LinkageTypes::ExternalLinkage, callInst->getCalledFunction()->getName(), TikModule);
+                funcDec->setAttributes(callInst->getCalledFunction()->getAttributes());
+                callInst->setCalledFunction(funcDec);
+            }
         }
     }
 }
@@ -1218,7 +1237,6 @@ std::string getCType(llvm::Type* param)
 std::string Kernel::getHeaderDeclaration(void)
 {
     std::string headerString = getCType(KernelFunction->getReturnType())+" ";
-    headerString += "Kernel";
     headerString += KernelFunction->getName();
     headerString += "(";
     int i = 0;
