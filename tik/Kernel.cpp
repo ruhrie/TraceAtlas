@@ -88,7 +88,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 
     GetConditional(blocks);
 
-    BuildBody();
+    BuildKernel(blocks);
 
     BuildExit();
 
@@ -192,7 +192,7 @@ void Kernel::MorphKernelFunction()
     }
 
     auto newInit = CloneBasicBlock(Init, localVMap, "", newFunc);
-    localVMap[Conditional] = newInit;
+    localVMap[Init] = newInit;
     Init = newInit;
 
     vector<BasicBlock *> newBody;
@@ -201,9 +201,12 @@ void Kernel::MorphKernelFunction()
         auto cb = CloneBasicBlock(b, localVMap, "", newFunc);
         newBody.push_back(cb);
         localVMap[b] = cb;
+        if(b == Conditional)
+        {
+            Conditional = cb;
+        }
     }
     Body = newBody;
-    vector<BasicBlock *> newEpilogue;
     vector<BasicBlock *> newTermination;
     for (auto b : Termination)
     {
@@ -215,9 +218,6 @@ void Kernel::MorphKernelFunction()
     auto exitCloned = CloneBasicBlock(Exit, localVMap, "", newFunc);
     localVMap[Exit] = exitCloned;
     Exit = exitCloned;
-    auto concCloned = CloneBasicBlock(Conditional, localVMap, "", newFunc);
-    localVMap[Conditional] = concCloned;
-    Conditional = concCloned;
     // remove the old function from the parent but do not erase it
     KernelFunction->removeFromParent();
     newFunc->setName(KernelFunction->getName());
@@ -249,7 +249,7 @@ void Kernel::MorphKernelFunction()
     int i = 0;
     for(auto ent : Entrances)
     {
-        initSwitch->setSuccessor(i, cast<BasicBlock>(VMap[ent]));
+        initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[ent]));
         i++;
     }
 
@@ -461,9 +461,6 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
     for (auto b : validConditions)
     {
         Conditional = b;
-        //Body.push_back(b);
-        //Conditional = CloneBasicBlock(b, VMap);
-        //VMap[b] = Conditional;
 
         auto exitPaths = exitDict[b];
         auto recPaths = recurseDict[b];
@@ -544,9 +541,8 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
     }
 }
 
-void Kernel::BuildBody()
+void Kernel::BuildKernel(set<BasicBlock *> &blocks)
 {
-    auto blocks = Body;
     Body.clear();
     for (auto block : blocks)
     {
@@ -1051,21 +1047,6 @@ void Kernel::ApplyMetadata()
 
 void Kernel::Repipe()
 {
-    //remap the body stuff to the conditional
-    for (auto b : Body)
-    {
-        auto term = b->getTerminator();
-        int sucCount = term->getNumSuccessors();
-        for (int i = 0; i < sucCount; i++)
-        {
-            auto suc = term->getSuccessor(i);
-            if (find(Body.begin(), Body.end(), suc) == Body.end())
-            {
-                term->setSuccessor(i, Conditional);
-            }
-        }
-    }
-
     //remap the conditional to the exit
     auto cTerm = Conditional->getTerminator();
     int cSuc = cTerm->getNumSuccessors();

@@ -91,7 +91,7 @@ private:
 
     std::vector<InlineStruct> InlinedFunctions;
 
-    void BuildBody();
+    void BuildKernel(std::set<llvm::BasicBlock *> &blocks);
     void BuildExit();
 
     void Repipe();
