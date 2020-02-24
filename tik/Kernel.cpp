@@ -1131,3 +1131,23 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
         throw TikException("Kernel Exception: tik requires a body entrance");
     }
 }
+
+void Kernel::SanityChecks()
+{
+    for(auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+    {
+        BasicBlock *BB = cast<BasicBlock>(fi);
+        int predCount = 0;
+        for(auto pred : predecessors(BB))
+        {
+            predCount++;
+        }
+        if(predCount == 0)
+        {
+            if(BB != Init)
+            {
+                throw TikException("Tik Sanity Failure: No predecessors");
+            }
+        }
+    }
+}
