@@ -593,8 +593,15 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                     toInline.push_back(ci);
                 }
             }
+            BasicBlock *working = cb;
             for (auto ci : toInline)
             {
+                if (ci->isIndirectCall())
+                {
+                    throw TikException("Tik Error: Indirect calls aren't supported")
+                }
+                else
+                {
                 auto calledFunc = ci->getCalledFunction();
                 if (!calledFunc->empty())
                 {
@@ -612,7 +619,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                     {
                         //needs to be inlined
                         currentStruct.CalledFunction = calledFunc;
-                        BasicBlock *suffix = cb->splitBasicBlock(ci);
+                            BasicBlock *suffix = working->splitBasicBlock(ci);
                         Body.push_back(suffix);
                         //first create the phi block which is the entry point
                         BasicBlock *phiBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
@@ -699,6 +706,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                         ci->removeFromParent();
 
                         InlinedFunctions.push_back(currentStruct); //finally add it to the already inlined functions
+                            working = suffix;
                     }
                     else
                     {
@@ -706,6 +714,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                         throw TikException("Tik Error: Not Implemented");
                     }
                 }
+            }
             }
             Body.push_back(cb);
             VMap[block] = cb;
@@ -779,8 +788,9 @@ void Kernel::GetMemoryFunctions()
 
     set<LoadInst *> loadInst;
     set<StoreInst *> storeInst;
-    for (auto bb : Body)
+    for(auto ki = KernelFunction->begin(); ki != KernelFunction->end(); ki++)
     {
+        auto bb = cast<BasicBlock>(ki);
         for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
         {
             Instruction *inst = cast<Instruction>(BI);
@@ -900,22 +910,34 @@ void Kernel::GetMemoryFunctions()
             IRBuilder<> builder(inst);
             if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
             {
-                auto memCall = builder.CreateCall(MemoryRead, loadMap[newInst->getPointerOperand()]);
+                auto readAddr = loadMap[newInst->getPointerOperand()];
+                if(readAddr == NULL)
+                {
+                    throw TikException("Tik Error: Missing address for load");
+                }
+                auto memCall = builder.CreateCall(MemoryRead, readAddr);
                 auto casted = cast<Instruction>(builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType()));
                 MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Cast))));
                 casted->setMetadata("TikSynthetic", tikNode);
                 auto newLoad = builder.CreateLoad(casted);
                 newInst->replaceAllUsesWith(newLoad);
                 toRemove.push_back(newInst);
+                BI++;
             }
             else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
             {
-                auto memCall = builder.CreateCall(MemoryWrite, storeMap[newInst->getPointerOperand()]);
+                auto writeAddr = storeMap[newInst->getPointerOperand()];
+                if(writeAddr == NULL)
+                {
+                    throw TikException("Tik Error: Missing address for store");
+                }
+                auto memCall = builder.CreateCall(MemoryWrite, writeAddr);
                 auto casted = cast<Instruction>(builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType()));
                 MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Cast))));
                 casted->setMetadata("TikSynthetic", tikNode);
                 auto newStore = builder.CreateStore(newInst->getValueOperand(), casted); //storee);
                 toRemove.push_back(newInst);
+                BI++;
             }
         }
     }
@@ -1038,14 +1060,19 @@ void Kernel::ApplyMetadata()
 void Kernel::Repipe()
 {
     //remap the conditional to the exit
-    for (auto c : Conditional)
+    for(auto ki = KernelFunction->begin(); ki != KernelFunction->end(); ki++)
     {
+        auto c = cast<BasicBlock>(ki);
         auto cTerm = c->getTerminator();
+        if(!cTerm)
+        {
+            continue;
+        }
         int cSuc = cTerm->getNumSuccessors();
         for (int i = 0; i < cSuc; i++)
         {
             auto suc = cTerm->getSuccessor(i);
-            if (find(Body.begin(), Body.end(), suc) == Body.end())
+            if(suc->getParent() != KernelFunction)
             {
                 cTerm->setSuccessor(i, Exit);
             }
@@ -1134,17 +1161,17 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
 
 void Kernel::SanityChecks()
 {
-    for(auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+    for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
     {
         BasicBlock *BB = cast<BasicBlock>(fi);
         int predCount = 0;
-        for(auto pred : predecessors(BB))
+        for (auto pred : predecessors(BB))
         {
             predCount++;
         }
-        if(predCount == 0)
+        if (predCount == 0)
         {
-            if(BB != Init)
+            if (BB != Init)
             {
                 throw TikException("Tik Sanity Failure: No predecessors");
             }
