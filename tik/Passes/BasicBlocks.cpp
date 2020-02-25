@@ -18,7 +18,6 @@ using namespace llvm;
 
 namespace DashTracer
 {
-
     namespace Passes
     {
         bool EncodedTrace::runOnBasicBlock(BasicBlock &BB)
@@ -84,7 +83,6 @@ namespace DashTracer
             AU.addRequired<DashTracer::Passes::TraceIO>();
             AU.setPreservesCFG();
         }
-
         char EncodedTrace::ID = 0;
         static RegisterPass<EncodedTrace> Y("EncodedTrace", "Adds tracing to the binary", true, false);
     } // namespace Passes

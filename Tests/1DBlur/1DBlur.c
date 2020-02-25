@@ -12,14 +12,16 @@ int main()
     //initialize the data
     for (int i = 0; i < WIDTH; i++)
     {
+        //printf("Initializing index %d of input.\n", i);
         input[i] = rand();
     }
     
     for (int i = 1; i < WIDTH - 1; i++)
     {
+        //printf("Computing index %d of output array.\n", i);
         output[i - 1] = input[i - 1] + input[i] + input[i + 1];
     }
 
-    printf("Success\n");
+    //printf("Success\n");
     return 0;
 }
