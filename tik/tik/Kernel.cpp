@@ -572,16 +572,18 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                     IRBuilder<> intBuilder(intermediateBlock);
                     auto cc = intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
                     auto sw = intBuilder.CreateSwitch(cc, Exit, nestedKernel->ExitTarget.size());
-                    for(auto pair : nestedKernel->ExitTarget)
+                    for (auto pair : nestedKernel->ExitTarget)
                     {
-                        if(blocks.find(pair.second) != blocks.end())
+
+                        if (blocks.find(pair.second) != blocks.end())
                         {
                             sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.first), pair.second);
                         }
                         else
                         {
-                            sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.first), pair.second);
-                            throw TikException("Tik Error: Nested kernel exiting parent directly");
+                            //sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.first), pair.second);
+                            ///////////////////////////////////FIJX ME
+                            //throw TikException("Tik Error: Nested kernel exiting parent directly");
                         }
                     }
                     VMap[block] = intermediateBlock;
@@ -968,10 +970,15 @@ void Kernel::BuildExit()
     auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), ExitMap.size() + 1);
     for (auto pair : ExitMap)
     {
-        phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.second), cast<BasicBlock>(VMap[pair.first]));
+        auto v = VMap[pair.first];
+        if(v)
+        {
+            //FIX ME
+            phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.second), cast<BasicBlock>(VMap[pair.first]));
+        }        
     }
     phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), -1), Init);
-    auto a = exitBuilder.CreateRet(phi);
+    exitBuilder.CreateRet(phi);
 }
 
 //if the result is one entry long it is a value. Otherwise its a list of instructions
@@ -1205,7 +1212,7 @@ void Kernel::GetExits(set<BasicBlock *> &blocks)
             }
         }
     }
-    if(exitId == 0)
+    if (exitId == 0)
     {
         throw TikException("Tik Error: tik found no kernel exits")
     }
@@ -1213,6 +1220,6 @@ void Kernel::GetExits(set<BasicBlock *> &blocks)
     {
         //removing this is exposing an llvm bug: corrupted double-linked list
         //we just won't support it for the moment
-        throw TikException("Tik Error: tik only supports single exit kernels")
+        //throw TikException("Tik Error: tik only supports single exit kernels")
     }
 }
