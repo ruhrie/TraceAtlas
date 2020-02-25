@@ -1068,12 +1068,34 @@ vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blo
 
 void Kernel::ApplyMetadata()
 {
-    MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::KernelFunction))));
-    MDNode *writeNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::MemoryRead))));
-    MDNode *readNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::MemoryWrite))));
-    KernelFunction->setMetadata("TikFunction", tikNode);
-    MemoryRead->setMetadata("TikFunction", readNode);
-    MemoryWrite->setMetadata("TikFunction", writeNode);
+    //annotate the kernel functions
+    MDNode *kernelNode = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), Name));
+    KernelFunction->setMetadata("KernelName", kernelNode);
+    MemoryRead->setMetadata("KernelName", kernelNode);
+    MemoryWrite->setMetadata("KernelName", kernelNode);
+    for (auto global : GlobalMap)
+    {
+        global.second->setMetadata("KernelName", kernelNode);
+    }
+
+    //annotate the body
+    MDNode *bodyNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::Body))));
+    for (auto body : Body)
+    {
+        cast<Instruction>(body->getFirstInsertionPt())->setMetadata("TikMetadata", bodyNode);
+    }
+    //annotate the terminus
+    MDNode *termNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::Terminus))));
+    for (auto term : Termination)
+    {
+        cast<Instruction>(term->getFirstInsertionPt())->setMetadata("TikMetadata", termNode);
+    }
+    //annotate the conditional, has to happen after body since conditional is a part of the body
+    MDNode *condNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::Conditional))));
+    for (auto cond : Conditional)
+    {
+        cast<Instruction>(cond->getFirstInsertionPt())->setMetadata("TikMetadata", condNode);
+    }
 }
 
 void Kernel::Repipe()

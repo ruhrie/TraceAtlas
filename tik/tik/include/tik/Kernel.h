@@ -40,7 +40,7 @@ private:
     ///
     /// The unaltered bitcode contains locally scoped variables that are used both in the Kernel function and the memory functions.
     /// This structure maps those local pointers to global pointers.
-    std::map<llvm::Value *, llvm::GlobalValue *> GlobalMap;
+    std::map<llvm::Value *, llvm::GlobalObject *> GlobalMap;
 
     ///
     ///
