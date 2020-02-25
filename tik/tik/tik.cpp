@@ -104,7 +104,7 @@ int main(int argc, char *argv[])
         inputJson >> j;
         inputJson.close();
     }
-    catch (TikException &e)
+    catch (exception &e)
     {
         std::cerr << "Couldn't open input json file: " << JsonFile << "\n";
         std::cerr << e.what() << '\n';
@@ -128,9 +128,6 @@ int main(int argc, char *argv[])
         {
             kernel = value;
         }
-
-        //std::cout << value;
-        //vector<int> kernel = value;
         kernels[index] = kernel.get<vector<int>>();
     }
 
@@ -163,10 +160,17 @@ int main(int argc, char *argv[])
     {
         sourceBitcode = parseIRFile(InputFile, smerror, context);
     }
-    catch (TikException &e)
+    catch (exception &e)
     {
         std::cerr << "Couldn't open input bitcode file: " << InputFile << "\n";
         std::cerr << e.what() << '\n';
+        spdlog::critical("Failed to open source bitcode: " + InputFile);
+        return EXIT_FAILURE;
+    }
+
+    if (sourceBitcode.get() == NULL)
+    {
+        std::cerr << "Couldn't open input bitcode file: " << InputFile << "\n";
         spdlog::critical("Failed to open source bitcode: " + InputFile);
         return EXIT_FAILURE;
     }
@@ -289,7 +293,7 @@ int main(int argc, char *argv[])
         }
         spdlog::info("Succesfully wrote tik to file");
     }
-    catch (TikException &e)
+    catch (exception &e)
     {
         std::cerr << "Failed to open output file: " << OutputFile << "\n";
         std::cerr << e.what() << '\n';
