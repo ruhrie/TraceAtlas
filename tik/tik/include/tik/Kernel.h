@@ -18,8 +18,8 @@ public:
     std::set<llvm::BasicBlock *> Conditional;
     std::set<llvm::BasicBlock *> Entrances;
     std::map<int, llvm::BasicBlock *> ExitTarget;
-    std::vector<llvm::BasicBlock *> Body;
-    std::vector<llvm::BasicBlock *> Termination;
+    std::set<llvm::BasicBlock *> Body;
+    std::set<llvm::BasicBlock *> Termination;
     llvm::BasicBlock *Init = NULL;
     llvm::BasicBlock *Exit = NULL;
     llvm::Function *MemoryRead = NULL;

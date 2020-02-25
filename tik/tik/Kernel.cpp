@@ -198,11 +198,11 @@ void Kernel::MorphKernelFunction()
     localVMap[Init] = newInit;
     Init = newInit;
 
-    vector<BasicBlock *> newBody;
+    set<BasicBlock *> newBody;
     for (auto b : Body)
     {
         auto cb = CloneBasicBlock(b, localVMap, "", newFunc);
-        newBody.push_back(cb);
+        newBody.insert(cb);
         localVMap[b] = cb;
         if (Conditional.find(b) != Conditional.end())
         {
@@ -211,11 +211,11 @@ void Kernel::MorphKernelFunction()
         }
     }
     Body = newBody;
-    vector<BasicBlock *> newTermination;
+    set<BasicBlock *> newTermination;
     for (auto b : Termination)
     {
         auto cb = CloneBasicBlock(b, localVMap, "", newFunc);
-        newTermination.push_back(cb);
+        newTermination.insert(cb);
         localVMap[b] = cb;
     }
     Termination = newTermination;
@@ -485,7 +485,7 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
                 {
                     if (blocks.find(a) != blocks.end())
                     {
-                        Body.push_back(a);
+                        Body.insert(a);
                     }
                 }
                 for (auto suc : successors(a))
@@ -520,7 +520,7 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
                     if (blocks.find(a) != blocks.end())
                     {
                         throw TikException("Tik Error: Detected terminus block");
-                        Termination.push_back(a);
+                        Termination.insert(a);
                     }
                 }
                 for (auto suc : successors(a))
@@ -536,7 +536,7 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
             }
         }
 
-        Body.push_back(b);
+        Body.insert(b);
     }
 }
 
@@ -595,7 +595,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                         }
                     }
                     VMap[block] = intermediateBlock;
-                    Body.push_back(intermediateBlock);
+                    Body.insert(intermediateBlock);
                     i++;
                 }
             }
@@ -648,10 +648,10 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                             //needs to be inlined
                             currentStruct.CalledFunction = calledFunc;
                             BasicBlock *suffix = working->splitBasicBlock(ci);
-                            Body.push_back(suffix);
+                            Body.insert(suffix);
                             //first create the phi block which is the entry point
                             BasicBlock *phiBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-                            Body.push_back(phiBlock);
+                            Body.insert(phiBlock);
                             IRBuilder<> phiBuilder(phiBlock);
                             //first phi we need is the number of exit paths
                             vector<BasicBlock *> funcUses;
@@ -692,7 +692,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
 
                             //we also need a block at the end to gather the return values
                             auto returnBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-                            Body.push_back(returnBlock);
+                            Body.insert(returnBlock);
                             int returnCount = 0; //just like before we need a count
                             map<BasicBlock *, Value *> returnMap;
                             for (auto fi = calledFunc->begin(); fi != calledFunc->end(); fi++)
@@ -744,7 +744,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                     }
                 }
             }
-            Body.push_back(cb);
+            Body.insert(cb);
             VMap[block] = cb;
         }
     }
