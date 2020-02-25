@@ -581,9 +581,17 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                         }
                         else
                         {
-                            //sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.first), pair.second);
-                            ///////////////////////////////////FIJX ME
-                            //throw TikException("Tik Error: Nested kernel exiting parent directly");
+                            //exits both kernels simultaneously
+                            //we create a temp block and remab the exit so the phi has a value
+                            //then remap in the dictionary for the final mapping
+                            //note that we do not change the ExitTarget map so we still go to the right place
+                            BasicBlock *newBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
+                            IRBuilder<> newBlockBuilder(newBlock);
+                            newBlockBuilder.CreateBr(Exit);
+                            sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.first), newBlock);
+                            int index = ExitMap[pair.second];
+                            ExitMap.erase(pair.second);
+                            ExitMap[newBlock] = index;
                         }
                     }
                     VMap[block] = intermediateBlock;
@@ -618,6 +626,11 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                 else
                 {
                     auto calledFunc = ci->getCalledFunction();
+                    if (!calledFunc)
+                    {
+                        throw TikException("Tik Error: Call inst was null")
+                    }
+
                     if (!calledFunc->empty())
                     {
                         //we need to do a check here to see if we already inlined it
@@ -971,11 +984,7 @@ void Kernel::BuildExit()
     for (auto pair : ExitMap)
     {
         auto v = VMap[pair.first];
-        if(v)
-        {
-            //FIX ME
-            phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.second), cast<BasicBlock>(VMap[pair.first]));
-        }        
+        phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.second), cast<BasicBlock>(VMap[pair.first]));
     }
     phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), -1), Init);
     exitBuilder.CreateRet(phi);
