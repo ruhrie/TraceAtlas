@@ -104,7 +104,7 @@ int main(int argc, char *argv[])
         inputJson >> j;
         inputJson.close();
     }
-    catch (TikException &e)
+    catch (exception &e)
     {
         std::cerr << "Couldn't open input json file: " << JsonFile << "\n";
         std::cerr << e.what() << '\n';
@@ -119,18 +119,15 @@ int main(int argc, char *argv[])
     {
         string index = key;
         nlohmann::json kernel;
-        if(!value[0].empty() && value[0].is_array())
+        if (!value[0].empty() && value[0].is_array())
         {
             //embedded layout
             kernel = value[0];
         }
         else
-        {  
+        {
             kernel = value;
         }
-        
-        //std::cout << value;
-        //vector<int> kernel = value;
         kernels[index] = kernel.get<vector<int>>();
     }
 
@@ -163,10 +160,17 @@ int main(int argc, char *argv[])
     {
         sourceBitcode = parseIRFile(InputFile, smerror, context);
     }
-    catch (TikException &e)
+    catch (exception &e)
     {
         std::cerr << "Couldn't open input bitcode file: " << InputFile << "\n";
         std::cerr << e.what() << '\n';
+        spdlog::critical("Failed to open source bitcode: " + InputFile);
+        return EXIT_FAILURE;
+    }
+
+    if (sourceBitcode.get() == NULL)
+    {
+        std::cerr << "Couldn't open input bitcode file: " << InputFile << "\n";
         spdlog::critical("Failed to open source bitcode: " + InputFile);
         return EXIT_FAILURE;
     }
@@ -192,10 +196,10 @@ int main(int argc, char *argv[])
             }
             if (childParentMapping.find(kernel.first) == childParentMapping.end())
             {
-                try
+                //this kernel has no unexplained parents
+                Kernel *kern = new Kernel(kernel.second, sourceBitcode.get(), kernel.first);
+                if (kern->Valid)
                 {
-                    //this kernel has no unexplained parents
-                    Kernel *kern = new Kernel(kernel.second, sourceBitcode.get(), kernel.first);
                     KfMap[kern->KernelFunction] = kern;
                     //so we remove its blocks from all parents
                     vector<string> toRemove;
@@ -234,12 +238,9 @@ int main(int argc, char *argv[])
                     //and restart the iterator to ensure cohesion
                     break;
                 }
-                catch (TikException &e)
+                else
                 {
                     failedKernels.insert(kernel.second);
-                    std::cerr << "Failed to convert kernel to tik"
-                              << "\n";
-                    std::cerr << e.what() << '\n';
                     error = true;
                     spdlog::error("Failed to convert kernel: " + kernel.first);
                 }
@@ -267,7 +268,7 @@ int main(int argc, char *argv[])
         if (OutputType == "JSON")
         {
             nlohmann::json finalJson;
-            for (Kernel *kern : results)
+            for (auto kern : results)
             {
                 finalJson["Kernels"][kern->Name] = kern->GetJson();
             }
@@ -302,7 +303,7 @@ int main(int argc, char *argv[])
         }
         spdlog::info("Succesfully wrote tik to file");
     }
-    catch (TikException &e)
+    catch (exception &e)
     {
         std::cerr << "Failed to open output file: " << OutputFile << "\n";
         std::cerr << e.what() << '\n';

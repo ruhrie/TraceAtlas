@@ -1,9 +1,9 @@
 #pragma once
 enum class TikMetadata : int
 {
-    KernelFunction,
-    MemoryWrite,
-    MemoryRead
+    Conditional,
+    Body,
+    Terminus
 };
 
 enum class TikSynthetic : int

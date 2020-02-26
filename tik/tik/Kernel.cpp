@@ -7,6 +7,7 @@
 #include "tik/Util.h"
 #include "tik/tik.h"
 #include <algorithm>
+#include <iostream>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/Function.h>
@@ -50,7 +51,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     }
     reservedNames.insert(Name);
 
-    FunctionType *mainType = FunctionType::get(Type::getVoidTy(TikModule->getContext()), false);
+    FunctionType *mainType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), false);
     KernelFunction = Function::Create(mainType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
     Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
     Exit = BasicBlock::Create(TikModule->getContext(), "Exit", KernelFunction);
@@ -72,47 +73,58 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         }
     }
 
-    //this is a recursion check, just so we can enumerate issues
-    for (auto block : blocks)
+    try
     {
-        Function *f = block->getParent();
-        for (auto bi = block->begin(); bi != block->end(); bi++)
+        //this is a recursion check, just so we can enumerate issues
+        for (auto block : blocks)
         {
-            if (CallBase *cb = dyn_cast<CallBase>(bi))
+            Function *f = block->getParent();
+            for (auto bi = block->begin(); bi != block->end(); bi++)
             {
-                if (cb->getCalledFunction() == f)
+                if (CallBase *cb = dyn_cast<CallBase>(bi))
                 {
-                    throw TikException("Tik Error: Recursion is unimplemented")
+                    if (cb->getCalledFunction() == f)
+                    {
+                        throw TikException("Tik Error: Recursion is unimplemented")
+                    }
                 }
             }
         }
-    }
 
-    //SplitBlocks(blocks);
+        //SplitBlocks(blocks);
 
-    GetEntrances(blocks);
-    GetExits(blocks);
+        GetEntrances(blocks);
+        GetExits(blocks);
 
-    GetConditional(blocks);
+        GetConditional(blocks);
 
-    BuildKernel(blocks);
+        BuildKernel(blocks);
 
-    BuildExit();
+        BuildExit();
     
-    ExportFunctionSignatures();
+        ExportFunctionSignatures();
 
-    Remap();
-    //might be fused
-    Repipe();
+        Remap();
+        //might be fused
+        Repipe();
 
-    GetInitInsts();
+        GetInitInsts();
 
-    GetMemoryFunctions();
+        GetMemoryFunctions();
 
-    MorphKernelFunction();
+        MorphKernelFunction();
 
+        ApplyMetadata();
 
-    ApplyMetadata();
+        Valid = true;
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Failed to convert kernel to tik"
+                  << "\n";
+        std::cerr << e.what() << '\n';
+        Cleanup();
+    }
 }
 
 nlohmann::json Kernel::GetJson()
@@ -167,6 +179,26 @@ nlohmann::json Kernel::GetJson()
     return j;
 }
 
+void Kernel::Cleanup()
+{
+    if (KernelFunction)
+    {
+        KernelFunction->removeFromParent();
+    }
+    if (MemoryRead)
+    {
+        MemoryRead->removeFromParent();
+    }
+    if (MemoryWrite)
+    {
+        MemoryWrite->removeFromParent();
+    }
+    for (auto g : GlobalMap)
+    {
+        g.second->removeFromParent();
+    }
+}
+
 Kernel::~Kernel()
 {
 }
@@ -214,7 +246,7 @@ void Kernel::MorphKernelFunction()
     }
 
     // create our new function with input args and clone our basic blocks into it
-    FunctionType *funcType = FunctionType::get(Type::getVoidTy(TikModule->getContext()), inputArgs, false);
+    FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
     llvm::Function *newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName() + "_tmp", TikModule);
     for (int i = 0; i < ExternalValues.size(); i++)
     {
@@ -225,11 +257,11 @@ void Kernel::MorphKernelFunction()
     localVMap[Init] = newInit;
     Init = newInit;
 
-    vector<BasicBlock *> newBody;
+    set<BasicBlock *> newBody;
     for (auto b : Body)
     {
         auto cb = CloneBasicBlock(b, localVMap, "", newFunc);
-        newBody.push_back(cb);
+        newBody.insert(cb);
         localVMap[b] = cb;
         if (Conditional.find(b) != Conditional.end())
         {
@@ -238,11 +270,11 @@ void Kernel::MorphKernelFunction()
         }
     }
     Body = newBody;
-    vector<BasicBlock *> newTermination;
+    set<BasicBlock *> newTermination;
     for (auto b : Termination)
     {
         auto cb = CloneBasicBlock(b, localVMap, "", newFunc);
-        newTermination.push_back(cb);
+        newTermination.insert(cb);
         localVMap[b] = cb;
     }
     Termination = newTermination;
@@ -512,7 +544,7 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
                 {
                     if (blocks.find(a) != blocks.end())
                     {
-                        Body.push_back(a);
+                        Body.insert(a);
                     }
                 }
                 for (auto suc : successors(a))
@@ -547,7 +579,7 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
                     if (blocks.find(a) != blocks.end())
                     {
                         throw TikException("Tik Error: Detected terminus block");
-                        Termination.push_back(a);
+                        Termination.insert(a);
                     }
                 }
                 for (auto suc : successors(a))
@@ -563,7 +595,7 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
             }
         }
 
-        Body.push_back(b);
+        Body.insert(b);
     }
 }
 
@@ -576,7 +608,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
         if (KernelMap.find(id) != KernelMap.end())
         {
             //this belongs to a subkernel
-            Kernel *nestedKernel = KernelMap[id];
+            auto nestedKernel = KernelMap[id];
             if (nestedKernel->Entrances.find(block) == nestedKernel->Entrances.end())
             {
                 //we need to make a unique block for each entrance (there is currently only one)
@@ -597,10 +629,32 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                     }
                     BasicBlock *intermediateBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
                     IRBuilder<> intBuilder(intermediateBlock);
-                    intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
-                    intBuilder.CreateBr(cast<BasicBlock>(nestedKernel->ExitTarget[0]));
+                    auto cc = intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
+                    auto sw = intBuilder.CreateSwitch(cc, Exit, nestedKernel->ExitTarget.size());
+                    for (auto pair : nestedKernel->ExitTarget)
+                    {
+
+                        if (blocks.find(pair.second) != blocks.end())
+                        {
+                            sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.first), pair.second);
+                        }
+                        else
+                        {
+                            //exits both kernels simultaneously
+                            //we create a temp block and remab the exit so the phi has a value
+                            //then remap in the dictionary for the final mapping
+                            //note that we do not change the ExitTarget map so we still go to the right place
+                            BasicBlock *newBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
+                            IRBuilder<> newBlockBuilder(newBlock);
+                            newBlockBuilder.CreateBr(Exit);
+                            sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.first), newBlock);
+                            int index = ExitMap[pair.second];
+                            ExitMap.erase(pair.second);
+                            ExitMap[newBlock] = index;
+                        }
+                    }
                     VMap[block] = intermediateBlock;
-                    Body.push_back(intermediateBlock);
+                    Body.insert(intermediateBlock);
                     i++;
                 }
             }
@@ -631,6 +685,11 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                 else
                 {
                     auto calledFunc = ci->getCalledFunction();
+                    if (!calledFunc)
+                    {
+                        throw TikException("Tik Error: Call inst was null")
+                    }
+
                     if (!calledFunc->empty())
                     {
                         //we need to do a check here to see if we already inlined it
@@ -648,10 +707,10 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                             //needs to be inlined
                             currentStruct.CalledFunction = calledFunc;
                             BasicBlock *suffix = working->splitBasicBlock(ci);
-                            Body.push_back(suffix);
+                            Body.insert(suffix);
                             //first create the phi block which is the entry point
                             BasicBlock *phiBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-                            Body.push_back(phiBlock);
+                            Body.insert(phiBlock);
                             IRBuilder<> phiBuilder(phiBlock);
                             //first phi we need is the number of exit paths
                             vector<BasicBlock *> funcUses;
@@ -692,7 +751,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
 
                             //we also need a block at the end to gather the return values
                             auto returnBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-                            Body.push_back(returnBlock);
+                            Body.insert(returnBlock);
                             int returnCount = 0; //just like before we need a count
                             map<BasicBlock *, Value *> returnMap;
                             for (auto fi = calledFunc->begin(); fi != calledFunc->end(); fi++)
@@ -744,7 +803,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                     }
                 }
             }
-            Body.push_back(cb);
+            Body.insert(cb);
             VMap[block] = cb;
         }
     }
@@ -951,7 +1010,6 @@ void Kernel::GetMemoryFunctions()
                 auto newLoad = builder.CreateLoad(casted);
                 newInst->replaceAllUsesWith(newLoad);
                 toRemove.push_back(newInst);
-                //BI++;
                 PrintVal(newLoad);
             }
             else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
@@ -967,7 +1025,6 @@ void Kernel::GetMemoryFunctions()
                 casted->setMetadata("TikSynthetic", tikNode);
                 auto newStore = builder.CreateStore(newInst->getValueOperand(), casted); //storee);
                 toRemove.push_back(newInst);
-                //BI++;
             }
         }
     }
@@ -982,7 +1039,14 @@ void Kernel::GetMemoryFunctions()
 void Kernel::BuildExit()
 {
     IRBuilder<> exitBuilder(Exit);
-    auto a = exitBuilder.CreateRetVoid();
+    auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), ExitMap.size() + 1);
+    for (auto pair : ExitMap)
+    {
+        auto v = VMap[pair.first];
+        phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.second), cast<BasicBlock>(VMap[pair.first]));
+    }
+    phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), -1), Init);
+    exitBuilder.CreateRet(phi);
 }
 
 //if the result is one entry long it is a value. Otherwise its a list of instructions
@@ -1063,12 +1127,34 @@ vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blo
 
 void Kernel::ApplyMetadata()
 {
-    MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::KernelFunction))));
-    MDNode *writeNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::MemoryRead))));
-    MDNode *readNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::MemoryWrite))));
-    KernelFunction->setMetadata("TikFunction", tikNode);
-    MemoryRead->setMetadata("TikFunction", readNode);
-    MemoryWrite->setMetadata("TikFunction", writeNode);
+    //annotate the kernel functions
+    MDNode *kernelNode = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), Name));
+    KernelFunction->setMetadata("KernelName", kernelNode);
+    MemoryRead->setMetadata("KernelName", kernelNode);
+    MemoryWrite->setMetadata("KernelName", kernelNode);
+    for (auto global : GlobalMap)
+    {
+        global.second->setMetadata("KernelName", kernelNode);
+    }
+
+    //annotate the body
+    MDNode *bodyNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::Body))));
+    for (auto body : Body)
+    {
+        cast<Instruction>(body->getFirstInsertionPt())->setMetadata("TikMetadata", bodyNode);
+    }
+    //annotate the terminus
+    MDNode *termNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::Terminus))));
+    for (auto term : Termination)
+    {
+        cast<Instruction>(term->getFirstInsertionPt())->setMetadata("TikMetadata", termNode);
+    }
+    //annotate the conditional, has to happen after body since conditional is a part of the body
+    MDNode *condNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::Conditional))));
+    for (auto cond : Conditional)
+    {
+        cast<Instruction>(cond->getFirstInsertionPt())->setMetadata("TikMetadata", condNode);
+    }
 }
 
 void Kernel::Repipe()
@@ -1276,19 +1362,30 @@ void Kernel::GetExits(set<BasicBlock *> &blocks)
 {
     int exitId = 0;
     // search for exit basic blocks
-    for(auto block : blocks)
+    set<BasicBlock *> coveredExits;
+    for (auto block : blocks)
     {
-        for(auto suc : successors(block))
+        for (auto suc : successors(block))
         {
-            if(blocks.find(suc) == blocks.end())
+            if (blocks.find(suc) == blocks.end())
             {
-                ExitTarget[exitId++] = suc;    
+                if (coveredExits.find(suc) == coveredExits.end())
+                {
+                    ExitTarget[exitId] = suc;
+                    coveredExits.insert(suc);
+                    ExitMap[block] = exitId++;
+                }
             }
         }
     }
-
-    if(exitId != 1)
+    if (exitId == 0)
     {
-        throw TikException("Tik Error: tik only supports single exit kernels")
+        throw TikException("Tik Error: tik found no kernel exits")
+    }
+    if (exitId != 1)
+    {
+        //removing this is exposing an llvm bug: corrupted double-linked list
+        //we just won't support it for the moment
+        //throw TikException("Tik Error: tik only supports single exit kernels")
     }
 }

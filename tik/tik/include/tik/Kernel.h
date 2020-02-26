@@ -19,17 +19,19 @@ public:
     std::set<llvm::BasicBlock *> Conditional;
     std::set<llvm::BasicBlock *> Entrances;
     std::map<int, llvm::BasicBlock *> ExitTarget;
-    std::vector<llvm::BasicBlock *> Body;
-    std::vector<llvm::BasicBlock *> Termination;
+    std::set<llvm::BasicBlock *> Body;
+    std::set<llvm::BasicBlock *> Termination;
     llvm::BasicBlock *Init = NULL;
     llvm::BasicBlock *Exit = NULL;
     llvm::Function *MemoryRead = NULL;
     llvm::Function *MemoryWrite = NULL;
     llvm::Function *KernelFunction = NULL;
-
+    bool Valid = false;
 private:
+    void Cleanup();
     void GetEntrances(std::set<llvm::BasicBlock *> &);
     void GetExits(std::set<llvm::BasicBlock *> &);
+    std::map<llvm::BasicBlock*, int> ExitMap;
     /// @brief  Maps old instructions to new instructions.
     ///
     /// Special LLVM map containing old instructions (from the original bitcode) as keys and new instructions as values.
@@ -40,7 +42,7 @@ private:
     ///
     /// The unaltered bitcode contains locally scoped variables that are used both in the Kernel function and the memory functions.
     /// This structure maps those local pointers to global pointers.
-    std::map<llvm::Value *, llvm::GlobalValue *> GlobalMap;
+    std::map<llvm::Value *, llvm::GlobalObject *> GlobalMap;
 
     ///
     ///
