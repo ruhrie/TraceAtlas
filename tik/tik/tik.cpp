@@ -180,6 +180,7 @@ int main(int argc, char *argv[])
 
     TikModule = new Module(InputFile, context);
     TikModule->setDataLayout(sourceBitcode->getDataLayout());
+    TikModule->setTargetTriple(sourceBitcode->getTargetTriple());
 
     //we now process all kernels who have no children and then remove them as we go
     std::vector<Kernel *> results;
