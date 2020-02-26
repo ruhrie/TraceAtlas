@@ -114,6 +114,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         std::cerr << "Failed to convert kernel to tik"
                   << "\n";
         std::cerr << e.what() << '\n';
+        Cleanup();
     }
 }
 
@@ -169,28 +170,28 @@ nlohmann::json Kernel::GetJson()
     return j;
 }
 
+void Kernel::Cleanup()
+{
+    if (KernelFunction)
+    {
+        KernelFunction->removeFromParent();
+    }
+    if (MemoryRead)
+    {
+        MemoryRead->removeFromParent();
+    }
+    if (MemoryWrite)
+    {
+        MemoryWrite->removeFromParent();
+    }
+    for (auto g : GlobalMap)
+    {
+        g.second->removeFromParent();
+    }
+}
+
 Kernel::~Kernel()
 {
-    //this is here for faulty kernel cleanup
-    if (!Valid)
-    {
-        if (KernelFunction)
-        {
-            KernelFunction->removeFromParent();
-        }
-        if (MemoryRead)
-        {
-            MemoryRead->removeFromParent();
-        }
-        if (MemoryWrite)
-        {
-            MemoryWrite->removeFromParent();
-        }
-        for (auto g : GlobalMap)
-        {
-            g.second->removeFromParent();
-        }
-    }
 }
 
 void Kernel::Remap()
@@ -982,7 +983,7 @@ void Kernel::GetMemoryFunctions()
                 auto newLoad = builder.CreateLoad(casted);
                 newInst->replaceAllUsesWith(newLoad);
                 toRemove.push_back(newInst);
-                BI++;
+                //BI++;
             }
             else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
             {
@@ -997,7 +998,7 @@ void Kernel::GetMemoryFunctions()
                 casted->setMetadata("TikSynthetic", tikNode);
                 auto newStore = builder.CreateStore(newInst->getValueOperand(), casted); //storee);
                 toRemove.push_back(newInst);
-                BI++;
+                //BI++;
             }
         }
     }

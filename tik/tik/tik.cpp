@@ -14,7 +14,6 @@
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/raw_os_ostream.h>
 #include <llvm/Support/raw_ostream.h>
-#include <memory>
 #include <nlohmann/json.hpp>
 #include <set>
 #include <spdlog/sinks/basic_file_sink.h>
@@ -31,8 +30,8 @@ enum Filetype
 };
 
 llvm::Module *TikModule;
-std::map<int, shared_ptr<Kernel>> KernelMap;
-std::map<llvm::Function *, shared_ptr<Kernel>> KfMap;
+std::map<int, Kernel *> KernelMap;
+std::map<llvm::Function *, Kernel *> KfMap;
 cl::opt<string> JsonFile("j", cl::desc("Specify input json filename"), cl::value_desc("json filename"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"));
 cl::opt<string> InputFile(cl::Positional, cl::Required, cl::desc("<input file>"));
@@ -182,7 +181,7 @@ int main(int argc, char *argv[])
     TikModule = new Module(InputFile, context);
 
     //we now process all kernels who have no children and then remove them as we go
-    std::vector<shared_ptr<Kernel>> results;
+    std::vector<Kernel *> results;
 
     bool change = true;
     set<vector<int>> failedKernels;
@@ -198,7 +197,7 @@ int main(int argc, char *argv[])
             if (childParentMapping.find(kernel.first) == childParentMapping.end())
             {
                 //this kernel has no unexplained parents
-                shared_ptr<Kernel> kern = make_shared<Kernel>(kernel.second, sourceBitcode.get(), kernel.first);
+                Kernel *kern = new Kernel(kernel.second, sourceBitcode.get(), kernel.first);
                 if (kern->Valid)
                 {
                     KfMap[kern->KernelFunction] = kern;

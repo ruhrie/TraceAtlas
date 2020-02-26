@@ -27,6 +27,7 @@ public:
     llvm::Function *KernelFunction = NULL;
     bool Valid = false;
 private:
+    void Cleanup();
     void GetEntrances(std::set<llvm::BasicBlock *> &);
     void GetExits(std::set<llvm::BasicBlock *> &);
     std::map<llvm::BasicBlock*, int> ExitMap;
