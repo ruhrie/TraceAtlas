@@ -1,12 +1,21 @@
-#include "include/Backend/Backend.h"
+#include "Backend/Backend.h"
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <zlib.h>
 
 FILE *myfile;
+
+int TraceCompressionLevel;
+char *TraceFilename;
+/// <summary>
+/// The maximum ammount of bytes to store in a buffer before flushing it.
+/// </summary>
+#define BUFSIZE 128
+unsigned int bufferIndex = 0;
+uint8_t temp_buffer[BUFSIZE];
+uint8_t storeBuffer[BUFSIZE];
 
 void WriteStream(char *input)
 {
@@ -17,6 +26,16 @@ void WriteStream(char *input)
     }
     memcpy(storeBuffer + bufferIndex, input, size);
     bufferIndex += size;
+}
+
+///Modified from https://stackoverflow.com/questions/4538586/how-to-compress-a-buffer-with-zlib
+void BufferData()
+{
+    for (int i = 0; i < BUFSIZE; i++)
+    {
+        fputc(temp_buffer[i], myfile);
+    }
+    bufferIndex = 0;
 }
 
 void Write(char *inst, int line, int block, uint64_t func)
