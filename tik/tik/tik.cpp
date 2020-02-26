@@ -179,6 +179,7 @@ int main(int argc, char *argv[])
     Annotate(sourceBitcode.get());
 
     TikModule = new Module(InputFile, context);
+    TikModule->setDataLayout(sourceBitcode->getDataLayout());
 
     //we now process all kernels who have no children and then remove them as we go
     std::vector<Kernel *> results;
