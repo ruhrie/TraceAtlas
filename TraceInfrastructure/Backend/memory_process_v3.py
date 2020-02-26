@@ -1,45 +1,50 @@
 inputSize = 0
 
 
-def firstStore(addr,t , op):
+def firstStore(addr,t,op):
     # end kernel if none at last  str(t) + '-' + str(addr)   str(addr) + '-' + str(t)
     global inputSize
     if op > 0:
-        virAddr[str(addr) + '-' + str(t)] = [addr,t,[]]
+        virAddr[str(addr) + '@' + str(t)] = [addr,t,[]]
         ## todo new coming repeat address will replace old one here
         if addr not in deAlias:
-            deAlias[addr] = str(addr) + '-' + str(t)  # latest store
+            deAlias[addr] = str(addr) + '@' + str(t)  # latest store
         elif not virAddr[deAlias[addr]][2]:
             virAddr[deAlias[addr]][2].append(t)
-            deAlias[addr] = str(addr) + '-' + str(t)
+            deAlias[addr] = str(addr) + '@' + str(t)
         else:
-            deAlias[addr] = str(addr) + '-' + str(t)
+            deAlias[addr] = str(addr) + '@' + str(t)
     else:
         ## todo repeat addr here
-        if addr not in inputAddrList:
-            inputAddrList.append(addr)
-            inputList.append([addr, t, 0])
+        if addr not in deAliasInput:
             inputSize += 1
+            deAliasInput[addr] = str(addr) + '@' + str(t)  # latest store
+            virAddrInput[str(addr) + '@' + str(t)] = [addr,[t]]
         else:
-            inputList.append([addr, t, 0])
+            virAddrInput[deAliasInput[addr]][1].append(t)
 
 
-def livingLoad(addr,t):
-    virAddr[deAlias[addr]][2].append(t)
+def livingLoad(addr,t,op):
+    if op ==1:
+        virAddr[deAlias[addr]][2].append(t)
+    else:
+        virAddrInput[deAliasInput[addr]][1].append(t)
 
 
 def myFunc(e):
-    e = e.split('-')
+    e = e.split('@')
     return int(e[1])
 
 inputAddrList = []
 inputList = []
 outputList = []
 virAddr = {}
+virAddrInput = {}
 aliveTbl = []
 deadTbl = []
 deAlias = {}
-file = open('./trace/fft.trc','rt')
+deAliasInput = {}
+file = open('./trace/fir-input-kernel.trc','rt')
 address = 0
 timing = -1
 output = []
@@ -56,48 +61,23 @@ for line in file.readlines():
         continue
 
     if address in deAlias and line[0] == "LoadAddress":
-        livingLoad(address,timing)
+        livingLoad(address,timing, 1)
+    elif address in deAliasInput and line[0] == "LoadAddress":
+        livingLoad(address,timing, -1)
+
     elif line[0] == "LoadAddress":
         # start kernel
         firstStore(address,timing, -1)
 
     elif line[0] == "StoreAddress":
-        firstStore(address,timing, 1)
-    # inputWorking.append(inputList.__len__())
-# inputList.reverse()
-# inputWorkingList = []
-# for line in inputList:
-#     if line not in inputWorkingList:
-#         inputWorkingList.append(line)
-intputLiveness = []
-for i in reversed(inputList):
-    if i[0] in intputLiveness:
-        i[2] = 0 # alive
-    else:
-        intputLiveness.append(i[0])
-        i[2] = 1 # dead
-alivenumber = inputSize
-breakflag = 0
-for time in range(0, timing):
-    for i in inputList:
-        if i[1] <= time and i[2] == 1:
-            alivenumber = alivenumber -1
-            inputList.remove(i)
-        elif i[1] < time and i[2] == 0:
-            inputList.remove(i)
-        elif i[1]> time:
-            breakflag = 1
-            inputWorking.append(alivenumber)
-            break
-    if breakflag == 0:
-        inputWorking.append(alivenumber)
-    if inputList.__len__() == 0:
-        inputWorking.append(0)
+        firstStore(address,timing,1)
 
 L = list(virAddr.keys())
 L.sort(key=myFunc)
-
-for time in range(0,timing):
+Lin = list(virAddrInput.keys())
+Lin.sort(key=myFunc)
+alivenumber = inputSize
+for time in range(0, timing+1):
     timeline = []
     reviseDic = []
     for addrPair in L:
@@ -116,9 +96,25 @@ for time in range(0,timing):
         L.remove(i)
     aliveTbl.append(timeline)
     outputWorking.append(outputList.__len__())
+    output.append(timeline.__len__())
+
+    timeline = []
+    reviseDic = []
+    for addrPair in Lin:
+        if virAddrInput[addrPair][1][0] > time:
+            break
+        if time > int(virAddrInput[addrPair][1][-1]):
+            reviseDic.append(addrPair)
+    if Lin.__len__():
+        alivenumber = alivenumber - reviseDic.__len__()
+    else:
+        alivenumber = 0
+    inputWorking.append(alivenumber)
+    for i in reviseDic:
+        del virAddrInput[i]
+        Lin.remove(i)
     if time%100 == 0:
         print("time progress:",time)
-    output.append(timeline.__len__())
 
 f = open("./workingSet.txt","w")
 for line in output:
