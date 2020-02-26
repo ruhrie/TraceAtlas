@@ -9,6 +9,11 @@
 void WriteStream(char *input);
 
 /// <summary>
+/// Compresses the trace buffer and writes it to the destination file.
+/// </summary>
+void BufferData();
+
+/// <summary>
 /// Writes the input instruction and line, block, and function UIDs to the trace buffer.
 /// </summary>
 /// <param name="inst">A stromg representing the instruction to write.</param>

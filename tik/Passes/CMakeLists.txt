@@ -1,5 +1,5 @@
 
-add_library(tikPasses MODULE Trace.cpp CommandArgs.cpp PapiExport.cpp PapiIO.cpp Functions.cpp AddLibrary.cpp ${CMAKE_SOURCE_DIR}/AtlasUtil/Annotate.cpp)
+add_library(tikPasses MODULE Trace.cpp Functions.cpp Annotate.cpp CommandArgs.cpp ${CMAKE_SOURCE_DIR}/AtlasUtil/Annotate.cpp)
 target_link_libraries(tikPasses PRIVATE nlohmann_json nlohmann_json::nlohmann_json)
 target_compile_definitions(tikPasses PRIVATE ${LLVM_DEFINITIONS})
 set_target_properties(tikPasses
