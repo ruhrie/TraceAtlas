@@ -39,7 +39,7 @@ virAddr = {}
 aliveTbl = []
 deadTbl = []
 deAlias = {}
-file = open('./trace/fir-input-kernel.trc','rt')
+file = open('./trace/fft.trc','rt')
 address = 0
 timing = -1
 output = []
@@ -80,7 +80,7 @@ alivenumber = inputSize
 breakflag = 0
 for time in range(0, timing):
     for i in inputList:
-        if i[1] < time and i[2] == 1:
+        if i[1] <= time and i[2] == 1:
             alivenumber = alivenumber -1
             inputList.remove(i)
         elif i[1] < time and i[2] == 0:
@@ -91,6 +91,8 @@ for time in range(0, timing):
             break
     if breakflag == 0:
         inputWorking.append(alivenumber)
+    if inputList.__len__() == 0:
+        inputWorking.append(0)
 
 L = list(virAddr.keys())
 L.sort(key=myFunc)
