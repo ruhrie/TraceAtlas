@@ -1,4 +1,5 @@
 #include "tik/Kernel.h"
+#include "tik/Exceptions.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Print.h"
 #include "tik/Exceptions.h"
@@ -109,7 +110,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 
         Valid = true;
     }
-    catch (const std::exception &e)
+    catch (TikException &e)
     {
         std::cerr << "Failed to convert kernel to tik"
                   << "\n";
