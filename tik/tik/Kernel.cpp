@@ -7,6 +7,7 @@
 #include "tik/Util.h"
 #include "tik/tik.h"
 #include <algorithm>
+#include <iostream>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/Function.h>
@@ -65,44 +66,55 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         }
     }
 
-    //this is a recursion check, just so we can enumerate issues
-    for (auto block : blocks)
+    try
     {
-        Function *f = block->getParent();
-        for (auto bi = block->begin(); bi != block->end(); bi++)
+        //this is a recursion check, just so we can enumerate issues
+        for (auto block : blocks)
         {
-            if (CallBase *cb = dyn_cast<CallBase>(bi))
+            Function *f = block->getParent();
+            for (auto bi = block->begin(); bi != block->end(); bi++)
             {
-                if (cb->getCalledFunction() == f)
+                if (CallBase *cb = dyn_cast<CallBase>(bi))
                 {
-                    throw TikException("Tik Error: Recursion is unimplemented")
+                    if (cb->getCalledFunction() == f)
+                    {
+                        throw TikException("Tik Error: Recursion is unimplemented")
+                    }
                 }
             }
         }
+
+        //SplitBlocks(blocks);
+
+        GetEntrances(blocks);
+        GetExits(blocks);
+
+        GetConditional(blocks);
+
+        BuildKernel(blocks);
+
+        BuildExit();
+
+        Remap();
+        //might be fused
+        Repipe();
+
+        GetInitInsts();
+
+        GetMemoryFunctions();
+
+        MorphKernelFunction();
+
+        ApplyMetadata();
+
+        Valid = true;
     }
-
-    //SplitBlocks(blocks);
-
-    GetEntrances(blocks);
-    GetExits(blocks);
-
-    GetConditional(blocks);
-
-    BuildKernel(blocks);
-
-    BuildExit();
-
-    Remap();
-    //might be fused
-    Repipe();
-
-    GetInitInsts();
-
-    GetMemoryFunctions();
-
-    MorphKernelFunction();
-
-    ApplyMetadata();
+    catch (const std::exception &e)
+    {
+        std::cerr << "Failed to convert kernel to tik"
+                  << "\n";
+        std::cerr << e.what() << '\n';
+    }
 }
 
 nlohmann::json Kernel::GetJson()
@@ -159,6 +171,26 @@ nlohmann::json Kernel::GetJson()
 
 Kernel::~Kernel()
 {
+    //this is here for faulty kernel cleanup
+    if (!Valid)
+    {
+        if (KernelFunction)
+        {
+            KernelFunction->removeFromParent();
+        }
+        if (MemoryRead)
+        {
+            MemoryRead->removeFromParent();
+        }
+        if (MemoryWrite)
+        {
+            MemoryWrite->removeFromParent();
+        }
+        for (auto g : GlobalMap)
+        {
+            g.second->removeFromParent();
+        }
+    }
 }
 
 void Kernel::Remap()
@@ -549,7 +581,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
         if (KernelMap.find(id) != KernelMap.end())
         {
             //this belongs to a subkernel
-            Kernel *nestedKernel = KernelMap[id];
+            auto nestedKernel = KernelMap[id];
             if (nestedKernel->Entrances.find(block) == nestedKernel->Entrances.end())
             {
                 //we need to make a unique block for each entrance (there is currently only one)

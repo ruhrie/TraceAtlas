@@ -25,7 +25,7 @@ public:
     llvm::Function *MemoryRead = NULL;
     llvm::Function *MemoryWrite = NULL;
     llvm::Function *KernelFunction = NULL;
-
+    bool Valid = false;
 private:
     void GetEntrances(std::set<llvm::BasicBlock *> &);
     void GetExits(std::set<llvm::BasicBlock *> &);

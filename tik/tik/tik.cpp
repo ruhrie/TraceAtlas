@@ -14,6 +14,7 @@
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/raw_os_ostream.h>
 #include <llvm/Support/raw_ostream.h>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <set>
 #include <spdlog/sinks/basic_file_sink.h>
@@ -30,8 +31,8 @@ enum Filetype
 };
 
 llvm::Module *TikModule;
-std::map<int, Kernel *> KernelMap;
-std::map<llvm::Function *, Kernel *> KfMap;
+std::map<int, shared_ptr<Kernel>> KernelMap;
+std::map<llvm::Function *, shared_ptr<Kernel>> KfMap;
 cl::opt<string> JsonFile("j", cl::desc("Specify input json filename"), cl::value_desc("json filename"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"));
 cl::opt<string> InputFile(cl::Positional, cl::Required, cl::desc("<input file>"));
@@ -181,7 +182,7 @@ int main(int argc, char *argv[])
     TikModule = new Module(InputFile, context);
 
     //we now process all kernels who have no children and then remove them as we go
-    std::vector<Kernel *> results;
+    std::vector<shared_ptr<Kernel>> results;
 
     bool change = true;
     set<vector<int>> failedKernels;
@@ -196,10 +197,10 @@ int main(int argc, char *argv[])
             }
             if (childParentMapping.find(kernel.first) == childParentMapping.end())
             {
-                try
+                //this kernel has no unexplained parents
+                shared_ptr<Kernel> kern = make_shared<Kernel>(kernel.second, sourceBitcode.get(), kernel.first);
+                if (kern->Valid)
                 {
-                    //this kernel has no unexplained parents
-                    Kernel *kern = new Kernel(kernel.second, sourceBitcode.get(), kernel.first);
                     KfMap[kern->KernelFunction] = kern;
                     //so we remove its blocks from all parents
                     vector<string> toRemove;
@@ -238,12 +239,9 @@ int main(int argc, char *argv[])
                     //and restart the iterator to ensure cohesion
                     break;
                 }
-                catch (TikException &e)
+                else
                 {
                     failedKernels.insert(kernel.second);
-                    std::cerr << "Failed to convert kernel to tik"
-                              << "\n";
-                    std::cerr << e.what() << '\n';
                     error = true;
                     spdlog::error("Failed to convert kernel: " + kernel.first);
                 }
@@ -258,7 +256,7 @@ int main(int argc, char *argv[])
         if (OutputType == "JSON")
         {
             nlohmann::json finalJson;
-            for (Kernel *kern : results)
+            for (auto kern : results)
             {
                 finalJson["Kernels"][kern->Name] = kern->GetJson();
             }
