@@ -67,7 +67,7 @@ private:
     ///
     /// The parent block of each instruction in Kernel::Body is checked for its membership in the tik representation.
     /// If it is not found, that instruction is added to Kernel::Init
-    void GetInitInsts();
+    void GetExternalValues(std::set<llvm::BasicBlock *> &blocks);
 
     /// @brief  Defines Kernel::MemoryRead and Kernel::MemoryWrite.
     ///         Defines GlobalMap.
@@ -84,7 +84,7 @@ private:
     /// This function replaces Kernel::KernelFunction with a new function that has the input args discovered by Kernel::getInitInsts.
     /// Then it assigns these input args to the appropriate global pointers.
     /// Finally, it remaps the new function, and the tik representation is done.
-    void MorphKernelFunction();
+    void RemapNestedKernels();
 
     std::vector<llvm::Value *> BuildReturnTree(llvm::BasicBlock *bb, std::vector<llvm::BasicBlock *> blocks);
 
@@ -95,7 +95,10 @@ private:
     std::vector<InlineStruct> InlinedFunctions;
 
     void BuildKernel(std::set<llvm::BasicBlock *> &blocks);
+    void BuildInit();
     void BuildExit();
+
+    void UpdateMemory();
 
     void Repipe();
     void SplitBlocks(std::set<llvm::BasicBlock *> &blocks);
