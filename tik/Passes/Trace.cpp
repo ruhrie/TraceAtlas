@@ -33,7 +33,7 @@ namespace DashTracer
             std::vector<Value *> args;
             args.push_back(idValue);
             args.push_back(trueConst);
-            firstBuilder.CreateCall(BB_ID, args);
+            firstBuilder.CreateCall(BB_ID);//, args);
             args.pop_back();
             args.push_back(falseConst);
             /*for (BasicBlock::iterator BI = BB.begin(), BE = BB.end(); BI != BE; ++BI)
@@ -67,13 +67,13 @@ namespace DashTracer
             }*/
             Instruction *preTerm = BB.getTerminator();
             IRBuilder endBuilder(preTerm);
-            endBuilder.CreateCall(BB_ID, args);
+            //endBuilder.CreateCall(BB_ID, args);
             return true;
         }
 
         bool EncodedTrace::doInitialization(Module &M)
         {
-            BB_ID = cast<Function>(M.getOrInsertFunction("BB_ID_Dump", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext()), Type::getInt1Ty(M.getContext())).getCallee());
+            BB_ID = cast<Function>(M.getOrInsertFunction("Test", Type::getVoidTy(M.getContext())).getCallee());//, Type::getInt64Ty(M.getContext()), Type::getInt1Ty(M.getContext())).getCallee());
             return false;
         }
 

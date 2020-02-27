@@ -24,3 +24,4 @@ void Write(char *inst, int line, int block, uint64_t func);
 
 void BB_ID_Dump(uint64_t block, bool enter);
 
+void Test();

@@ -997,7 +997,6 @@ void Kernel::GetMemoryFunctions()
             IRBuilder<> builder(inst);
             if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
             {
-                PrintVal(cast<Instruction>(newInst));
                 auto readAddr = loadMap[newInst->getPointerOperand()];
                 if (readAddr == NULL)
                 {
@@ -1010,7 +1009,6 @@ void Kernel::GetMemoryFunctions()
                 auto newLoad = builder.CreateLoad(casted);
                 newInst->replaceAllUsesWith(newLoad);
                 toRemove.push_back(newInst);
-                PrintVal(newLoad);
             }
             else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
             {

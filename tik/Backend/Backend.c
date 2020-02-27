@@ -1,6 +1,7 @@
 #include "Backend/Backend.h"
 #include <assert.h>
 #include <stdbool.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,11 +32,14 @@ void WriteStream(char *input)
 ///Modified from https://stackoverflow.com/questions/4538586/how-to-compress-a-buffer-with-zlib
 void BufferData()
 {
+    /*
     for (int i = 0; i < BUFSIZE; i++)
     {
         fputc(temp_buffer[i], myfile);
     }
     bufferIndex = 0;
+    */
+   printf("%s", temp_buffer);
 }
 
 void Write(char *inst, int line, int block, uint64_t func)
@@ -55,6 +59,8 @@ void Write(char *inst, int line, int block, uint64_t func)
 
 void BB_ID_Dump(uint64_t block, bool enter)
 {
+    printf("a");
+    /*
     char fin[128];
     if (enter)
     {
@@ -65,4 +71,12 @@ void BB_ID_Dump(uint64_t block, bool enter)
         sprintf(fin, "BBExit:%#lX\n", block);
     }
     WriteStream(fin);
+    */
+}
+
+void Test()
+{
+    printf("a");
+    char* asdf = (char*)malloc(100*sizeof(char));
+    scanf("%[^\n]", asdf);
 }

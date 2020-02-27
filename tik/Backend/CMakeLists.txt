@@ -1,4 +1,5 @@
 add_library(tikBackend STATIC Backend.c)
+target_compile_options(tikBackend PRIVATE "-flto")
 set_target_properties(
     tikBackend PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
