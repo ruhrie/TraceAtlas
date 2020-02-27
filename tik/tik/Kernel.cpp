@@ -229,6 +229,7 @@ void Kernel::MorphKernelFunction()
 
     auto newInit = CloneBasicBlock(Init, localVMap, "", newFunc);
     localVMap[Init] = newInit;
+    Init->removeFromParent();
     Init = newInit;
 
     set<BasicBlock *> newBody;
@@ -242,6 +243,7 @@ void Kernel::MorphKernelFunction()
             Conditional.erase(b);
             Conditional.insert(cb);
         }
+        b->removeFromParent();
     }
     Body = newBody;
     set<BasicBlock *> newTermination;
@@ -250,10 +252,12 @@ void Kernel::MorphKernelFunction()
         auto cb = CloneBasicBlock(b, localVMap, "", newFunc);
         newTermination.insert(cb);
         localVMap[b] = cb;
+        b->removeFromParent();
     }
     Termination = newTermination;
     auto exitCloned = CloneBasicBlock(Exit, localVMap, "", newFunc);
     localVMap[Exit] = exitCloned;
+    Exit->removeFromParent();
     Exit = exitCloned;
     // remove the old function from the parent but do not erase it
     KernelFunction->removeFromParent();
@@ -569,8 +573,6 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
             }
         }
         */
-
-        Body.insert(b);
     }
 
     for (auto block : blocks)
@@ -798,7 +800,20 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                     }
                 }
             }
-            Body.insert(cb);
+            if (Body.find(block) != Body.end())
+            {
+                Body.erase(block);
+                Body.insert(cb);
+            }
+            else if (Termination.find(block) != Termination.end())
+            {
+                Termination.erase(block);
+                Termination.insert(cb);
+            }
+            else
+            {
+                throw TikException("Tik Error: block not in Body or Termination");
+            }
             VMap[block] = cb;
         }
     }
