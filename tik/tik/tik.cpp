@@ -236,7 +236,7 @@ int main(int argc, char *argv[])
                     //and remove it from kernels
                     auto it = find(kernels.begin(), kernels.end(), kernel);
                     kernels.erase(it);
-                    spdlog::info("Succesfully converted kernel: " + kernel.first);
+                    spdlog::info("Successfully converted kernel: " + kernel.first);
                     //and restart the iterator to ensure cohesion
                     break;
                 }
@@ -303,7 +303,7 @@ int main(int argc, char *argv[])
                 WriteBitcodeToFile(*TikModule, raw_stream);
             }
         }
-        spdlog::info("Succesfully wrote tik to file");
+        spdlog::info("Successfully wrote tik to file");
     }
     catch (exception &e)
     {

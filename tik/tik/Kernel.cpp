@@ -15,6 +15,7 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Type.h>
+#include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/Transforms/Utils/Cloning.h>
 #include <queue>
 #include <iostream>
@@ -906,7 +907,7 @@ void Kernel::GetMemoryFunctions()
     }
 
     // create MemoryRead, MemoryWrite functions
-    FunctionType *funcType = FunctionType::get(Type::getInt32Ty(TikModule->getContext()), Type::getInt32Ty(TikModule->getContext()), false);
+    FunctionType *funcType = FunctionType::get(Type::getInt64Ty(TikModule->getContext()), Type::getInt64Ty(TikModule->getContext()), false);
     MemoryRead = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, "MemoryRead", TikModule);
     MemoryWrite = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, "MemoryWrite", TikModule);
 
@@ -929,11 +930,11 @@ void Kernel::GetMemoryFunctions()
             GlobalMap[lVal] = g;
         }
         VMap[lVal] = GlobalMap[lVal];
-        Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
+        Constant *constant = ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), 0);
         auto a = loadBuilder.CreateGEP(lVal->getType(), GlobalMap[lVal], constant);
         auto b = loadBuilder.CreateLoad(a);
-        Instruction *converted = cast<Instruction>(loadBuilder.CreatePtrToInt(b, Type::getInt32Ty(TikModule->getContext())));
-        Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
+        Instruction *converted = cast<Instruction>(loadBuilder.CreatePtrToInt(b, Type::getInt64Ty(TikModule->getContext())));
+        Constant *indexConstant = ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), i++);
         loadMap[lVal] = indexConstant;
         if (priorValue == NULL)
         {
@@ -967,11 +968,11 @@ void Kernel::GetMemoryFunctions()
         {
             continue;
         }
-        Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
+        Constant *constant = ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), 0);
         auto a = storeBuilder.CreateGEP(sVal->getType(), GlobalMap[sVal], constant);
         auto b = storeBuilder.CreateLoad(a);
-        Instruction *converted = cast<Instruction>(storeBuilder.CreatePtrToInt(b, Type::getInt32Ty(TikModule->getContext())));
-        Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
+        Instruction *converted = cast<Instruction>(storeBuilder.CreatePtrToInt(b, Type::getInt64Ty(TikModule->getContext())));
+        Constant *indexConstant = ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), i++);
         if (priorValue == NULL)
         {
             priorValue = converted;
@@ -1133,6 +1134,8 @@ void Kernel::ApplyMetadata()
     for (auto global : GlobalMap)
     {
         global.second->setMetadata("KernelName", kernelNode);
+        /*DILocation loc(global.second->get);
+        unsigned int ln = loc.getLineNumber();*/
     }
 
     //annotate the body
