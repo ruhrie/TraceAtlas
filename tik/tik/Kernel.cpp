@@ -1,5 +1,4 @@
 #include "tik/Kernel.h"
-#include "tik/Exceptions.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Print.h"
 #include "tik/Exceptions.h"
@@ -335,7 +334,7 @@ void Kernel::MorphKernelFunction()
                 {
                     // we have a non-kernel function call
                 }
-                else // must be a kernel function call
+                else if (funcName != MemoryRead && funcName != MemoryWrite) // must be a kernel function call
                 {
                     bool found = false;
                     auto calledFunc = callInst->getCalledFunction();
@@ -344,7 +343,7 @@ void Kernel::MorphKernelFunction()
                     {
                         for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
                         {
-                            for (auto b : Body)
+                            for (auto b = KernelFunction->begin(); b != KernelFunction->end(); b++)
                             {
                                 for (BasicBlock::iterator j = b->begin(), BE2 = b->end(); j != BE2; ++j)
                                 {
@@ -534,7 +533,7 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
                 }
             }
         }
-
+        /*
         //and the terminus
         {
             queue<BasicBlock *> processing;
@@ -553,7 +552,7 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
                 {
                     if (blocks.find(a) != blocks.end())
                     {
-                        throw TikException("Tik Error: Detected terminus block");
+                        //throw TikException("Tik Error: Detected terminus block");
                         Termination.insert(a);
                     }
                 }
@@ -569,14 +568,22 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
                 }
             }
         }
+        */
 
         Body.insert(b);
+    }
+
+    for (auto block : blocks)
+    {
+        if (Body.find(block) == Body.end())
+        {
+            Termination.insert(block);
+        }
     }
 }
 
 void Kernel::BuildKernel(set<BasicBlock *> &blocks)
 {
-    Body.clear();
     for (auto block : blocks)
     {
         int64_t id = GetBlockID(block);
@@ -629,7 +636,20 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                         }
                     }
                     VMap[block] = intermediateBlock;
-                    Body.insert(intermediateBlock);
+                    if (Body.find(block) != Body.end())
+                    {
+                        Body.insert(intermediateBlock);
+                        Body.erase(intermediateBlock);
+                    }
+                    else if (Termination.find(block) != Termination.end())
+                    {
+                        Termination.insert(intermediateBlock);
+                        Termination.erase(intermediateBlock);
+                    }
+                    else
+                    {
+                        throw TikException("Tik Error: Block not assigned to Body or Terminus");
+                    }
                     i++;
                 }
             }
@@ -819,16 +839,16 @@ void Kernel::GetInitInsts()
                                 //these are the arguments for the function call in order
                                 //we now can check if they are in our vmap, if so they aren't external
                                 //if not they are and should be mapped as is appropriate
-                                if (VMap[sExtVal] == NULL)
+                                Value *v = VMap[sExtVal];
+                                if (!v)
                                 {
                                     if (find(ExternalValues.begin(), ExternalValues.end(), sExtVal) == ExternalValues.end())
                                     {
                                         ExternalValues.push_back(sExtVal);
                                     }
                                 }
-                                else
+                                else //this is a mapped value, therefore it is in the kernel locally
                                 {
-                                    throw TikException("Tik Error: Not Implemented");
                                 }
                             }
                         }
@@ -872,7 +892,6 @@ void Kernel::GetMemoryFunctions()
     {
         Value *loadVal = load->getPointerOperand();
         loadValues.insert(loadVal);
-        Type *loadType = loadVal->getType();
     }
     for (StoreInst *store : storeInst)
     {
@@ -964,7 +983,7 @@ void Kernel::GetMemoryFunctions()
 
     // find instructions in body block not belonging to parent kernel
     vector<Instruction *> toRemove;
-    for (auto bb : Body)
+    for (auto bb = KernelFunction->begin(); bb != KernelFunction->end(); bb++)
     {
         for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
         {
