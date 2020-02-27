@@ -795,6 +795,32 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                 throw TikException("Tik Error: block not in Body or Termination");
             }
             VMap[block] = cb;
+
+            //fix the phis
+            int rescheduled = 0; //the number of blocks we rescheduled
+            for(auto bi = cb->begin(); bi != cb->end(); bi++)
+            {
+                if(PHINode *p = dyn_cast<PHINode>(bi))
+                {
+                    for(auto pred : p->blocks())
+                    {
+                        if(blocks.find(pred) == blocks.end())
+                        {
+                            //we have an invalid predecessor, replace with init
+                            p->replaceIncomingBlockWith(pred, Init);
+                            rescheduled++;
+                        }
+                    }
+                }
+                else
+                {
+                    break;
+                }                
+            }
+            if(rescheduled > 1)
+            {
+                spdlog::warn("Rescheduled more than one phi predecessor"); //basically this is a band aid. Needs some more help
+            }
         }
     }
 }
