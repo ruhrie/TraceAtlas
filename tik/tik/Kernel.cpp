@@ -263,7 +263,7 @@ void Kernel::UpdateMemory()
             Instruction *inst = cast<Instruction>(BI);
             for (auto pair : GlobalMap)
             {
-                if (llvm::cast<Instruction>(pair.first) == inst)
+                if (pair.first == inst)
                 {
                     if (coveredGlobals.find(pair.second) == coveredGlobals.end())
                     {
