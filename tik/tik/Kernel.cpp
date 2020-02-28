@@ -100,7 +100,9 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         KernelFunction = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
         for (int i = 0; i < ExternalValues.size(); i++)
         {
-            ArgumentMap[KernelFunction->arg_begin() + 1 + i] = ExternalValues[i];
+            Argument *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i);
+            VMap[ExternalValues[i]] = a;
+            ArgumentMap[a] = ExternalValues[i];
         }
 
         //create the artificial blocks
@@ -852,7 +854,6 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
                 {
                     if (CallInst *ci = dyn_cast<CallInst>(inst))
                     {
-
                         if (KfMap.find(ci->getCalledFunction()) != KfMap.end())
                         {
                             auto subKernel = KfMap[ci->getCalledFunction()];
@@ -877,6 +878,25 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
                         else
                         {
                             throw TikException("Tik Error: Not Implemented");
+                        }
+                    }
+                    else
+                    {
+                        if (find(ExternalValues.begin(), ExternalValues.end(), ar) == ExternalValues.end())
+                        {
+                            ExternalValues.push_back(ar);
+                        }
+
+                        bool external = false;
+                        for (auto user : ar->getParent()->users())
+                        {
+                            if (auto a = dyn_cast<Instruction>(user))
+                            {
+                                if (blocks.find(a->getParent()) == blocks.end())
+                                {
+                                    external = true;
+                                }
+                            }
                         }
                     }
                 }
