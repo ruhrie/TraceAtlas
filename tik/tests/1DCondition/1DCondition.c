@@ -1,17 +1,17 @@
-#include <time.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 #define WIDTH 1024
 int main()
 {
-    int *input = (int*)malloc(sizeof(int) * WIDTH);
-    int *output = (int*)malloc(sizeof(int) * WIDTH);
+    int *input = (int *)malloc(sizeof(int) * WIDTH);
+    int *output = (int *)malloc(sizeof(int) * WIDTH);
 
     srand(time(NULL));
     //initialize the data
-    for(int i = 0; i < WIDTH; i++)
+    for (int i = 0; i < WIDTH; i++)
     {
-        if(i % 2 == 0)
+        if (i % 2 == 0)
         {
             input[i] = 0;
         }
@@ -21,10 +21,10 @@ int main()
         }
     }
 
-    for(int i = 0; i < WIDTH ; i++)
+    for (int i = 0; i < WIDTH; i++)
     {
         int addition = 2;
-        if(i % 3 == 0)
+        if (i % 3 == 0)
         {
             addition += 1;
         }
