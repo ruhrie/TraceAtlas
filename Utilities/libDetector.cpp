@@ -1,3 +1,4 @@
+#include "AtlasUtil/Annotate.h"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -8,7 +9,6 @@
 #include <nlohmann/json.hpp>
 #include <set>
 #include <string>
-#include "AtlasUtil/Annotate.h"
 using namespace std;
 using namespace llvm;
 
@@ -29,16 +29,16 @@ int main(int argc, char *argv[])
     for (auto &[key, value] : j.items())
     {
         string index = key;
-        
+
         nlohmann::json kernel;
 
-        if(!value[0].empty() && value[0].is_array())
+        if (!value[0].empty() && value[0].is_array())
         {
             //embedded layout
             kernel = value[0];
         }
         else
-        {  
+        {
             kernel = value;
         }
 

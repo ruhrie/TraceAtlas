@@ -42,10 +42,10 @@ std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> Extrac
     int openCount[blockCount];              // counter to know where we are in the callstack
     set<int> finalBlocks[kernels.size()];   // final kernel definitions
     map<int, std::set<string>> functionMap; // maps a kernel index to its label
-    set<int> openBlocks;    
-    set<int>* kernelMap = (set<int>*)calloc(sizeof(set<int>), blockCount);
-    int kernelStarts[kernels.size()];       // map of a kernel index to the first block seen
-    set<int> blocks[kernels.size()];        // temporary kernel blocks
+    set<int> openBlocks;
+    set<int> *kernelMap = (set<int> *)calloc(sizeof(set<int>), blockCount);
+    int kernelStarts[kernels.size()]; // map of a kernel index to the first block seen
+    set<int> blocks[kernels.size()];  // temporary kernel blocks
 
     for (int i = 0; i < blockCount; i++)
     {
@@ -228,7 +228,7 @@ std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> Extrac
                     spdlog::critical("Unrecognized key: " + key);
                     throw 2;
                 }
-                if(fin)
+                if (fin)
                 {
                     break;
                 }

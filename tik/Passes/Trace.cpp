@@ -1,9 +1,9 @@
 #include "Passes/Trace.h"
+#include "AtlasUtil/Annotate.h"
 #include "Passes/Annotate.h"
 #include "Passes/CommandArgs.h"
 #include "Passes/Functions.h"
 #include "Passes/TraceIO.h"
-#include "AtlasUtil/Annotate.h"
 #include <llvm/IR/Function.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instruction.h>
@@ -33,7 +33,7 @@ namespace DashTracer
             std::vector<Value *> args;
             args.push_back(idValue);
             args.push_back(trueConst);
-            firstBuilder.CreateCall(BB_ID);//, args);
+            firstBuilder.CreateCall(BB_ID); //, args);
             args.pop_back();
             args.push_back(falseConst);
             /*for (BasicBlock::iterator BI = BB.begin(), BE = BB.end(); BI != BE; ++BI)
@@ -73,7 +73,7 @@ namespace DashTracer
 
         bool EncodedTrace::doInitialization(Module &M)
         {
-            BB_ID = cast<Function>(M.getOrInsertFunction("Test", Type::getVoidTy(M.getContext())).getCallee());//, Type::getInt64Ty(M.getContext()), Type::getInt1Ty(M.getContext())).getCallee());
+            BB_ID = cast<Function>(M.getOrInsertFunction("Test", Type::getVoidTy(M.getContext())).getCallee()); //, Type::getInt64Ty(M.getContext()), Type::getInt1Ty(M.getContext())).getCallee());
             return false;
         }
 
