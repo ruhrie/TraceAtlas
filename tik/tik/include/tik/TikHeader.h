@@ -1,5 +1,5 @@
-#pragma once 
+#pragma once
 #include <llvm/IR/Type.h>
 #include <string>
 
-std::string getCType(llvm::Type* param);
+std::string getCType(llvm::Type *param);

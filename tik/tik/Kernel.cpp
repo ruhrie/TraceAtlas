@@ -4,9 +4,9 @@
 #include "tik/Exceptions.h"
 #include "tik/InlineStruct.h"
 #include "tik/Metadata.h"
+#include "tik/TikHeader.h"
 #include "tik/Util.h"
 #include "tik/tik.h"
-#include "tik/TikHeader.h"
 #include <algorithm>
 #include <iostream>
 #include <llvm/ADT/SmallVector.h>
@@ -47,7 +47,6 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     {
         Name = name;
     }
-    cout << Name << endl;
     if (reservedNames.find(Name) != reservedNames.end())
     {
         throw TikException("Kernel Error: Kernel names must be unique!");
@@ -1356,7 +1355,7 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
     }
 }
 
-std::string Kernel::getHeaderDeclaration(void)
+std::string Kernel::GetHeaderDeclaration(void)
 {
     std::string headerString = getCType(KernelFunction->getReturnType()) + " ";
     headerString += KernelFunction->getName();

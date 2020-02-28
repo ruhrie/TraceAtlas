@@ -252,15 +252,15 @@ int main(int argc, char *argv[])
     }
 
     // generate a C header file declaring each tik function
-    std::string headerFile = "\n// Auto-generated header for the tik representations of "+InputFile+"\n";
+    std::string headerFile = "\n// Auto-generated header for the tik representations of " + InputFile + "\n";
     headerFile += "#include <stdint.h>\n";
-    for( auto kernel : results )
+    for (auto kernel : results)
     {
-        headerFile+="\n" + kernel->getHeaderDeclaration();
+        headerFile += "\n" + kernel->getHeaderDeclaration();
     }
     // write the header file
     std::ofstream header;
-    header.open(OutputFile+".h");
+    header.open(OutputFile + ".h");
     header << headerFile;
     header.close();
 
@@ -269,7 +269,7 @@ int main(int argc, char *argv[])
     llvm::raw_string_ostream rso(str);
     bool debugBroken;
     bool broken = verifyModule(*TikModule, &rso, &debugBroken);
-    if(broken)
+    if (broken)
     {
         auto b = rso.str();
         spdlog::critical("Tik Module Corrupted: " + str);
