@@ -256,7 +256,7 @@ int main(int argc, char *argv[])
     headerFile += "#include <stdint.h>\n";
     for (auto kernel : results)
     {
-        headerFile += "\n" + kernel->getHeaderDeclaration();
+        headerFile += "\n" + kernel->GetHeaderDeclaration();
     }
     // write the header file
     std::ofstream header;
