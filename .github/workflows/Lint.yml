@@ -1,0 +1,13 @@
+name: clang-format Lint
+
+on: [push]
+jobs:
+  build:
+    runs-on: ubunt-18.04
+    steps:
+      - uses: actions/checkout@v1
+      - uses: DoozyX/clang-format-lint-action@v0.5
+        with: 
+          source: .
+          extensions: 'h,cpp,c'
+          clangFormatVersion: 9
