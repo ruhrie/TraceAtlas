@@ -237,7 +237,7 @@ int main(int argc, char *argv[])
                     //and remove it from kernels
                     auto it = find(kernels.begin(), kernels.end(), kernel);
                     kernels.erase(it);
-                    spdlog::info("Succesfully converted kernel: " + kernel.first);
+                    spdlog::info("Successfully converted kernel: " + kernel.first);
                     //and restart the iterator to ensure cohesion
                     break;
                 }
@@ -251,12 +251,25 @@ int main(int argc, char *argv[])
         }
     }
 
+    // generate a C header file declaring each tik function
+    std::string headerFile = "\n// Auto-generated header for the tik representations of " + InputFile + "\n";
+    headerFile += "#include <stdint.h>\n";
+    for (auto kernel : results)
+    {
+        headerFile += "\n" + kernel->getHeaderDeclaration();
+    }
+    // write the header file
+    std::ofstream header;
+    header.open(OutputFile + ".h");
+    header << headerFile;
+    header.close();
+
     //verify the module
     std::string str = "";
     llvm::raw_string_ostream rso(str);
     bool debugBroken;
     bool broken = verifyModule(*TikModule, &rso, &debugBroken);
-    if(broken)
+    if (broken)
     {
         auto b = rso.str();
         spdlog::critical("Tik Module Corrupted: " + str);
@@ -306,7 +319,7 @@ int main(int argc, char *argv[])
                 WriteBitcodeToFile(*TikModule, raw_stream);
             }
         }
-        spdlog::info("Succesfully wrote tik to file");
+        spdlog::info("Successfully wrote tik to file");
     }
     catch (exception &e)
     {

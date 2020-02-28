@@ -14,7 +14,7 @@ int main()
     {
         input[i] = rand();
     }
-    
+
     for (int i = 1; i < WIDTH - 1; i++)
     {
         output[i - 1] = input[i - 1] + input[i] + input[i + 1];

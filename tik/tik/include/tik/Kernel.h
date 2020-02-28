@@ -13,6 +13,7 @@ class Kernel
 public:
     Kernel(std::vector<int> basicBlocks, llvm::Module *M, std::string name = "");
     ~Kernel();
+    std::string GetHeaderDeclaration(void);
     std::string Name;
     nlohmann::json GetJson();
     std::set<llvm::BasicBlock *> Conditional;
@@ -26,11 +27,12 @@ public:
     llvm::Function *MemoryWrite = NULL;
     llvm::Function *KernelFunction = NULL;
     bool Valid = false;
+
 private:
     void Cleanup();
     void GetEntrances(std::set<llvm::BasicBlock *> &);
     void GetExits(std::set<llvm::BasicBlock *> &);
-    std::map<llvm::BasicBlock*, int> ExitMap;
+    std::map<llvm::BasicBlock *, int> ExitMap;
     /// @brief  Maps old instructions to new instructions.
     ///
     /// Special LLVM map containing old instructions (from the original bitcode) as keys and new instructions as values.
@@ -102,7 +104,7 @@ private:
 
     void Repipe();
     void SplitBlocks(std::set<llvm::BasicBlock *> &blocks);
-
+    void ExportFunctionSignatures();
     void SanityChecks();
 
     void CopyGlobals();

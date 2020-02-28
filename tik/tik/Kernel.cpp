@@ -4,12 +4,14 @@
 #include "tik/Exceptions.h"
 #include "tik/InlineStruct.h"
 #include "tik/Metadata.h"
+#include "tik/TikHeader.h"
 #include "tik/Util.h"
 #include "tik/tik.h"
 #include <algorithm>
 #include <iostream>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/IR/CFG.h>
+#include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/IRBuilder.h>
@@ -18,6 +20,7 @@
 #include <llvm/Transforms/Utils/Cloning.h>
 #include <queue>
 #include <spdlog/spdlog.h>
+
 using namespace llvm;
 using namespace std;
 
@@ -31,17 +34,22 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     MemoryWrite = NULL;
     Init = NULL;
     Exit = NULL;
+    string Name = "";
     if (name.empty())
     {
         Name = "Kernel_" + to_string(KernelUID++);
     }
+    else if (name.front() >= '0' && name.front() <= '9')
+    {
+        Name = "K" + name;
+    }
     else
     {
-        if (reservedNames.find(name) != reservedNames.end())
-        {
-            throw TikException("Kernel Error: Kernel names must be unique!");
-        }
         Name = name;
+    }
+    if (reservedNames.find(Name) != reservedNames.end())
+    {
+        throw TikException("Kernel Error: Kernel names must be unique!");
     }
     reservedNames.insert(Name);
 
@@ -120,6 +128,9 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         Remap();
         //might be fused
         Repipe();
+
+        // replace external function calls with tik declarations
+        ExportFunctionSignatures();
 
         //handle the memory operations
         GetMemoryFunctions();
@@ -236,6 +247,26 @@ void Kernel::Cleanup()
 
 Kernel::~Kernel()
 {
+}
+
+void Kernel::ExportFunctionSignatures()
+{
+    for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
+    {
+        for (auto inst = bi->begin(); inst != bi->end(); inst++)
+        {
+            if (CallBase *callInst = dyn_cast<CallBase>(inst))
+            {
+                Function *f = callInst->getCalledFunction();
+                if (f != MemoryRead && f != MemoryWrite)
+                {
+                    llvm::Function *funcDec = llvm::Function::Create(callInst->getCalledFunction()->getFunctionType(), GlobalValue::LinkageTypes::ExternalLinkage, callInst->getCalledFunction()->getName(), TikModule);
+                    funcDec->setAttributes(callInst->getCalledFunction()->getAttributes());
+                    callInst->setCalledFunction(funcDec);
+                }
+            }
+        }
+    }
 }
 
 void Kernel::UpdateMemory()
@@ -942,7 +973,7 @@ void Kernel::GetMemoryFunctions()
     }
 
     // create MemoryRead, MemoryWrite functions
-    FunctionType *funcType = FunctionType::get(Type::getInt32Ty(TikModule->getContext()), Type::getInt32Ty(TikModule->getContext()), false);
+    FunctionType *funcType = FunctionType::get(Type::getInt64Ty(TikModule->getContext()), Type::getInt64Ty(TikModule->getContext()), false);
     MemoryRead = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, "MemoryRead", TikModule);
     MemoryWrite = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, "MemoryWrite", TikModule);
 
@@ -965,11 +996,11 @@ void Kernel::GetMemoryFunctions()
             GlobalMap[lVal] = g;
         }
         VMap[lVal] = GlobalMap[lVal];
-        Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
+        Constant *constant = ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), 0);
         auto a = loadBuilder.CreateGEP(lVal->getType(), GlobalMap[lVal], constant);
         auto b = loadBuilder.CreateLoad(a);
-        Instruction *converted = cast<Instruction>(loadBuilder.CreatePtrToInt(b, Type::getInt32Ty(TikModule->getContext())));
-        Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
+        Instruction *converted = cast<Instruction>(loadBuilder.CreatePtrToInt(b, Type::getInt64Ty(TikModule->getContext())));
+        Constant *indexConstant = ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), i++);
         loadMap[lVal] = indexConstant;
         if (priorValue == NULL)
         {
@@ -1011,11 +1042,11 @@ void Kernel::GetMemoryFunctions()
         {
             continue;
         }
-        Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
+        Constant *constant = ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), 0);
         auto a = storeBuilder.CreateGEP(sVal->getType(), GlobalMap[sVal], constant);
         auto b = storeBuilder.CreateLoad(a);
-        Instruction *converted = cast<Instruction>(storeBuilder.CreatePtrToInt(b, Type::getInt32Ty(TikModule->getContext())));
-        Constant *indexConstant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), i++);
+        Instruction *converted = cast<Instruction>(storeBuilder.CreatePtrToInt(b, Type::getInt64Ty(TikModule->getContext())));
+        Constant *indexConstant = ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), i++);
         if (priorValue == NULL)
         {
             priorValue = converted;
@@ -1061,7 +1092,6 @@ void Kernel::GetMemoryFunctions()
                 auto newLoad = builder.CreateLoad(casted);
                 newInst->replaceAllUsesWith(newLoad);
                 toRemove.push_back(newInst);
-                //BI++;
             }
             else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
             {
@@ -1076,7 +1106,6 @@ void Kernel::GetMemoryFunctions()
                 casted->setMetadata("TikSynthetic", tikNode);
                 auto newStore = builder.CreateStore(newInst->getValueOperand(), casted); //storee);
                 toRemove.push_back(newInst);
-                //BI++;
             }
         }
     }
@@ -1197,6 +1226,8 @@ void Kernel::ApplyMetadata()
     for (auto global : GlobalMap)
     {
         global.second->setMetadata("KernelName", kernelNode);
+        /*DILocation loc(global.second->get);
+        unsigned int ln = loc.getLineNumber();*/
     }
 
     //annotate the body
@@ -1322,6 +1353,27 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
     {
         throw TikException("Kernel Exception: tik requires a body entrance");
     }
+}
+
+std::string Kernel::GetHeaderDeclaration(void)
+{
+    std::string headerString = getCType(KernelFunction->getReturnType()) + " ";
+    headerString += KernelFunction->getName();
+    headerString += "(";
+    int i = 0;
+    for (auto ai = KernelFunction->arg_begin(); ai < KernelFunction->arg_end(); ai++)
+    {
+        if (i > 0)
+        {
+            headerString += ", ";
+        }
+        headerString += getCType(ai->getType());
+        headerString += " arg";
+        headerString += std::to_string(i);
+        i++;
+    }
+    headerString += ");\n";
+    return headerString;
 }
 
 void Kernel::SanityChecks()
