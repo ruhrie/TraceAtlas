@@ -6,19 +6,21 @@
 #include "tik/Metadata.h"
 #include "tik/Util.h"
 #include "tik/tik.h"
+#include "tik/TikHeader.h"
 #include <algorithm>
 #include <iostream>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/IR/CFG.h>
+#include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Type.h>
-#include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/Transforms/Utils/Cloning.h>
 #include <queue>
-#include <iostream>
+#include <spdlog/spdlog.h>
+
 using namespace llvm;
 using namespace std;
 
@@ -51,11 +53,6 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         throw TikException("Kernel Error: Kernel names must be unique!");
     }
     reservedNames.insert(Name);
-
-    FunctionType *mainType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), false);
-    KernelFunction = Function::Create(mainType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
-    Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
-    Exit = BasicBlock::Create(TikModule->getContext(), "Exit", KernelFunction);
 
     set<BasicBlock *> blocks;
     for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
@@ -96,30 +93,79 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 
         GetEntrances(blocks);
         GetExits(blocks);
-
         GetConditional(blocks);
+        GetExternalValues(blocks);
 
+        //we now have all the information we need
+
+        //start by making the correct function
+        std::vector<llvm::Type *> inputArgs;
+        inputArgs.push_back(Type::getInt8Ty(TikModule->getContext()));
+        for (auto inst : ExternalValues)
+        {
+            inputArgs.push_back(inst->getType());
+        }
+        FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
+        KernelFunction = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
+        for (int i = 0; i < ExternalValues.size(); i++)
+        {
+            Argument *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i);
+            VMap[ExternalValues[i]] = a;
+            ArgumentMap[a] = ExternalValues[i];
+        }
+
+        //create the artificial blocks
+        Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
+        Exit = BasicBlock::Create(TikModule->getContext(), "Exit", KernelFunction);
+
+        //copy the appropriate blocks
         BuildKernel(blocks);
 
         BuildExit();
-    
-        ExportFunctionSignatures();
 
+        CopyGlobals();
+
+        //remap and repipe
         Remap();
         //might be fused
         Repipe();
 
-        GetInitInsts();
+        // replace external function calls with tik declarations
+        ExportFunctionSignatures();
 
+        //handle the memory operations
         GetMemoryFunctions();
 
-        MorphKernelFunction();
+        UpdateMemory();
 
+        BuildInit();
+
+        RemapNestedKernels();
+
+        //apply metadata
         ApplyMetadata();
 
+        //we will also do some minor cleanup
+        for (Function::iterator fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+        {
+            for (BasicBlock::iterator bi = fi->begin(); bi != fi->end(); bi++)
+            {
+                for (auto usr : bi->users())
+                {
+                    if (auto inst = dyn_cast<Instruction>(usr))
+                    {
+                        if (inst->getParent() == NULL)
+                        {
+                        }
+                    }
+                }
+            }
+        }
+
+        //and set a flag that we succeeded
         Valid = true;
     }
-    catch (const std::exception &e)
+    catch (TikException &e)
     {
         std::cerr << "Failed to convert kernel to tik"
                   << "\n";
@@ -204,91 +250,28 @@ Kernel::~Kernel()
 {
 }
 
-void Kernel::Remap()
-{
-    for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)
-    {
-        for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
-        {
-            Instruction *inst = cast<Instruction>(BI);
-            RemapInstruction(inst, VMap, llvm::RF_None);
-        }
-    }
-}
-
 void Kernel::ExportFunctionSignatures()
 {
-    for( auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++ )
+    for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
     {
-        for( auto inst = bi->begin(); inst != bi->end(); inst++ )
+        for (auto inst = bi->begin(); inst != bi->end(); inst++)
         {
-            if(CallBase* callInst = dyn_cast<CallBase>(inst))
+            if (CallBase *callInst = dyn_cast<CallBase>(inst))
             {
-                llvm::Function *funcDec = llvm::Function::Create(callInst->getCalledFunction()->getFunctionType(), GlobalValue::LinkageTypes::ExternalLinkage, callInst->getCalledFunction()->getName(), TikModule);
-                funcDec->setAttributes(callInst->getCalledFunction()->getAttributes());
-                callInst->setCalledFunction(funcDec);
+                Function *f = callInst->getCalledFunction();
+                if (f != MemoryRead && f != MemoryWrite)
+                {
+                    llvm::Function *funcDec = llvm::Function::Create(callInst->getCalledFunction()->getFunctionType(), GlobalValue::LinkageTypes::ExternalLinkage, callInst->getCalledFunction()->getName(), TikModule);
+                    funcDec->setAttributes(callInst->getCalledFunction()->getAttributes());
+                    callInst->setCalledFunction(funcDec);
+                }
             }
         }
     }
 }
 
-void Kernel::MorphKernelFunction()
+void Kernel::UpdateMemory()
 {
-    // localVMap is the new VMap for the new function
-    llvm::ValueToValueMapTy localVMap;
-
-    // capture all the input args our kernel function will need
-    std::vector<llvm::Type *> inputArgs;
-    inputArgs.push_back(Type::getInt8Ty(TikModule->getContext()));
-    for (auto inst : ExternalValues)
-    {
-        inputArgs.push_back(inst->getType());
-        
-    }
-
-    // create our new function with input args and clone our basic blocks into it
-    FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
-    llvm::Function *newFunc = llvm::Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, KernelFunction->getName() + "_tmp", TikModule);
-    for (int i = 0; i < ExternalValues.size(); i++)
-    {
-        ArgumentMap[newFunc->arg_begin() + 1 + i] = ExternalValues[i];
-    }
-
-    auto newInit = CloneBasicBlock(Init, localVMap, "", newFunc);
-    localVMap[Init] = newInit;
-    Init = newInit;
-
-    set<BasicBlock *> newBody;
-    for (auto b : Body)
-    {
-        auto cb = CloneBasicBlock(b, localVMap, "", newFunc);
-        newBody.insert(cb);
-        localVMap[b] = cb;
-        if (Conditional.find(b) != Conditional.end())
-        {
-            Conditional.erase(b);
-            Conditional.insert(cb);
-        }
-    }
-    Body = newBody;
-    set<BasicBlock *> newTermination;
-    for (auto b : Termination)
-    {
-        auto cb = CloneBasicBlock(b, localVMap, "", newFunc);
-        newTermination.insert(cb);
-        localVMap[b] = cb;
-    }
-    Termination = newTermination;
-    auto exitCloned = CloneBasicBlock(Exit, localVMap, "", newFunc);
-    localVMap[Exit] = exitCloned;
-    Exit = exitCloned;
-    // remove the old function from the parent but do not erase it
-    KernelFunction->removeFromParent();
-    newFunc->setName(KernelFunction->getName());
-    KernelFunction = newFunc;
-
-    // for each input instruction, store them into one of our global pointers
-    // GlobalMap already contains the input arg->global pointer relationships we need
     std::set<llvm::Value *> coveredGlobals;
     std::set<llvm::StoreInst *> newStores;
     IRBuilder<> initBuilder(Init);
@@ -308,27 +291,14 @@ void Kernel::MorphKernelFunction()
         }
     }
 
-    //add a switch for the init
-    auto initSwitch = initBuilder.CreateSwitch(newFunc->arg_begin(), Exit, Entrances.size());
-    int i = 0;
-    for (auto ent : Entrances)
-    {
-        initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[ent]));
-        i++;
-    }
-
-    // look through the body for pointer references
-    // every time we see a global reference who is not written to in MemRead, not stored to in Init, store to it in body
-
-    // every time we use a global pointer in the body that is not in MemWrite, store to it
-    for (Function::iterator bb = newFunc->begin(), be = newFunc->end(); bb != be; bb++)
+    for (Function::iterator bb = KernelFunction->begin(), be = KernelFunction->end(); bb != be; bb++)
     {
         for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
         {
             Instruction *inst = cast<Instruction>(BI);
             for (auto pair : GlobalMap)
             {
-                if (localVMap.find(pair.first) != localVMap.end() && llvm::cast<Instruction>(localVMap[pair.first]) == inst)
+                if (pair.first == inst)
                 {
                     if (coveredGlobals.find(pair.second) == coveredGlobals.end())
                     {
@@ -343,13 +313,33 @@ void Kernel::MorphKernelFunction()
             }
         }
     }
+}
+
+void Kernel::Remap()
+{
+    for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)
+    {
+        for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
+        {
+            Instruction *inst = cast<Instruction>(BI);
+            RemapInstruction(inst, VMap, llvm::RF_None);
+        }
+    }
+}
+
+void Kernel::RemapNestedKernels()
+{
+    // look through the body for pointer references
+    // every time we see a global reference who is not written to in MemRead, not stored to in Init, store to it in body
+
+    // every time we use a global pointer in the body that is not in MemWrite, store to it
 
     // loop->body or loop->exit (conditional)
     // body->loop (unconditional)
 
     // Now find all calls to the embedded kernel functions in the body, if any, and change their arguments to the new ones
     std::map<Argument *, Value *> embeddedCallArgs;
-    for (auto b : Body)
+    for (auto b = KernelFunction->begin(); b != KernelFunction->end(); b++)
     {
         for (BasicBlock::iterator i = b->begin(), BE = b->end(); i != BE; ++i)
         {
@@ -361,7 +351,7 @@ void Kernel::MorphKernelFunction()
                 {
                     // we have a non-kernel function call
                 }
-                else // must be a kernel function call
+                else if (funcName != MemoryRead && funcName != MemoryWrite) // must be a kernel function call
                 {
                     bool found = false;
                     auto calledFunc = callInst->getCalledFunction();
@@ -370,7 +360,7 @@ void Kernel::MorphKernelFunction()
                     {
                         for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
                         {
-                            for (auto b : Body)
+                            for (auto b = KernelFunction->begin(); b != KernelFunction->end(); b++)
                             {
                                 for (BasicBlock::iterator j = b->begin(), BE2 = b->end(); j != BE2; ++j)
                                 {
@@ -415,15 +405,17 @@ void Kernel::MorphKernelFunction()
             }
         }
     }
+}
 
-    // finally, remap our instructions for the new function
-    for (Function::iterator BB = KernelFunction->begin(), E = KernelFunction->end(); BB != E; ++BB)
+void Kernel::BuildInit()
+{
+    IRBuilder<> initBuilder(Init);
+    auto initSwitch = initBuilder.CreateSwitch(KernelFunction->arg_begin(), Exit, Entrances.size());
+    int i = 0;
+    for (auto ent : Entrances)
     {
-        for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
-        {
-            Instruction *inst = cast<Instruction>(BI);
-            RemapInstruction(inst, localVMap, llvm::RF_None);
-        }
+        initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[ent]));
+        i++;
     }
 }
 
@@ -560,7 +552,7 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
                 }
             }
         }
-
+        /*
         //and the terminus
         {
             queue<BasicBlock *> processing;
@@ -579,7 +571,7 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
                 {
                     if (blocks.find(a) != blocks.end())
                     {
-                        throw TikException("Tik Error: Detected terminus block");
+                        //throw TikException("Tik Error: Detected terminus block");
                         Termination.insert(a);
                     }
                 }
@@ -595,14 +587,20 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
                 }
             }
         }
+        */
+    }
 
-        Body.insert(b);
+    for (auto block : blocks)
+    {
+        if (Body.find(block) == Body.end())
+        {
+            Termination.insert(block);
+        }
     }
 }
 
 void Kernel::BuildKernel(set<BasicBlock *> &blocks)
 {
-    Body.clear();
     for (auto block : blocks)
     {
         int64_t id = GetBlockID(block);
@@ -655,7 +653,20 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                         }
                     }
                     VMap[block] = intermediateBlock;
-                    Body.insert(intermediateBlock);
+                    if (Body.find(block) != Body.end())
+                    {
+                        Body.insert(intermediateBlock);
+                        Body.erase(intermediateBlock);
+                    }
+                    else if (Termination.find(block) != Termination.end())
+                    {
+                        Termination.insert(intermediateBlock);
+                        Termination.erase(intermediateBlock);
+                    }
+                    else
+                    {
+                        throw TikException("Tik Error: Block not assigned to Body or Terminus");
+                    }
                     i++;
                 }
             }
@@ -765,7 +776,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                                 if (ReturnInst *ri = dyn_cast<ReturnInst>(fBasicBlock->getTerminator()))
                                 {
                                     returnMap[fBasicBlock] = ri->getReturnValue();
-                                    ri->removeFromParent(); //we also remove the return here because we don't need it
+                                    ri->eraseFromParent(); //we also remove the return here because we don't need it
                                     returnCount++;
                                     IRBuilder<> fIteratorBuilder(fBasicBlock);
                                     fIteratorBuilder.CreateBr(returnBlock);
@@ -791,7 +802,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                             //and redirect the first block
                             BranchInst *priorBranch = cast<BranchInst>(cb->getTerminator());
                             priorBranch->setSuccessor(0, phiBlock);
-                            ci->removeFromParent();
+                            ci->eraseFromParent();
 
                             InlinedFunctions.push_back(currentStruct); //finally add it to the already inlined functions
                             working = suffix;
@@ -804,15 +815,54 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                     }
                 }
             }
-            Body.insert(cb);
+            if (Body.find(block) != Body.end())
+            {
+                Body.erase(block);
+                Body.insert(cb);
+            }
+            else if (Termination.find(block) != Termination.end())
+            {
+                Termination.erase(block);
+                Termination.insert(cb);
+            }
+            else
+            {
+                throw TikException("Tik Error: block not in Body or Termination");
+            }
             VMap[block] = cb;
+
+            //fix the phis
+            int rescheduled = 0; //the number of blocks we rescheduled
+            for (auto bi = cb->begin(); bi != cb->end(); bi++)
+            {
+                if (PHINode *p = dyn_cast<PHINode>(bi))
+                {
+                    for (auto pred : p->blocks())
+                    {
+                        if (blocks.find(pred) == blocks.end())
+                        {
+                            //we have an invalid predecessor, replace with init
+                            p->replaceIncomingBlockWith(pred, Init);
+                            rescheduled++;
+                        }
+                    }
+                }
+                else
+                {
+                    break;
+                }
+            }
+            if (rescheduled > 1)
+            {
+                spdlog::warn("Rescheduled more than one phi predecessor"); //basically this is a band aid. Needs some more help
+            }
         }
     }
 }
 
-void Kernel::GetInitInsts()
+void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
 {
-    for (auto bb : Body)
+    for (auto bb : blocks)
     {
         for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
         {
@@ -824,7 +874,7 @@ void Kernel::GetInitInsts()
                 if (Instruction *operand = dyn_cast<Instruction>(op))
                 {
                     BasicBlock *parentBlock = operand->getParent();
-                    if (std::find(Body.begin(), Body.end(), parentBlock) == Body.end())
+                    if (std::find(blocks.begin(), blocks.end(), parentBlock) == blocks.end())
                     {
                         if (find(ExternalValues.begin(), ExternalValues.end(), operand) == ExternalValues.end())
                         {
@@ -836,7 +886,6 @@ void Kernel::GetInitInsts()
                 {
                     if (CallInst *ci = dyn_cast<CallInst>(inst))
                     {
-
                         if (KfMap.find(ci->getCalledFunction()) != KfMap.end())
                         {
                             auto subKernel = KfMap[ci->getCalledFunction()];
@@ -845,22 +894,41 @@ void Kernel::GetInitInsts()
                                 //these are the arguments for the function call in order
                                 //we now can check if they are in our vmap, if so they aren't external
                                 //if not they are and should be mapped as is appropriate
-                                if (VMap[sExtVal] == NULL)
+                                Value *v = VMap[sExtVal];
+                                if (!v)
                                 {
                                     if (find(ExternalValues.begin(), ExternalValues.end(), sExtVal) == ExternalValues.end())
                                     {
                                         ExternalValues.push_back(sExtVal);
                                     }
                                 }
-                                else
+                                else //this is a mapped value, therefore it is in the kernel locally
                                 {
-                                    throw TikException("Tik Error: Not Implemented");
                                 }
                             }
                         }
                         else
                         {
                             throw TikException("Tik Error: Not Implemented");
+                        }
+                    }
+                    else
+                    {
+                        if (find(ExternalValues.begin(), ExternalValues.end(), ar) == ExternalValues.end())
+                        {
+                            ExternalValues.push_back(ar);
+                        }
+
+                        bool external = false;
+                        for (auto user : ar->getParent()->users())
+                        {
+                            if (auto a = dyn_cast<Instruction>(user))
+                            {
+                                if (blocks.find(a->getParent()) == blocks.end())
+                                {
+                                    external = true;
+                                }
+                            }
                         }
                     }
                 }
@@ -898,7 +966,6 @@ void Kernel::GetMemoryFunctions()
     {
         Value *loadVal = load->getPointerOperand();
         loadValues.insert(loadVal);
-        Type *loadType = loadVal->getType();
     }
     for (StoreInst *store : storeInst)
     {
@@ -947,7 +1014,15 @@ void Kernel::GetMemoryFunctions()
             priorValue = sInst;
         }
     }
-    Instruction *loadRet = cast<ReturnInst>(loadBuilder.CreateRet(priorValue));
+    if (!priorValue)
+    {
+        spdlog::warn("Empty kernel read encountered");
+        loadBuilder.CreateRet(ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0));
+    }
+    else
+    {
+        loadBuilder.CreateRet(priorValue);
+    }
 
     // MemoryWrite
     i = 0;
@@ -986,11 +1061,19 @@ void Kernel::GetMemoryFunctions()
             storeMap[sVal] = indexConstant;
         }
     }
-    Instruction *storeRet = cast<ReturnInst>(storeBuilder.CreateRet(priorValue));
+    if (!priorValue)
+    {
+        spdlog::warn("Empty kernel write encountered");
+        storeBuilder.CreateRet(ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0));
+    }
+    else
+    {
+        storeBuilder.CreateRet(priorValue);
+    }
 
     // find instructions in body block not belonging to parent kernel
     vector<Instruction *> toRemove;
-    for (auto bb : Body)
+    for (auto bb = KernelFunction->begin(); bb != KernelFunction->end(); bb++)
     {
         for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
         {
@@ -1031,7 +1114,7 @@ void Kernel::GetMemoryFunctions()
     // remove the instructions that don't belong
     for (auto inst : toRemove)
     {
-        inst->removeFromParent();
+        inst->eraseFromParent();
     }
 }
 
@@ -1126,6 +1209,16 @@ vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blo
 
 void Kernel::ApplyMetadata()
 {
+    //first we will clean the current instructions
+    for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+    {
+        for (auto bi = fi->begin(); bi != fi->end(); bi++)
+        {
+            Instruction *inst = cast<Instruction>(bi);
+            inst->setMetadata("dbg", NULL);
+        }
+    }
+
     //annotate the kernel functions
     MDNode *kernelNode = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), Name));
     KernelFunction->setMetadata("KernelName", kernelNode);
@@ -1263,79 +1356,24 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
     }
 }
 
-std::string getCType(llvm::Type* param)
-{
-    std::string retType;
-    if (param->isVoidTy())
-    {
-        return "void";
-    }
-    else if(param->isHalfTy())
-    {
-        return "half";
-    }
-    else if(param->isFloatTy())
-    {
-        return "float";
-    }
-    else if(param->isDoubleTy())
-    {
-        return "double";
-    }
-    else if(param->isX86_FP80Ty())
-    {
-        return "long double";
-    }
-    else if(param->isFP128Ty())
-    {
-        return "__float128";
-    }
-    else if(param->isIntegerTy(8))
-    {
-        return "uint8_t";
-    }
-    else if(param->isIntegerTy(16))
-    {
-        return "uint16_t";
-    }
-    else if(param->isIntegerTy(32))
-    {
-        return "uint32_t";
-    }
-    else if(param->isIntegerTy(64))
-    {
-        return "uint64_t";
-    }
-    else if(param->isPointerTy())
-    {
-        llvm::PointerType* newType = dyn_cast<llvm::PointerType>(param);
-        llvm::Type* memberType = newType->getElementType();
-        return getCType(memberType)+"*";
-    }
-    else
-    {
-        throw TikException("This type of argument is not supported for header generation.");
-    }
-}
-
 std::string Kernel::getHeaderDeclaration(void)
 {
-    std::string headerString = getCType(KernelFunction->getReturnType())+" ";
+    std::string headerString = getCType(KernelFunction->getReturnType()) + " ";
     headerString += KernelFunction->getName();
     headerString += "(";
     int i = 0;
-    for( auto ai = KernelFunction->arg_begin(); ai < KernelFunction->arg_end(); ai++ )
+    for (auto ai = KernelFunction->arg_begin(); ai < KernelFunction->arg_end(); ai++)
     {
         if (i > 0)
         {
-            headerString+=", ";
+            headerString += ", ";
         }
         headerString += getCType(ai->getType());
         headerString += " arg";
         headerString += std::to_string(i);
         i++;
     }
-    headerString+=");\n";
+    headerString += ");\n";
     return headerString;
 }
 
@@ -1388,5 +1426,46 @@ void Kernel::GetExits(set<BasicBlock *> &blocks)
         //removing this is exposing an llvm bug: corrupted double-linked list
         //we just won't support it for the moment
         //throw TikException("Tik Error: tik only supports single exit kernels")
+    }
+}
+
+void Kernel::CopyGlobals()
+{
+    for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+    {
+        for (auto bi = fi->begin(); bi != fi->end(); bi++)
+        {
+            Instruction *inst = cast<Instruction>(bi);
+            if (!isa<CallBase>(inst))
+            {
+                for (int j = 0; j < inst->getNumOperands(); j++)
+                {
+                    Value *v = inst->getOperand(j);
+                    if (GlobalVariable *gv = dyn_cast<GlobalVariable>(v))
+                    {
+                        Module *m = gv->getParent();
+                        if (m != TikModule)
+                        {
+                            //its the wrong module
+                            if (VMap.find(gv) == VMap.end())
+                            {
+                                //and not already in the vmap
+                                Constant *initializer = NULL;
+                                if (gv->hasInitializer())
+                                {
+                                    initializer = gv->getInitializer();
+                                }
+                                GlobalVariable *newVar = new GlobalVariable(*TikModule, gv->getValueType(), gv->isConstant(), gv->getLinkage(), initializer, gv->getName(), NULL, gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
+                                VMap[gv] = newVar;
+                            }
+                        }
+                    }
+                    else if (GlobalValue *gv = dyn_cast<GlobalValue>(v))
+                    {
+                        throw TikException("Tik Error: Non variable global reference");
+                    }
+                }
+            }
+        }
     }
 }

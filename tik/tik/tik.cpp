@@ -9,6 +9,7 @@
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
+#include <llvm/IR/Verifier.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/SourceMgr.h>
@@ -260,11 +261,26 @@ int main(int argc, char *argv[])
     // write the header file
     std::ofstream header;
     header.open(OutputFile+".h");
-    cout << headerFile;
     header << headerFile;
     header.close();
 
-    // write the json file
+    //verify the module
+    std::string str = "";
+    llvm::raw_string_ostream rso(str);
+    bool debugBroken;
+    bool broken = verifyModule(*TikModule, &rso, &debugBroken);
+    if(broken)
+    {
+        auto b = rso.str();
+        spdlog::critical("Tik Module Corrupted: " + str);
+#ifndef DEBUG
+        return EXIT_FAILURE;
+#else
+        error = true;
+#endif
+    }
+
+    // writing part
     try
     {
         if (OutputType == "JSON")
