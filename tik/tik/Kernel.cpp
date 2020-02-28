@@ -112,6 +112,8 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 
         BuildExit();
 
+        CopyGlobals();
+
         //remap and repipe
         Remap();
         //might be fused
@@ -134,13 +136,12 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         {
             for (BasicBlock::iterator bi = fi->begin(); bi != fi->end(); bi++)
             {
-                for(auto usr : bi->users())
+                for (auto usr : bi->users())
                 {
-                    if(auto inst = dyn_cast<Instruction>(usr))
+                    if (auto inst = dyn_cast<Instruction>(usr))
                     {
-                        if(inst->getParent() == NULL)
+                        if (inst->getParent() == NULL)
                         {
-                            
                         }
                     }
                 }
@@ -798,13 +799,13 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
 
             //fix the phis
             int rescheduled = 0; //the number of blocks we rescheduled
-            for(auto bi = cb->begin(); bi != cb->end(); bi++)
+            for (auto bi = cb->begin(); bi != cb->end(); bi++)
             {
-                if(PHINode *p = dyn_cast<PHINode>(bi))
+                if (PHINode *p = dyn_cast<PHINode>(bi))
                 {
-                    for(auto pred : p->blocks())
+                    for (auto pred : p->blocks())
                     {
-                        if(blocks.find(pred) == blocks.end())
+                        if (blocks.find(pred) == blocks.end())
                         {
                             //we have an invalid predecessor, replace with init
                             p->replaceIncomingBlockWith(pred, Init);
@@ -815,9 +816,9 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                 else
                 {
                     break;
-                }                
+                }
             }
-            if(rescheduled > 1)
+            if (rescheduled > 1)
             {
                 spdlog::warn("Rescheduled more than one phi predecessor"); //basically this is a band aid. Needs some more help
             }
@@ -1352,5 +1353,46 @@ void Kernel::GetExits(set<BasicBlock *> &blocks)
         //removing this is exposing an llvm bug: corrupted double-linked list
         //we just won't support it for the moment
         //throw TikException("Tik Error: tik only supports single exit kernels")
+    }
+}
+
+void Kernel::CopyGlobals()
+{
+    for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+    {
+        for (auto bi = fi->begin(); bi != fi->end(); bi++)
+        {
+            Instruction *inst = cast<Instruction>(bi);
+            if (!isa<CallBase>(inst))
+            {
+                for (int j = 0; j < inst->getNumOperands(); j++)
+                {
+                    Value *v = inst->getOperand(j);
+                    if (GlobalVariable *gv = dyn_cast<GlobalVariable>(v))
+                    {
+                        Module *m = gv->getParent();
+                        if (m != TikModule)
+                        {
+                            //its the wrong module
+                            if (VMap.find(gv) == VMap.end())
+                            {
+                                //and not already in the vmap
+                                Constant *initializer = NULL;
+                                if (gv->hasInitializer())
+                                {
+                                    initializer = gv->getInitializer();
+                                }
+                                GlobalVariable *newVar = new GlobalVariable(*TikModule, gv->getValueType(), gv->isConstant(), gv->getLinkage(), initializer, gv->getName(), NULL, gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
+                                VMap[gv] = newVar;
+                            }
+                        }
+                    }
+                    else if (GlobalValue *gv = dyn_cast<GlobalValue>(v))
+                    {
+                        throw TikException("Tik Error: Non variable global reference");
+                    }
+                }
+            }
+        }
     }
 }

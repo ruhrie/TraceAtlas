@@ -104,4 +104,6 @@ private:
     void SplitBlocks(std::set<llvm::BasicBlock *> &blocks);
 
     void SanityChecks();
+
+    void CopyGlobals();
 };
