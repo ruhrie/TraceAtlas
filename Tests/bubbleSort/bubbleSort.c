@@ -2,48 +2,45 @@
 #include <stdlib.h>
 #include <time.h>
 
-int* get_input(int n)
+int *get_input(int n)
 {
-	int* in = (int* )malloc( sizeof(int)*n );
-	for(int i = 0; i < n; i++) 
-	{
-		*(in + i) = rand(); 
-	}
-	return in;
+    int *in = (int *)malloc(sizeof(int) * n);
+    for (int i = 0; i < n; i++)
+    {
+        *(in + i) = rand();
+    }
+    return in;
 }
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
-	int SIZE;
-	if(argc > 1)
-	{
-		SIZE = atoi(argv[1]);
-	}
-	else 
-	{
-		SIZE = 1000;
-	}
-	printf("\nSIZE = %d", SIZE);
-	int* in = get_input(SIZE);
+    int SIZE;
+    if (argc > 1)
+    {
+        SIZE = atoi(argv[1]);
+    }
+    else
+    {
+        SIZE = 1000;
+    }
+    printf("\nSIZE = %d", SIZE);
+    int *in = get_input(SIZE);
 
-	// bubble sort
-	int swap;
-	for(int i = 0; i < SIZE; i++)
-	{
-		for(int j = i; j < SIZE; j++)
-		{
-			if(in[i] > in[j]) 
-			{ 
-				swap  = in[i]; 
-				in[i] = in[j]; 
-				in[j] = swap; 
-			}
-		}
-	}
+    // bubble sort
+    int swap;
+    for (int i = 0; i < SIZE; i++)
+    {
+        for (int j = i; j < SIZE; j++)
+        {
+            if (in[i] > in[j])
+            {
+                swap = in[i];
+                in[i] = in[j];
+                in[j] = swap;
+            }
+        }
+    }
 
-	printf("\nSorting Done");
-	return 0;
+    printf("\nSorting Done");
+    return 0;
 }
-
-
-

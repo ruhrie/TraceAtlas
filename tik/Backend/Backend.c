@@ -1,10 +1,10 @@
 #include "Backend/Backend.h"
 #include <assert.h>
 #include <stdbool.h>
-#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 FILE *myfile;
 
@@ -39,7 +39,7 @@ void BufferData()
     }
     bufferIndex = 0;
     */
-   printf("%s", temp_buffer);
+    printf("%s", temp_buffer);
 }
 
 void Write(char *inst, int line, int block, uint64_t func)
@@ -77,6 +77,6 @@ void BB_ID_Dump(uint64_t block, bool enter)
 void Test()
 {
     printf("a");
-    char* asdf = (char*)malloc(100*sizeof(char));
+    char *asdf = (char *)malloc(100 * sizeof(char));
     scanf("%[^\n]", asdf);
 }
