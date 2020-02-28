@@ -1,17 +1,15 @@
-#include <llvm/IRReader/IRReader.h>
+#include <algorithm>
 #include <fstream>
 #include <iostream>
-#include <llvm/Support/SourceMgr.h>
-#include <llvm/Support/CommandLine.h>
-#include <string>
 #include <llvm/IR/Module.h>
+#include <llvm/IRReader/IRReader.h>
+#include <llvm/Support/CommandLine.h>
+#include <llvm/Support/SourceMgr.h>
 #include <nlohmann/json.hpp>
-#include <algorithm>
 #include <set>
 #include "AtlasUtil/Annotate.h"
 using namespace std;
 using namespace llvm;
-
 
 cl::opt<string> JsonFile("j", cl::desc("Specify input json filename"), cl::value_desc("json filename"));
 cl::opt<string> NameFile("o", cl::desc("Specify output name filename"), cl::value_desc("name filename"));
@@ -59,13 +57,13 @@ int main(int argc, char *argv[])
             for(auto kernel : kernels)
             {
                 auto blocks = kernel.second;
-                if(find(blocks.begin(), blocks.end(), id) != blocks.end())
+                if (find(blocks.begin(), blocks.end(), id) != blocks.end())
                 {
                     kernelParents[kernel.first].insert(functionName);
                 }
             }
         }
-    }	
+    }
 
     nlohmann::json finalJson = kernelParents;
     ofstream oStream(NameFile);

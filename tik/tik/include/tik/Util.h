@@ -1,14 +1,14 @@
 #pragma once
-#include <llvm/IR/Value.h>
-#include <llvm/IR/Type.h>
 #include <llvm/IR/BasicBlock.h>
-#include <llvm/IR/Instruction.h>
 #include <llvm/IR/Function.h>
+#include <llvm/IR/Instruction.h>
 #include <llvm/IR/Module.h>
-#include <vector>
+#include <llvm/IR/Type.h>
+#include <llvm/IR/Value.h>
 #include <map>
-#include <string>
 #include <set>
+#include <string>
+#include <vector>
 
 std::string GetString(llvm::Value *v);
 std::vector<std::string> GetStrings(llvm::BasicBlock *bb);

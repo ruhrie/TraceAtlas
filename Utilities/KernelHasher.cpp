@@ -1,19 +1,19 @@
-#include <map>
-#include <vector>
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IRReader/IRReader.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/SourceMgr.h"
+#include <algorithm>
 #include <fstream>
 #include <iostream>
-#include <algorithm>
-#include <unordered_map>
-#include "llvm/IR/Module.h"
-#include "llvm/IRReader/IRReader.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/Support/SourceMgr.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Type.h"
-#include "llvm/IR/Instruction.h"
-#include "llvm/IR/DataLayout.h"
-#include "llvm/Support/CommandLine.h"
+#include <map>
 #include <nlohmann/json.hpp>
+#include <unordered_map>
+#include <vector>
 using namespace llvm;
 using json = nlohmann::json;
 using namespace std;

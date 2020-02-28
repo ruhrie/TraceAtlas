@@ -1,6 +1,6 @@
-#include <time.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 #define WIDTH 1024
 int main()
 {
@@ -13,7 +13,7 @@ int main()
 
     srand(time(NULL));
     //initialize the data
-    for(int i = 0; i < WIDTH * WIDTH; i++)
+    for (int i = 0; i < WIDTH * WIDTH; i++)
     {
         input[i] = rand();
     }

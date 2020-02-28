@@ -1,0 +1,1 @@
+find ./ -iname *.h -o -iname *.c -iname *.cpp | xargs clang-format-9 -i

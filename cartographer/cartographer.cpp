@@ -12,10 +12,6 @@
 #include <spdlog/spdlog.h>
 #include <string>
 #include <tuple>
-#include <vector>
-
-using namespace std;
-using namespace llvm;
 
 bool noProgressBar;
 

@@ -1,6 +1,6 @@
 #pragma once
-#include <llvm/Pass.h>
 #include <llvm/IR/Function.h>
+#include <llvm/Pass.h>
 
 using namespace llvm;
 
