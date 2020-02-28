@@ -1,10 +1,10 @@
 #include "EncodeDetect.h"
 #include "EncodeExtract.h"
+#include <iostream>
 #include <llvm/Support/CommandLine.h>
 #include <nlohmann/json.hpp>
 #include <set>
 #include <string>
-#include <iostream>
 #include <vector>
 
 using namespace std;

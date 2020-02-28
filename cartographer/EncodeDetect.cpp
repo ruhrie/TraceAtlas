@@ -3,10 +3,10 @@
 #include <assert.h>
 #include <deque>
 #include <functional>
+#include <iostream>
 #include <list>
 #include <map>
 #include <sstream>
-#include <iostream>
 #include <zlib.h>
 
 #define BLOCK_SIZE 4096
