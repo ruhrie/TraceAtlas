@@ -6,7 +6,7 @@ jobs:
     runs-on: ubuntu-18.04
     steps:
       - name: Install papi
-        run: sudo apt isntall libpapi-dev
+        run: sudo apt install libpapi-dev
         shell: bash 
       - uses: actions/checkout@v2
         with:
