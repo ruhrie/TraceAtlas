@@ -733,6 +733,10 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                                 if (CallInst *callUse = dyn_cast<CallInst>(user))
                                 {
                                     BasicBlock *parent = callUse->getParent();
+                                    if(parent->getModule() == TikModule)
+                                    {
+                                        continue;
+                                    }
                                     if (find(Body.begin(), Body.end(), parent) != Body.end())
                                     {
                                         funcUses.push_back(parent);
@@ -762,7 +766,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                                 currentStruct.ArgNodes.push_back(argPhi);
                             }
                             phiBuilder.CreateBr(&calledFunc->getEntryBlock()); //after this we can finally branch into the function
-
+                            //PrintVal(phiBlock);
                             //we also need a block at the end to gather the return values
                             auto returnBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
                             Body.insert(returnBlock);
@@ -797,7 +801,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                                 ci->replaceAllUsesWith(returnPhi);
                             }
                             //finally we use the first phi we created to determine where we should return to
-                            auto branchSwitch = returnBuilder.CreateSwitch(branchPhi, suffix, funcUses.size());
+                            auto branchSwitch = returnBuilder.CreateSwitch(branchPhi, Exception, funcUses.size());
                             branchSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), 0), suffix);
                             currentStruct.SwitchInstruction = branchSwitch;
 
