@@ -22,13 +22,13 @@ jobs:
       - name: dir
         run: find ${{ runner.workspace }}
       - name: Run vcpkg
-        uses: lukka/run-vcpkg@dev
+        uses: lukka/run-vcpkg@v0
         id: runvcpkg
         with:
           vcpkgArguments: '@${{ env.vcpkgResponseFile }}'
           vcpkgDirectory: '${{ github.workspace }}/vcpkg'
       - name: Run CMake with Ninja
-        uses: lukka/run-cmake@dev
+        uses: lukka/run-cmake@v0
         id: runcmake
         with:
           cmakeListsTxtPath: '${{ github.workspace }}/CMakeLists.txt'
