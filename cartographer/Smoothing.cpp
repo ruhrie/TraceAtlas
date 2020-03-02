@@ -66,6 +66,7 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
 
             for (auto &block : bbs)
             {
+                int id = GetBlockID(block);
                 //this is each block in the kernel
                 //we need to check the entrance and exits
                 //entrance first
@@ -83,11 +84,11 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
                 if (!entPresent)
                 {
                     Function *f = block->getParent();
+                    bool called = false;
                     if (&(f->getEntryBlock()) == block)
                     {
                         //it is an entry block so it may still be valid
                         //we now need to check if there are any calls to this function in the code
-                        bool called = false;
                         for (auto user : f->users())
                         {
                             if (auto ui = dyn_cast<CallInst>(user))
@@ -109,10 +110,10 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
                                 }
                             }
                         }
-                        if (!called)
-                        {
-                            valid = false;
-                        }
+                    }
+                    if (!called)
+                    {
+                        valid = false;
                     }
                 }
 
