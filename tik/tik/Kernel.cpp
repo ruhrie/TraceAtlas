@@ -11,6 +11,8 @@
 #include <iostream>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/IR/CFG.h>
+#include <llvm/IR/DebugLoc.h>
+#include <llvm/IR/DebugInfo.h>
 #include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalValue.h>
@@ -276,14 +278,16 @@ void Kernel::UpdateMemory()
     IRBuilder<> initBuilder(Init);
     for (int i = 0; i < ExternalValues.size(); i++)
     {
-        if (GlobalMap.find(ExternalValues[i]) != GlobalMap.end())
+        PrintVal(GlobalMap[VMap[ExternalValues[i]]]);
+        PrintVal(ExternalValues[i]);
+        if (GlobalMap.find(VMap[ExternalValues[i]]) != GlobalMap.end())
         {
-            if (GlobalMap[ExternalValues[i]] == NULL)
+            if (GlobalMap[VMap[ExternalValues[i]]] == NULL)
             {
                 throw TikException("Tik Error: External Value not found in GlobalMap.");
             }
-            coveredGlobals.insert(GlobalMap[ExternalValues[i]]);
-            auto b = initBuilder.CreateStore(KernelFunction->arg_begin() + i + 1, GlobalMap[ExternalValues[i]]);
+            coveredGlobals.insert(GlobalMap[VMap[ExternalValues[i]]]);
+            auto b = initBuilder.CreateStore(KernelFunction->arg_begin() + i + 1, GlobalMap[VMap[ExternalValues[i]]]);
             MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Store))));
             b->setMetadata("TikSynthetic", tikNode);
             newStores.insert(b);
@@ -303,7 +307,7 @@ void Kernel::UpdateMemory()
                     {
                         IRBuilder<> builder(inst->getNextNode());
                         Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
-                        auto a = builder.CreateGEP(inst->getType(), GlobalMap[pair.first], constant);
+                        auto a = builder.CreateGEP(inst->getType(), pair.second, constant);
                         auto b = builder.CreateStore(inst, a);
                         MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Store))));
                         b->setMetadata("TikSynthetic", tikNode);
@@ -1226,10 +1230,7 @@ void Kernel::ApplyMetadata()
     for (auto global : GlobalMap)
     {
         global.second->setMetadata("KernelName", kernelNode);
-        /*DILocation loc(global.second->get);
-        unsigned int ln = loc.getLineNumber();*/
     }
-
     //annotate the body
     MDNode *bodyNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::Body))));
     for (auto body : Body)
