@@ -22,7 +22,7 @@ std::ifstream::pos_type filesize(std::string filename)
     return in.tellg();
 }
 
-std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, int hotThresh)
+std::set<std::set<int>> DetectKernels(std::string sourceFile, float thresh, int hotThresh)
 {
     indicators::ProgressBar bar;
     int previousCount = 0;
@@ -299,13 +299,10 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
         }
     } // for it in blockCount
 
-    std::vector<std::set<int>> result;
+    std::set<std::set<int>> result;
     for (auto &it : kernels)
     {
-        if (std::find(result.begin(), result.end(), it) == result.end())
-        {
-            result.push_back(it);
-        }
+        result.insert(it);
     }
     return result;
 }

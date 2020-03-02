@@ -95,7 +95,7 @@ int main(int argc, char **argv)
     }
     try
     {
-        std::vector<std::set<int>> type1Kernels;
+        std::set<std::set<int>> type1Kernels;
         spdlog::info("Started analysis");
         type1Kernels = DetectKernels(inputTrace, threshold, hotThreshold);
         spdlog::info("Detected " + to_string(type1Kernels.size()) + " type 1 kernels");

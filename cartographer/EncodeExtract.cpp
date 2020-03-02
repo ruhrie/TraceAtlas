@@ -17,7 +17,7 @@
 using namespace std;
 using namespace llvm;
 
-std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> ExtractKernels(std::string sourceFile, std::vector<std::set<int>> kernels, Module *bitcode)
+std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> ExtractKernels(std::string sourceFile, std::set<std::set<int>> kernels, Module *bitcode)
 {
     indicators::ProgressBar bar;
     int previousCount = 0;
@@ -59,14 +59,14 @@ std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> Extrac
         functionMap[i].insert("");
         kernelStarts[i] = -1;
     }
-
-    for (int i = 0; i < kernels.size(); i++)
+    int a = 0;
+    for (auto kernel : kernels)
     {
-        set<int> kernel = kernels[i];
         for (int block : kernel)
         {
-            kernelMap[block].insert(i);
+            kernelMap[block].insert(a);
         }
+        a++;
     }
 
     std::ifstream::pos_type traceSize = filesize(sourceFile);
