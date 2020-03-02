@@ -23,6 +23,7 @@ public:
     std::set<llvm::BasicBlock *> Termination;
     llvm::BasicBlock *Init = NULL;
     llvm::BasicBlock *Exit = NULL;
+    llvm::BasicBlock *Exception = NULL;
     llvm::Function *MemoryRead = NULL;
     llvm::Function *MemoryWrite = NULL;
     llvm::Function *KernelFunction = NULL;

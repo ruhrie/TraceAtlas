@@ -118,11 +118,10 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         //create the artificial blocks
         Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
         Exit = BasicBlock::Create(TikModule->getContext(), "Exit", KernelFunction);
+        Exception = BasicBlock::Create(TikModule->getContext(), "Exception", KernelFunction);
 
         //copy the appropriate blocks
         BuildKernel(blocks);
-
-        BuildExit();
 
         CopyGlobals();
 
@@ -140,6 +139,8 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         UpdateMemory();
 
         BuildInit();
+
+        BuildExit();
 
         RemapNestedKernels();
 
@@ -411,7 +412,7 @@ void Kernel::RemapNestedKernels()
 void Kernel::BuildInit()
 {
     IRBuilder<> initBuilder(Init);
-    auto initSwitch = initBuilder.CreateSwitch(KernelFunction->arg_begin(), Exit, Entrances.size());
+    auto initSwitch = initBuilder.CreateSwitch(KernelFunction->arg_begin(), Exception, Entrances.size());
     int i = 0;
     for (auto ent : Entrances)
     {
@@ -609,7 +610,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
         {
             //this belongs to a subkernel
             auto nestedKernel = KernelMap[id];
-            if (nestedKernel->Entrances.find(block) == nestedKernel->Entrances.end())
+            if (nestedKernel->Entrances.find(block) != nestedKernel->Entrances.end())
             {
                 //we need to make a unique block for each entrance (there is currently only one)
                 int i = 0;
@@ -630,7 +631,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                     BasicBlock *intermediateBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
                     IRBuilder<> intBuilder(intermediateBlock);
                     auto cc = intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
-                    auto sw = intBuilder.CreateSwitch(cc, Exit, nestedKernel->ExitTarget.size());
+                    auto sw = intBuilder.CreateSwitch(cc, Exception, nestedKernel->ExitTarget.size());
                     for (auto pair : nestedKernel->ExitTarget)
                     {
 
@@ -1122,14 +1123,16 @@ void Kernel::GetMemoryFunctions()
 void Kernel::BuildExit()
 {
     IRBuilder<> exitBuilder(Exit);
-    auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), ExitMap.size() + 1);
+    auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), ExitMap.size());
     for (auto pair : ExitMap)
     {
         auto v = VMap[pair.first];
         phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.second), cast<BasicBlock>(VMap[pair.first]));
     }
-    phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), -1), Init);
     exitBuilder.CreateRet(phi);
+
+    IRBuilder<> exceptionBuilder(Exception);
+    exceptionBuilder.CreateRet(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), -2));
 }
 
 //if the result is one entry long it is a value. Otherwise its a list of instructions
@@ -1218,6 +1221,25 @@ void Kernel::ApplyMetadata()
             Instruction *inst = cast<Instruction>(bi);
             inst->setMetadata("dbg", NULL);
         }
+    }
+
+    //second remove all debug intrinsics
+    vector<Instruction *> toRemove;
+    for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+    {
+        for (auto bi = fi->begin(); bi != fi->end(); bi++)
+        {
+            if(auto di = dyn_cast<DbgInfoIntrinsic>(bi))
+            {
+                toRemove.push_back(di);
+            }
+            Instruction *inst = cast<Instruction>(bi);
+            inst->setMetadata("dbg", NULL);
+        }
+    }
+    for(auto r : toRemove)
+    {
+        r->eraseFromParent();
     }
 
     //annotate the kernel functions
