@@ -11,9 +11,9 @@
 #include <iostream>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/IR/CFG.h>
-#include <llvm/IR/DebugLoc.h>
 #include <llvm/IR/DebugInfo.h>
 #include <llvm/IR/DebugInfoMetadata.h>
+#include <llvm/IR/DebugLoc.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/IRBuilder.h>
@@ -278,8 +278,6 @@ void Kernel::UpdateMemory()
     IRBuilder<> initBuilder(Init);
     for (int i = 0; i < ExternalValues.size(); i++)
     {
-        PrintVal(GlobalMap[VMap[ExternalValues[i]]]);
-        PrintVal(ExternalValues[i]);
         if (GlobalMap.find(VMap[ExternalValues[i]]) != GlobalMap.end())
         {
             if (GlobalMap[VMap[ExternalValues[i]]] == NULL)
