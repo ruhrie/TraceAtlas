@@ -101,7 +101,15 @@ int main(int argc, char **argv)
         spdlog::info("Detected " + to_string(type1Kernels.size()) + " type 1 kernels");
         auto type2Kernels = ExtractKernels(inputTrace, type1Kernels, sourceBitcode.get());
         spdlog::info("Detected " + to_string(std::get<1>(type2Kernels).size()) + " type 2 kernels");
-        map<int, set<int>> type3Kernels = SmoothKernel(std::get<1>(type2Kernels), bitcodeFile);
+        //glitchy work around, but it gets the job done
+        set<set<int>> t2k;
+        for(auto key : std::get<1>(type2Kernels))
+        {
+            t2k.insert(key.second);
+        }
+        auto type25Kernels = ExtractKernels(inputTrace, t2k, sourceBitcode.get());
+        spdlog::info("Detected " + to_string(std::get<1>(type25Kernels).size()) + " type 2.5 kernels");
+        map<int, set<int>> type3Kernels = SmoothKernel(std::get<1>(type25Kernels), bitcodeFile);
         spdlog::info("Detected " + to_string(type3Kernels.size()) + " type 3 kernels");
 
         nlohmann::json outputJson;
@@ -112,7 +120,7 @@ int main(int argc, char **argv)
                 string label = "";
                 bool first = true;
                 int i = 0;
-                for (auto entry : std::get<0>(type2Kernels)[key.first])
+                for (auto entry : std::get<0>(type25Kernels)[key.first])
                 {
                     if (entry.empty())
                     {
