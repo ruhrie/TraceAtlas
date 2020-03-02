@@ -169,9 +169,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     }
     catch (TikException &e)
     {
-        std::cerr << "Failed to convert kernel to tik"
-                  << "\n";
-        std::cerr << e.what() << '\n';
+        spdlog::error(e.what());
         Cleanup();
     }
 }
@@ -733,7 +731,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                                 if (CallInst *callUse = dyn_cast<CallInst>(user))
                                 {
                                     BasicBlock *parent = callUse->getParent();
-                                    if(parent->getModule() == TikModule)
+                                    if (parent->getModule() == TikModule)
                                     {
                                         continue;
                                     }
@@ -1023,7 +1021,7 @@ void Kernel::GetMemoryFunctions()
     if (!priorValue)
     {
         spdlog::warn("Empty kernel read encountered");
-        loadBuilder.CreateRet(ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0));
+        loadBuilder.CreateRet(ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), 0));
     }
     else
     {
@@ -1070,7 +1068,7 @@ void Kernel::GetMemoryFunctions()
     if (!priorValue)
     {
         spdlog::warn("Empty kernel write encountered");
-        storeBuilder.CreateRet(ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0));
+        storeBuilder.CreateRet(ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), 0));
     }
     else
     {
@@ -1233,7 +1231,7 @@ void Kernel::ApplyMetadata()
     {
         for (auto bi = fi->begin(); bi != fi->end(); bi++)
         {
-            if(auto di = dyn_cast<DbgInfoIntrinsic>(bi))
+            if (auto di = dyn_cast<DbgInfoIntrinsic>(bi))
             {
                 toRemove.push_back(di);
             }
@@ -1241,7 +1239,7 @@ void Kernel::ApplyMetadata()
             inst->setMetadata("dbg", NULL);
         }
     }
-    for(auto r : toRemove)
+    for (auto r : toRemove)
     {
         r->eraseFromParent();
     }

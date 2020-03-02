@@ -256,7 +256,14 @@ int main(int argc, char *argv[])
     headerFile += "#include <stdint.h>\n";
     for (auto kernel : results)
     {
-        headerFile += "\n" + kernel->GetHeaderDeclaration();
+        try
+        {
+            headerFile += "\n" + kernel->GetHeaderDeclaration();
+        }
+        catch (TikException &e)
+        {
+            spdlog::error(e.what());
+        }
     }
     // write the header file
     std::ofstream header;
@@ -271,13 +278,10 @@ int main(int argc, char *argv[])
     bool broken = verifyModule(*TikModule, &rso, &debugBroken);
     if (broken)
     {
-        auto b = rso.str();
-        spdlog::critical("Tik Module Corrupted: " + str);
-#ifndef DEBUG
-        return EXIT_FAILURE;
-#else
         error = true;
-#endif
+        auto err = rso.str();
+        spdlog::critical("Tik Module Corrupted: " + err);
+        //return EXIT_FAILURE;
     }
 
     // writing part
