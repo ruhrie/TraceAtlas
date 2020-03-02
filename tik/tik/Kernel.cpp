@@ -263,7 +263,7 @@ void Kernel::ExportFunctionSignatures()
                 Function *f = callInst->getCalledFunction();
                 if (f != MemoryRead && f != MemoryWrite)
                 {
-                    llvm::Function *funcDec = llvm::Function::Create(callInst->getCalledFunction()->getFunctionType(), GlobalValue::LinkageTypes::ExternalLinkage, callInst->getCalledFunction()->getName(), TikModule);
+                    Function *funcDec = cast<Function>(TikModule->getOrInsertFunction(callInst->getCalledFunction()->getName(), callInst->getCalledFunction()->getFunctionType()).getCallee());
                     funcDec->setAttributes(callInst->getCalledFunction()->getAttributes());
                     callInst->setCalledFunction(funcDec);
                 }
