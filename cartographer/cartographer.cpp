@@ -103,7 +103,7 @@ int main(int argc, char **argv)
         spdlog::info("Detected " + to_string(std::get<1>(type2Kernels).size()) + " type 2 kernels");
         //glitchy work around, but it gets the job done
         set<set<int>> t2k;
-        for(auto key : std::get<1>(type2Kernels))
+        for (auto key : std::get<1>(type2Kernels))
         {
             t2k.insert(key.second);
         }
