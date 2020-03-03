@@ -31,11 +31,11 @@ jobs:
       - name: Run CMake with Ninja
         uses: lukka/run-cmake@v0
         id: runcmake
-        buildDirectory: ${{github.workspace}}/build
         with:
           cmakeListsTxtPath: '${{ github.workspace }}/CMakeLists.txt'
           useVcpkgToolchainFile: true
           buildWithCMakeArgs: '-- -v'
+          buildDirectory: ${{github.workspace}}/build
       - name: Run ctest
         run: ctest
         shell: bash
