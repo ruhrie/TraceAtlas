@@ -31,6 +31,10 @@ jobs:
           vcpkgArguments: '@${{ env.vcpkgResponseFile }}'
           vcpkgDirectory: '${{ github.workspace }}/vcpkg'
       - name: Run CMake with Ninja
+        env:
+          CC: clang-9
+          CXX: clang++-9
+          LDFLAGS: -fuse-ld=lld-9
         uses: lukka/run-cmake@v0
         id: runcmake
         with:
