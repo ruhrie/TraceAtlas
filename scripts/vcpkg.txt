@@ -1,0 +1,2 @@
+nlohmann-json:x64-linux
+zlib:x64-linux

@@ -1,0 +1,48 @@
+name: Unit Tests
+on: [push]
+
+jobs:
+  Tests:
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Install papi
+        run: sudo apt install libpapi-dev
+        shell: bash 
+      - uses: actions/checkout@v1
+        with:
+          submodules: true
+      - name: Set vcpkg's response file
+        env:
+          vcpkgResponseFile: ${{github.workspace}}/scripts/vcpkg.txt
+        run: |
+          echo "::set-env name=vcpkgResponseFile::$vcpkgResponseFile"
+        shell: bash
+      - name: Cache vcpkg artifacts
+        uses: actions/cache@v1
+        with:
+          path: ${{github.workspace}}/vcpkg
+          key: ${{ hashFiles( env.vcpkgResponseFile ) }}-${{ hashFiles('.git/modules/vcpkg/HEAD') }}
+      - name: Run vcpkg
+        uses: lukka/run-vcpkg@v0
+        id: runvcpkg
+        with:
+          vcpkgArguments: '@${{ env.vcpkgResponseFile }}'
+          vcpkgDirectory: '${{ github.workspace }}/vcpkg'
+      - name: Run CMake with Ninja
+        uses: lukka/run-cmake@v0
+        id: runcmake
+        with:
+          cmakeListsTxtPath: '${{ github.workspace }}/CMakeLists.txt'
+          useVcpkgToolchainFile: true
+          buildWithCMakeArgs: '-- -v'
+          buildDirectory: ${{github.workspace}}/build
+      - name: Run ctest
+        run: ctest
+        shell: bash
+        working-directory: ${{github.workspace}}/build
+      - name: Clean vcpkg
+        run: |
+          rm -rf ${{ github.workspace }}/vcpkg/buildtrees
+          rm -rf ${{ github.workspace }}/vcpkg/packages
+          rm -rf ${{ github.workspace }}/vcpkg/downloads
+        shell: bash
