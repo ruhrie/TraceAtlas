@@ -1458,36 +1458,94 @@ void Kernel::CopyGlobals()
         for (auto bi = fi->begin(); bi != fi->end(); bi++)
         {
             Instruction *inst = cast<Instruction>(bi);
-            if (!isa<CallBase>(inst))
+            if (CallBase* cv = dyn_cast<CallBase>(inst))
             {
-                for (int j = 0; j < inst->getNumOperands(); j++)
+                CopyArgument(cv);
+            }
+            else
+            {
+                CopyOperand(inst);
+            }
+        }
+    }
+}
+
+void Kernel::CopyArgument(llvm::CallBase* Call)
+{
+    PrintVal(Call);
+    for (auto *i = Call->arg_begin(); i < Call->arg_end(); i++)
+    {
+        PrintVal(cast<llvm::Value>(i));
+        //llvm::Value* v = dyn_cast<llvm::Value>(arg);
+        // if we are a global, copy it
+        if (GlobalVariable *gv = dyn_cast<GlobalVariable>(i))
+        {
+            Module *m = gv->getParent();
+            if (m != TikModule)
+            {
+                //its the wrong module
+                if (VMap.find(gv) == VMap.end())
                 {
-                    Value *v = inst->getOperand(j);
-                    if (GlobalVariable *gv = dyn_cast<GlobalVariable>(v))
+                    //and not already in the vmap
+                    Constant *initializer = NULL;
+                    if (gv->hasInitializer())
                     {
-                        Module *m = gv->getParent();
-                        if (m != TikModule)
-                        {
-                            //its the wrong module
-                            if (VMap.find(gv) == VMap.end())
-                            {
-                                //and not already in the vmap
-                                Constant *initializer = NULL;
-                                if (gv->hasInitializer())
-                                {
-                                    initializer = gv->getInitializer();
-                                }
-                                GlobalVariable *newVar = new GlobalVariable(*TikModule, gv->getValueType(), gv->isConstant(), gv->getLinkage(), initializer, gv->getName(), NULL, gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
-                                VMap[gv] = newVar;
-                            }
-                        }
+                        initializer = gv->getInitializer();
                     }
-                    else if (GlobalValue *gv = dyn_cast<GlobalValue>(v))
-                    {
-                        throw TikException("Tik Error: Non variable global reference");
-                    }
+                    GlobalVariable *newVar = new GlobalVariable(*TikModule, gv->getValueType(), gv->isConstant(), gv->getLinkage(), initializer, gv->getName(), NULL, gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
+                    VMap[gv] = newVar;
                 }
             }
+        }
+        // if we have a GEP as a function arg, get its pointer arg
+        //else if(llvm::Operator* op = dyn_cast<llvm::Operator>(i))
+        //{
+        else if(llvm::GEPOperator* gop = dyn_cast<llvm::GEPOperator>(i))
+        {
+            PrintVal(gop->getPointerOperand());
+            CopyOperand(gop);
+        }   
+        //}
+        // if we are a value, we don't know what to do
+        else if (GlobalValue *gv = dyn_cast<GlobalValue>(i))
+        {
+            spdlog::warn("Non variable global reference"); //basically this is a band aid. Needs some more help
+        }
+        else
+        {
+            spdlog::warn("Function argument operand type not supported for global copying."); //basically this is a band aid. Needs some more help
+        }
+    }
+}
+
+void Kernel::CopyOperand(llvm::User* inst)
+{
+    for (int j = 0; j < inst->getNumOperands(); j++)
+    {
+        Value *v = inst->getOperand(j);
+        if (GlobalVariable *gv = dyn_cast<GlobalVariable>(v))
+        {
+            Module *m = gv->getParent();
+            if (m != TikModule)
+            {
+                //its the wrong module
+                if (VMap.find(gv) == VMap.end())
+                {
+                    //and not already in the vmap
+                    Constant *initializer = NULL;
+                    if (gv->hasInitializer())
+                    {
+                        initializer = gv->getInitializer();
+                    }
+                    GlobalVariable *newVar = new GlobalVariable(*TikModule, gv->getValueType(), gv->isConstant(), gv->getLinkage(), initializer, gv->getName(), NULL, gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
+                    VMap[gv] = newVar;
+                }
+            }
+        }
+        else if (GlobalValue *gv = dyn_cast<GlobalValue>(v))
+        {
+            PrintVal(gv);
+            throw TikException("Tik Error: Non variable global reference");
         }
     }
 }
