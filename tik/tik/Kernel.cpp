@@ -1458,7 +1458,7 @@ void Kernel::CopyGlobals()
         for (auto bi = fi->begin(); bi != fi->end(); bi++)
         {
             Instruction *inst = cast<Instruction>(bi);
-            if (CallBase* cv = dyn_cast<CallBase>(inst))
+            if (CallBase *cv = dyn_cast<CallBase>(inst))
             {
                 CopyArgument(cv);
             }
@@ -1470,7 +1470,7 @@ void Kernel::CopyGlobals()
     }
 }
 
-void Kernel::CopyArgument(llvm::CallBase* Call)
+void Kernel::CopyArgument(llvm::CallBase *Call)
 {
     PrintVal(Call);
     for (auto *i = Call->arg_begin(); i < Call->arg_end(); i++)
@@ -1500,11 +1500,11 @@ void Kernel::CopyArgument(llvm::CallBase* Call)
         // if we have a GEP as a function arg, get its pointer arg
         //else if(llvm::Operator* op = dyn_cast<llvm::Operator>(i))
         //{
-        else if(llvm::GEPOperator* gop = dyn_cast<llvm::GEPOperator>(i))
+        else if (llvm::GEPOperator *gop = dyn_cast<llvm::GEPOperator>(i))
         {
             PrintVal(gop->getPointerOperand());
             CopyOperand(gop);
-        }   
+        }
         //}
         // if we are a value, we don't know what to do
         else if (GlobalValue *gv = dyn_cast<GlobalValue>(i))
@@ -1518,7 +1518,7 @@ void Kernel::CopyArgument(llvm::CallBase* Call)
     }
 }
 
-void Kernel::CopyOperand(llvm::User* inst)
+void Kernel::CopyOperand(llvm::User *inst)
 {
     for (int j = 0; j < inst->getNumOperands(); j++)
     {

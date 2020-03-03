@@ -109,7 +109,6 @@ private:
     void SanityChecks();
 
     void CopyGlobals();
-    void CopyArgument(llvm::CallBase* Call);
-    void CopyOperand(llvm::User* inst);
-
+    void CopyArgument(llvm::CallBase *Call);
+    void CopyOperand(llvm::User *inst);
 };
