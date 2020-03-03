@@ -1,8 +1,10 @@
 # TraceAtlas
 
-## Overview
-
 TraceAtlas is a tool that generates a dynamic application trace from source code and extracts kernels from it. There is a paper currently under review by TPDS that goes into depth upon this process. Its title is "Automated Parallel Kernel Extraction from Dynamic Application Traces." It is available at [arxiv](https://arxiv.org/abs/2001.09995). If you use this work in your research please cite this paper.
+
+Tik is a tool included within TraceAtlas that converts the detected kernels into executable code. It will be included in a future publication.
+
+![Unit Tests](https://github.com/ruhrie/TraceAtlas/workflows/Unit%20Tests/badge.svg)
 
 ## Building
 
@@ -13,7 +15,7 @@ TraceAtlas requires a few of libraries:
 * [zlib](https://www.zlib.net/)
 * [spdlog](https://github.com/gabime/spdlog)
 
-The json library, spdlog, and indicators are expected to be installed via [vcpkg](https://github.com/Microsoft/vcpkg). A future update will also move LLVM to vcpkg.
+The json library, spdlog, and indicators are expected to be installed via [vcpkg](https://github.com/Microsoft/vcpkg) which is available as a submodule of the repo. 
 
 To build, simply create a build directory and run cmake (at least 3.10) against it with your build tool of choice. A couple of small unit tests are created. These can be disabled with the `ENABLE_TESTING` option. Note that they do not work properly on the release version due to optimization of the inputs. Doxygen documentation is also available under the `doc` target. It is not built by default.
 
@@ -34,12 +36,15 @@ Cartographer is our trace analysis tool. To detect kernels simply call it with t
 
 ## tik
 
-Tik is a work in progress to extract kernels from the source code. It is not ready for major use. It currently is being developed against function call code. The current requirements are:
-* Single depth function calls
-* Single entrance kernels
-* Single exit kernels
+Tik is a work in progress to extract kernels from the source code. It currently has provisional support for simple kernels, but more complex structures are still a work in progress. The current limitations are:
+
 * No multithreading
 * No exception handling
+* No phi nodes at the beginning of a block that depend on multiple kernel entrances
+
+The status of tik is written to the log. Info indicates a successful action, a warning is something that is likely failing to execute properly, an error is an unrecoverable kernel error, and critical occurs when the generated tik module in invalid.
+
+Currently the performance of tik is lower than desired, but no accelerations have occured yet and are simply a copying of the source code with an additional overhead injected by us to simplify analysis.
 
 ## Utilities
 

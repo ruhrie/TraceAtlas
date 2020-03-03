@@ -2,7 +2,7 @@ name: clang-format
 
 on: [push]
 jobs:
-  build:
+  lint:
     runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v1
@@ -11,3 +11,4 @@ jobs:
           source: .
           extensions: 'h,cpp,c'
           clangFormatVersion: 9
+          exclude: './vcpkg'
