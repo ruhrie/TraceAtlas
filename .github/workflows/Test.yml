@@ -14,9 +14,6 @@ jobs:
       - name: Set environment variables
         env:
           vcpkgResponseFile: ${{github.workspace}}/scripts/vcpkg.txt
-          CC: clang-9
-          CXX: clang++-9
-          LDFLAGS: -fuse-ld=lld-9
         run: echo "::set-env name=vcpkgResponseFile::$vcpkgResponseFile"
         shell: bash
       - name: Cache vcpkg artifacts
@@ -40,7 +37,7 @@ jobs:
         with:
           cmakeListsTxtPath: '${{ github.workspace }}/CMakeLists.txt'
           useVcpkgToolchainFile: true
-          buildWithCMakeArgs: '-- -v -DCMAKE_CXX_COMPILER=clang++-9 -DCMAKE_C_COMPILER=clang-9 -DCMAKE_AR=llvm-ar-9'
+          buildWithCMakeArgs: '-- -v'
           buildDirectory: ${{github.workspace}}/build
       - name: Run ctest
         run: ctest
