@@ -1,34 +1,78 @@
 #include "EncodeExtract.h"
 #include "EncodeDetect.h"
+#include "cartographer.h"
 #include <algorithm>
 #include <assert.h>
 #include <fstream>
 #include <functional>
-#include <iostream>
+#include <indicators/progress_bar.hpp>
 #include <list>
+#include <spdlog/spdlog.h>
 #include <sstream>
+#include <stdlib.h>
 #include <zlib.h>
 
 #define BLOCK_SIZE 4096
 
-std::map<int, std::vector<int>> ExtractKernels(std::string sourceFile, std::vector<std::set<int>> kernels, bool newline)
-{
-    /* Data structures for grouping kernels */
-    // Dictionary for holding the first blockID for each kernel
-    std::map<int, int> kernStart;
-    // Dictionary the final set of kernels, [kernelID] -> [blockIDs]
-    std::map<int, std::set<int>> finalBlocks;
-    // Vector for holding blocks not belonging to a type 1 kernel
-    std::map<int, std::set<int>> blocks;
+using namespace std;
+using namespace llvm;
 
-    /* Read the Trace */
-    // Compute # of blocks in the trace
+std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> ExtractKernels(std::string sourceFile, std::set<std::set<int>> kernels, Module *bitcode)
+{
+    indicators::ProgressBar bar;
+    int previousCount = 0;
+    if (!noProgressBar)
+    {
+        bar.set_prefix_text("Detecting type 2 kernels");
+        bar.show_elapsed_time();
+        bar.show_remaining_time();
+        bar.set_bar_width(50);
+    }
+
+    //first step is to find the total number of basic blocks for allocation
+    int blockCount = 0;
+    for (auto mi = bitcode->begin(); mi != bitcode->end(); mi++)
+    {
+        for (auto fi = mi->begin(); fi != mi->end(); fi++)
+        {
+            blockCount++;
+        }
+    }
+
+    int openCount[blockCount];              // counter to know where we are in the callstack
+    set<int> finalBlocks[kernels.size()];   // final kernel definitions
+    map<int, std::set<string>> functionMap; // maps a kernel index to its label
+    set<int> openBlocks;
+    set<int> *kernelMap = (set<int> *)calloc(sizeof(set<int>), blockCount);
+    int kernelStarts[kernels.size()]; // map of a kernel index to the first block seen
+    set<int> blocks[kernels.size()];  // temporary kernel blocks
+
+    for (int i = 0; i < blockCount; i++)
+    {
+        kernelMap[i] = set<int>();
+        openCount[i] = 0;
+    }
+    for (int i = 0; i < kernels.size(); i++)
+    {
+        blocks[i] = set<int>();
+        finalBlocks[i] = set<int>();
+        functionMap[i].insert("");
+        kernelStarts[i] = -1;
+    }
+    int a = 0;
+    for (auto kernel : kernels)
+    {
+        for (int block : kernel)
+        {
+            kernelMap[block].insert(a);
+        }
+        a++;
+    }
+
     std::ifstream::pos_type traceSize = filesize(sourceFile);
     int totalBlocks = traceSize / BLOCK_SIZE + 1;
     // File stuff for input trace and output decompressed file
     std::ifstream inputTrace;
-    std::ofstream outfile;
-    outfile.open("outfile.txt");
     inputTrace.open(sourceFile);
     inputTrace.seekg(0, std::ios_base::end);
     uint64_t size = inputTrace.tellg();
@@ -51,125 +95,148 @@ std::map<int, std::vector<int>> ExtractKernels(std::string sourceFile, std::vect
     bool notDone = true;
     // Shows whether we've seen the first block ID yet
     bool seenFirst;
+    // keeps track of which kernel function we are in. Initialized to None because we assume a program never starts immediately in a kernel
+    string currentKernel = "";
+    string segment;
     while (notDone)
     {
         // read a block size of the trace
         inputTrace.readsome(dataArray, BLOCK_SIZE);
         strm.next_in = (Bytef *)dataArray;   // input data to z_lib for decompression
         strm.avail_in = inputTrace.gcount(); // remaining characters in the compressed inputTrace
-        std::string bufferString = "";
         while (strm.avail_in != 0)
         {
-            std::string strresult;
             // decompress our data
             strm.next_out = (Bytef *)decompressedArray; // pointer where uncompressed data is written to
-            strm.avail_out = BLOCK_SIZE;                // remaining space in decompressedArray
+            strm.avail_out = BLOCK_SIZE - 1;            // remaining space in decompressedArray
             ret = inflate(&strm, Z_NO_FLUSH);
             assert(ret != Z_STREAM_ERROR);
 
             // put decompressed data into a string for splitting
             unsigned int have = BLOCK_SIZE - strm.avail_out;
+            decompressedArray[have - 1] = '\0';
+            string bufferString(decompressedArray);
+            std::stringstream stringStream(bufferString);
+            std::string segment;
+            std::getline(stringStream, segment, '\n');
+            char back = bufferString.back();
+            seenFirst = false;
 
-            for (int i = 0; i < have; i++)
+            while (true)
             {
-                strresult += decompressedArray[i];
-            }
-            bufferString += strresult;
-            continue;
-
-        } // while(strm.avail_in != 0)
-
-        std::stringstream stringStream(bufferString);
-        std::vector<std::string> split;
-        std::string segment;
-
-        while (std::getline(stringStream, segment, '\n'))
-        {
-            split.push_back(segment);
-        }
-
-        seenFirst = false;
-        int splitIndex = 0;
-        for (std::string &it : split)
-        {
-            auto pi = it;
-            if (it == split.front() && !seenFirst)
-            {
-                it = priorLine + it;
-                seenFirst = true;
-            }
-            else if (splitIndex == split.size() - 1 && bufferString.back() != '\n')
-            {
-                break;
-            }
-            // split it by the colon between the instruction and value
-            std::stringstream itstream(it);
-            std::vector<std::string> spl;
-            while (std::getline(itstream, segment, ':'))
-            {
-                spl.push_back(segment);
-            }
-
-            std::string key = spl.front();
-            std::string value = spl.back();
-
-            if (key == value)
-            {
-                break;
-            }
-            // If key is basic block, put it in our sorting dictionary
-            if (key == "BasicBlock")
-            {
-                long int block = stoi(value, 0, 0);
-                for (int i = 0; i < kernels.size(); i++)
+                if (!seenFirst)
                 {
-                    std::set<int> *kernel = &(kernels[i]);
-                    if ((kernStart.find(i) != kernStart.end()) && (block == kernStart[i])) //check if i is a key and if we are the start //only second half is needed
+                    segment = priorLine + segment;
+                    seenFirst = true;
+                }
+                // split it by the colon between the instruction and value
+                std::stringstream itstream(segment);
+                std::string key;
+                std::string value;
+                std::string error;
+                std::getline(itstream, key, ':');
+                std::getline(itstream, value, ':');
+                bool fin = false;
+                if (!std::getline(stringStream, segment, '\n'))
+                {
+                    //cout << "broke" << segment << "\n";
+                    if (back == '\n')
                     {
-                        blocks[i].clear();
+                        fin = true;
                     }
                     else
                     {
-                        blocks[i].insert(block);
-                        if (kernel->find(block) != kernel->end()) //block is a part of kernel
-                        {
-                            if (kernStart.find(i) == kernStart.end()) //we haven't seen the start before ..so assign it
-                            {
-                                kernStart[i] = block;
-                                finalBlocks[i].insert(block);
-                            }
-                            else
-                            {
-                                finalBlocks[i].merge(blocks[i]);
-                            }
-                            blocks[i].clear();
-                        }
+                        break;
                     }
                 }
-            } // if key == BasicBlock
-            else if (key == "TraceVersion")
-            {
-            }
-            else if (key == "StoreAddress")
-            {
-            }
-            else if (key == "LoadAddress")
-            {
-            }
-            else
-            {
-                throw 2;
-            }
-            splitIndex++;
-        } // for it in split
-        if (bufferString.back() != '\n')
-        {
-            priorLine = split.back();
-        }
-        else
-        {
-            priorLine = "";
-        }
+                ///////////////////////////////////////////////
+                //This is the actual logic
+                if (key == "BBEnter")
+                {
+                    int block = stoi(value, 0, 0);
+                    openCount[block]++; //mark this block as being entered
+                    openBlocks.insert(block);
+
+                    for (int i = 0; i < kernels.size(); i++)
+                    {
+                        blocks[i].insert(block);
+                    }
+
+                    for (auto open : openBlocks)
+                    {
+                        for (auto ki : kernelMap[open])
+                        {
+                            finalBlocks[ki].insert(block);
+                            if (!currentKernel.empty())
+                            {
+                                functionMap[ki].insert(currentKernel);
+                            }
+                        }
+                    }
+
+                    for (auto ki : kernelMap[block])
+                    {
+
+                        if (kernelStarts[ki] == -1)
+                        {
+                            kernelStarts[ki] = block;
+                            finalBlocks[ki].insert(block);
+                            if (!currentKernel.empty())
+                            {
+                                functionMap[ki].insert(currentKernel);
+                            }
+                        }
+                        if (kernelStarts[ki] != block)
+                        {
+                            finalBlocks[ki].insert(blocks[ki].begin(), blocks[ki].end());
+                            if (!currentKernel.empty())
+                            {
+                                functionMap[ki].insert(currentKernel);
+                            }
+                        }
+                        blocks[ki].clear();
+                    }
+                }
+                else if (key == "TraceVersion")
+                {
+                }
+                else if (key == "StoreAddress")
+                {
+                }
+                else if (key == "LoadAddress")
+                {
+                }
+                else if (key == "BBExit")
+                {
+                    int block = stoi(value, 0, 0);
+                    openCount[block]--;
+                    if (openCount[block] == 0)
+                    {
+                        openBlocks.erase(block);
+                    }
+                }
+                else if (key == "KernelEnter")
+                {
+                    currentKernel = value;
+                }
+                else if (key == "KernelExit")
+                {
+                    currentKernel.clear();
+                }
+                else
+                {
+                    spdlog::critical("Unrecognized key: " + key);
+                    throw 2;
+                }
+                if (fin)
+                {
+                    break;
+                }
+            } // while()
+            priorLine = segment;
+
+        } // while(strm.avail_in != 0)
+
         index++;
 
         notDone = (ret != Z_STREAM_END);
@@ -177,27 +244,39 @@ std::map<int, std::vector<int>> ExtractKernels(std::string sourceFile, std::vect
         {
             notDone = false;
         }
-        if (index % 1000 == 1)
+        float percent = (float)index / (float)totalBlocks * 100.0f;
+        if (!noProgressBar)
         {
-            std::cout << "Currently reading block " << index << " of " << totalBlocks << ".\n";
+            bar.set_progress(percent);
+            bar.set_postfix_text("Analyzing block " + to_string(index) + "/" + to_string(totalBlocks));
+        }
+        else
+        {
+            int iPercent = (int)percent;
+            if (iPercent > previousCount + 5)
+            {
+                previousCount = ((iPercent / 5) + 1) * 5;
+                spdlog::info("Completed block {0:d} of {1:d}", index, totalBlocks);
+            }
         }
     }
 
-    std::vector<std::set<int>> checker;
+    if (!noProgressBar && !bar.is_completed())
+    {
+        bar.mark_as_completed();
+    }
+
+    std::set<set<int>> finalSets;
+    std::map<int, std::set<int>> finalMap;
     for (int i = 0; i < kernels.size(); i++)
     {
-        if (std::find(checker.begin(), checker.end(), finalBlocks[i]) == checker.end())
-        {
-            checker.push_back(finalBlocks[i]);
-        }
+        finalSets.insert(finalBlocks[i]);
     }
-    std::map<int, std::vector<int>> finalMap;
-    for (int i = 0; i < checker.size(); i++)
+    int i = 0;
+    for (auto fin : finalSets)
     {
-        //std::sort( checker[i].begin(), checker[i].end() );
-        std::vector<int> v(checker[i].begin(), checker[i].end());
-        finalMap[i] = v;
+        finalMap[i++] = fin;
     }
-
-    return finalMap;
+    free(kernelMap);
+    return {functionMap, finalMap};
 }

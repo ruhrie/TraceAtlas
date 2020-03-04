@@ -1,17 +1,15 @@
 #include "Backend/BackendTrace.h"
-#include "zlib.h"
 #include <assert.h>
-#include <semaphore.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <zlib.h>
 
 FILE *myfile;
 
 //trace functions
 z_stream strm_DashTracer;
-sem_t semaphore_DashTracer;
 
 int TraceCompressionLevel;
 char *TraceFilename;
@@ -28,9 +26,7 @@ void WriteStream(char *input)
     size_t size = strlen(input);
     if (bufferIndex + size >= BUFSIZE)
     {
-        sem_wait(&semaphore_DashTracer);
         BufferData();
-        sem_post(&semaphore_DashTracer);
     }
     memcpy(storeBuffer + bufferIndex, input, size);
     bufferIndex += size;
@@ -98,9 +94,18 @@ void WriteAddress(char *inst, int line, int block, uint64_t func, char *address)
     WriteStream(fin);
 }
 
-void OpenFile(char *test)
+void OpenFile()
 {
-    sem_init(&semaphore_DashTracer, 1, 1);
+    char *tcl = getenv("TRACE_COMPRESSION");
+    if (tcl != NULL)
+    {
+        int l = atoi(tcl);
+        TraceCompressionLevel = l;
+    }
+    else
+    {
+        TraceCompressionLevel = 5;
+    }
     strm_DashTracer.zalloc = Z_NULL;
     strm_DashTracer.zfree = Z_NULL;
     strm_DashTracer.opaque = Z_NULL;
@@ -116,41 +121,25 @@ void OpenFile(char *test)
         TraceFilename = "raw.trc";
     }
 
-    char *tcl = getenv("TRACE_COMPRESSION");
-    if (tcl != NULL)
-    {
-        int l = atoi(tcl);
-        TraceCompressionLevel = l;
-    }
-    else
-    {
-        TraceCompressionLevel = 9;
-    }
-
     myfile = fopen(TraceFilename, "w");
-    WriteStream("TraceVersion:2\n");
+    WriteStream("TraceVersion:3\n");
 }
 
 void CloseFile()
 {
-    sem_wait(&semaphore_DashTracer);
-
     strm_DashTracer.next_in = storeBuffer;
     strm_DashTracer.avail_in = bufferIndex;
     strm_DashTracer.next_out = temp_buffer;
     strm_DashTracer.avail_out = BUFSIZE;
     int deflate_res = deflate(&strm_DashTracer, Z_FINISH);
     assert(deflate_res == Z_STREAM_END);
-
-    sem_post(&semaphore_DashTracer);
-
     for (int i = 0; i < BUFSIZE - strm_DashTracer.avail_out; i++)
     {
         fputc(temp_buffer[i], myfile);
     }
+
     deflateEnd(&strm_DashTracer);
-    sem_destroy(&semaphore_DashTracer);
-    fclose(myfile); //breaks gsl occasionally for some reason. Likely a glibc error.
+    //fclose(myfile); //breaks occasionally for some reason. Likely a glibc error.
 }
 
 void LoadDump(void *address)
@@ -164,15 +153,16 @@ void DumpLoadAddrValue(void *MemValue, int size)
     char fin[128];
     sprintf(fin, "LoadAddress:%#lX\n", (uint64_t)MemValue);
     WriteStream(fin);
-    char value[128];
     uint8_t *bitwisePrint = (uint8_t *)MemValue;
-    sprintf(value, "size:%d, MemValue:", size);
+    sprintf(fin, "size:%d, LoadMemValue:", size);
+    WriteStream(fin);
     for (int i = 0; i < size; i++)
     {
-        sprintf(value, "%u", bitwisePrint[i]);
+        sprintf(fin, "%u ", bitwisePrint[i]);
+        WriteStream(fin);
     }
-    sprintf(value, "\n");
-    WriteStream(value);
+    sprintf(fin, "\n");
+    WriteStream(fin);
 }
 void StoreDump(void *address)
 {
@@ -186,20 +176,45 @@ void DumpStoreAddrValue(void *MemValue, int size)
     char fin[128];
     sprintf(fin, "StoreAddress:%#lX\n", (uint64_t)MemValue);
     WriteStream(fin);
-    char value[128];
     uint8_t *bitwisePrint = (uint8_t *)MemValue;
-    sprintf(value, "size:%d, MemValue:", size);
+    sprintf(fin, "size:%d, StoreMemValue:", size);
+    WriteStream(fin);
     for (int i = 0; i < size; i++)
     {
-        sprintf(value, "%u", bitwisePrint[i]);
+        sprintf(fin, "%u ", bitwisePrint[i]);
+        WriteStream(fin);
     }
-    sprintf(value, "\n");
-    WriteStream(value);
+    sprintf(fin, "\n");
+    WriteStream(fin);
 }
 
-void BB_ID_Dump(uint64_t block)
+void BB_ID_Dump(uint64_t block, bool enter)
 {
     char fin[128];
-    sprintf(fin, "BasicBlock:%#lX\n", block);
+    if (enter)
+    {
+        sprintf(fin, "BBEnter:%#lX\n", block);
+    }
+    else
+    {
+        sprintf(fin, "BBExit:%#lX\n", block);
+    }
+    WriteStream(fin);
+}
+
+void KernelEnter(char *label)
+{
+    char fin[128];
+    strcpy(fin, "KernelEnter:");
+    strcat(fin, label);
+    strcat(fin, "\n");
+    WriteStream(fin);
+}
+void KernelExit(char *label)
+{
+    char fin[128];
+    strcpy(fin, "KernelExit:");
+    strcat(fin, label);
+    strcat(fin, "\n");
     WriteStream(fin);
 }

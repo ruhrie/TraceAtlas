@@ -1,5 +1,5 @@
-#ifndef BACKENDTRACE_H
-#define BACKENDTRACE_H
+#pragma once
+#include <stdbool.h>
 #include <stdint.h>
 
 /// <summary>
@@ -49,6 +49,14 @@ void DumpLoadAddrValue(void *MemValue, int size);
 void StoreDump(void *address);
 void DumpStoreAddrValue(void *MemValue, int size);
 
-void BB_ID_Dump(uint64_t block);
+void BB_ID_Dump(uint64_t block, bool enter);
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+    void KernelEnter(char *label);
+    void KernelExit(char *label);
+#ifdef __cplusplus
+}
 #endif

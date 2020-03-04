@@ -1,3 +1,4 @@
+#include "AtlasUtil/Annotate.h"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -28,8 +29,20 @@ int main(int argc, char *argv[])
     for (auto &[key, value] : j.items())
     {
         string index = key;
-        vector<int> kernel = value;
-        kernels[index] = kernel;
+
+        nlohmann::json kernel;
+
+        if (!value[0].empty() && value[0].is_array())
+        {
+            //embedded layout
+            kernel = value[0];
+        }
+        else
+        {
+            kernel = value;
+        }
+
+        kernels[index] = kernel.get<vector<int>>();
     }
 
     //load the llvm file
@@ -37,14 +50,7 @@ int main(int argc, char *argv[])
     SMDiagnostic smerror;
     unique_ptr<Module> sourceBitcode = parseIRFile(InputFile, smerror, context);
     //annotate it with the same algorithm used in the tracer
-    static uint64_t UID = 0;
-    for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
-    {
-        for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
-        {
-            BB->setName("BB_UID_" + std::to_string(UID++));
-        }
-    }
+    Annotate(sourceBitcode.get());
     map<string, set<string>> kernelParents;
     for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
     {
@@ -52,8 +58,7 @@ int main(int argc, char *argv[])
         for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
         {
             BasicBlock *b = cast<BasicBlock>(BB);
-            string blockName = b->getName();
-            uint64_t id = std::stoul(blockName.substr(7));
+            int64_t id = GetBlockID(b);
             for (auto kernel : kernels)
             {
                 auto blocks = kernel.second;

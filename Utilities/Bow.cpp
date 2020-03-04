@@ -1,3 +1,4 @@
+#include "AtlasUtil/Annotate.h"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -7,7 +8,6 @@
 #include <llvm/Support/SourceMgr.h>
 #include <nlohmann/json.hpp>
 #include <set>
-#include <string>
 using namespace std;
 using namespace llvm;
 
@@ -42,25 +42,18 @@ int main(int argc, char *argv[])
         std::cerr << "Failed to load bitcode file\n";
         return -1;
     }
+    Module *M = sourceBitcode.get();
     //annotate it with the same algorithm used in the tracer
-    static uint64_t UID = 0;
-    for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
-    {
-        for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
-        {
-            BB->setName("BB_UID_" + std::to_string(UID++));
-        }
-    }
+    Annotate(M);
     map<string, set<string>> kernelParents;
-    for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
+    for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
     {
         Function *f = cast<Function>(F);
         string functionName = f->getName();
         for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
         {
             BasicBlock *b = cast<BasicBlock>(BB);
-            string blockName = b->getName();
-            uint64_t id = std::stoul(blockName.substr(7));
+            int64_t id = GetBlockID(b);
             for (auto kernel : kernels)
             {
                 auto blocks = kernel.second;

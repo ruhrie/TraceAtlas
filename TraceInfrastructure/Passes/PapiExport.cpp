@@ -1,10 +1,11 @@
 #include "Passes/PapiExport.h"
+#include "AtlasUtil/Annotate.h"
 #include "Passes/Annotate.h"
 #include "Passes/CommandArgs.h"
 #include "Passes/PapiIO.h"
-#include "llvm/IR/CFG.h"
 #include <fstream>
 #include <iostream>
+#include <llvm/IR/CFG.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instruction.h>
@@ -13,10 +14,12 @@
 #include <llvm/Pass.h>
 #include <llvm/Support/raw_ostream.h>
 #include <map>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
 using namespace llvm;
+using namespace std;
 
 namespace DashTracer
 {
@@ -35,19 +38,13 @@ namespace DashTracer
             {
                 BasicBlock *block = cast<BasicBlock>(BB);
                 std::vector<Instruction *> toRemove;
-                std::string blockName = block->getName();
-                if (blockName.rfind("papi_", 0) == 0)
-                {
-                    break;
-                }
-                uint64_t blockId = std::stoul(blockName.substr(7));
+                auto blockId = GetBlockID(block);
                 bool local = std::find(kernelBlock.begin(), kernelBlock.end(), blockId) != kernelBlock.end();
                 bool contInt = false;
                 bool contExt = false;
                 for (BasicBlock *pred : predecessors(block))
                 {
-                    std::string subName = pred->getName();
-                    uint64_t subId = std::stoul(subName.substr(7));
+                    auto subId = GetBlockID(pred);
                     if (std::find(kernelBlock.begin(), kernelBlock.end(), subId) != kernelBlock.end())
                     {
                         contInt = true;
@@ -120,98 +117,27 @@ namespace DashTracer
             certOff = cast<Function>(M.getOrInsertFunction("CertifyPapiOff", Type::getVoidTy(M.getContext())).getCallee());
 
             kernelBlock.clear();
+            nlohmann::json j;
             std::ifstream inputStream(KernelFilename);
-            if (inputStream.is_open())
+            inputStream >> j;
+            inputStream.close();
+            for (auto &[key, value] : j.items())
             {
-                std::string data = "";
-                std::string line;
-                while (std::getline(inputStream, line))
+                string index = key;
+                if (stoi(index) == KernelIndex)
                 {
-                    data += line;
-                }
-                data.erase(std::remove(data.begin(), data.end(), '\n'), data.end());
-                data.erase(std::remove(data.begin(), data.end(), ' '), data.end());
-                data.erase(std::remove(data.begin(), data.end(), '\t'), data.end());
-                std::vector<std::string> kernels;
-                std::string temp = "";
-                for (int i = 1; i < data.length() - 1; i++)
-                {
-                    if (data[i - 1] == ']' && data[i] == ',')
+                    nlohmann::json kernel;
+                    if (!value[0].empty() && value[0].is_array())
                     {
-                        kernels.push_back(temp);
-                        temp = "";
+                        //embedded layout
+                        kernel = value[0];
                     }
                     else
                     {
-                        temp += data[i];
+                        kernel = value;
                     }
+                    kernelBlock = kernel.get<vector<uint64_t>>();
                 }
-                kernels.push_back(temp);
-                bool found = false;
-                for (int i = 0; i < kernels.size(); i++)
-                {
-                    if (found)
-                    {
-                        break;
-                    }
-                    std::string kern = kernels[i];
-                    for (int i = 1; i < kern.length(); i++)
-                    {
-                        if (kern[i] == '"')
-                        {
-                            uint64_t index = std::stoul(kern.substr(1, i - 1));
-                            if (index == KernelIndex)
-                            {
-                                std::string kernString = kern.substr(i + 3, kern.length() - i - 4);
-                                std::string intString = "";
-                                for (int j = 0; j < kernString.length(); j++)
-                                {
-                                    if (kernString[j] == ',')
-                                    {
-                                        uint64_t resultInt;
-                                        if (intString.rfind("0X", 0) == 0 || intString.rfind("0x", 0) == 0)
-                                        {
-                                            resultInt = std::stoul(intString.substr(1, intString.size() - 2), nullptr, 16);
-                                        }
-                                        else
-                                        {
-                                            resultInt = std::stoul(intString);
-                                        }
-
-                                        kernelBlock.push_back(resultInt);
-                                        intString = "";
-                                    }
-                                    else
-                                    {
-                                        intString += kernString[j];
-                                    }
-                                }
-                                if (intString.length() != 0)
-                                {
-                                    uint64_t resultInt;
-                                    if (intString.rfind("0X", 0) == 0 || intString.rfind("0x", 0) == 0)
-                                    {
-                                        resultInt = std::stoul(intString.substr(1, intString.size() - 2), nullptr, 16);
-                                    }
-                                    else
-                                    {
-                                        resultInt = std::stoul(intString);
-                                    }
-                                    kernelBlock.push_back(resultInt);
-                                }
-                                found = true;
-                            }
-                            break;
-                        }
-                    }
-                }
-
-                inputStream.close();
-            }
-
-            else
-            {
-                std::cout << "Failed to open kernel file. Will not trace events\n";
             }
 
             return false;

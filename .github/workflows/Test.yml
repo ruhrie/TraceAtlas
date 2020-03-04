@@ -1,5 +1,5 @@
 name: Unit Tests
-on: [push]
+on: [pull_request]
 
 jobs:
   Tests:
@@ -11,11 +11,10 @@ jobs:
       - uses: actions/checkout@v1
         with:
           submodules: true
-      - name: Set vcpkg's response file
+      - name: Set environment variables
         env:
           vcpkgResponseFile: ${{github.workspace}}/scripts/vcpkg.txt
-        run: |
-          echo "::set-env name=vcpkgResponseFile::$vcpkgResponseFile"
+        run: echo "::set-env name=vcpkgResponseFile::$vcpkgResponseFile"
         shell: bash
       - name: Cache vcpkg artifacts
         uses: actions/cache@v1
@@ -29,6 +28,10 @@ jobs:
           vcpkgArguments: '@${{ env.vcpkgResponseFile }}'
           vcpkgDirectory: '${{ github.workspace }}/vcpkg'
       - name: Run CMake with Ninja
+        env:
+          CC: clang-9
+          CXX: clang++-9
+          LDFLAGS: -fuse-ld=lld-9
         uses: lukka/run-cmake@v0
         id: runcmake
         with:

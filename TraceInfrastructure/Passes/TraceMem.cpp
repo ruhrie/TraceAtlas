@@ -5,7 +5,6 @@
 #include "Passes/TraceMemIO.h"
 #include "llvm/IR/DataLayout.h"
 #include <fstream>
-#include <iostream>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instruction.h>
@@ -32,9 +31,8 @@ namespace DashTracer
             for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
             {
                 BasicBlock *block = cast<BasicBlock>(BB);
-                std::string blockName = block->getName();
                 auto dl = block->getModule()->getDataLayout();
-                uint64_t blockId = std::stoul(blockName.substr(7));
+                int64_t blockId = GetBlockID(block);
                 if (std::find(kernelBlockForValue.begin(), kernelBlockForValue.end(), blockId) != kernelBlockForValue.end())
                 {
                     for (BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; ++BI)

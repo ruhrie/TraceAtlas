@@ -1,11 +1,12 @@
 #include "EncodeDetect.h"
+#include "cartographer.h"
 #include <algorithm>
 #include <assert.h>
-#include <deque>
 #include <functional>
-#include <iostream>
-#include <list>
+#include <indicators/progress_bar.hpp>
 #include <map>
+#include <queue>
+#include <spdlog/spdlog.h>
 #include <sstream>
 #include <zlib.h>
 
@@ -13,21 +14,33 @@
 
 using namespace std;
 
+std::map<int, uint64_t> blockCount; //fine
+
 std::ifstream::pos_type filesize(std::string filename)
 {
     std::ifstream in(filename, std::ifstream::ate | std::ifstream::binary);
     return in.tellg();
 }
 
-std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, int hotThresh, bool newline)
+std::set<std::set<int>> DetectKernels(std::string sourceFile, float thresh, int hotThresh)
 {
+    indicators::ProgressBar bar;
+    int previousCount = 0;
+    if (!noProgressBar)
+    {
+        bar.set_prefix_text("Detecting type 1 kernels");
+        bar.show_elapsed_time();
+        bar.show_remaining_time();
+        bar.set_bar_width(50);
+    }
+
     /* Structures for grouping kernels */
     // Tracer parameter, sets the maximum width that the parser can look for temporally affine blocks
     int radius = 5;
     // Maps a blockID to its vector of temporally affine blocks
-    std::map<int, std::map<int, int>> blockMap; //should probably seperate the floating point values into a seperate structure
+    std::map<int, std::map<int, uint64_t>> blockMap; //should probably seperate the floating point values into a seperate structure
     // Holds the count of each blockID
-    std::map<int, int> blockCount; //fine
+
     // Vector for grouping blocks together
     std::deque<int> priorBlocks; //should be a dequeue
 
@@ -37,8 +50,6 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
     int blocks = traceSize / BLOCK_SIZE + 1;
     // File stuff for input trace and output decompressed file
     std::ifstream inputTrace;
-    std::ofstream outfile;
-    outfile.open("outfile.txt");
     inputTrace.open(sourceFile);
     inputTrace.seekg(0, std::ios_base::end);
     uint64_t size = inputTrace.tellg();
@@ -61,13 +72,14 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
     bool notDone = true;
     // Shows whether we've seen the first block ID yet
     bool seenFirst, seenLast;
+    std::string segment;
     while (notDone)
     {
         // read a block size of the trace
         inputTrace.readsome(dataArray, BLOCK_SIZE);
         strm.next_in = (Bytef *)dataArray;   // input data to z_lib for decompression
         strm.avail_in = inputTrace.gcount(); // remaining characters in the compressed inputTrace
-        std::string bufferString = "";
+        //std::string bufferString = "";
         while (strm.avail_in != 0)
         {
             std::string strresult;
@@ -79,96 +91,91 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
 
             // put decompressed data into a string for splitting
             unsigned int have = BLOCK_SIZE - strm.avail_out;
+            decompressedArray[have] = '\0';
+            string bufferString = string(decompressedArray);
+            //continue;
 
-            for (int i = 0; i < have; i++)
+            std::stringstream stringStream(bufferString);
+            std::getline(stringStream, segment, '\n');
+            char back = bufferString.back();
+            seenFirst = false;
+
+            while (true)
             {
-                strresult += decompressedArray[i];
-            }
-            bufferString += strresult;
-            continue;
-
-        } // while(strm.avail_in != 0)
-
-        std::stringstream stringStream(bufferString);
-        std::vector<std::string> split;
-        std::string segment;
-
-        while (std::getline(stringStream, segment, '\n'))
-        {
-            split.push_back(segment);
-        }
-
-        seenFirst = false;
-        int splitIndex = 0;
-        for (std::string &it : split)
-        {
-            if (it == split.front() && !seenFirst)
-            {
-                it = priorLine + it;
-                seenFirst = true;
-            }
-            else if (splitIndex == split.size() - 1 && bufferString.back() != '\n')
-            {
-                seenLast = true;
-                break;
-            }
-            // split it by the colon between the instruction and value
-            std::stringstream itstream(it);
-            std::vector<std::string> spl;
-            while (std::getline(itstream, segment, ':'))
-            {
-                spl.push_back(segment);
-            }
-
-            std::string key = spl.front();
-            std::string value = spl.back();
-
-            if (key == value)
-            {
-                break;
-            }
-            // If key is basic block, put it in our sorting dictionary
-            if (key == "BasicBlock")
-            {
-                long int block = stoi(value, 0, 0);
-                blockCount[block] += 1;
-                priorBlocks.push_back(block);
-
-                if (priorBlocks.size() > (2 * radius + 1))
+                if (!seenFirst)
                 {
-                    priorBlocks.pop_front();
+                    segment = priorLine + segment;
+                    seenFirst = true;
                 }
-                if (priorBlocks.size() > radius)
+                // split it by the colon between the instruction and value
+                std::stringstream itstream(segment);
+                std::string key;
+                std::string value;
+                std::string error;
+                std::getline(itstream, key, ':');
+                std::getline(itstream, value, ':');
+                bool fin = false;
+                if (!std::getline(stringStream, segment, '\n'))
                 {
-                    for (auto i : priorBlocks)
+                    if (back == '\n')
                     {
-                        blockMap[block][i]++;
+                        fin = true;
                     }
-                } // if priorBlocks.size > radius
-            }     // if key == BasicBlock
-            else if (key == "TraceVersion")
-            {
-            }
-            else if (key == "StoreAddress")
-            {
-            }
-            else if (key == "LoadAddress")
-            {
-            }
-            else
-            {
-                throw 2;
-            }
-            splitIndex++;
-        } // for it in split
-        if (bufferString.back() != '\n')
-        {
-            priorLine = split.back();
-        }
-        else
-        {
-            priorLine = "";
-        }
+                    else
+                    {
+                        break;
+                    }
+                }
+                // If key is basic block, put it in our sorting dictionary
+                if (key == "BBEnter")
+                {
+                    long int block = stoi(value, 0, 0);
+                    blockCount[block] += 1;
+                    priorBlocks.push_back(block);
+
+                    if (priorBlocks.size() > (2 * radius + 1))
+                    {
+                        priorBlocks.pop_front();
+                    }
+                    if (priorBlocks.size() > radius)
+                    {
+                        for (auto i : priorBlocks)
+                        {
+                            blockMap[block][i]++;
+                        }
+                    } // if priorBlocks.size > radius
+                }     // if key == BasicBlock
+                else if (key == "TraceVersion")
+                {
+                }
+                else if (key == "StoreAddress")
+                {
+                }
+                else if (key == "LoadAddress")
+                {
+                }
+                else if (key == "BBExit")
+                {
+                }
+                else if (key == "KernelEnter")
+                {
+                }
+                else if (key == "KernelExit")
+                {
+                }
+                else
+                {
+                    spdlog::critical("Unrecognized key: " + key);
+                    throw 2;
+                }
+                if (fin)
+                {
+                    break;
+                }
+            } // while()
+            priorLine = segment;
+
+        } // while (strm.avail_in != 0)
         index++;
 
         notDone = (ret != Z_STREAM_END);
@@ -176,24 +183,41 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
         {
             notDone = false;
         }
-        if (index % 1000 == 1)
+        float percent = (float)index / (float)blocks * 100.0f;
+        if (!noProgressBar)
         {
-            std::cout << "Currently reading block " << index << " of " << blocks << ".\n";
+            bar.set_progress(percent);
+            bar.set_postfix_text("Analyzing block " + to_string(index) + "/" + to_string(blocks));
+        }
+        else
+        {
+            int iPercent = (int)percent;
+            if (iPercent > previousCount + 5)
+            {
+                previousCount = ((iPercent / 5) + 1) * 5;
+                spdlog::info("Completed block {0:d} of {1:d}", index, blocks);
+            }
         }
     } // while( notDone )
+
+    if (!noProgressBar && !bar.is_completed())
+    {
+        bar.mark_as_completed();
+    }
 
     // assign to every index of every list value in blockMap a normalized amount
     std::map<int, std::vector<std::pair<int, float>>> fBlockMap; //really this is a matrix of floats
     for (auto &key : blockMap)
     {
-        int total = 0;
+        uint64_t total = 0;
         for (auto &sub : key.second)
         {
             total += sub.second;
         }
         for (auto &sub : key.second)
         {
-            fBlockMap[key.first].push_back(std::pair<int, float>(sub.first, (float)sub.second / (float)total));
+            float val = (float)sub.second / (float)total;
+            fBlockMap[key.first].push_back(std::pair<int, float>(sub.first, val));
         }
     }
 
@@ -230,7 +254,7 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
     });
     for (auto &it : blockPairs)
     {
-        if (it.second > hotThresh)
+        if (it.second >= hotThresh)
         {
             if (covered.find(it.first) == covered.end())
             {
@@ -275,13 +299,10 @@ std::vector<std::set<int>> DetectKernels(std::string sourceFile, float thresh, i
         }
     } // for it in blockCount
 
-    std::vector<std::set<int>> result;
+    std::set<std::set<int>> result;
     for (auto &it : kernels)
     {
-        if (std::find(result.begin(), result.end(), it) == result.end())
-        {
-            result.push_back(it);
-        }
+        result.insert(it);
     }
     return result;
 }
