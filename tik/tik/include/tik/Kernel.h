@@ -114,4 +114,6 @@ private:
     void CopyGlobals();
 
     void GetKernelLabels();
+    void CopyArgument(llvm::CallBase *Call);
+    void CopyOperand(llvm::User *inst);
 };
