@@ -1472,11 +1472,8 @@ void Kernel::CopyGlobals()
 
 void Kernel::CopyArgument(llvm::CallBase *Call)
 {
-    PrintVal(Call);
     for (auto *i = Call->arg_begin(); i < Call->arg_end(); i++)
     {
-        PrintVal(cast<llvm::Value>(i));
-        //llvm::Value* v = dyn_cast<llvm::Value>(arg);
         // if we are a global, copy it
         if (GlobalVariable *gv = dyn_cast<GlobalVariable>(i))
         {
@@ -1498,15 +1495,11 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
             }
         }
         // if we have a GEP as a function arg, get its pointer arg
-        //else if(llvm::Operator* op = dyn_cast<llvm::Operator>(i))
-        //{
         else if (llvm::GEPOperator *gop = dyn_cast<llvm::GEPOperator>(i))
         {
-            PrintVal(gop->getPointerOperand());
             CopyOperand(gop);
         }
-        //}
-        // if we are a value, we don't know what to do
+        // if we are anything else, we don't know what to do
         else if (GlobalValue *gv = dyn_cast<GlobalValue>(i))
         {
             spdlog::warn("Non variable global reference"); //basically this is a band aid. Needs some more help
@@ -1544,7 +1537,6 @@ void Kernel::CopyOperand(llvm::User *inst)
         }
         else if (GlobalValue *gv = dyn_cast<GlobalValue>(v))
         {
-            PrintVal(gv);
             throw TikException("Tik Error: Non variable global reference");
         }
     }
