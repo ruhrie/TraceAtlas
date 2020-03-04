@@ -1,5 +1,6 @@
 #pragma once
 #include "tik/InlineStruct.h"
+#include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Transforms/Utils/ValueMapper.h>
 #include <map>
@@ -34,6 +35,8 @@ private:
     void GetEntrances(std::set<llvm::BasicBlock *> &);
     void GetExits(std::set<llvm::BasicBlock *> &);
     std::map<llvm::BasicBlock *, int> ExitMap;
+    std::map<int, llvm::GlobalValue *> LoadMap;
+    std::map<int, llvm::GlobalValue *> StoreMap;
     /// @brief  Maps old instructions to new instructions.
     ///
     /// Special LLVM map containing old instructions (from the original bitcode) as keys and new instructions as values.
@@ -109,4 +112,6 @@ private:
     void SanityChecks();
 
     void CopyGlobals();
+
+    void GetKernelLabels();
 };

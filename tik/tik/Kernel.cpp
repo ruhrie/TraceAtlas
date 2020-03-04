@@ -172,6 +172,16 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         spdlog::error(e.what());
         Cleanup();
     }
+
+    try
+    {
+        GetKernelLabels();
+    }
+    catch (TikException &e)
+    {
+        spdlog::warn("Failed to annotate Loop/Memory grammars");
+        spdlog::debug(e.what());
+    }
 }
 
 nlohmann::json Kernel::GetJson()
@@ -1002,8 +1012,8 @@ void Kernel::GetMemoryFunctions()
         }
         VMap[lVal] = GlobalMap[lVal];
         Constant *constant = ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), 0);
-        auto a = loadBuilder.CreateGEP(lVal->getType(), GlobalMap[lVal], constant);
-        auto b = loadBuilder.CreateLoad(a);
+        auto b = loadBuilder.CreateLoad(GlobalMap[lVal]);
+        LoadMap[i] = GlobalMap[lVal];
         Instruction *converted = cast<Instruction>(loadBuilder.CreatePtrToInt(b, Type::getInt64Ty(TikModule->getContext())));
         Constant *indexConstant = ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), i++);
         loadMap[lVal] = indexConstant;
@@ -1048,8 +1058,8 @@ void Kernel::GetMemoryFunctions()
             continue;
         }
         Constant *constant = ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), 0);
-        auto a = storeBuilder.CreateGEP(sVal->getType(), GlobalMap[sVal], constant);
-        auto b = storeBuilder.CreateLoad(a);
+        auto b = storeBuilder.CreateLoad(GlobalMap[sVal]);
+        StoreMap[i] = GlobalMap[sVal];
         Instruction *converted = cast<Instruction>(storeBuilder.CreatePtrToInt(b, Type::getInt64Ty(TikModule->getContext())));
         Constant *indexConstant = ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), i++);
         if (priorValue == NULL)
