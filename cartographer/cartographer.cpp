@@ -1,5 +1,7 @@
+#include "AtlasUtil/Annotate.h"
 #include "EncodeDetect.h"
 #include "EncodeExtract.h"
+#include "Rectifier.h"
 #include "Smoothing.h"
 #include "profile.h"
 #include <llvm/Bitcode/BitcodeReader.h>
@@ -13,10 +15,13 @@
 #include <string>
 #include <tuple>
 
-bool noProgressBar;
-
 using namespace std;
 using namespace llvm;
+
+bool noProgressBar;
+bool blocksLabeled = false;
+map<int, set<string>> blockLabelMap;
+map<int, BasicBlock *> blockMap;
 
 llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
 llvm::cl::opt<float> threshold("t", cl::desc("The threshold of block grouping required to complete a kernel."), llvm::cl::value_desc("float"), llvm::cl::init(0.9));
@@ -93,34 +98,57 @@ int main(int argc, char **argv)
         spdlog::critical("Failed to open bitcode file: " + bitcodeFile);
         return EXIT_FAILURE;
     }
+
+    Module *M = sourceBitcode.get();
+    Annotate(M);
+
+    //build the blockMap
+    for (auto mi = M->begin(); mi != M->end(); mi++)
+    {
+        for (auto fi = mi->begin(); fi != mi->end(); fi++)
+        {
+            BasicBlock *bb = cast<BasicBlock>(fi);
+            int64_t id = GetBlockID(bb);
+            blockMap[id] = bb;
+        }
+    }
+
     try
     {
         std::set<std::set<int>> type1Kernels;
         spdlog::info("Started analysis");
         type1Kernels = DetectKernels(inputTrace, threshold, hotThreshold);
         spdlog::info("Detected " + to_string(type1Kernels.size()) + " type 1 kernels");
-        auto type2Kernels = ExtractKernels(inputTrace, type1Kernels, sourceBitcode.get());
-        spdlog::info("Detected " + to_string(std::get<1>(type2Kernels).size()) + " type 2 kernels");
-        //glitchy work around, but it gets the job done
-        set<set<int>> t2k;
-        for (auto key : std::get<1>(type2Kernels))
-        {
-            t2k.insert(key.second);
-        }
-        auto type25Kernels = ExtractKernels(inputTrace, t2k, sourceBitcode.get());
-        spdlog::info("Detected " + to_string(std::get<1>(type25Kernels).size()) + " type 2.5 kernels");
-        map<int, set<int>> type3Kernels = SmoothKernel(std::get<1>(type25Kernels), bitcodeFile);
+        auto type2Kernels = ExtractKernels(inputTrace, type1Kernels, M);
+        spdlog::info("Detected " + to_string(type2Kernels.size()) + " type 2 kernels");
+        auto type25Kernels = ExtractKernels(inputTrace, type2Kernels, M);
+        spdlog::info("Detected " + to_string(type25Kernels.size()) + " type 2.5 kernels");
+        set<set<int>> type3Kernels = SmoothKernel(type25Kernels, M);
         spdlog::info("Detected " + to_string(type3Kernels.size()) + " type 3 kernels");
+        auto type4Kernels = RectifyKernel(type3Kernels, M);
+        spdlog::info("Detected " + to_string(type4Kernels.size()) + " type 4 kernels");
+
+        map<int, set<int>> finalResult;
+        int j = 0;
+        for (auto set : type4Kernels)
+        {
+            finalResult[j++] = set;
+        }
 
         nlohmann::json outputJson;
-        for (auto key : type3Kernels)
+        for (auto key : finalResult)
         {
             if (label)
             {
-                string label = "";
+                string strLabel = "";
                 bool first = true;
                 int i = 0;
-                for (auto entry : std::get<0>(type25Kernels)[key.first])
+                set<string> labels;
+                for (auto block : key.second)
+                {
+                    labels.insert(blockLabelMap[block].begin(), blockLabelMap[block].end());
+                }
+                for (auto entry : labels)
                 {
                     if (entry.empty())
                     {
@@ -132,11 +160,11 @@ int main(int argc, char **argv)
                     }
                     else
                     {
-                        label += ";";
+                        strLabel += ";";
                     }
-                    label += entry;
+                    strLabel += entry;
                 }
-                outputJson[to_string(key.first)] = {key.second, label};
+                outputJson[to_string(key.first)] = {key.second, strLabel};
             }
             else
             {
@@ -148,7 +176,7 @@ int main(int argc, char **argv)
         oStream.close();
         if (!profileFile.empty())
         {
-            nlohmann::json prof = ProfileKernels(type3Kernels, sourceBitcode.get());
+            nlohmann::json prof = ProfileKernels(finalResult, sourceBitcode.get());
             ofstream pStream(profileFile);
             pStream << prof;
             pStream.close();

@@ -1346,16 +1346,13 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
         int id = GetBlockID(block);
         if (KernelMap.find(id) == KernelMap.end())
         {
+            PrintVal(block);
             for (BasicBlock *pred : predecessors(block))
             {
-                if (pred)
+                PrintVal(pred);
+                if (blocks.find(pred) == blocks.end())
                 {
-                    //strange bug here that leaves a predecessor in place, even if we remove the parent
-                    //not sure about the solution
-                    if (blocks.find(pred) == blocks.end() && pred->getParent() != NULL)
-                    {
-                        Entrances.insert(block);
-                    }
+                    Entrances.insert(block);
                 }
             }
             //we also check the entry blocks
@@ -1382,8 +1379,13 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
             }
         }
     }
+
     if (Entrances.size() == 0)
     {
+        for (auto block : blocks)
+        {
+            PrintVal(block);
+        }
         throw TikException("Kernel Exception: tik requires a body entrance");
     }
 }

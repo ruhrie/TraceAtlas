@@ -6,13 +6,11 @@
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
-#include <llvm/IRReader/IRReader.h>
-#include <llvm/Support/SourceMgr.h>
 #include <spdlog/spdlog.h>
 using namespace std;
 using namespace llvm;
 
-std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string bitcodeFile)
+std::set<set<int>> SmoothKernel(std::set<std::set<int>> blocks, Module *M)
 {
     indicators::ProgressBar bar;
     if (!noProgressBar)
@@ -26,16 +24,11 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
     int status = 0;
     int total = blocks.size();
 
-    std::map<int, set<int>> result;
-    set<set<int>> tmpResults;
-    LLVMContext context;
-    SMDiagnostic smerror;
-    unique_ptr<Module> sourceBitcode = parseIRFile(bitcodeFile, smerror, context);
+    set<set<int>> result;
 
-    Annotate(sourceBitcode.get());
     float percent;
 
-    for (const auto &[index, blk] : blocks)
+    for (const auto &blk : blocks)
     {
         percent = (float)status / (float)total * 100;
         if (!noProgressBar)
@@ -45,7 +38,7 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
         //for every kernel do this
         set<BasicBlock *> bbs;
         set<BasicBlock *> toRemove;
-        for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
+        for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
         {
             for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
             {
@@ -56,7 +49,6 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
                 }
             }
         }
-
         bool change = true;
         int trimCount = 0;
         int totalCount = bbs.size();
@@ -304,13 +296,7 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
         }
         if (!preR.empty())
         {
-            int oldSize = tmpResults.size();
-            tmpResults.insert(preR);
-            int newSize = tmpResults.size();
-            if (newSize != oldSize)
-            {
-                result[index] = preR;
-            }
+            result.insert(preR);
         }
         status++;
     }
