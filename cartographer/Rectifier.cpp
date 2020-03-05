@@ -160,6 +160,7 @@ set<set<int>> RectifyKernel(set<set<int>> type3Kernels, Module *M)
         }
         status++;
         float percent = float(status) / float(total) * 100;
+        bar.set_postfix_text("Kernel " + to_string(status) + "/" + to_string(total));
         bar.set_progress(percent);
     }
 
