@@ -12,7 +12,7 @@
 using namespace std;
 using namespace llvm;
 
-std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string bitcodeFile)
+std::set<set<int>> SmoothKernel(std::set<std::set<int>> blocks, string bitcodeFile)
 {
     indicators::ProgressBar bar;
     if (!noProgressBar)
@@ -26,8 +26,7 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
     int status = 0;
     int total = blocks.size();
 
-    std::map<int, set<int>> result;
-    set<set<int>> tmpResults;
+    set<set<int>> result;
     LLVMContext context;
     SMDiagnostic smerror;
     unique_ptr<Module> sourceBitcode = parseIRFile(bitcodeFile, smerror, context);
@@ -35,7 +34,7 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
     Annotate(sourceBitcode.get());
     float percent;
 
-    for (const auto &[index, blk] : blocks)
+    for (const auto &blk : blocks)
     {
         percent = (float)status / (float)total * 100;
         if (!noProgressBar)
@@ -304,13 +303,7 @@ std::map<int, set<int>> SmoothKernel(std::map<int, std::set<int>> blocks, string
         }
         if (!preR.empty())
         {
-            int oldSize = tmpResults.size();
-            tmpResults.insert(preR);
-            int newSize = tmpResults.size();
-            if (newSize != oldSize)
-            {
-                result[index] = preR;
-            }
+            result.insert(preR);
         }
         status++;
     }
