@@ -89,7 +89,16 @@ int main(int argc, char **argv)
     inputJson.close();
     for (auto &[key, value] : j.items())
     {
-        set<int> kernelSet = value;
+        nlohmann::json jkset;
+        if (!value[0].empty() && value[0].is_array())
+        {
+            jkset = value[0];
+        }
+        else
+        {
+            jkset = value;
+        }
+        set<int> kernelSet = jkset.get<set<int>>();
         kernelMap[key] = kernelSet;
     }
 
