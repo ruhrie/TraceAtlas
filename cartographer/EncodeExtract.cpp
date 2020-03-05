@@ -39,8 +39,8 @@ set<set<int>> ExtractKernels(std::string sourceFile, std::set<std::set<int>> ker
         }
     }
 
-    int openCount[blockCount];              // counter to know where we are in the callstack
-    set<int> finalBlocks[kernels.size()];   // final kernel definitions
+    int openCount[blockCount];            // counter to know where we are in the callstack
+    set<int> finalBlocks[kernels.size()]; // final kernel definitions
     set<int> openBlocks;
     set<int> *kernelMap = (set<int> *)calloc(sizeof(set<int>), blockCount);
     int kernelStarts[kernels.size()]; // map of a kernel index to the first block seen
@@ -159,10 +159,10 @@ set<set<int>> ExtractKernels(std::string sourceFile, std::set<std::set<int>> ker
                     {
                         blocks[i].insert(block);
                     }
-                    if(!blocksLabeled && !currentKernel.empty())
+                    if (!blocksLabeled && !currentKernel.empty())
                     {
                         blockLabelMap[block].insert(currentKernel);
-                    }                    
+                    }
 
                     for (auto open : openBlocks)
                     {
@@ -262,8 +262,8 @@ set<set<int>> ExtractKernels(std::string sourceFile, std::set<std::set<int>> ker
         finalSets.insert(finalBlocks[i]);
     }
     free(kernelMap);
-    
-    if(!blocksLabeled)
+
+    if (!blocksLabeled)
     {
         blocksLabeled = true;
     }

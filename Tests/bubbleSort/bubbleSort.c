@@ -1,7 +1,7 @@
+#include "Backend/BackendTrace.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include "Backend/BackendTrace.h"
 
 int *get_input(int n)
 {

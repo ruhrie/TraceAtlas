@@ -1,5 +1,7 @@
+#include "AtlasUtil/Annotate.h"
 #include "EncodeDetect.h"
 #include "EncodeExtract.h"
+#include "Rectifier.h"
 #include "Smoothing.h"
 #include "profile.h"
 #include <llvm/Bitcode/BitcodeReader.h>
@@ -19,6 +21,7 @@ using namespace llvm;
 bool noProgressBar;
 bool blocksLabeled = false;
 map<int, set<string>> blockLabelMap;
+map<int, BasicBlock *> blockMap;
 
 llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
 llvm::cl::opt<float> threshold("t", cl::desc("The threshold of block grouping required to complete a kernel."), llvm::cl::value_desc("float"), llvm::cl::init(0.9));
@@ -95,22 +98,39 @@ int main(int argc, char **argv)
         spdlog::critical("Failed to open bitcode file: " + bitcodeFile);
         return EXIT_FAILURE;
     }
+
+    Module *M = sourceBitcode.get();
+    Annotate(M);
+
+    //build the blockMap
+    for (auto mi = M->begin(); mi != M->end(); mi++)
+    {
+        for (auto fi = mi->begin(); fi != mi->end(); fi++)
+        {
+            BasicBlock *bb = cast<BasicBlock>(fi);
+            int64_t id = GetBlockID(bb);
+            blockMap[id] = bb;
+        }
+    }
+
     try
     {
         std::set<std::set<int>> type1Kernels;
         spdlog::info("Started analysis");
         type1Kernels = DetectKernels(inputTrace, threshold, hotThreshold);
         spdlog::info("Detected " + to_string(type1Kernels.size()) + " type 1 kernels");
-        auto type2Kernels = ExtractKernels(inputTrace, type1Kernels, sourceBitcode.get());
+        auto type2Kernels = ExtractKernels(inputTrace, type1Kernels, M);
         spdlog::info("Detected " + to_string(type2Kernels.size()) + " type 2 kernels");
-        auto type25Kernels = ExtractKernels(inputTrace, type2Kernels, sourceBitcode.get());
+        auto type25Kernels = ExtractKernels(inputTrace, type2Kernels, M);
         spdlog::info("Detected " + to_string(type25Kernels.size()) + " type 2.5 kernels");
-        set<set<int>> type3Kernels = SmoothKernel(type25Kernels, bitcodeFile);
+        set<set<int>> type3Kernels = SmoothKernel(type25Kernels, M);
         spdlog::info("Detected " + to_string(type3Kernels.size()) + " type 3 kernels");
+        auto type4Kernels = RectifyKernel(type3Kernels, M);
+        spdlog::info("Detected " + to_string(type4Kernels.size()) + " type 4 kernels");
 
         map<int, set<int>> finalResult;
         int j = 0;
-        for (auto set : type3Kernels)
+        for (auto set : type4Kernels)
         {
             finalResult[j++] = set;
         }

@@ -6,13 +6,11 @@
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
-#include <llvm/IRReader/IRReader.h>
-#include <llvm/Support/SourceMgr.h>
 #include <spdlog/spdlog.h>
 using namespace std;
 using namespace llvm;
 
-std::set<set<int>> SmoothKernel(std::set<std::set<int>> blocks, string bitcodeFile)
+std::set<set<int>> SmoothKernel(std::set<std::set<int>> blocks, Module *M)
 {
     indicators::ProgressBar bar;
     if (!noProgressBar)
@@ -27,11 +25,7 @@ std::set<set<int>> SmoothKernel(std::set<std::set<int>> blocks, string bitcodeFi
     int total = blocks.size();
 
     set<set<int>> result;
-    LLVMContext context;
-    SMDiagnostic smerror;
-    unique_ptr<Module> sourceBitcode = parseIRFile(bitcodeFile, smerror, context);
 
-    Annotate(sourceBitcode.get());
     float percent;
 
     for (const auto &blk : blocks)
@@ -44,7 +38,7 @@ std::set<set<int>> SmoothKernel(std::set<std::set<int>> blocks, string bitcodeFi
         //for every kernel do this
         set<BasicBlock *> bbs;
         set<BasicBlock *> toRemove;
-        for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
+        for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
         {
             for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
             {
@@ -55,7 +49,6 @@ std::set<set<int>> SmoothKernel(std::set<std::set<int>> blocks, string bitcodeFi
                 }
             }
         }
-
         bool change = true;
         int trimCount = 0;
         int totalCount = bbs.size();
