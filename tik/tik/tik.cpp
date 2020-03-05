@@ -281,7 +281,9 @@ int main(int argc, char *argv[])
         error = true;
         auto err = rso.str();
         spdlog::critical("Tik Module Corrupted: " + err);
-        //return EXIT_FAILURE;
+#ifndef DEBUG
+        return EXIT_FAILURE;
+#endif
     }
 
     // writing part
