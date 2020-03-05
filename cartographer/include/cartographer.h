@@ -1,7 +1,7 @@
 #pragma once
 #include <map>
-#include <string>
 #include <set>
+#include <string>
 
 extern bool noProgressBar;
 extern bool blocksLabeled;
