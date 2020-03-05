@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include "Backend/BackendTrace.h"
 
 int *get_input(int n)
 {
@@ -27,6 +28,7 @@ int main(int argc, char *argv[])
     int *in = get_input(SIZE);
 
     // bubble sort
+    KernelEnter("bubbleSort");
     int swap;
     for (int i = 0; i < SIZE; i++)
     {
@@ -40,6 +42,7 @@ int main(int argc, char *argv[])
             }
         }
     }
+    KernelExit("bubbleSort");
 
     printf("\nSorting Done");
     return 0;
