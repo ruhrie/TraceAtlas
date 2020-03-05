@@ -11,6 +11,107 @@
 using namespace std;
 using namespace llvm;
 
+set<BasicBlock *> GetReachable(BasicBlock *base, set<int> validBlocks)
+{
+    bool foundSelf = false;
+    queue<BasicBlock *> toProcess;
+    set<BasicBlock *> checked;
+    toProcess.push(base);
+    checked.insert(base);
+    while (!toProcess.empty())
+    {
+        BasicBlock *bb = toProcess.front();
+        toProcess.pop();
+        for (auto suc : successors(bb))
+        {
+            if (suc == base)
+            {
+                foundSelf = true;
+            }
+            if (checked.find(suc) == checked.end())
+            {
+                int64_t id = GetBlockID(suc);
+                if (validBlocks.find(id) != validBlocks.end())
+                {
+                    checked.insert(suc);
+                    toProcess.push(suc);
+                }
+            }
+        }
+        //we now check if there is a function call, and if so add the entry
+        for (auto bi = bb->begin(); bi != bb->end(); bi++)
+        {
+            if (auto ci = dyn_cast<CallBase>(bi))
+            {
+                Function *f = ci->getCalledFunction();
+                if (f && !f->empty())
+                {
+                    BasicBlock *entry = &f->getEntryBlock();
+                    if (entry == base)
+                    {
+                        foundSelf = true;
+                    }
+                    if (checked.find(entry) == checked.end())
+                    {
+                        int64_t id = GetBlockID(entry);
+                        if (validBlocks.find(id) != validBlocks.end())
+                        {
+                            checked.insert(entry);
+                            toProcess.push(entry);
+                        }
+                    }
+                }
+            }
+        }
+        //finally check the terminator and add the call points
+        Instruction *I = bb->getTerminator();
+        if (auto r = dyn_cast<ReturnInst>(I))
+        {
+            for (auto user : r->getParent()->getParent()->users())
+            {
+                if (auto base = dyn_cast<CallBase>(user))
+                {
+                    auto baseBlock = base->getParent();
+                    if (checked.find(baseBlock) == checked.end())
+                    {
+                        int64_t id = GetBlockID(baseBlock);
+                        if (validBlocks.find(id) != validBlocks.end())
+                        {
+                            checked.insert(baseBlock);
+                            toProcess.push(baseBlock);
+                        }
+                    }
+                }
+            }
+        }
+        else if (auto r = dyn_cast<ResumeInst>(I))
+        {
+            for (auto user : r->getParent()->getParent()->users())
+            {
+                if (auto base = dyn_cast<CallBase>(user))
+                {
+                    auto baseBlock = base->getParent();
+                    if (checked.find(baseBlock) == checked.end())
+                    {
+                        int64_t id = GetBlockID(baseBlock);
+                        if (validBlocks.find(id) != validBlocks.end())
+                        {
+                            checked.insert(baseBlock);
+                            toProcess.push(baseBlock);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (!foundSelf)
+    {
+        checked.erase(base);
+    }
+    return checked;
+}
+
 set<set<int>> RectifyKernel(set<set<int>> type3Kernels, Module *M)
 {
     indicators::ProgressBar bar;
@@ -29,118 +130,36 @@ set<set<int>> RectifyKernel(set<set<int>> type3Kernels, Module *M)
     for (auto kernel : type3Kernels)
     {
         set<int> blocks;
+        map<int, set<BasicBlock *>> reachableMap;
         for (auto block : kernel)
         {
             //we need to see if this block can ever reach itself
-            bool foundSelf = false;
-            queue<BasicBlock *> toProcess;
-            set<BasicBlock *> checked;
             BasicBlock *base = blockMap[block];
-            toProcess.push(base);
-            checked.insert(base);
-            while (!toProcess.empty())
+            auto reachable = GetReachable(base, kernel);
+            if (reachable.find(base) != reachable.end())
             {
-                BasicBlock *bb = toProcess.front();
-                toProcess.pop();
-                for (auto suc : successors(bb))
-                {
-                    if (suc == base)
-                    {
-                        foundSelf = true;
-                        break;
-                    }
-                    else
-                    {
-                        if (checked.find(suc) == checked.end())
-                        {
-                            int64_t id = GetBlockID(suc);
-                            if (kernel.find(id) != kernel.end())
-                            {
-                                checked.insert(suc);
-                                toProcess.push(suc);
-                            }
-                        }
-                    }
-                }
-                //we now check if there is a function call, and if so add the entry
-                for (auto bi = bb->begin(); bi != bb->end(); bi++)
-                {
-                    if (auto ci = dyn_cast<CallBase>(bi))
-                    {
-                        Function *f = ci->getCalledFunction();
-                        if (f && !f->empty())
-                        {
-                            BasicBlock *entry = &f->getEntryBlock();
-                            if (entry == base)
-                            {
-                                foundSelf = true;
-                                break;
-                            }
-                            else
-                            {
-                                if (checked.find(entry) == checked.end())
-                                {
-                                    int64_t id = GetBlockID(entry);
-                                    if (kernel.find(id) != kernel.end())
-                                    {
-                                        checked.insert(entry);
-                                        toProcess.push(entry);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                //finally check the terminator and add the call points
-                Instruction *I = bb->getTerminator();
-                if (auto r = dyn_cast<ReturnInst>(I))
-                {
-                    for (auto user : r->getParent()->getParent()->users())
-                    {
-                        if (auto base = dyn_cast<CallBase>(user))
-                        {
-                            auto baseBlock = base->getParent();
-                            if (checked.find(baseBlock) == checked.end())
-                            {
-                                int64_t id = GetBlockID(baseBlock);
-                                if (kernel.find(id) != kernel.end())
-                                {
-                                    checked.insert(baseBlock);
-                                    toProcess.push(baseBlock);
-                                }
-                            }
-                        }
-                    }
-                }
-                else if (auto r = dyn_cast<ResumeInst>(I))
-                {
-                    for (auto user : r->getParent()->getParent()->users())
-                    {
-                        if (auto base = dyn_cast<CallBase>(user))
-                        {
-                            auto baseBlock = base->getParent();
-                            if (checked.find(baseBlock) == checked.end())
-                            {
-                                int64_t id = GetBlockID(baseBlock);
-                                if (kernel.find(id) != kernel.end())
-                                {
-                                    checked.insert(baseBlock);
-                                    toProcess.push(baseBlock);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            if (foundSelf)
-            {
-                //this is a valid block so add it to the block set
                 blocks.insert(block);
             }
+            reachableMap[block] = reachable;
         }
-        result.insert(blocks);
+        //blocks is now a set, but it may be disjoint, so we need to check that now
+        set<set<int>> subSets;
+        for (auto block : blocks)
+        {
+            set<int> sub;
+            auto subReached = GetReachable(blockMap[block], blocks);
+            for (auto a : subReached)
+            {
+                sub.insert(GetBlockID(a));
+            }
+            subSets.insert(sub);
+        }
+        for (auto subSet : subSets)
+        {
+            result.insert(subSet);
+        }
         status++;
-        float percent = float(status) / float(total);
+        float percent = float(status) / float(total) * 100;
         bar.set_progress(percent);
     }
 
