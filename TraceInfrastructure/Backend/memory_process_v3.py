@@ -5,7 +5,7 @@ def firstStore(addr,t,op):
     # end kernel if none at last  str(t) + '-' + str(addr)   str(addr) + '-' + str(t)
     global inputSize
     if op > 0:
-        virAddr[str(addr) + '@' + str(t)] = [addr,t,[]]
+        virAddr[str(addr) + '@' + str(t)] = [addr, t, []]
         ## todo new coming repeat address will replace old one here
         if addr not in deAlias:
             deAlias[addr] = str(addr) + '@' + str(t)  # latest store
@@ -19,7 +19,7 @@ def firstStore(addr,t,op):
         if addr not in deAliasInput:
             inputSize += 1
             deAliasInput[addr] = str(addr) + '@' + str(t)  # latest store
-            virAddrInput[str(addr) + '@' + str(t)] = [addr,[t]]
+            virAddrInput[str(addr) + '@' + str(t)] = [addr, [t]]
         else:
             virAddrInput[deAliasInput[addr]][1].append(t)
 
@@ -44,7 +44,7 @@ aliveTbl = []
 deadTbl = []
 deAlias = {}
 deAliasInput = {}
-file = open('./trace/fir-input-kernel.trc','rt')
+file = open('./trace/radar8nfk2.trc','rt')
 address = 0
 timing = -1
 output = []
@@ -77,6 +77,9 @@ L.sort(key=myFunc)
 Lin = list(virAddrInput.keys())
 Lin.sort(key=myFunc)
 alivenumber = inputSize
+maxInput = 0
+maxOutput = 0
+maxinternal= 0
 for time in range(0, timing+1):
     timeline = []
     reviseDic = []
@@ -84,17 +87,22 @@ for time in range(0, timing+1):
         if virAddr[addrPair][1] > time:
             break
         if virAddr[addrPair][2]:
-            if int(virAddr[addrPair][1]) < time < int(virAddr[addrPair][2][-1]):
+            if int(virAddr[addrPair][1]) <= time < int(virAddr[addrPair][2][-1]):
                 timeline.append(addrPair)
             elif time > int(virAddr[addrPair][2][-1]):
                 reviseDic.append(addrPair)
         else:
             if addrPair not in outputList:
                 outputList.append(addrPair)
+                reviseDic.append(addrPair)
     for i in reviseDic:
         del virAddr[i]
         L.remove(i)
     aliveTbl.append(timeline)
+    if maxOutput < outputList.__len__():
+        maxOutput = outputList.__len__()
+    if maxinternal < timeline.__len__():
+        maxinternal = timeline.__len__()
     outputWorking.append(outputList.__len__())
     output.append(timeline.__len__())
 
@@ -109,13 +117,17 @@ for time in range(0, timing+1):
         alivenumber = alivenumber - reviseDic.__len__()
     else:
         alivenumber = 0
+    if maxInput < alivenumber:
+        maxInput = alivenumber
     inputWorking.append(alivenumber)
     for i in reviseDic:
         del virAddrInput[i]
         Lin.remove(i)
-    if time%100 == 0:
+    if time%2000 == 0:
         print("time progress:",time)
-
+print("maxInput:", maxInput)
+print("maxOutput:", maxOutput)
+print("maxinternal:", maxinternal)
 f = open("./workingSet.txt","w")
 for line in output:
     f.writelines(str(line) + '\n')
