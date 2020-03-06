@@ -87,7 +87,7 @@ std::set<std::set<int>> DetectKernels(std::string sourceFile, float thresh, int 
             strm.next_out = (Bytef *)decompressedArray; // pointer where uncompressed data is written to
             strm.avail_out = BLOCK_SIZE;                // remaining space in decompressedArray
             ret = inflate(&strm, Z_NO_FLUSH);
-            assert(ret != Z_STREAM_ERROR);
+            assert(ret != Z_STREAM_ERROR && ret != Z_DATA_ERROR);
 
             // put decompressed data into a string for splitting
             unsigned int have = BLOCK_SIZE - strm.avail_out;
