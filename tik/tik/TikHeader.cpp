@@ -56,6 +56,25 @@ std::string getCType(llvm::Type *param)
     }
     else
     {
-        throw TikException("This type of argument is not supported for header generation.");
+        if (param->isArrayTy())
+        {
+            throw TikException("Array argument types are not supported for header generation.");
+        }
+        else if (param->isVectorTy())
+        {
+            throw TikException("Vector argument types are not supported for header generation.");
+        }
+        else if (param->isStructTy())
+        {
+            throw TikException("Struct argument types are not supported for header generation.");
+        }
+        else if (param->isFunctionTy())
+        {
+            throw TikException("Function argument types are not supported for header generation.");
+        }
+        else
+        {
+            throw TikException("Unrecognized argument type is not supported for header generation.");
+        }
     }
 }
