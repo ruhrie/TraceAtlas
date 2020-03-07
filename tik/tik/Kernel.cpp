@@ -774,7 +774,6 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                                 currentStruct.ArgNodes.push_back(argPhi);
                             }
                             phiBuilder.CreateBr(&calledFunc->getEntryBlock()); //after this we can finally branch into the function
-                            //PrintVal(phiBlock);
                             //we also need a block at the end to gather the return values
                             auto returnBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
                             Body.insert(returnBlock);
@@ -1346,10 +1345,8 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
         int id = GetBlockID(block);
         if (KernelMap.find(id) == KernelMap.end())
         {
-            PrintVal(block);
             for (BasicBlock *pred : predecessors(block))
             {
-                PrintVal(pred);
                 if (blocks.find(pred) == blocks.end())
                 {
                     Entrances.insert(block);
@@ -1384,7 +1381,7 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
     {
         for (auto block : blocks)
         {
-            PrintVal(block);
+            //PrintVal(block);
         }
         throw TikException("Kernel Exception: tik requires a body entrance");
     }
