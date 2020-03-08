@@ -90,7 +90,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
             }
         }
 
-        //SplitBlocks(blocks);
+        SplitBlocks(blocks);
 
         GetEntrances(blocks);
         GetExits(blocks);
@@ -697,7 +697,6 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                     toInline.push_back(ci);
                 }
             }
-            BasicBlock *working = cb;
             for (auto ci : toInline)
             {
                 if (ci->isIndirectCall())
@@ -728,8 +727,6 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                         {
                             //needs to be inlined
                             currentStruct.CalledFunction = calledFunc;
-                            BasicBlock *suffix = working->splitBasicBlock(ci);
-                            Body.insert(suffix);
                             //first create the phi block which is the entry point
                             BasicBlock *phiBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
                             currentStruct.entranceBlock = phiBlock;
@@ -737,6 +734,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                             IRBuilder<> phiBuilder(phiBlock);
                             //first phi we need is the number of exit paths
                             vector<BasicBlock *> funcUses;
+                            vector<CallInst *> callUses;
                             for (auto user : calledFunc->users())
                             {
                                 if (CallInst *callUse = dyn_cast<CallInst>(user))
@@ -746,9 +744,10 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                                     {
                                         continue;
                                     }
-                                    if (find(Body.begin(), Body.end(), parent) != Body.end())
+                                    if (blocks.find(parent) != blocks.end())
                                     {
                                         funcUses.push_back(parent);
+                                        callUses.push_back(callUse);
                                     }
                                 }
                                 else
@@ -758,17 +757,23 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                             }
                             //now that we know that we can create the phi for where to branch to
                             auto branchPhi = phiBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), funcUses.size());
-                            int i = 0;
-                            branchPhi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), currentStruct.phiIndex++), working);
+                            for (auto pre : funcUses)
+                            {
+                                branchPhi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), currentStruct.phiIndex++), pre);
+                            }
                             currentStruct.branchPhi = branchPhi;
                             //then we do the same for ever argument
                             int argIndex = 0;
                             for (auto ai = calledFunc->arg_begin(); ai != calledFunc->arg_end(); ai++)
                             {
                                 Argument *arg = cast<Argument>(ai);
-                                Value *passedValue = ci->getOperand(argIndex++);
                                 auto argPhi = phiBuilder.CreatePHI(arg->getType(), funcUses.size()); //create a phi for the arg
-                                argPhi->addIncoming(passedValue, cb);                                //and give it a value for the current call instruction
+                                for (auto pre : funcUses)
+                                {
+                                    Value *passedValue = ci->getOperand(argIndex);
+                                    argPhi->addIncoming(passedValue, pre); //and give it a value for the current call instruction
+                                }
+                                argIndex++;
                                 VMap[arg] = argPhi;
                                 currentStruct.ArgNodes.push_back(argPhi);
                             }
@@ -809,7 +814,11 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                             }
                             //finally we use the first phi we created to determine where we should return to
                             auto branchSwitch = returnBuilder.CreateSwitch(branchPhi, Exception, funcUses.size());
-                            branchSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), currentStruct.currentIndex++), suffix);
+                            for(auto pre : funcUses)
+                            {
+                                BasicBlock *suc = cast<BranchInst>(pre->getTerminator())->getSuccessor(0);
+                                branchSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), currentStruct.currentIndex++), suc);
+                            }
                             currentStruct.SwitchInstruction = branchSwitch;
 
                             //and redirect the first block
@@ -817,26 +826,12 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                             priorBranch->setSuccessor(0, phiBlock);
                             ci->eraseFromParent();
                             InlinedFunctions.push_back(currentStruct); //finally add it to the already inlined functions
-                            working = suffix;
                         }
                         else
                         {
-                            auto brInst = cast<BranchInst>(ci->getParent()->getTerminator());
-                            BasicBlock *suc = brInst->getSuccessor(0);
-                            currentStruct.SwitchInstruction->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), currentStruct.currentIndex++), suc);
-                            currentStruct.branchPhi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), currentStruct.phiIndex++), ci->getParent());
-                            for(int i = 0; i < ci->getNumArgOperands(); i++)
-                            {
-                                Value *argOperand = ci->getArgOperand(i);
-                                currentStruct.ArgNodes[i]->addIncoming(argOperand, ci->getParent());
-                            }
-                            ci->replaceAllUsesWith(currentStruct.returnPhi);
-                            //PrintVal(currentStruct.branchPhi);
-                            //PrintVal(currentStruct.SwitchInstruction);
+                            BranchInst *priorBranch = cast<BranchInst>(cb->getTerminator());
+                            priorBranch->setSuccessor(0, currentStruct.entranceBlock);
                             ci->eraseFromParent();
-                            brInst->setSuccessor(0, currentStruct.entranceBlock);
-                            //we already inlined this one and need to add the appropriate entries to teh argnodes and the switch instruction
-                            //throw TikException("Tik Error: Not Implemented");
                         }
                     }
                 }
