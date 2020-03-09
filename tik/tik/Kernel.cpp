@@ -970,6 +970,16 @@ void Kernel::GetMemoryFunctions()
                 casted->setMetadata("TikSynthetic", tikNode);
                 auto newLoad = builder.CreateLoad(casted);
                 newInst->replaceAllUsesWith(newLoad);
+                if(loadMap.find(newInst) != loadMap.end())
+                {
+                    loadMap[newLoad] = loadMap[newInst];
+                    loadMap.erase(newInst);
+                }
+                if(storeMap.find(newInst) != storeMap.end())
+                {
+                    storeMap[newLoad] = storeMap[newInst];
+                    storeMap.erase(newInst);
+                }
                 toRemove.push_back(newInst);
             }
             else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
