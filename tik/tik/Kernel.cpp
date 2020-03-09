@@ -351,9 +351,9 @@ void Kernel::RemapNestedKernels()
 
     // Now find all calls to the embedded kernel functions in the body, if any, and change their arguments to the new ones
     std::map<Argument *, Value *> embeddedCallArgs;
-    for (auto b = KernelFunction->begin(); b != KernelFunction->end(); b++)
+    for (auto bf = KernelFunction->begin(); bf != KernelFunction->end(); bf++)
     {
-        for (BasicBlock::iterator i = b->begin(), BE = b->end(); i != BE; ++i)
+        for (BasicBlock::iterator i = bf->begin(), BE = bf->end(); i != BE; ++i)
         {
             if (CallInst *callInst = dyn_cast<CallInst>(i))
             {
@@ -780,14 +780,7 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
                                         ExternalValues.push_back(sExtVal);
                                     }
                                 }
-                                else //this is a mapped value, therefore it is in the kernel locally
-                                {
-                                }
                             }
-                        }
-                        else
-                        {
-                            throw TikException("Tik Error: Not Implemented");
                         }
                     }
                     else
@@ -970,12 +963,12 @@ void Kernel::GetMemoryFunctions()
                 casted->setMetadata("TikSynthetic", tikNode);
                 auto newLoad = builder.CreateLoad(casted);
                 newInst->replaceAllUsesWith(newLoad);
-                if(loadMap.find(newInst) != loadMap.end())
+                if (loadMap.find(newInst) != loadMap.end())
                 {
                     loadMap[newLoad] = loadMap[newInst];
                     loadMap.erase(newInst);
                 }
-                if(storeMap.find(newInst) != storeMap.end())
+                if (storeMap.find(newInst) != storeMap.end())
                 {
                     storeMap[newLoad] = storeMap[newInst];
                     storeMap.erase(newInst);
@@ -1012,8 +1005,16 @@ void Kernel::BuildExit()
     auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), ExitMap.size());
     for (auto pair : ExitMap)
     {
-        auto v = VMap[pair.first];
-        phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.second), cast<BasicBlock>(VMap[pair.first]));
+        Value *v;
+        if (pair.first->getModule() == TikModule)
+        {
+            v = pair.first;
+        }
+        else
+        {
+            v = VMap[pair.first];
+        }
+        phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.second), cast<BasicBlock>(v));
     }
     exitBuilder.CreateRet(phi);
 
@@ -1384,7 +1385,7 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
         {
             spdlog::warn("Non variable global reference"); //basically this is a band aid. Needs some more help
         }
-        else if(isa<Operator>(i))
+        else if (isa<Operator>(i))
         {
             spdlog::warn("Function argument operand type not supported for global copying."); //basically this is a band aid. Needs some more help
         }
@@ -1555,7 +1556,16 @@ void Kernel::InlineFunctions()
                     currentStruct.SwitchInstruction = returnBuilder.CreateSwitch(currentStruct.branchPhi, Exception, funcUses.size());
                     for (auto pre : funcUses)
                     {
-                        BasicBlock *suc = cast<BranchInst>(pre->getTerminator())->getSuccessor(0);
+                        auto term = pre->getTerminator();
+                        BasicBlock *suc;
+                        if (auto brInst = dyn_cast<BranchInst>(term))
+                        {
+                            suc = brInst->getSuccessor(0);
+                        }
+                        else
+                        {
+                            throw TikException("Unimplemented terminator");
+                        }
                         currentStruct.SwitchInstruction->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), currentStruct.currentIndex++), suc);
                     }
 
