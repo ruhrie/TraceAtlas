@@ -1384,7 +1384,7 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
         {
             spdlog::warn("Non variable global reference"); //basically this is a band aid. Needs some more help
         }
-        else
+        else if(isa<Operator>(i))
         {
             spdlog::warn("Function argument operand type not supported for global copying."); //basically this is a band aid. Needs some more help
         }
