@@ -1319,6 +1319,24 @@ void Kernel::GetExits(set<BasicBlock *> &blocks)
                 }
             }
         }
+        auto term = block->getTerminator();
+        if (auto retInst = dyn_cast<ReturnInst>(term))
+        {
+            Function *base = block->getParent();
+            for (auto user : base->users())
+            {
+                Instruction *v = cast<Instruction>(user);
+                if (blocks.find(v->getParent()) == blocks.end())
+                {
+                    if (coveredExits.find(v->getParent()) == coveredExits.end())
+                    {
+                        ExitTarget[exitId] = v->getParent();
+                        coveredExits.insert(v->getParent());
+                        ExitMap[block] = exitId++;
+                    }
+                }
+            }
+        }
     }
     if (exitId == 0)
     {
@@ -1488,6 +1506,10 @@ void Kernel::InlineFunctions()
                                 funcUses.push_back(parent);
                                 callUses.push_back(callUse);
                             }
+                        }
+                        else if (isa<StoreInst>(user))
+                        {
+                            //ignore, this is a jump table
                         }
                         else
                         {
