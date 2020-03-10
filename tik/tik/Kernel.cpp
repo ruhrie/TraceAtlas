@@ -314,7 +314,7 @@ void Kernel::UpdateMemory()
                 {
                     if (coveredGlobals.find(pair.second) == coveredGlobals.end())
                     {
-                        if(isa<InvokeInst>(inst))
+                        if (isa<InvokeInst>(inst))
                         {
                             throw TikException("Invoke is unsupported");
                         }
@@ -1383,19 +1383,47 @@ void Kernel::CopyGlobals()
 
 std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures)
 {
-    std::string headerString = getCType(KernelFunction->getReturnType(), AllStructures) + " ";
+    std::string headerString = "";
+    try
+    {
+        headerString = getCType(KernelFunction->getReturnType(), AllStructures) + " ";
+    }
+    catch (TikException &e)
+    {
+        spdlog::error(e.what());
+        headerString = "TypeNotSupported ";
+    }
     headerString += KernelFunction->getName();
     headerString += "(";
     int i = 0;
     for (auto ai = KernelFunction->arg_begin(); ai < KernelFunction->arg_end(); ai++)
     {
+        std::string type = "";
         if (i > 0)
         {
             headerString += ", ";
         }
-        headerString += getCType(ai->getType(), AllStructures);
-        headerString += " arg";
-        headerString += std::to_string(i);
+        try
+        {
+            type = getCType(ai->getType(), AllStructures);
+        }
+        catch (TikException &e)
+        {
+            spdlog::error(e.what());
+            type = "TypeNotSupported";
+        }
+        if (type.find("!") != std::string::npos)
+        {
+            std::string varName = "arg" + std::to_string(i);
+            type.erase(type.begin() + type.find("!"));
+            std::size_t whiteSpacePosition = type.find(" ");
+            type.insert(whiteSpacePosition + 1, varName);
+        }
+        else
+        {
+            type += " arg" + std::to_string(i);
+        }
+        headerString += type;
         i++;
     }
     headerString += ");\n";

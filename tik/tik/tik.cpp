@@ -260,14 +260,7 @@ int main(int argc, char *argv[])
     headerFile += GetTikStructures(results, AllStructures);
     for (auto kernel : results)
     {
-        try
-        {
-            headerFile += "\n" + kernel->GetHeaderDeclaration(AllStructures);
-        }
-        catch (TikException &e)
-        {
-            spdlog::error(e.what());
-        }
+        headerFile += "\n" + kernel->GetHeaderDeclaration(AllStructures);
     }
     // write the header file
     std::ofstream header;

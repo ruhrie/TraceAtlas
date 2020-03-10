@@ -5,6 +5,7 @@
 #include <iostream>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/Support/Casting.h>
+#include <spdlog/spdlog.h>
 #include <string.h>
 
 using namespace llvm;
@@ -48,49 +49,54 @@ std::string GetTikStructures(std::vector<Kernel *> kernels, std::set<llvm::Struc
     std::string AllStructureDefinitions;
     for (auto structure : AllStructures)
     {
+        char *memberName = new char[4];
         std::string a = structure->getName();
-        std::string structureDefinition = "\ntypedef struct " + a + " {\n";
+        std::string structureDefinition = "\nstruct " + a + " {\n";
         for (int i = 0; i < structure->getNumElements(); i++)
         {
-            char *memberName = new char[4];
             memset(memberName, 0, 4);
-            memberName[0] = i + 97;
-            if (int(memberName[0]) < 123)
+            memberName[0] = i % 26 + 97;
+            std::string varDec;
+            try
             {
-                std::string varDec = getCType(structure->getElementType(i), AllStructures);
-                // if we find a bang, the variable name has to be inserted after the whitespace and before the array sizes
-                if (varDec.find("!") != std::string::npos)
+                varDec = getCType(structure->getElementType(i), AllStructures);
+            }
+            catch (TikException &e)
+            {
+                spdlog::error(e.what());
+                varDec = "TypeNotSupported";
+            }
+            // if we find a bang, the variable name has to be inserted after the whitespace and before the array sizes
+            if (varDec.find("!") != std::string::npos)
+            {
+                varDec.erase(varDec.begin() + varDec.find("!"));
+                std::size_t whiteSpacePosition;
+                if (varDec.find("struct") != std::string::npos)
                 {
-                    varDec.erase(varDec.begin() + varDec.find("!"));
-                    std::size_t whiteSpacePosition = varDec.find(" ");
-                    varDec.insert(whiteSpacePosition + 1, &memberName[0]);
-                    structureDefinition += "\t" + varDec + ";\n";
+                    whiteSpacePosition = varDec.find("[") - 1;
                 }
                 else
                 {
-                    structureDefinition += "\t" + varDec + " " + memberName[0] + ";\n";
+                    whiteSpacePosition = varDec.find(" ");
                 }
+
+                for (int j = 0; j < (int)(i / 26) + 1; j++)
+                {
+                    varDec.insert(whiteSpacePosition + 1, &memberName[0]);
+                }
+                structureDefinition += "\t" + varDec + ";\n";
             }
             else
             {
-                memberName[0] = memberName[0] - 26;
-                std::string varDec = getCType(structure->getElementType(i), AllStructures);
-                // if we a bang, the variable name has to be inserted after the whitespace and before the array sizes
-                if (varDec.find("!") != std::string::npos)
+                structureDefinition += "\t" + varDec + " ";
+                for (int j = 0; j < (int)(i / 26) + 1; j++)
                 {
-                    varDec.erase(varDec.begin() + varDec.find("!"));
-                    std::size_t whiteSpacePosition = varDec.find(" ");
-                    varDec.insert(whiteSpacePosition + 1, &memberName[0]);
-                    varDec.insert(whiteSpacePosition + 1, &memberName[0]);
-                    structureDefinition += "\t" + varDec + ";\n";
+                    structureDefinition.insert(structureDefinition.size(), &memberName[0]);
                 }
-                else
-                {
-                    structureDefinition += "\t" + varDec + " " + memberName[0] + memberName[0] + ";\n";
-                }
+                structureDefinition += ";\n";
             }
         }
-        structureDefinition += "} " + a + "_t;\n";
+        structureDefinition += "};\n";
         AllStructureDefinitions += structureDefinition;
     }
     return AllStructureDefinitions;
@@ -108,10 +114,19 @@ std::string getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStr
     if (elem->isArrayTy())
     {
         type = getCArrayType(dyn_cast<llvm::ArrayType>(elem)->getArrayElementType(), AllStructures, size);
-        std::size_t whiteSpacePosition = type.find(" ");
+        std::size_t whiteSpacePosition;
+        // if the type is a struct
+        if (type.find("struct") != std::string::npos)
+        {
+            whiteSpacePosition = type.size() - 1;
+        }
+        else
+        {
+            whiteSpacePosition = type.find(" ");
+        }
         std::string arrayDec = "";
-        // if there's no whitespace in the declaration string, the base case is right below us
-        if (whiteSpacePosition == std::string::npos)
+        // if there's no whitespace in the declaration string, or if we have a struct, the base case is right below us
+        if (whiteSpacePosition == std::string::npos || whiteSpacePosition == type.size() - 1)
         {
             *size = elem->getArrayNumElements();
             arrayDec = "!" + type + " [" + std::to_string(*size) + "]";
@@ -128,7 +143,15 @@ std::string getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStr
     // else return the type we have
     else
     {
-        return getCType(elem, AllStructures);
+        try
+        {
+            return getCType(elem, AllStructures);
+        }
+        catch (TikException &e)
+        {
+            spdlog::error(e.what());
+            return "TypeNotSupported";
+        }
     }
 }
 
@@ -178,15 +201,22 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
     {
         llvm::PointerType *newType = dyn_cast<llvm::PointerType>(param);
         llvm::Type *memberType = newType->getElementType();
-        std::string a = getCType(memberType, AllStructures) + "*";
-        return a;
+        std::string a = getCType(memberType, AllStructures);
+        // check if we had an array type, don't add the star
+        if (a.find("!") != std::string::npos)
+        {
+            return a;
+        }
+        else
+        {
+            return a + "*";
+        }
     }
     else
     {
         if (param->isArrayTy())
         {
-            std::string a = getCArrayType(param, AllStructures);
-            return a;
+            return getCArrayType(param, AllStructures);
         }
         else if (param->isVectorTy())
         {
