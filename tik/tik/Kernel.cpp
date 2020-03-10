@@ -177,7 +177,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 
     try
     {
-        GetKernelLabels();
+        //GetKernelLabels();
     }
     catch (TikException &e)
     {
