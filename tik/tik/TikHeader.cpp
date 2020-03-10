@@ -49,7 +49,7 @@ std::string GetTikStructures(std::vector<Kernel *> kernels, std::set<llvm::Struc
     for (auto structure : AllStructures)
     {
         std::string a = structure->getName();
-        std::string structureDefinition = "\ntypedef struct " + a + " {\n";
+        std::string structureDefinition = "\nstruct " + a + " {\n";
         for (int i = 0; i < structure->getNumElements(); i++)
         {
             char *memberName = new char[4];
@@ -91,7 +91,7 @@ std::string GetTikStructures(std::vector<Kernel *> kernels, std::set<llvm::Struc
                 }
             }
         }
-        structureDefinition += "} " + a + "_t;\n";
+        structureDefinition += "};\n";
         AllStructureDefinitions += structureDefinition;
     }
     return AllStructureDefinitions;
@@ -179,8 +179,16 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
     {
         llvm::PointerType *newType = dyn_cast<llvm::PointerType>(param);
         llvm::Type *memberType = newType->getElementType();
-        std::string a = getCType(memberType, AllStructures) + "*";
-        return a;
+        std::string a = getCType(memberType, AllStructures);
+        // check if we had an array type
+        if (a.find("!") != std::string::npos)
+        {
+            return a;
+        }
+        else
+        {
+            return a + "*";
+        }
     }
     else
     {

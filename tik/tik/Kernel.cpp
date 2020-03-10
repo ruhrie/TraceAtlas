@@ -1360,9 +1360,19 @@ std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStruct
         {
             headerString += ", ";
         }
-        headerString += getCType(ai->getType(), AllStructures);
-        headerString += " arg";
-        headerString += std::to_string(i);
+        std::string type = getCType(ai->getType(), AllStructures);
+        if (type.find("!") != std::string::npos)
+        {
+            std::string varName = "arg" + std::to_string(i);
+            type.erase(type.begin() + type.find("!"));
+            std::size_t whiteSpacePosition = type.find(" ");
+            type.insert(whiteSpacePosition + 1, varName);
+        }
+        else
+        {
+            type += " arg" + std::to_string(i);
+        }        
+        headerString += type;
         i++;
     }
     headerString += ");\n";
