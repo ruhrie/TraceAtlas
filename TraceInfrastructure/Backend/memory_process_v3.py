@@ -10,7 +10,7 @@ def firstStore(addr,t,op):
         if addr not in deAlias:
             deAlias[addr] = str(addr) + '@' + str(t)  # latest store
         elif not virAddr[deAlias[addr]][2]:
-            virAddr[deAlias[addr]][2].append(t)
+            virAddr[deAlias[addr]][2].append(t-1)
             deAlias[addr] = str(addr) + '@' + str(t)
         else:
             deAlias[addr] = str(addr) + '@' + str(t)
@@ -44,7 +44,7 @@ aliveTbl = []
 deadTbl = []
 deAlias = {}
 deAliasInput = {}
-file = open('./trace/radar8nfk2.trc','rt')
+file = open('./trace/fft+fir/k6.trc','rt')
 address = 0
 timing = -1
 output = []
