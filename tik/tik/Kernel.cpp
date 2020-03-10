@@ -314,6 +314,10 @@ void Kernel::UpdateMemory()
                 {
                     if (coveredGlobals.find(pair.second) == coveredGlobals.end())
                     {
+                        if(isa<InvokeInst>(inst))
+                        {
+                            throw TikException("Invoke is unsupported");
+                        }
                         IRBuilder<> builder(inst->getNextNode());
                         Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
                         auto a = builder.CreateGEP(inst->getType(), pair.second, constant);
@@ -613,6 +617,7 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
 
 void Kernel::BuildKernel(set<BasicBlock *> &blocks)
 {
+    set<BasicBlock *> handeledExits;
     for (auto block : blocks)
     {
         int64_t id = GetBlockID(block);
@@ -653,17 +658,40 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                         }
                         else
                         {
-                            //exits both kernels simultaneously
-                            //we create a temp block and remab the exit so the phi has a value
-                            //then remap in the dictionary for the final mapping
-                            //note that we do not change the ExitTarget map so we still go to the right place
-                            BasicBlock *newBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-                            IRBuilder<> newBlockBuilder(newBlock);
-                            newBlockBuilder.CreateBr(Exit);
-                            sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.first), newBlock);
-                            int index = ExitMap[pair.second];
-                            ExitMap.erase(pair.second);
-                            ExitMap[newBlock] = index;
+                            if (handeledExits.find(pair.second) == handeledExits.end())
+                            {
+                                //exits both kernels simultaneously
+                                //we create a temp block and remab the exit so the phi has a value
+                                //then remap in the dictionary for the final mapping
+                                //note that we do not change the ExitTarget map so we still go to the right place
+
+                                BasicBlock *tar = NULL;
+                                //we need to find every block in the nested kernel that will branch to this target
+                                //easiest way to do this is to go through every block in this kernel and check if it is in the nested kernel
+                                set<BasicBlock *> nExits;
+                                for (auto k : nestedKernel->ExitMap)
+                                {
+                                    if (k.second == pair.first)
+                                    {
+                                        //this is the exit
+                                        nExits.insert(k.first);
+                                    }
+                                }
+
+                                if (nExits.size() != 1)
+                                {
+                                    throw TikException("Expected exactly one exit fron nested kernel");
+                                }
+                                tar = *nExits.begin();
+                                BasicBlock *newBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
+                                IRBuilder<> newBlockBuilder(newBlock);
+                                newBlockBuilder.CreateBr(Exit);
+                                sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.first), newBlock);
+                                int index = ExitMap[tar];
+                                ExitMap.erase(tar);
+                                ExitMap[newBlock] = index;
+                                handeledExits.insert(pair.second);
+                            }
                         }
                     }
                     VMap[block] = intermediateBlock;
@@ -683,6 +711,11 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                     }
                     i++;
                 }
+            }
+            else
+            {
+                //this is a block from the nested kernel
+                //it doesn't need to be mapped
             }
         }
         else
