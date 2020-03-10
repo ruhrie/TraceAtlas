@@ -1259,27 +1259,6 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
     }
 }
 
-std::string Kernel::GetHeaderDeclaration(void)
-{
-    std::string headerString = getCType(KernelFunction->getReturnType()) + " ";
-    headerString += KernelFunction->getName();
-    headerString += "(";
-    int i = 0;
-    for (auto ai = KernelFunction->arg_begin(); ai < KernelFunction->arg_end(); ai++)
-    {
-        if (i > 0)
-        {
-            headerString += ", ";
-        }
-        headerString += getCType(ai->getType());
-        headerString += " arg";
-        headerString += std::to_string(i);
-        i++;
-    }
-    headerString += ");\n";
-    return headerString;
-}
-
 void Kernel::SanityChecks()
 {
     for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
@@ -1367,6 +1346,27 @@ void Kernel::CopyGlobals()
             }
         }
     }
+}
+
+std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures)
+{
+    std::string headerString = getCType(KernelFunction->getReturnType(), AllStructures) + " ";
+    headerString += KernelFunction->getName();
+    headerString += "(";
+    int i = 0;
+    for (auto ai = KernelFunction->arg_begin(); ai < KernelFunction->arg_end(); ai++)
+    {
+        if (i > 0)
+        {
+            headerString += ", ";
+        }
+        headerString += getCType(ai->getType(), AllStructures);
+        headerString += " arg";
+        headerString += std::to_string(i);
+        i++;
+    }
+    headerString += ");\n";
+    return headerString;
 }
 
 void Kernel::CopyArgument(llvm::CallBase *Call)

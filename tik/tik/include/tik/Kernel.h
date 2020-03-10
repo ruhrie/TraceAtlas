@@ -14,7 +14,7 @@ class Kernel
 public:
     Kernel(std::vector<int> basicBlocks, llvm::Module *M, std::string name = "");
     ~Kernel();
-    std::string GetHeaderDeclaration(void);
+    std::string GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures);
     std::string Name;
     nlohmann::json GetJson();
     std::set<llvm::BasicBlock *> Conditional;
