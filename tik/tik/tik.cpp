@@ -257,7 +257,14 @@ int main(int argc, char *argv[])
     headerFile += "#include <stdint.h>\n";
     // insert all structures in the tik module and convert them
     std::set<llvm::StructType *> AllStructures;
-    headerFile += GetTikStructures(results, AllStructures);
+    try
+    {
+        headerFile += GetTikStructures(results, AllStructures);
+    }
+    catch (TikException &e)
+    {
+        spdlog::error(e.what());
+    }
     for (auto kernel : results)
     {
         try
