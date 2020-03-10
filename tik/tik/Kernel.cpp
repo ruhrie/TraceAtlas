@@ -1383,17 +1383,35 @@ void Kernel::CopyGlobals()
 
 std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures)
 {
-    std::string headerString = getCType(KernelFunction->getReturnType(), AllStructures) + " ";
+    std::string headerString = "";
+    try
+    {
+        headerString = getCType(KernelFunction->getReturnType(), AllStructures) + " ";
+    }
+    catch (TikException &e)
+    {
+        spdlog::error(e.what());
+        headerString = "TypeNotSupported ";
+    }
     headerString += KernelFunction->getName();
     headerString += "(";
     int i = 0;
     for (auto ai = KernelFunction->arg_begin(); ai < KernelFunction->arg_end(); ai++)
     {
+        std::string type = "";
         if (i > 0)
         {
             headerString += ", ";
         }
-        std::string type = getCType(ai->getType(), AllStructures);
+        try
+        {
+            type = getCType(ai->getType(), AllStructures);
+        }
+        catch (TikException &e)
+        {
+            spdlog::error(e.what());
+            type = "TypeNotSupported";
+        }
         if (type.find("!") != std::string::npos)
         {
             std::string varName = "arg" + std::to_string(i);
