@@ -825,7 +825,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                             BasicBlock *suc = brInst->getSuccessor(0);
                             currentStruct.SwitchInstruction->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), currentStruct.currentIndex++), suc);
                             currentStruct.branchPhi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), currentStruct.phiIndex++), ci->getParent());
-                            for(int i = 0; i < ci->getNumArgOperands(); i++)
+                            for (int i = 0; i < ci->getNumArgOperands(); i++)
                             {
                                 Value *argOperand = ci->getArgOperand(i);
                                 currentStruct.ArgNodes[i]->addIncoming(argOperand, ci->getParent());
@@ -1396,27 +1396,6 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
     }
 }
 
-std::string Kernel::GetHeaderDeclaration(void)
-{
-    std::string headerString = getCType(KernelFunction->getReturnType()) + " ";
-    headerString += KernelFunction->getName();
-    headerString += "(";
-    int i = 0;
-    for (auto ai = KernelFunction->arg_begin(); ai < KernelFunction->arg_end(); ai++)
-    {
-        if (i > 0)
-        {
-            headerString += ", ";
-        }
-        headerString += getCType(ai->getType());
-        headerString += " arg";
-        headerString += std::to_string(i);
-        i++;
-    }
-    headerString += ");\n";
-    return headerString;
-}
-
 void Kernel::SanityChecks()
 {
     for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
@@ -1486,6 +1465,27 @@ void Kernel::CopyGlobals()
             }
         }
     }
+}
+
+std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures)
+{
+    std::string headerString = getCType(KernelFunction->getReturnType(), AllStructures) + " ";
+    headerString += KernelFunction->getName();
+    headerString += "(";
+    int i = 0;
+    for (auto ai = KernelFunction->arg_begin(); ai < KernelFunction->arg_end(); ai++)
+    {
+        if (i > 0)
+        {
+            headerString += ", ";
+        }
+        headerString += getCType(ai->getType(), AllStructures);
+        headerString += " arg";
+        headerString += std::to_string(i);
+        i++;
+    }
+    headerString += ");\n";
+    return headerString;
 }
 
 void Kernel::CopyArgument(llvm::CallBase *Call)

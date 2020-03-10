@@ -1,6 +1,7 @@
 #include "tik/tik.h"
 #include "AtlasUtil/Annotate.h"
 #include "tik/Exceptions.h"
+#include "tik/TikHeader.h"
 #include "tik/Util.h"
 #include <fstream>
 #include <iostream>
@@ -254,11 +255,14 @@ int main(int argc, char *argv[])
     // generate a C header file declaring each tik function
     std::string headerFile = "\n// Auto-generated header for the tik representations of " + InputFile + "\n";
     headerFile += "#include <stdint.h>\n";
+    // insert all structures in the tik module and convert them
+    std::set<llvm::StructType *> AllStructures;
+    headerFile += GetTikStructures(results, AllStructures);
     for (auto kernel : results)
     {
         try
         {
-            headerFile += "\n" + kernel->GetHeaderDeclaration();
+            headerFile += "\n" + kernel->GetHeaderDeclaration(AllStructures);
         }
         catch (TikException &e)
         {
