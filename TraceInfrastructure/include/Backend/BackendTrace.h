@@ -44,6 +44,13 @@ void OpenFile();
 /// </summary>
 void CloseFile();
 
+void OpenFileMem();
+
+/// <summary>
+/// Flushes the compression stream and closes the trace file.
+/// </summary>
+void CloseFileMem();
+
 void LoadDump(void *address);
 void DumpLoadAddrValue(void *MemValue, int size);
 void StoreDump(void *address);

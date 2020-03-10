@@ -8,7 +8,7 @@
 #include <string.h>
 
 FILE *myfile;
-
+FILE *myfileMem;
 //trace functions
 z_stream strm_DashTracer;
 sem_t semaphore_DashTracer;
@@ -153,6 +153,21 @@ void CloseFile()
     fclose(myfile); //breaks gsl occasionally for some reason. Likely a glibc error.
 }
 
+
+
+void OpenFileMem(char *test)
+{
+    char *TraceFilenameMem;
+    TraceFilenameMem = "rawMem.trc";
+    myfileMem = fopen(TraceFilenameMem, "w");
+    //WriteStream("TraceVersion:2\n");
+}
+
+void CloseFileMem()
+{
+    fclose(myfileMem); //breaks gsl occasionally for some reason. Likely a glibc error.
+}
+
 void LoadDump(void *address)
 {
     char fin[128];
@@ -164,9 +179,9 @@ void DumpLoadAddrValue(void *MemValue, int size)
     char fin[128];
     //sprintf(fin, "LoadAddress:%#lX\n", (uint64_t)MemValue);
     uint64_t out = (uint64_t)MemValue;
-    sprintf(fin, "LoadAddress:%ld\n", out);
-
-    WriteStream(fin);
+    fprintf(myfileMem, "LoadAddress:%ld\n", out);
+    //fputc(fin, myfileMem);
+    //WriteStream(fin);
     // uint8_t *bitwisePrint = (uint8_t *)MemValue;
     // sprintf(fin, "size:%d, LoadMemValue:", size);
     // WriteStream(fin);
@@ -192,8 +207,9 @@ void DumpStoreAddrValue(void *MemValue, int size)
 
 
     uint64_t out = (uint64_t)MemValue;
-    sprintf(fin, "StoreAddress:%ld\n", out);
-    WriteStream(fin);
+    fprintf(myfileMem, "StoreAddress:%ld\n", out);
+    //fputc(fin, myfileMem);
+    //WriteStream(fin);
     // uint8_t *bitwisePrint = (uint8_t *)MemValue;
     // sprintf(fin, "size:%d, StoreMemValue:", size);
     // WriteStream(fin);

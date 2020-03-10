@@ -35,6 +35,14 @@ namespace DashTracer
                 std::string blockName = block->getName();
                 auto dl = block->getModule()->getDataLayout();
                 uint64_t blockId = std::stoul(blockName.substr(7));
+                errs()<<"blockName:";
+                errs()<< blockName << '\n';
+                for (BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; ++BI)
+                {
+                    Instruction *CIerr = dyn_cast<Instruction>(BI);
+                    errs()<<"instr:";
+                    errs()<< *CIerr << '\n';
+                }
                 if (std::find(kernelBlockForValue.begin(), kernelBlockForValue.end(), blockId) != kernelBlockForValue.end())
                 {
                     for (BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; ++BI)
@@ -42,6 +50,8 @@ namespace DashTracer
 
                         bool done = false;
                         Instruction *CI = dyn_cast<Instruction>(BI);
+                        // errs()<<"instr:";
+                        // errs()<< *CI << '\n';
                         if (!done)
                         {
                             std::vector<Value *> values;
@@ -50,8 +60,8 @@ namespace DashTracer
                                 IRBuilder<> builder(load);
                                 Value *addr = load->getPointerOperand();
                                 Value *addr2 = load->getOperand(0);
-                                errs()<<"load instr:";
-                                errs()<< *load << '\n';
+                                // errs()<<"load instr:";
+                                // errs()<< *load << '\n';
                                 // errs()<<"load value:";
                                 // errs()<< *addr << '\n';
                                 // errs()<<"load value2:";

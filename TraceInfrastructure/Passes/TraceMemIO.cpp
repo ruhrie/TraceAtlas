@@ -34,8 +34,8 @@ namespace DashTracer
         }
         bool TraceMemIO::doInitialization(Module &M)
         {
-            openFunc = cast<Function>(M.getOrInsertFunction("OpenFile", Type::getVoidTy(M.getContext())).getCallee());
-            closeFunc = cast<Function>(M.getOrInsertFunction("CloseFile", Type::getVoidTy(M.getContext())).getCallee());
+            openFunc = cast<Function>(M.getOrInsertFunction("OpenFileMem", Type::getVoidTy(M.getContext())).getCallee());
+            closeFunc = cast<Function>(M.getOrInsertFunction("CloseFileMem", Type::getVoidTy(M.getContext())).getCallee());
             return true;
         }
     } // namespace Passes
