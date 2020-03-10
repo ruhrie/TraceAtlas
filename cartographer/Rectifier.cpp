@@ -143,14 +143,22 @@ set<set<int>> RectifyKernel(set<set<int>> type3Kernels, Module *M)
             reachableMap[block] = reachable;
         }
         //blocks is now a set, but it may be disjoint, so we need to check that now
+        map<int, set<BasicBlock *>> reachableBlockSets;
+        for (auto block : blocks)
+        {
+            reachableBlockSets[block] = GetReachable(blockMap[block], blocks);
+        }
         set<set<int>> subSets;
         for (auto block : blocks)
         {
             set<int> sub;
-            auto subReached = GetReachable(blockMap[block], blocks);
-            for (auto a : subReached)
+            for (auto a : reachableBlockSets[block])
             {
-                sub.insert(GetBlockID(a));
+                int64_t id = GetBlockID(a);
+                if (reachableBlockSets[id].find(blockMap[block]) != reachableBlockSets[id].end())
+                {
+                    sub.insert(id);
+                }
             }
             subSets.insert(sub);
         }
