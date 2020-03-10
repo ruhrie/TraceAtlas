@@ -57,7 +57,6 @@ std::string GetTikStructures(std::vector<Kernel *> kernels, std::set<llvm::Struc
             memberName[0] = i + 97;
             if (int(memberName[0]) < 123)
             {
-                std::cout << std::to_string(int(memberName[0])) << std::endl;
                 std::string varDec = getCType(structure->getElementType(i), AllStructures);
                 // if we find a bang, the variable name has to be inserted after the whitespace and before the array sizes
                 if (varDec.find("!") != std::string::npos)
