@@ -314,7 +314,7 @@ void Kernel::UpdateMemory()
                 {
                     if (coveredGlobals.find(pair.second) == coveredGlobals.end())
                     {
-                        if(isa<InvokeInst>(inst))
+                        if (isa<InvokeInst>(inst))
                         {
                             throw TikException("Invoke is unsupported");
                         }
@@ -1404,7 +1404,7 @@ std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStruct
         else
         {
             type += " arg" + std::to_string(i);
-        }        
+        }
         headerString += type;
         i++;
     }
