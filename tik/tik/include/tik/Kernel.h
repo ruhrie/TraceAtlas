@@ -116,4 +116,5 @@ private:
     void GetKernelLabels();
     void CopyArgument(llvm::CallBase *Call);
     void CopyOperand(llvm::User *inst);
+    void InlineFunctions();
 };
