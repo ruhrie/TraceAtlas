@@ -149,23 +149,6 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         //apply metadata
         ApplyMetadata();
 
-        //we will also do some minor cleanup
-        for (Function::iterator fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
-        {
-            for (BasicBlock::iterator bi = fi->begin(); bi != fi->end(); bi++)
-            {
-                for (auto usr : bi->users())
-                {
-                    if (auto inst = dyn_cast<Instruction>(usr))
-                    {
-                        if (inst->getParent() == NULL)
-                        {
-                        }
-                    }
-                }
-            }
-        }
-
         //and set a flag that we succeeded
         Valid = true;
     }
@@ -242,19 +225,19 @@ void Kernel::Cleanup()
 {
     if (KernelFunction)
     {
-        KernelFunction->removeFromParent();
+        KernelFunction->eraseFromParent();
     }
     if (MemoryRead)
     {
-        MemoryRead->removeFromParent();
+        MemoryRead->eraseFromParent();
     }
     if (MemoryWrite)
     {
-        MemoryWrite->removeFromParent();
+        MemoryWrite->eraseFromParent();
     }
     for (auto g : GlobalMap)
     {
-        g.second->removeFromParent();
+        g.second->eraseFromParent();
     }
 }
 
