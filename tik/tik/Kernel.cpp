@@ -1250,28 +1250,6 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
                     Entrances.insert(block);
                 }
             }
-            //we also check the entry blocks
-            Function *parent = block->getParent();
-            BasicBlock *entry = &parent->getEntryBlock();
-            if (block == entry)
-            {
-                //potential entrance
-                bool extUse = false;
-                for (auto user : parent->users())
-                {
-                    Instruction *ci = cast<Instruction>(user);
-                    BasicBlock *parentBlock = ci->getParent();
-                    if (blocks.find(parentBlock) == blocks.end())
-                    {
-                        extUse = true;
-                        break;
-                    }
-                }
-                if (extUse)
-                {
-                    Entrances.insert(block);
-                }
-            }
         }
     }
 
