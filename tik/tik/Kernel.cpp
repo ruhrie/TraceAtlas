@@ -1239,7 +1239,8 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
         {
             for (BasicBlock *pred : predecessors(block))
             {
-                if (blocks.find(pred) == blocks.end())
+                int64_t predId = GetBlockID(pred);
+                if (blocks.find(pred) == blocks.end() && ValidBlocks.find(predId) != ValidBlocks.end())
                 {
                     Entrances.insert(block);
                 }

@@ -132,13 +132,16 @@ int main(int argc, char **argv)
         int j = 0;
         for (auto set : type4Kernels)
         {
-            finalResult[j++] = set;
+            if (!set.empty())
+            {
+                finalResult[j++] = set;
+            }
         }
 
         vector<int> validBlocks;
-        for(auto &[block, count] : blockCount)
+        for (auto &[block, count] : blockCount)
         {
-            if(count != 0)
+            if (count != 0)
             {
                 validBlocks.push_back(block);
             }

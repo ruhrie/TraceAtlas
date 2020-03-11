@@ -34,6 +34,7 @@ enum Filetype
 llvm::Module *TikModule;
 std::map<int, Kernel *> KernelMap;
 std::map<llvm::Function *, Kernel *> KfMap;
+set<int64_t> ValidBlocks;
 cl::opt<string> JsonFile("j", cl::desc("Specify input json filename"), cl::value_desc("json filename"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"));
 cl::opt<string> InputFile(cl::Positional, cl::Required, cl::desc("<input file>"));
@@ -123,6 +124,7 @@ int main(int argc, char *argv[])
         nlohmann::json kernel = l["Blocks"];
         kernels[index] = kernel.get<vector<int>>();
     }
+    ValidBlocks = j["ValidBlocks"].get<set<int64_t>>();
 
     map<string, vector<string>> childParentMapping;
 
