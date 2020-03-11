@@ -117,19 +117,10 @@ int main(int argc, char *argv[])
 
     map<string, vector<int>> kernels;
 
-    for (auto &[key, value] : j.items())
+    for (auto &[k, l] : j["Kernels"].items())
     {
-        string index = key;
-        nlohmann::json kernel;
-        if (!value[0].empty() && value[0].is_array())
-        {
-            //embedded layout
-            kernel = value[0];
-        }
-        else
-        {
-            kernel = value;
-        }
+        string index = k;
+        nlohmann::json kernel = l["Blocks"];
         kernels[index] = kernel.get<vector<int>>();
     }
 
