@@ -93,7 +93,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         SplitBlocks(blocks);
 
         GetEntrances(blocks);
-        GetExits(blocks);
+        //GetExits(blocks);
         GetConditional(blocks);
         GetExternalValues(blocks);
 
@@ -1018,6 +1018,11 @@ void Kernel::GetMemoryFunctions()
 void Kernel::BuildExit()
 {
     IRBuilder<> exitBuilder(Exit);
+    int i = 0;
+    for(auto pred : predecessors(Exit))
+    {
+        ExitMap[pred] = i++;
+    }
     auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), ExitMap.size());
     for (auto pair : ExitMap)
     {
@@ -1584,7 +1589,6 @@ void Kernel::InlineFunctions()
                     }
                     auto a = cast<Value>(calledFunc->begin());
                     phiBuilder.CreateBr(cast<BasicBlock>(a)); //after this we can finally branch into the function
-                    //PrintVal(&calledFunc->getEntryBlock());
                     //we also need a block at the end to gather the return values
                     auto returnBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
                     Body.insert(returnBlock);

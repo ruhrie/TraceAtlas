@@ -114,7 +114,7 @@ int main(int argc, char *argv[])
         spdlog::critical("Failed to open kernel file: " + JsonFile);
         return EXIT_FAILURE;
     }
-    spdlog::info("Found " + to_string(j.size()) + " kernels in the kernel file");
+    spdlog::info("Found " + to_string(j["Kernels"].size()) + " kernels in the kernel file");
 
     map<string, vector<int>> kernels;
 
