@@ -413,19 +413,7 @@ void Kernel::BuildInit()
     int i = 0;
     for (auto ent : Entrances)
     {
-        int id = GetBlockID(ent);
-        BasicBlock *tar;
-        if (KernelMap.find(id) == KernelMap.end())
-        {
-            //this is a nested kernel so we will build a sub block that calls the kernel
-            tar = NestedBlocks[ent];
-        }
-        else
-        {
-            tar = cast<BasicBlock>(VMap[ent]);
-        }
-        
-        initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), tar);
+        initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[ent]));
         i++;
     }
 }
@@ -704,7 +692,6 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                     {
                         throw TikException("Tik Error: Block not assigned to Body or Terminus");
                     }
-                    NestedBlocks[block] = intermediateBlock;
                     i++;
                 }
             }
@@ -1248,6 +1235,8 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
     for (BasicBlock *block : blocks)
     {
         int id = GetBlockID(block);
+        if (KernelMap.find(id) == KernelMap.end())
+        {
             for (BasicBlock *pred : predecessors(block))
             {
                 if (blocks.find(pred) == blocks.end())
@@ -1278,6 +1267,7 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
                 }
             }
         }
+    }
 
     if (Entrances.size() == 0)
     {

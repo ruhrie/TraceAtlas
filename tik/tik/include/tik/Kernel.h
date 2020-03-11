@@ -37,7 +37,6 @@ private:
     std::map<llvm::BasicBlock *, int> ExitMap;
     std::map<int, llvm::GlobalValue *> LoadMap;
     std::map<int, llvm::GlobalValue *> StoreMap;
-    std::map<llvm::BasicBlock *, llvm::BasicBlock *> NestedBlocks;
     /// @brief  Maps old instructions to new instructions.
     ///
     /// Special LLVM map containing old instructions (from the original bitcode) as keys and new instructions as values.
