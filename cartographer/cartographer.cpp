@@ -132,7 +132,19 @@ int main(int argc, char **argv)
         int j = 0;
         for (auto set : type4Kernels)
         {
-            finalResult[j++] = set;
+            if (!set.empty())
+            {
+                finalResult[j++] = set;
+            }
+        }
+
+        vector<int> validBlocks;
+        for (auto &[block, count] : blockCount)
+        {
+            if (count != 0)
+            {
+                validBlocks.push_back(block);
+            }
         }
 
         nlohmann::json outputJson;
@@ -164,13 +176,15 @@ int main(int argc, char **argv)
                     }
                     strLabel += entry;
                 }
-                outputJson[to_string(key.first)] = {key.second, strLabel};
+                outputJson["Kernels"][to_string(key.first)]["Blocks"] = key.second;
+                outputJson["Kernels"][to_string(key.first)]["Label"] = strLabel;
             }
             else
             {
-                outputJson[to_string(key.first)] = key.second;
+                outputJson["Kernels"][to_string(key.first)]["Blocks"] = key.second;
             }
         }
+        outputJson["ValidBlocks"] = validBlocks;
         ofstream oStream(kernelFile);
         oStream << outputJson;
         oStream.close();

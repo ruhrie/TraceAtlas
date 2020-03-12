@@ -93,7 +93,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         SplitBlocks(blocks);
 
         GetEntrances(blocks);
-        GetExits(blocks);
+        //GetExits(blocks);
         GetConditional(blocks);
         GetExternalValues(blocks);
 
@@ -102,17 +102,30 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         //start by making the correct function
         std::vector<llvm::Type *> inputArgs;
         inputArgs.push_back(Type::getInt8Ty(TikModule->getContext()));
-        for (auto inst : ExternalValues)
+        for (auto inst : KernelImports)
         {
             inputArgs.push_back(inst->getType());
         }
+        for (auto inst : KernelExports)
+        {
+            inputArgs.push_back(PointerType::get(inst->getType(), 0));
+        }
         FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
         KernelFunction = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
-        for (int i = 0; i < ExternalValues.size(); i++)
+        int i;
+        for (i = 0; i < KernelImports.size(); i++)
         {
             Argument *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i);
-            VMap[ExternalValues[i]] = a;
-            ArgumentMap[a] = ExternalValues[i];
+            a->setName("i" + to_string(i));
+            VMap[KernelImports[i]] = a;
+            ArgumentMap[a] = KernelImports[i];
+        }
+        int j;
+        for (j = 0; j < KernelExports.size(); j++)
+        {
+            Argument *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i + j);
+            a->setName("e" + to_string(j));
+            ArgumentMap[a] = KernelExports[j];
         }
 
         //create the artificial blocks
@@ -146,25 +159,10 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 
         RemapNestedKernels();
 
+        RemapExports();
+
         //apply metadata
         ApplyMetadata();
-
-        //we will also do some minor cleanup
-        for (Function::iterator fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
-        {
-            for (BasicBlock::iterator bi = fi->begin(); bi != fi->end(); bi++)
-            {
-                for (auto usr : bi->users())
-                {
-                    if (auto inst = dyn_cast<Instruction>(usr))
-                    {
-                        if (inst->getParent() == NULL)
-                        {
-                        }
-                    }
-                }
-            }
-        }
 
         //and set a flag that we succeeded
         Valid = true;
@@ -242,19 +240,19 @@ void Kernel::Cleanup()
 {
     if (KernelFunction)
     {
-        KernelFunction->removeFromParent();
+        KernelFunction->eraseFromParent();
     }
     if (MemoryRead)
     {
-        MemoryRead->removeFromParent();
+        MemoryRead->eraseFromParent();
     }
     if (MemoryWrite)
     {
-        MemoryWrite->removeFromParent();
+        MemoryWrite->eraseFromParent();
     }
     for (auto g : GlobalMap)
     {
-        g.second->removeFromParent();
+        g.second->eraseFromParent();
     }
 }
 
@@ -287,16 +285,16 @@ void Kernel::UpdateMemory()
     std::set<llvm::Value *> coveredGlobals;
     std::set<llvm::StoreInst *> newStores;
     IRBuilder<> initBuilder(Init);
-    for (int i = 0; i < ExternalValues.size(); i++)
+    for (int i = 0; i < KernelImports.size(); i++)
     {
-        if (GlobalMap.find(VMap[ExternalValues[i]]) != GlobalMap.end())
+        if (GlobalMap.find(VMap[KernelImports[i]]) != GlobalMap.end())
         {
-            if (GlobalMap[VMap[ExternalValues[i]]] == NULL)
+            if (GlobalMap[VMap[KernelImports[i]]] == NULL)
             {
                 throw TikException("Tik Error: External Value not found in GlobalMap.");
             }
-            coveredGlobals.insert(GlobalMap[VMap[ExternalValues[i]]]);
-            auto b = initBuilder.CreateStore(KernelFunction->arg_begin() + i + 1, GlobalMap[VMap[ExternalValues[i]]]);
+            coveredGlobals.insert(GlobalMap[VMap[KernelImports[i]]]);
+            auto b = initBuilder.CreateStore(KernelFunction->arg_begin() + i + 1, GlobalMap[VMap[KernelImports[i]]]);
             MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Store))));
             b->setMetadata("TikSynthetic", tikNode);
             newStores.insert(b);
@@ -746,6 +744,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
             int rescheduled = 0; //the number of blocks we rescheduled
             for (auto bi = cb->begin(); bi != cb->end(); bi++)
             {
+                auto i = cast<Instruction>(bi);
                 if (PHINode *p = dyn_cast<PHINode>(bi))
                 {
                     for (auto pred : p->blocks())
@@ -778,6 +777,8 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
         for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
         {
             Instruction *inst = cast<Instruction>(BI);
+            //start by getting all the inputs
+            //they will be composed of the operands whose input is not defined in one of the parent blocks
             int numOps = inst->getNumOperands();
             for (int i = 0; i < numOps; i++)
             {
@@ -787,9 +788,9 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
                     BasicBlock *parentBlock = operand->getParent();
                     if (std::find(blocks.begin(), blocks.end(), parentBlock) == blocks.end())
                     {
-                        if (find(ExternalValues.begin(), ExternalValues.end(), operand) == ExternalValues.end())
+                        if (find(KernelImports.begin(), KernelImports.end(), operand) == KernelImports.end())
                         {
-                            ExternalValues.push_back(operand);
+                            KernelImports.push_back(operand);
                         }
                     }
                 }
@@ -800,7 +801,7 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
                         if (KfMap.find(ci->getCalledFunction()) != KfMap.end())
                         {
                             auto subKernel = KfMap[ci->getCalledFunction()];
-                            for (auto sExtVal : subKernel->ExternalValues)
+                            for (auto sExtVal : subKernel->KernelImports)
                             {
                                 //these are the arguments for the function call in order
                                 //we now can check if they are in our vmap, if so they aren't external
@@ -808,9 +809,9 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
                                 Value *v = VMap[sExtVal];
                                 if (!v)
                                 {
-                                    if (find(ExternalValues.begin(), ExternalValues.end(), sExtVal) == ExternalValues.end())
+                                    if (find(KernelImports.begin(), KernelImports.end(), sExtVal) == KernelImports.end())
                                     {
-                                        ExternalValues.push_back(sExtVal);
+                                        KernelImports.push_back(sExtVal);
                                     }
                                 }
                             }
@@ -818,9 +819,9 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
                     }
                     else
                     {
-                        if (find(ExternalValues.begin(), ExternalValues.end(), ar) == ExternalValues.end())
+                        if (find(KernelImports.begin(), KernelImports.end(), ar) == KernelImports.end())
                         {
-                            ExternalValues.push_back(ar);
+                            KernelImports.push_back(ar);
                         }
 
                         bool external = false;
@@ -835,6 +836,26 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
                             }
                         }
                     }
+                }
+            }
+
+            //then get all the exports
+            //this is composed of all the instructions whose use extends beyond the current blocks
+            for (auto user : inst->users())
+            {
+                if (auto i = dyn_cast<Instruction>(user))
+                {
+                    auto p = i->getParent();
+                    if (blocks.find(p) == blocks.end())
+                    {
+                        //the use is external therefore it should be a kernel export
+                        KernelExports.push_back(inst);
+                        break;
+                    }
+                }
+                else
+                {
+                    throw TikException("Non-instruction user detected");
                 }
             }
         }
@@ -887,7 +908,7 @@ void Kernel::GetMemoryFunctions()
     IRBuilder<> loadBuilder(loadBlock);
     Value *priorValue = NULL;
 
-    // Add ExternalValues to the global map
+    // Add KernelImports to the global map
 
     // MemoryRead
     map<Value *, Value *> loadMap;
@@ -1035,6 +1056,11 @@ void Kernel::GetMemoryFunctions()
 void Kernel::BuildExit()
 {
     IRBuilder<> exitBuilder(Exit);
+    int i = 0;
+    for (auto pred : predecessors(Exit))
+    {
+        ExitMap[pred] = i++;
+    }
     auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), ExitMap.size());
     for (auto pair : ExitMap)
     {
@@ -1049,6 +1075,7 @@ void Kernel::BuildExit()
         }
         phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.second), cast<BasicBlock>(v));
     }
+
     exitBuilder.CreateRet(phi);
 
     IRBuilder<> exceptionBuilder(Exception);
@@ -1256,29 +1283,8 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
         {
             for (BasicBlock *pred : predecessors(block))
             {
-                if (blocks.find(pred) == blocks.end())
-                {
-                    Entrances.insert(block);
-                }
-            }
-            //we also check the entry blocks
-            Function *parent = block->getParent();
-            BasicBlock *entry = &parent->getEntryBlock();
-            if (block == entry)
-            {
-                //potential entrance
-                bool extUse = false;
-                for (auto user : parent->users())
-                {
-                    Instruction *ci = cast<Instruction>(user);
-                    BasicBlock *parentBlock = ci->getParent();
-                    if (blocks.find(parentBlock) == blocks.end())
-                    {
-                        extUse = true;
-                        break;
-                    }
-                }
-                if (extUse)
+                int64_t predId = GetBlockID(pred);
+                if (blocks.find(pred) == blocks.end() && ValidBlocks.find(predId) != ValidBlocks.end())
                 {
                     Entrances.insert(block);
                 }
@@ -1631,7 +1637,6 @@ void Kernel::InlineFunctions()
                     }
                     auto a = cast<Value>(calledFunc->begin());
                     phiBuilder.CreateBr(cast<BasicBlock>(a)); //after this we can finally branch into the function
-                    //PrintVal(&calledFunc->getEntryBlock());
                     //we also need a block at the end to gather the return values
                     auto returnBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
                     Body.insert(returnBlock);
@@ -1695,6 +1700,70 @@ void Kernel::InlineFunctions()
                     priorBranch->setSuccessor(0, currentStruct.entranceBlock);
                     ci->eraseFromParent();
                 }
+            }
+        }
+    }
+}
+
+void Kernel::RemapExports()
+{
+    
+    map<Value *, AllocaInst *> exportMap;
+    for (auto ex : KernelExports)
+    {
+        Value *mapped = VMap[ex];
+        if (mapped)
+        {
+            if (mapped->getNumUses() != 0)
+            {
+                IRBuilder iBuilder(Init->getFirstNonPHI());
+                AllocaInst *alloc = iBuilder.CreateAlloca(mapped->getType());
+                exportMap[mapped] = alloc;
+                for (auto u : mapped->users())
+                {
+                    IRBuilder<> uBuilder(cast<Instruction>(u));
+                    auto load = uBuilder.CreateLoad(alloc);
+                    for (int i = 0; i < u->getNumOperands(); i++)
+                    {
+                        if (mapped == u->getOperand(i))
+                        {
+                            u->setOperand(i, load);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+    {
+        for (auto bi = fi->begin(); bi != fi->end(); bi++)
+        {
+            Instruction *i = cast<Instruction>(bi);
+            if (auto call = dyn_cast<CallInst>(i))
+            {
+                if (call->getMetadata("KernelCall"))
+                {
+                    Function *F = call->getCalledFunction();
+                    auto fType = F->getFunctionType();
+                    for (int i = 0; i < call->getNumArgOperands(); i++)
+                    {
+                        auto arg = call->getArgOperand(i);
+                        if(arg->getType() != fType->getParamType(i))
+                        {
+                            IRBuilder <> aBuilder(call);
+                            auto load = aBuilder.CreateLoad(arg);
+                            call->setArgOperand(i, load);
+                        }
+                    }
+                }
+            }
+            if (exportMap.find(i) != exportMap.end())
+            {
+                IRBuilder<> b(i->getNextNode());
+                b.CreateStore(i, exportMap[i]);
+                bi++;
             }
         }
     }

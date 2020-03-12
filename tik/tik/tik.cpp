@@ -34,6 +34,7 @@ enum Filetype
 llvm::Module *TikModule;
 std::map<int, Kernel *> KernelMap;
 std::map<llvm::Function *, Kernel *> KfMap;
+set<int64_t> ValidBlocks;
 cl::opt<string> JsonFile("j", cl::desc("Specify input json filename"), cl::value_desc("json filename"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"));
 cl::opt<string> InputFile(cl::Positional, cl::Required, cl::desc("<input file>"));
@@ -113,25 +114,17 @@ int main(int argc, char *argv[])
         spdlog::critical("Failed to open kernel file: " + JsonFile);
         return EXIT_FAILURE;
     }
-    spdlog::info("Found " + to_string(j.size()) + " kernels in the kernel file");
+    spdlog::info("Found " + to_string(j["Kernels"].size()) + " kernels in the kernel file");
 
     map<string, vector<int>> kernels;
 
-    for (auto &[key, value] : j.items())
+    for (auto &[k, l] : j["Kernels"].items())
     {
-        string index = key;
-        nlohmann::json kernel;
-        if (!value[0].empty() && value[0].is_array())
-        {
-            //embedded layout
-            kernel = value[0];
-        }
-        else
-        {
-            kernel = value;
-        }
+        string index = k;
+        nlohmann::json kernel = l["Blocks"];
         kernels[index] = kernel.get<vector<int>>();
     }
+    ValidBlocks = j["ValidBlocks"].get<set<int64_t>>();
 
     map<string, vector<string>> childParentMapping;
 

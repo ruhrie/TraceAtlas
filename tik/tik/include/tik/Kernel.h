@@ -55,7 +55,8 @@ private:
 
     /// @brief  Vector containing all instructions that don't have their parent in the basic blocks of the tik representation.
     ///         These instructions become the input arguments to the Kernel function.
-    std::vector<llvm::Value *> ExternalValues;
+    std::vector<llvm::Value *> KernelImports;
+    std::vector<llvm::Value *> KernelExports;
 
     /// @brief   Function for remapping instructions based on VMap.
     ///          This is done before morphing KernelFunction into a new function with inputs.
@@ -117,4 +118,5 @@ private:
     void CopyArgument(llvm::CallBase *Call);
     void CopyOperand(llvm::User *inst);
     void InlineFunctions();
+    void RemapExports();
 };
