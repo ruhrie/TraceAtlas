@@ -66,25 +66,60 @@ std::string GetTikStructures(std::vector<Kernel *> kernels, std::set<llvm::Struc
                 spdlog::error(e.what());
                 varDec = "TypeNotSupported";
             }
-            // if we find a bang, the variable name has to be inserted after the whitespace and before the array sizes
+            // if we find a bang, we have an array and the variable name has to be inserted before the array sizes
             if (varDec.find("!") != std::string::npos)
             {
                 varDec.erase(varDec.begin() + varDec.find("!"));
+                // find all of our asterisks;
+                int ast = 0;
+                while (varDec.find("*") != std::string::npos)
+                {
+                    varDec.erase(varDec.begin() + varDec.find("*"));
+                    ast++;
+                }
                 std::size_t whiteSpacePosition;
+                // if we have a structure, find the first [] and insert the name before it
                 if (varDec.find("struct") != std::string::npos)
                 {
                     whiteSpacePosition = varDec.find("[") - 1;
                 }
-                else
+                else // we just have a type name and white space at the end
                 {
                     whiteSpacePosition = varDec.find(" ");
                 }
-
+                int varLength = (int)(i / 26) + 1;
+                for (int j = 0; j < varLength; j++)
+                {
+                    varDec.insert(whiteSpacePosition + 1, &memberName[0]);
+                }
+                for (int j = 0; j < ast; j++)
+                {
+                    varDec.insert(whiteSpacePosition, "*");
+                }
+                structureDefinition += "\t" + varDec + ";\n";
+            }
+            else if (varDec.find("@") != std::string::npos)
+            {
+                varDec.erase(varDec.begin() + varDec.find("@"));
+                // find all of our asterisks;
+                int ast = 0;
+                while (varDec.find("#") != std::string::npos)
+                {
+                    varDec.erase(varDec.begin() + varDec.find("#"));
+                    ast++;
+                }
+                std::size_t whiteSpacePosition = varDec.find("(") - 1;
+                varDec.insert(whiteSpacePosition + 1, ") ");
                 for (int j = 0; j < (int)(i / 26) + 1; j++)
                 {
                     varDec.insert(whiteSpacePosition + 1, &memberName[0]);
                 }
-                structureDefinition += "\t" + varDec + ";\n";
+                std::string pointerString = "(";
+                for (int j = 0; j < ast; j++)
+                {
+                    pointerString += "*";
+                }
+                varDec.insert(whiteSpacePosition + 1, pointerString);
             }
             else
             {
@@ -115,11 +150,12 @@ std::string getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStr
     {
         type = getCArrayType(dyn_cast<llvm::ArrayType>(elem)->getArrayElementType(), AllStructures, size);
         std::size_t whiteSpacePosition;
-        // if the type is a struct
+        // if the type is a struct, set the name insert position to be the end
         if (type.find("struct") != std::string::npos)
         {
             whiteSpacePosition = type.size() - 1;
         }
+        // else set the insert position to the end
         else
         {
             whiteSpacePosition = type.find(" ");
@@ -203,9 +239,9 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
         llvm::Type *memberType = newType->getElementType();
         std::string a = getCType(memberType, AllStructures);
         // check if we had an array type, don't add the star
-        if (a.find("!") != std::string::npos)
+        if(a.find("@") != std::string::npos)
         {
-            return a;
+            return a + "#";
         }
         else
         {
@@ -237,7 +273,20 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
         }
         else if (param->isFunctionTy())
         {
-            throw TikException("Function argument types are not supported for header generation.");
+            llvm::FunctionType* func = dyn_cast<llvm::FunctionType>(param);
+            std::string type = "@";
+            type  += getCType(func->getReturnType(), AllStructures);
+            type += " (";
+            for (int i = 0; i < func->getNumParams(); i++)
+            {
+                if (i > 0)
+                {
+                    type += ", ";
+                }
+                type += getCType(func->getParamType(i), AllStructures);
+            }
+            type += ")";
+            return type;
         }
         else
         {
