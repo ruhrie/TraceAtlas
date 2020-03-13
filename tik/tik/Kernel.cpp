@@ -1420,10 +1420,40 @@ std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStruct
         }
         if (type.find("!") != std::string::npos)
         {
-            std::string varName = "arg" + std::to_string(i);
             type.erase(type.begin() + type.find("!"));
+            // find all of our asterisks;
+            int ast = 0;
+            while (type.find("*") != std::string::npos)
+            {
+                type.erase(type.begin() + type.find("*"));
+                ast++;
+            }
             std::size_t whiteSpacePosition = type.find(" ");
-            type.insert(whiteSpacePosition + 1, varName);
+            for (int j = 0; j < ast; j++)
+            {
+                type.insert(whiteSpacePosition, "*");
+            }
+            type.insert(type.find(" ") + 1, "arg" + std::to_string(i));
+        }
+        else if (type.find("@") != std::string::npos)
+        {
+            type.erase(type.begin() + type.find("@"));
+            // find all of our asterisks;
+            int ast = 0;
+            while (type.find("#") != std::string::npos)
+            {
+                type.erase(type.begin() + type.find("#"));
+                ast++;
+            }
+            std::size_t whiteSpacePosition = type.find("(") - 1;
+            type.insert(whiteSpacePosition + 1, ") ");
+            std::string pointerString = " (";
+            for (int j = 0; j < ast; j++)
+            {
+                pointerString += "*";
+            }
+            std::string funcName = pointerString + "arg" + std::to_string(i);
+            type.insert(type.find(" "), funcName);
         }
         else
         {
