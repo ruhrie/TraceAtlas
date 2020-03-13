@@ -1707,7 +1707,7 @@ void Kernel::InlineFunctions()
 
 void Kernel::RemapExports()
 {
-    
+
     map<Value *, AllocaInst *> exportMap;
     for (auto ex : KernelExports)
     {
@@ -1735,7 +1735,7 @@ void Kernel::RemapExports()
             }
         }
     }
-    
+
     for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
     {
         for (auto bi = fi->begin(); bi != fi->end(); bi++)
@@ -1750,9 +1750,9 @@ void Kernel::RemapExports()
                     for (int i = 0; i < call->getNumArgOperands(); i++)
                     {
                         auto arg = call->getArgOperand(i);
-                        if(arg->getType() != fType->getParamType(i))
+                        if (arg->getType() != fType->getParamType(i))
                         {
-                            IRBuilder <> aBuilder(call);
+                            IRBuilder<> aBuilder(call);
                             auto load = aBuilder.CreateLoad(arg);
                             call->setArgOperand(i, load);
                         }
