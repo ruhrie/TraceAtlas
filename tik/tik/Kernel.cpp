@@ -1453,7 +1453,6 @@ std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStruct
                 pointerString += "*";
             }
             std::string funcName = pointerString + "arg" + std::to_string(i);
-            std::cout << type << std::endl;
             type.insert(type.find(" "), funcName);
         }
         else
