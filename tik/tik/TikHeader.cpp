@@ -239,7 +239,7 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
         llvm::Type *memberType = newType->getElementType();
         std::string a = getCType(memberType, AllStructures);
         // check if we had an array type, don't add the star
-        if(a.find("@") != std::string::npos)
+        if (a.find("@") != std::string::npos)
         {
             return a + "#";
         }
@@ -273,9 +273,9 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
         }
         else if (param->isFunctionTy())
         {
-            llvm::FunctionType* func = dyn_cast<llvm::FunctionType>(param);
+            llvm::FunctionType *func = dyn_cast<llvm::FunctionType>(param);
             std::string type = "@";
-            type  += getCType(func->getReturnType(), AllStructures);
+            type += getCType(func->getReturnType(), AllStructures);
             type += " (";
             for (int i = 0; i < func->getNumParams(); i++)
             {
