@@ -1,6 +1,7 @@
 #include "tik/tik.h"
 #include "AtlasUtil/Annotate.h"
 #include "tik/Exceptions.h"
+#include "tik/TikHeader.h"
 #include "tik/Util.h"
 #include <fstream>
 #include <iostream>
@@ -33,6 +34,7 @@ enum Filetype
 llvm::Module *TikModule;
 std::map<int, Kernel *> KernelMap;
 std::map<llvm::Function *, Kernel *> KfMap;
+set<int64_t> ValidBlocks;
 cl::opt<string> JsonFile("j", cl::desc("Specify input json filename"), cl::value_desc("json filename"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"));
 cl::opt<string> InputFile(cl::Positional, cl::Required, cl::desc("<input file>"));
@@ -112,25 +114,17 @@ int main(int argc, char *argv[])
         spdlog::critical("Failed to open kernel file: " + JsonFile);
         return EXIT_FAILURE;
     }
-    spdlog::info("Found " + to_string(j.size()) + " kernels in the kernel file");
+    spdlog::info("Found " + to_string(j["Kernels"].size()) + " kernels in the kernel file");
 
     map<string, vector<int>> kernels;
 
-    for (auto &[key, value] : j.items())
+    for (auto &[k, l] : j["Kernels"].items())
     {
-        string index = key;
-        nlohmann::json kernel;
-        if (!value[0].empty() && value[0].is_array())
-        {
-            //embedded layout
-            kernel = value[0];
-        }
-        else
-        {
-            kernel = value;
-        }
+        string index = k;
+        nlohmann::json kernel = l["Blocks"];
         kernels[index] = kernel.get<vector<int>>();
     }
+    ValidBlocks = j["ValidBlocks"].get<set<int64_t>>();
 
     map<string, vector<string>> childParentMapping;
 
@@ -254,16 +248,12 @@ int main(int argc, char *argv[])
     // generate a C header file declaring each tik function
     std::string headerFile = "\n// Auto-generated header for the tik representations of " + InputFile + "\n";
     headerFile += "#include <stdint.h>\n";
+    // insert all structures in the tik module and convert them
+    std::set<llvm::StructType *> AllStructures;
+    headerFile += GetTikStructures(results, AllStructures);
     for (auto kernel : results)
     {
-        try
-        {
-            headerFile += "\n" + kernel->GetHeaderDeclaration();
-        }
-        catch (TikException &e)
-        {
-            spdlog::error(e.what());
-        }
+        headerFile += "\n" + kernel->GetHeaderDeclaration(AllStructures);
     }
     // write the header file
     std::ofstream header;
@@ -281,7 +271,9 @@ int main(int argc, char *argv[])
         error = true;
         auto err = rso.str();
         spdlog::critical("Tik Module Corrupted: " + err);
-        //return EXIT_FAILURE;
+#ifndef DEBUG
+        return EXIT_FAILURE;
+#endif
     }
 
     // writing part

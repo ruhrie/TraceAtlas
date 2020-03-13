@@ -87,10 +87,12 @@ int main(int argc, char **argv)
     nlohmann::json j;
     inputJson >> j;
     inputJson.close();
-    for (auto &[key, value] : j.items())
+
+    for (auto &[k, l] : j["Kernels"].items())
     {
-        set<int> kernelSet = value;
-        kernelMap[key] = kernelSet;
+        string index = k;
+        nlohmann::json kernel = l["Blocks"];
+        kernelMap[index] = kernel.get<set<int>>();
     }
 
     //get parent child relationships

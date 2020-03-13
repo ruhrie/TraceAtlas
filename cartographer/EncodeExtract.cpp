@@ -17,7 +17,7 @@
 using namespace std;
 using namespace llvm;
 
-std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> ExtractKernels(std::string sourceFile, std::set<std::set<int>> kernels, Module *bitcode)
+set<set<int>> ExtractKernels(std::string sourceFile, std::set<std::set<int>> kernels, Module *bitcode)
 {
     indicators::ProgressBar bar;
     int previousCount = 0;
@@ -39,9 +39,8 @@ std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> Extrac
         }
     }
 
-    int openCount[blockCount];              // counter to know where we are in the callstack
-    set<int> finalBlocks[kernels.size()];   // final kernel definitions
-    map<int, std::set<string>> functionMap; // maps a kernel index to its label
+    int openCount[blockCount];            // counter to know where we are in the callstack
+    set<int> finalBlocks[kernels.size()]; // final kernel definitions
     set<int> openBlocks;
     set<int> *kernelMap = (set<int> *)calloc(sizeof(set<int>), blockCount);
     int kernelStarts[kernels.size()]; // map of a kernel index to the first block seen
@@ -56,7 +55,6 @@ std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> Extrac
     {
         blocks[i] = set<int>();
         finalBlocks[i] = set<int>();
-        functionMap[i].insert("");
         kernelStarts[i] = -1;
     }
     int a = 0;
@@ -161,16 +159,16 @@ std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> Extrac
                     {
                         blocks[i].insert(block);
                     }
+                    if (!blocksLabeled && !currentKernel.empty())
+                    {
+                        blockLabelMap[block].insert(currentKernel);
+                    }
 
                     for (auto open : openBlocks)
                     {
                         for (auto ki : kernelMap[open])
                         {
                             finalBlocks[ki].insert(block);
-                            if (!currentKernel.empty())
-                            {
-                                functionMap[ki].insert(currentKernel);
-                            }
                         }
                     }
 
@@ -181,18 +179,10 @@ std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> Extrac
                         {
                             kernelStarts[ki] = block;
                             finalBlocks[ki].insert(block);
-                            if (!currentKernel.empty())
-                            {
-                                functionMap[ki].insert(currentKernel);
-                            }
                         }
                         if (kernelStarts[ki] != block)
                         {
                             finalBlocks[ki].insert(blocks[ki].begin(), blocks[ki].end());
-                            if (!currentKernel.empty())
-                            {
-                                functionMap[ki].insert(currentKernel);
-                            }
                         }
                         blocks[ki].clear();
                     }
@@ -267,16 +257,16 @@ std::tuple<std::map<int, set<std::string>>, std::map<int, std::set<int>>> Extrac
     }
 
     std::set<set<int>> finalSets;
-    std::map<int, std::set<int>> finalMap;
     for (int i = 0; i < kernels.size(); i++)
     {
         finalSets.insert(finalBlocks[i]);
     }
-    int i = 0;
-    for (auto fin : finalSets)
-    {
-        finalMap[i++] = fin;
-    }
     free(kernelMap);
-    return {functionMap, finalMap};
+
+    if (!blocksLabeled)
+    {
+        blocksLabeled = true;
+    }
+
+    return finalSets;
 }

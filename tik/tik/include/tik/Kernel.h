@@ -1,5 +1,6 @@
 #pragma once
 #include "tik/InlineStruct.h"
+#include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Transforms/Utils/ValueMapper.h>
 #include <map>
@@ -13,7 +14,7 @@ class Kernel
 public:
     Kernel(std::vector<int> basicBlocks, llvm::Module *M, std::string name = "");
     ~Kernel();
-    std::string GetHeaderDeclaration(void);
+    std::string GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures);
     std::string Name;
     nlohmann::json GetJson();
     std::set<llvm::BasicBlock *> Conditional;
@@ -34,6 +35,8 @@ private:
     void GetEntrances(std::set<llvm::BasicBlock *> &);
     void GetExits(std::set<llvm::BasicBlock *> &);
     std::map<llvm::BasicBlock *, int> ExitMap;
+    std::map<int, llvm::GlobalValue *> LoadMap;
+    std::map<int, llvm::GlobalValue *> StoreMap;
     /// @brief  Maps old instructions to new instructions.
     ///
     /// Special LLVM map containing old instructions (from the original bitcode) as keys and new instructions as values.
@@ -52,7 +55,8 @@ private:
 
     /// @brief  Vector containing all instructions that don't have their parent in the basic blocks of the tik representation.
     ///         These instructions become the input arguments to the Kernel function.
-    std::vector<llvm::Value *> ExternalValues;
+    std::vector<llvm::Value *> KernelImports;
+    std::vector<llvm::Value *> KernelExports;
 
     /// @brief   Function for remapping instructions based on VMap.
     ///          This is done before morphing KernelFunction into a new function with inputs.
@@ -109,6 +113,10 @@ private:
     void SanityChecks();
 
     void CopyGlobals();
+
+    void GetKernelLabels();
     void CopyArgument(llvm::CallBase *Call);
     void CopyOperand(llvm::User *inst);
+    void InlineFunctions();
+    void RemapExports();
 };

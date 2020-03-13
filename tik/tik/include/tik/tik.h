@@ -3,6 +3,7 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
 #include <map>
+#include <set>
 
 /// @brief  Maps a basic block ID to a kernel object.
 ///
@@ -18,3 +19,5 @@ extern llvm::Module *TikModule;
 /// When making embedded function calls, it is necessary
 /// to get the object in which that embedded function belongs.
 extern std::map<llvm::Function *, Kernel *> KfMap;
+
+extern std::set<int64_t> ValidBlocks;
