@@ -615,6 +615,17 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
 
 void Kernel::BuildKernel(set<BasicBlock *> &blocks)
 {
+    set<Function *> headFunctions;
+    for(auto ent : Entrances)
+    {
+        headFunctions.insert(ent->getParent());
+    }
+
+    if(headFunctions.size() != 1)
+    {
+        throw TikException("Entrances not on same level");
+    }
+
     set<BasicBlock *> handeledExits;
     for (auto block : blocks)
     {
@@ -1744,11 +1755,16 @@ void Kernel::RemapExports()
             {
                 if (call->getMetadata("KernelCall"))
                 {
+                    PrintVal(i);
                     Function *F = call->getCalledFunction();
                     auto fType = F->getFunctionType();
                     for (int i = 0; i < call->getNumArgOperands(); i++)
                     {
                         auto arg = call->getArgOperand(i);
+                        if(arg == NULL)
+                        {
+                            continue;
+                        }
                         if (arg->getType() != fType->getParamType(i))
                         {
                             IRBuilder<> aBuilder(call);
