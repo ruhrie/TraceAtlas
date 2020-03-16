@@ -13,6 +13,11 @@ void PrintVal(llvm::Value *val)
     std::cout << str << "\n";
 }
 
+void PrintVal(const llvm::Value *val)
+{
+    PrintVal(val);
+}
+
 void PrintVal(llvm::Module *mod)
 {
     AssemblyAnnotationWriter *write = new llvm::AssemblyAnnotationWriter();

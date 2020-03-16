@@ -1556,10 +1556,27 @@ void Kernel::CopyOperand(llvm::User *inst)
 void Kernel::InlineFunctions(set<BasicBlock *> &blocks)
 {
     bool change = true;
+    map<Value *, Value *> callMap;
+    for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+    {
+        for (auto bi = fi->begin(); bi != fi->end(); bi++)
+        {
+            if (CallInst *ci = dyn_cast<CallInst>(bi))
+            {
+                for (auto pair : VMap)
+                {
+                    if (pair.second == ci)
+                    {
+                        callMap[ci] = (Value *)pair.first;
+                    }
+                }
+            }
+        }
+    }
+
     while (change)
     {
         change = false;
-
         for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
         {
             for (auto bi = fi->begin(); bi != fi->end(); bi++)
@@ -1586,6 +1603,10 @@ void Kernel::InlineFunctions(set<BasicBlock *> &blocks)
                                 //we finally know this can be inlined
                                 ValueToValueMapTy vmap; //local vmap for this singular call
                                 BranchInst *brInst = cast<BranchInst>(ci->getNextNode());
+
+                                auto newVal = callMap[ci];
+                                assert(newVal != NULL);
+                                callMap[vmap[ci]] = callMap[ci];
 
                                 /*
                                 these are the inlining steps
@@ -1657,9 +1678,7 @@ void Kernel::InlineFunctions(set<BasicBlock *> &blocks)
                                     {
                                         phi->addIncoming(pair.second, pair.first);
                                     }
-                                    PrintVal(ci);
-                                    PrintVal(phi);
-                                    VMap[ci] = phi; //we use the external vmap since it won't be remapped properly otherwise
+                                    VMap[callMap[ci]] = phi; //we use the external vmap since it won't be remapped properly otherwise
                                 }
                                 retBuilder.CreateBr(brInst->getSuccessor(0));
                                 remappedBlocks.push_back(retBlock);
@@ -1743,7 +1762,7 @@ void Kernel::RemapExports()
                     for (int i = 0; i < call->getNumArgOperands(); i++)
                     {
                         auto arg = call->getArgOperand(i);
-                        if(arg == NULL)
+                        if (arg == NULL)
                         {
                             continue;
                         }
