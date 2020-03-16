@@ -136,7 +136,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         //copy the appropriate blocks
         BuildKernel(blocks);
 
-        InlineFunctions();
+        InlineFunctions(blocks);
 
         CopyGlobals();
 
@@ -615,9 +615,24 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
 
 void Kernel::BuildKernel(set<BasicBlock *> &blocks)
 {
+    set<Function *> headFunctions;
+    for (auto ent : Entrances)
+    {
+        headFunctions.insert(ent->getParent());
+    }
+
+    if (headFunctions.size() != 1)
+    {
+        throw TikException("Entrances not on same level");
+    }
+
     set<BasicBlock *> handeledExits;
     for (auto block : blocks)
     {
+        if (headFunctions.find(block->getParent()) == headFunctions.end())
+        {
+            continue;
+        }
         int64_t id = GetBlockID(block);
         if (KernelMap.find(id) != KernelMap.end())
         {
@@ -1508,151 +1523,146 @@ void Kernel::CopyOperand(llvm::User *inst)
     }
 }
 
-void Kernel::InlineFunctions()
+void Kernel::InlineFunctions(set<BasicBlock *> &blocks)
 {
-    vector<CallInst *> toInline;
-    for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+    bool change = true;
+    while (change)
     {
-        for (auto bi = fi->begin(); bi != fi->end(); bi++)
-        {
-            if (CallInst *ci = dyn_cast<CallInst>(bi))
-            {
-                if (ci->getModule() == TikModule && !ci->getMetadata("KernelCall"))
-                {
-                    toInline.push_back(ci);
-                }
-            }
-        }
-    }
-    for (auto ci : toInline)
-    {
-        BasicBlock *cb = ci->getParent();
-        if (ci->isIndirectCall())
-        {
-            throw TikException("Tik Error: Indirect calls aren't supported")
-        }
-        else
-        {
-            auto calledFunc = ci->getCalledFunction();
-            if (!calledFunc)
-            {
-                throw TikException("Tik Error: Call inst was null")
-            }
+        change = false;
 
-            if (!calledFunc->empty())
+        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+        {
+            for (auto bi = fi->begin(); bi != fi->end(); bi++)
             {
-                //we need to do a check here to see if we already inlined it
-                //needs to be inlined
-                auto calledFunction = calledFunc;
-                //first create the phi block which is the entry point
-                auto entranceBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-                Body.insert(entranceBlock);
-                IRBuilder<> phiBuilder(entranceBlock);
-                //first phi we need is the number of exit paths
-                vector<BasicBlock *> funcUses;
-                vector<CallInst *> callUses;
-
-                for (auto user : calledFunc->users())
+                if (CallInst *ci = dyn_cast<CallInst>(bi))
                 {
-                    if (CallInst *callUse = dyn_cast<CallInst>(user))
+                    if (ci->getModule() == TikModule && !ci->getMetadata("KernelCall"))
                     {
-                        if (callUse->getModule() == TikModule)
+                        if (ci->isIndirectCall())
                         {
-                            BasicBlock *parent = callUse->getParent();
-                            funcUses.push_back(parent);
-                            callUses.push_back(callUse);
+                            throw TikException("Tik Error: Indirect calls aren't supported")
+                        }
+                        else
+                        {
+                            auto calledFunc = ci->getCalledFunction();
+                            if (!calledFunc)
+                            {
+                                throw TikException("Tik Error: Call inst was null")
+                            }
+
+                            if (!calledFunc->empty())
+                            {
+                                change = true;
+                                //we finally know this can be inlined
+                                ValueToValueMapTy vmap; //local vmap for this singular call
+                                BranchInst *brInst = cast<BranchInst>(ci->getNextNode());
+
+                                /*
+                                these are the inlining steps
+                                1. clone all blocks that are valid
+                                2. add the inputs to the vmap
+                                3. create a return block which will be a phi from all valid exits
+                                4. remap all the returns
+                                5. remap all the blocks
+                                6. replace the call with a branch
+                                */
+
+                                //so do #1
+                                vector<BasicBlock *> remappedBlocks;
+                                for (auto fi = calledFunc->begin(); fi != calledFunc->end(); fi++)
+                                {
+                                    BasicBlock *b = cast<BasicBlock>(fi);
+                                    if (blocks.find(b) != blocks.end())
+                                    {
+                                        //this is a valid block to clone
+                                        BasicBlock *cb = CloneBasicBlock(b, vmap, "", KernelFunction);
+                                        vmap[b] = cb;
+                                        remappedBlocks.push_back(cb);
+                                    }
+                                }
+
+                                //#2
+                                int total = calledFunc->getNumOperands();
+                                for (int i = 0; i < total; i++)
+                                {
+                                    vmap[calledFunc->getOperand(i)] = ci->getOperand(i);
+                                }
+
+                                //#3
+                                map<BasicBlock *, Value *> phiMap; //both these values are old
+                                for (auto fi = calledFunc->begin(); fi != calledFunc->end(); fi++)
+                                {
+                                    BasicBlock *b = cast<BasicBlock>(fi);
+                                    auto term = b->getTerminator();
+                                    if (auto ret = dyn_cast<ReturnInst>(term))
+                                    {
+                                        if (calledFunc->getReturnType() != Type::getVoidTy(calledFunc->getContext()))
+                                        {
+                                            Value *a = ret->getOperand(0);
+                                            phiMap[b] = a;
+                                        }
+                                        else
+                                        {
+                                            phiMap[b] = NULL;
+                                        }
+                                    }
+                                    else if (isa<BranchInst>(term))
+                                    {
+                                    }
+                                    else if (isa<SwitchInst>(term))
+                                    {
+                                    }
+                                    else
+                                    {
+                                        spdlog::warn("Unimplemented terminator: {0}", term->getOpcodeName());
+                                    }
+                                }
+
+                                BasicBlock *retBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
+                                IRBuilder<> retBuilder(retBlock);
+                                if (calledFunc->getReturnType() != Type::getVoidTy(calledFunc->getContext()))
+                                {
+                                    auto phi = retBuilder.CreatePHI(calledFunc->getReturnType(), phiMap.size());
+                                    for (auto &pair : phiMap)
+                                    {
+                                        phi->addIncoming(pair.second, pair.first);
+                                    }
+                                    PrintVal(ci);
+                                    PrintVal(phi);
+                                    VMap[ci] = phi; //we use the external vmap since it won't be remapped properly otherwise
+                                }
+                                retBuilder.CreateBr(brInst->getSuccessor(0));
+                                remappedBlocks.push_back(retBlock);
+
+                                //#4
+                                for (auto &pair : phiMap)
+                                {
+                                    auto ret = cast<ReturnInst>(cast<BasicBlock>(vmap[pair.first])->getTerminator());
+                                    ret->eraseFromParent();
+                                    IRBuilder<> retBuilder(cast<BasicBlock>(vmap[pair.first]));
+                                    retBuilder.CreateBr(retBlock);
+                                }
+
+                                //#5
+                                for (auto &cb : remappedBlocks)
+                                {
+                                    for (auto bi = cb->begin(); bi != cb->end(); bi++)
+                                    {
+                                        Instruction *i = cast<Instruction>(bi);
+                                        RemapInstruction(i, vmap);
+                                    }
+                                }
+
+                                //#6
+                                IRBuilder<> finBuilder(ci);
+                                finBuilder.CreateBr(cast<BasicBlock>(vmap[&calledFunc->getEntryBlock()]));
+                                ci->eraseFromParent();
+                                brInst->eraseFromParent();
+                                break; //due to the prior split we know that this is the final inst anyway
+                            }
                         }
                     }
-                    else if (isa<StoreInst>(user))
-                    {
-                        //ignore, this is a jump table
-                    }
-                    else
-                    {
-                        throw TikException("Tik Error: Only expected callInst");
-                    }
                 }
-                //now that we know that we can create the phi for where to branch to
-                auto branchPhi = phiBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), funcUses.size());
-                int phiIndex = 0;
-                for (auto pre : funcUses)
-                {
-                    branchPhi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), phiIndex++), pre);
-                }
-                //then we do the same for every argument
-                vector<PHINode *> ArgNodes;
-                int argIndex = 0;
-                for (auto ai = calledFunc->arg_begin(); ai != calledFunc->arg_end(); ai++)
-                {
-                    Argument *arg = cast<Argument>(ai);
-                    auto argPhi = phiBuilder.CreatePHI(arg->getType(), funcUses.size()); //create a phi for the arg
-                    for (auto pre : funcUses)
-                    {
-                        Value *passedValue = ci->getOperand(argIndex);
-                        argPhi->addIncoming(passedValue, pre); //and give it a value for the current call instruction
-                    }
-                    argIndex++;
-                    VMap[arg] = argPhi;
-                    ArgNodes.push_back(argPhi);
-                }
-                auto a = cast<Value>(calledFunc->begin());
-                phiBuilder.CreateBr(cast<BasicBlock>(a)); //after this we can finally branch into the function
-                //we also need a block at the end to gather the return values
-                auto returnBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-                Body.insert(returnBlock);
-                int returnCount = 0; //just like before we need a count
-                map<BasicBlock *, Value *> returnMap;
-                for (auto fi = calledFunc->begin(); fi != calledFunc->end(); fi++)
-                {
-                    BasicBlock *fBasicBlock = cast<BasicBlock>(fi);
-                    if (VMap.find(fBasicBlock) != VMap.end())
-                    {
-                        fBasicBlock = cast<BasicBlock>(VMap[fBasicBlock]);
-                    }
-                    if (ReturnInst *ri = dyn_cast<ReturnInst>(fBasicBlock->getTerminator()))
-                    {
-                        returnMap[fBasicBlock] = ri->getReturnValue();
-                        ri->eraseFromParent(); //we also remove the return here because we don't need it
-                        returnCount++;
-                        IRBuilder<> fIteratorBuilder(fBasicBlock);
-                        fIteratorBuilder.CreateBr(returnBlock);
-                    }
-                }
-
-                //with the count we create the phi nodes iff the return type isn't void
-                IRBuilder<> returnBuilder(returnBlock);
-                if (calledFunc->getReturnType() != Type::getVoidTy(TikModule->getContext()))
-                {
-                    auto returnPhi = returnBuilder.CreatePHI(calledFunc->getReturnType(), returnCount);
-                    for (auto pair : returnMap)
-                    {
-                        returnPhi->addIncoming(pair.second, pair.first);
-                    }
-                    returnPhi = returnPhi;
-                    ci->replaceAllUsesWith(returnPhi);
-                }
-                //finally we use the first phi we created to determine where we should return to
-                auto SwitchInstruction = returnBuilder.CreateSwitch(branchPhi, Exception, funcUses.size());
-                int currentIndex = 0;
-                for (auto pre : funcUses)
-                {
-                    auto term = pre->getTerminator();
-                    BasicBlock *suc;
-                    if (auto brInst = dyn_cast<BranchInst>(term))
-                    {
-                        suc = brInst->getSuccessor(0);
-                    }
-                    else
-                    {
-                        throw TikException("Unimplemented terminator");
-                    }
-                    SwitchInstruction->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), currentIndex++), suc);
-                }
-
-                //and redirect the first block
-                BranchInst *priorBranch = cast<BranchInst>(cb->getTerminator());
-                priorBranch->setSuccessor(0, entranceBlock);
-                ci->eraseFromParent();
             }
         }
     }
@@ -1660,7 +1670,6 @@ void Kernel::InlineFunctions()
 
 void Kernel::RemapExports()
 {
-
     map<Value *, AllocaInst *> exportMap;
     for (auto ex : KernelExports)
     {
