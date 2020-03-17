@@ -1420,6 +1420,7 @@ std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStruct
     for (auto ai = KernelFunction->arg_begin(); ai < KernelFunction->arg_end(); ai++)
     {
         std::string type = "";
+        std::string argname = "arg" + std::to_string(i);
         if (i > 0)
         {
             headerString += ", ";
@@ -1435,44 +1436,15 @@ std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStruct
         }
         if (type.find("!") != std::string::npos)
         {
-            type.erase(type.begin() + type.find("!"));
-            // find all of our asterisks;
-            int ast = 0;
-            while (type.find("*") != std::string::npos)
-            {
-                type.erase(type.begin() + type.find("*"));
-                ast++;
-            }
-            std::size_t whiteSpacePosition = type.find(" ");
-            for (int j = 0; j < ast; j++)
-            {
-                type.insert(whiteSpacePosition, "*");
-            }
-            type.insert(type.find(" ") + 1, "arg" + std::to_string(i));
+            ProcessArrayArgument(type, argname);
         }
         else if (type.find("@") != std::string::npos)
         {
-            type.erase(type.begin() + type.find("@"));
-            // find all of our asterisks;
-            int ast = 0;
-            while (type.find("#") != std::string::npos)
-            {
-                type.erase(type.begin() + type.find("#"));
-                ast++;
-            }
-            std::size_t whiteSpacePosition = type.find("(") - 1;
-            type.insert(whiteSpacePosition + 1, ") ");
-            std::string pointerString = " (";
-            for (int j = 0; j < ast; j++)
-            {
-                pointerString += "*";
-            }
-            std::string funcName = pointerString + "arg" + std::to_string(i);
-            type.insert(type.find(" "), funcName);
+            ProcessFunctionArgument(type, argname);
         }
         else
         {
-            type += " arg" + std::to_string(i);
+            type += " " + argname;
         }
         headerString += type;
         i++;
