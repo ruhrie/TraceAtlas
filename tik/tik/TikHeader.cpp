@@ -265,7 +265,7 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
         else if (param->isVectorTy())
         {
             VectorsUsed = true;
-            return getCVectorType(param, AllStructures); 
+            return getCVectorType(param, AllStructures);
         }
         else if (param->isStructTy())
         {

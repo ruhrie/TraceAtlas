@@ -247,7 +247,7 @@ int main(int argc, char *argv[])
 
     // generate a C header file declaring each tik function
     std::string headerFile = "\n// Auto-generated header for the tik representations of " + InputFile + "\n";
-    headerFile += "#include <stdint.h>\n\n#ifdef __cplusplus\nextern \"C\" {\n#endif";
+    headerFile += "#include <stdint.h>\n\n#ifdef __cplusplus\nextern \"C\" {\n#endif\n";
     // insert all structures in the tik module and convert them
     std::set<llvm::StructType *> AllStructures;
     headerFile += GetTikStructures(results, AllStructures);
@@ -257,9 +257,11 @@ int main(int argc, char *argv[])
     }
     if (VectorsUsed)
     {
-        headerFile += "\n#include <vector>\n";
+        std::string stdIntHeader = "\n#include <stdint.h>\n";
+        std::string vectorHeader = "\n#include <vector>";
+        headerFile.insert(headerFile.find(stdIntHeader), vectorHeader);
     }
-    headerFile += "#ifdef __cplusplus\n}\n#endif\n";
+    headerFile += "\n#ifdef __cplusplus\n}\n#endif\n";
     // write the header file
     std::ofstream header;
     header.open(OutputFile + ".h");
