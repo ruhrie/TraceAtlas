@@ -1,7 +1,7 @@
 #pragma once
-#include <llvm/IR/Module.h>
-#include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <iostream>
+#include <llvm/IR/AssemblyAnnotationWriter.h>
+#include <llvm/IR/Module.h>
 
 inline void PrintVal(llvm::Value *val)
 {
