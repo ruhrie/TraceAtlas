@@ -1,9 +1,11 @@
 #include "AtlasUtil/Annotate.h"
-#include "EncodeDetect.h"
+#include "AtlasUtil/Traces.h"
 #include "EncodeExtract.h"
 #include "Rectifier.h"
 #include "Smoothing.h"
+#include "TypeOne.h"
 #include "profile.h"
+#include <functional>
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
@@ -115,9 +117,9 @@ int main(int argc, char **argv)
 
     try
     {
-        std::set<std::set<int>> type1Kernels;
         spdlog::info("Started analysis");
-        type1Kernels = DetectKernels(inputTrace, threshold, hotThreshold);
+        ProcessTrace(inputTrace, &TypeOne::Process, "Detecting type 1 kernels", noBar);
+        auto type1Kernels = TypeOne::Get();
         spdlog::info("Detected " + to_string(type1Kernels.size()) + " type 1 kernels");
         auto type2Kernels = ExtractKernels(inputTrace, type1Kernels, M);
         spdlog::info("Detected " + to_string(type2Kernels.size()) + " type 2 kernels");
@@ -139,7 +141,7 @@ int main(int argc, char **argv)
         }
 
         vector<int> validBlocks;
-        for (auto &[block, count] : blockCount)
+        for (auto &[block, count] : TypeOne::blockCount)
         {
             if (count != 0)
             {

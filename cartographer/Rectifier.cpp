@@ -115,7 +115,7 @@ set<BasicBlock *> GetReachable(BasicBlock *base, set<int> validBlocks)
 set<set<int>> RectifyKernel(set<set<int>> type3Kernels, Module *M)
 {
     indicators::ProgressBar bar;
-    if (!noProgressBar)
+    if (!noBar)
     {
         bar.set_prefix_text("Detecting type 4 kernels");
         bar.set_bar_width(50);
@@ -172,7 +172,7 @@ set<set<int>> RectifyKernel(set<set<int>> type3Kernels, Module *M)
         bar.set_progress(percent);
     }
 
-    if (!noProgressBar && !bar.is_completed())
+    if (!noBar && !bar.is_completed())
     {
         bar.set_postfix_text("Kernel " + to_string(status) + "/" + to_string(total));
         bar.set_progress(100);

@@ -1,5 +1,5 @@
 #include "EncodeExtract.h"
-#include "EncodeDetect.h"
+#include "TypeOne.h"
 #include "cartographer.h"
 #include <algorithm>
 #include <assert.h>
@@ -17,11 +17,17 @@
 using namespace std;
 using namespace llvm;
 
+std::ifstream::pos_type filesize(std::string filename)
+{
+    std::ifstream in(filename, std::ifstream::ate | std::ifstream::binary);
+    return in.tellg();
+}
+
 set<set<int>> ExtractKernels(std::string sourceFile, std::set<std::set<int>> kernels, Module *bitcode)
 {
     indicators::ProgressBar bar;
     int previousCount = 0;
-    if (!noProgressBar)
+    if (!noBar)
     {
         bar.set_prefix_text("Detecting type 2 kernels");
         bar.show_elapsed_time();
@@ -235,7 +241,7 @@ set<set<int>> ExtractKernels(std::string sourceFile, std::set<std::set<int>> ker
             notDone = false;
         }
         float percent = (float)index / (float)totalBlocks * 100.0f;
-        if (!noProgressBar)
+        if (!noBar)
         {
             bar.set_progress(percent);
             bar.set_postfix_text("Analyzing block " + to_string(index) + "/" + to_string(totalBlocks));
@@ -251,7 +257,7 @@ set<set<int>> ExtractKernels(std::string sourceFile, std::set<std::set<int>> ker
         }
     }
 
-    if (!noProgressBar && !bar.is_completed())
+    if (!noBar && !bar.is_completed())
     {
         bar.mark_as_completed();
     }

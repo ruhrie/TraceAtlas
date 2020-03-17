@@ -13,7 +13,7 @@ using namespace llvm;
 std::set<set<int>> SmoothKernel(std::set<std::set<int>> blocks, Module *M)
 {
     indicators::ProgressBar bar;
-    if (!noProgressBar)
+    if (!noBar)
     {
         bar.set_prefix_text("Detecting type 3 kernels");
         bar.set_bar_width(50);
@@ -31,7 +31,7 @@ std::set<set<int>> SmoothKernel(std::set<std::set<int>> blocks, Module *M)
     for (const auto &blk : blocks)
     {
         percent = (float)status / (float)total * 100;
-        if (!noProgressBar)
+        if (!noBar)
         {
             bar.set_progress(percent);
         }
@@ -279,7 +279,7 @@ std::set<set<int>> SmoothKernel(std::set<std::set<int>> blocks, Module *M)
                     bbs.erase(b);
                 }
                 trimCount += toRemove.size();
-                if (!noProgressBar)
+                if (!noBar)
                 {
                     bar.set_postfix_text("Trimmed " + to_string(trimCount) + "/" + to_string(totalCount) + " blocks, Kernel " + to_string(status) + "/" + to_string(total));
                     bar.set_progress(percent);
@@ -301,7 +301,7 @@ std::set<set<int>> SmoothKernel(std::set<std::set<int>> blocks, Module *M)
         status++;
     }
 
-    if (!noProgressBar && !bar.is_completed())
+    if (!noBar && !bar.is_completed())
     {
         bar.set_postfix_text("Kernel " + to_string(status) + "/" + to_string(total));
         bar.set_progress(100);
