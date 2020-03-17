@@ -118,7 +118,7 @@ static void ProcessTrace(std::string TraceFile, std::function<void(std::string &
         if (!noBar)
         {
             bar.set_progress(percent);
-            bar.set_postfix_text("Analyzing block " + std::to_string(index) + "/" + std::to_string(blocks));
+            bar.set_postfix_text("Block " + std::to_string(index) + "/" + std::to_string(blocks));
         }
         else
         {

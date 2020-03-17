@@ -1,7 +1,7 @@
-#include <set>
-#include <string>
 #include "TypeTwo.h"
 #include "cartographer.h"
+#include <set>
+#include <string>
 
 using namespace std;
 using namespace llvm;
