@@ -10,6 +10,8 @@
 
 using namespace llvm;
 
+bool VectorsUsed = false;
+
 void RecurseForStructs(llvm::Type *input, std::set<llvm::StructType *> &AllStructures)
 {
     if (input->isStructTy())
@@ -191,6 +193,12 @@ std::string getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStr
     }
 }
 
+std::string getCVectorType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructures)
+{
+    std::string type = getCType(dyn_cast<llvm::VectorType>(elem)->getElementType(), AllStructures);
+    return "std::vector<" + type + ">";
+}
+
 std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructures)
 {
     if (param->isVoidTy())
@@ -256,7 +264,8 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
         }
         else if (param->isVectorTy())
         {
-            throw TikException("Vector argument types are not supported for header generation.");
+            VectorsUsed = true;
+            return getCVectorType(param, AllStructures); 
         }
         else if (param->isStructTy())
         {

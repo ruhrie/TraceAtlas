@@ -1706,7 +1706,6 @@ void Kernel::InlineFunctions()
 
 void Kernel::RemapExports()
 {
-
     map<Value *, AllocaInst *> exportMap;
     for (auto ex : KernelExports)
     {
