@@ -1,3 +1,4 @@
+#include "AtlasUtil/Traces.h"
 #include <algorithm>
 #include <fstream>
 #include <indicators/progress_bar.hpp>
@@ -10,7 +11,6 @@
 #include <sstream>
 #include <vector>
 #include <zlib.h>
-#include "AtlasUtil/Traces.h"
 using namespace llvm;
 using namespace std;
 
