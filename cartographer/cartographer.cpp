@@ -1,8 +1,8 @@
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Traces.h"
 #include "TypeFour.h"
-#include "TypeThree.h"
 #include "TypeOne.h"
+#include "TypeThree.h"
 #include "TypeTwo.h"
 #include "profile.h"
 #include <functional>
