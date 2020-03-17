@@ -1556,7 +1556,7 @@ void Kernel::CopyOperand(llvm::User *inst)
 void Kernel::InlineFunctions(set<BasicBlock *> &blocks)
 {
     bool change = true;
-    map<Value *, Value *> callMap;
+    map<Value *, Value *> callMap; //mapps the call in question to the original call
     for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
     {
         for (auto bi = fi->begin(); bi != fi->end(); bi++)
@@ -1604,10 +1604,6 @@ void Kernel::InlineFunctions(set<BasicBlock *> &blocks)
                                 ValueToValueMapTy vmap; //local vmap for this singular call
                                 BranchInst *brInst = cast<BranchInst>(ci->getNextNode());
 
-                                auto newVal = callMap[ci];
-                                assert(newVal != NULL);
-                                callMap[vmap[ci]] = callMap[ci];
-
                                 /*
                                 these are the inlining steps
                                 1. clone all blocks that are valid
@@ -1637,6 +1633,15 @@ void Kernel::InlineFunctions(set<BasicBlock *> &blocks)
                                 for (int i = 0; i < total; i++)
                                 {
                                     vmap[calledFunc->getOperand(i)] = ci->getOperand(i);
+                                }
+
+                                //intermediate step, not in above outline
+                                for (auto pair : vmap)
+                                {
+                                    if (CallInst *cit = dyn_cast<CallInst>((Value *)pair.first))
+                                    {
+                                        callMap[pair.second] = callMap[cit];
+                                    }
                                 }
 
                                 //#3
@@ -1756,7 +1761,6 @@ void Kernel::RemapExports()
             {
                 if (call->getMetadata("KernelCall"))
                 {
-                    PrintVal(i);
                     Function *F = call->getCalledFunction();
                     auto fType = F->getFunctionType();
                     for (int i = 0; i < call->getNumArgOperands(); i++)
