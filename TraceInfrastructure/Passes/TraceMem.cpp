@@ -1,8 +1,8 @@
-#include "Passes/TraceMem.h"
 #include "AtlasUtil/Annotate.h"
 #include "Passes/Annotate.h"
 #include "Passes/CommandArgs.h"
 #include "Passes/Functions.h"
+#include "Passes/TraceMem.h"
 #include "Passes/TraceMemIO.h"
 #include "llvm/IR/DataLayout.h"
 #include <fstream>
@@ -14,9 +14,9 @@
 #include <llvm/Pass.h>
 #include <llvm/Support/raw_ostream.h>
 #include <map>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
-#include <nlohmann/json.hpp>
 
 using namespace llvm;
 using namespace std;
