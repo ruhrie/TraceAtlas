@@ -1,8 +1,8 @@
+#include "Passes/TraceMemIO.h"
 #include "Passes/Annotate.h"
 #include "Passes/CommandArgs.h"
 #include "Passes/Functions.h"
 #include "Passes/TraceMem.h"
-#include "Passes/TraceMemIO.h"
 #include <llvm/IR/Function.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instruction.h>

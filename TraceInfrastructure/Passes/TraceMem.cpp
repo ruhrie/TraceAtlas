@@ -1,8 +1,8 @@
+#include "Passes/TraceMem.h"
 #include "AtlasUtil/Annotate.h"
 #include "Passes/Annotate.h"
 #include "Passes/CommandArgs.h"
 #include "Passes/Functions.h"
-#include "Passes/TraceMem.h"
 #include "Passes/TraceMemIO.h"
 #include "llvm/IR/DataLayout.h"
 #include <fstream>
