@@ -1651,6 +1651,10 @@ void Kernel::InlineFunctions(set<BasicBlock *> &blocks)
                                 for (auto fi = calledFunc->begin(); fi != calledFunc->end(); fi++)
                                 {
                                     BasicBlock *b = cast<BasicBlock>(fi);
+                                    if(blocks.find(b) == blocks.end())
+                                    {
+                                        continue;
+                                    }
                                     auto term = b->getTerminator();
                                     if (auto ret = dyn_cast<ReturnInst>(term))
                                     {
