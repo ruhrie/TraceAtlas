@@ -1,4 +1,5 @@
 #include "Passes/TraceMem.h"
+#include "AtlasUtil/Annotate.h"
 #include "Passes/Annotate.h"
 #include "Passes/CommandArgs.h"
 #include "Passes/Functions.h"
@@ -15,15 +16,17 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <nlohmann/json.hpp>
 
 using namespace llvm;
+using namespace std;
 
 namespace DashTracer
 {
 
     namespace Passes
     {
-        std::vector<uint64_t> kernelBlockForValue;
+        std::vector<uint64_t> kernelBlockValue;
 
         bool EncodedTraceMemory::runOnFunction(Function &F)
         {
@@ -33,7 +36,7 @@ namespace DashTracer
                 BasicBlock *block = cast<BasicBlock>(BB);
                 auto dl = block->getModule()->getDataLayout();
                 int64_t blockId = GetBlockID(block);
-                if (std::find(kernelBlockForValue.begin(), kernelBlockForValue.end(), blockId) != kernelBlockForValue.end())
+                if (std::find(kernelBlockValue.begin(), kernelBlockValue.end(), blockId) != kernelBlockValue.end())
                 {
                     for (BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; ++BI)
                     {
@@ -85,102 +88,31 @@ namespace DashTracer
 
         bool EncodedTraceMemory::doInitialization(Module &M)
         {
-            DumpLoadAddrValue = dyn_cast<Function>(M.getOrInsertFunction("DumpLoadAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())));
-            DumpStoreAddrValue = dyn_cast<Function>(M.getOrInsertFunction("DumpStoreAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())));
+            DumpLoadAddrValue = cast<Function>(M.getOrInsertFunction("DumpLoadAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
+            DumpStoreAddrValue = cast<Function>(M.getOrInsertFunction("DumpStoreAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
 
-            kernelBlockForValue.clear();
+            kernelBlockValue.clear();
+            nlohmann::json j;
             std::ifstream inputStream(KernelFilename);
-            if (inputStream.is_open())
+            inputStream >> j;
+            inputStream.close();
+            for (auto &[key, value] : j.items())
             {
-                std::string data = "";
-                std::string line;
-                while (std::getline(inputStream, line))
+                string index = key;
+                if (stoi(index) == KernelIndex)
                 {
-                    data += line;
-                }
-                data.erase(std::remove(data.begin(), data.end(), '\n'), data.end());
-                data.erase(std::remove(data.begin(), data.end(), ' '), data.end());
-                data.erase(std::remove(data.begin(), data.end(), '\t'), data.end());
-                std::vector<std::string> kernels;
-                std::string temp = "";
-                for (int i = 1; i < data.length() - 1; i++)
-                {
-                    if (data[i - 1] == ']' && data[i] == ',')
+                    nlohmann::json kernel;
+                    if (!value[0].empty() && value[0].is_array())
                     {
-                        kernels.push_back(temp);
-                        temp = "";
+                        //embedded layout
+                        kernel = value[0];
                     }
                     else
                     {
-                        temp += data[i];
+                        kernel = value;
                     }
+                    kernelBlockValue = kernel.get<vector<uint64_t>>();
                 }
-                kernels.push_back(temp);
-                bool found = false;
-                for (int i = 0; i < kernels.size(); i++)
-                {
-                    if (found)
-                    {
-                        break;
-                    }
-                    std::string kern = kernels[i];
-                    for (int i = 1; i < kern.length(); i++)
-                    {
-                        if (kern[i] == '"')
-                        {
-                            uint64_t index = std::stoul(kern.substr(1, i - 1));
-                            if (index == KernelIndex)
-                            {
-                                std::string kernString = kern.substr(i + 3, kern.length() - i - 4);
-                                std::string intString = "";
-                                for (int j = 0; j < kernString.length(); j++)
-                                {
-                                    if (kernString[j] == ',')
-                                    {
-                                        uint64_t resultInt;
-                                        if (intString.rfind("0X", 0) == 0 || intString.rfind("0x", 0) == 0)
-                                        {
-                                            resultInt = std::stoul(intString.substr(1, intString.size() - 2), nullptr, 16);
-                                        }
-                                        else
-                                        {
-                                            resultInt = std::stoul(intString);
-                                        }
-
-                                        kernelBlockForValue.push_back(resultInt);
-                                        intString = "";
-                                    }
-                                    else
-                                    {
-                                        intString += kernString[j];
-                                    }
-                                }
-                                if (intString.length() != 0)
-                                {
-                                    uint64_t resultInt;
-                                    if (intString.rfind("0X", 0) == 0 || intString.rfind("0x", 0) == 0)
-                                    {
-                                        resultInt = std::stoul(intString.substr(1, intString.size() - 2), nullptr, 16);
-                                    }
-                                    else
-                                    {
-                                        resultInt = std::stoul(intString);
-                                    }
-                                    kernelBlockForValue.push_back(resultInt);
-                                }
-                                found = true;
-                            }
-                            break;
-                        }
-                    }
-                }
-
-                inputStream.close();
-            }
-
-            else
-            {
-                std::cout << "Failed to open kernel file. Will not trace events\n";
             }
 
             return false;
