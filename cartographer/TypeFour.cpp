@@ -67,39 +67,49 @@ namespace TypeFour
             }
             //finally check the terminator and add the call points
             Instruction *I = bb->getTerminator();
-            if (auto r = dyn_cast<ReturnInst>(I))
+            if (auto ri = dyn_cast<ReturnInst>(I))
             {
-                for (auto user : r->getParent()->getParent()->users())
+                Function *f = bb->getParent();
+                for (auto use : f->users())
                 {
-                    if (auto base = dyn_cast<CallBase>(user))
+                    if (auto cb = dyn_cast<CallBase>(use))
                     {
-                        auto baseBlock = base->getParent();
-                        if (checked.find(baseBlock) == checked.end())
+                        BasicBlock *entry = cb->getParent();
+                        if (entry == base)
                         {
-                            int64_t id = GetBlockID(baseBlock);
+                            foundSelf = true;
+                        }
+                        if (checked.find(entry) == checked.end())
+                        {
+                            int64_t id = GetBlockID(entry);
                             if (validBlocks.find(id) != validBlocks.end())
                             {
-                                checked.insert(baseBlock);
-                                toProcess.push(baseBlock);
+                                checked.insert(entry);
+                                toProcess.push(entry);
                             }
                         }
                     }
                 }
             }
-            else if (auto r = dyn_cast<ResumeInst>(I))
+            else if (auto ri = dyn_cast<ResumeInst>(I))
             {
-                for (auto user : r->getParent()->getParent()->users())
+                Function *f = bb->getParent();
+                for (auto use : f->users())
                 {
-                    if (auto base = dyn_cast<CallBase>(user))
+                    if (auto cb = dyn_cast<CallBase>(use))
                     {
-                        auto baseBlock = base->getParent();
-                        if (checked.find(baseBlock) == checked.end())
+                        BasicBlock *entry = cb->getParent();
+                        if (entry == base)
                         {
-                            int64_t id = GetBlockID(baseBlock);
+                            foundSelf = true;
+                        }
+                        if (checked.find(entry) == checked.end())
+                        {
+                            int64_t id = GetBlockID(entry);
                             if (validBlocks.find(id) != validBlocks.end())
                             {
-                                checked.insert(baseBlock);
-                                toProcess.push(baseBlock);
+                                checked.insert(entry);
+                                toProcess.push(entry);
                             }
                         }
                     }
