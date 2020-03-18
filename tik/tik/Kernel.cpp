@@ -1630,9 +1630,11 @@ void Kernel::InlineFunctions(set<BasicBlock *> &blocks)
 
                                 //#2
                                 int total = calledFunc->getNumOperands();
-                                for (int i = 0; i < total; i++)
+                                int i = 0;
+                                for(auto ai = calledFunc->arg_begin(); ai != calledFunc->arg_end(); ai++)
                                 {
-                                    vmap[calledFunc->getOperand(i)] = ci->getOperand(i);
+                                    Argument *arg = cast<Argument>(ai);
+                                    vmap[arg] = ci->getOperand(i++);
                                 }
 
                                 //intermediate step, not in above outline

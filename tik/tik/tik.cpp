@@ -271,8 +271,7 @@ int main(int argc, char *argv[])
     //verify the module
     std::string str = "";
     llvm::raw_string_ostream rso(str);
-    bool debugBroken;
-    bool broken = verifyModule(*TikModule, &rso, &debugBroken);
+    bool broken = verifyModule(*TikModule, &rso);
     if (broken)
     {
         error = true;
