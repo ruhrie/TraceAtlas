@@ -32,8 +32,8 @@ set<string> reservedNames;
 
 Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 {
-    MemoryRead = NULL;
-    MemoryWrite = NULL;
+    //MemoryRead = NULL;
+    //MemoryWrite = NULL;
     Init = NULL;
     Exit = NULL;
     string Name = "";
@@ -149,9 +149,9 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         ExportFunctionSignatures();
 
         //handle the memory operations
-        GetMemoryFunctions();
+        //GetMemoryFunctions();
 
-        UpdateMemory();
+        //UpdateMemory();
 
         BuildInit();
 
@@ -218,6 +218,7 @@ nlohmann::json Kernel::GetJson()
     {
         j["Exit"] = GetStrings(Exit);
     }
+    /*
     if (MemoryRead != NULL)
     {
         j["MemoryRead"] = GetStrings(MemoryRead);
@@ -226,6 +227,7 @@ nlohmann::json Kernel::GetJson()
     {
         j["MemoryWrite"] = GetStrings(MemoryWrite);
     }
+    */
     if (!Conditional.empty())
     {
         for (auto cond : Conditional)
@@ -242,6 +244,7 @@ void Kernel::Cleanup()
     {
         KernelFunction->eraseFromParent();
     }
+    /*
     if (MemoryRead)
     {
         MemoryRead->eraseFromParent();
@@ -250,6 +253,7 @@ void Kernel::Cleanup()
     {
         MemoryWrite->eraseFromParent();
     }
+    */
     for (auto g : GlobalMap)
     {
         g.second->eraseFromParent();
@@ -269,12 +273,12 @@ void Kernel::ExportFunctionSignatures()
             if (CallBase *callInst = dyn_cast<CallBase>(inst))
             {
                 Function *f = callInst->getCalledFunction();
-                if (f != MemoryRead && f != MemoryWrite)
-                {
-                    Function *funcDec = cast<Function>(TikModule->getOrInsertFunction(callInst->getCalledFunction()->getName(), callInst->getCalledFunction()->getFunctionType()).getCallee());
-                    funcDec->setAttributes(callInst->getCalledFunction()->getAttributes());
-                    callInst->setCalledFunction(funcDec);
-                }
+                //if (f != MemoryRead && f != MemoryWrite)
+                //{
+                Function *funcDec = cast<Function>(TikModule->getOrInsertFunction(callInst->getCalledFunction()->getName(), callInst->getCalledFunction()->getFunctionType()).getCallee());
+                funcDec->setAttributes(callInst->getCalledFunction()->getAttributes());
+                callInst->setCalledFunction(funcDec);
+                //}
             }
         }
     }
@@ -365,57 +369,57 @@ void Kernel::RemapNestedKernels()
                 {
                     // we have a non-kernel function call
                 }
-                else if (funcName != MemoryRead && funcName != MemoryWrite) // must be a kernel function call
+                //else if (funcName != MemoryRead && funcName != MemoryWrite) // must be a kernel function call
+                //{
+                bool found = false;
+                auto calledFunc = callInst->getCalledFunction();
+                auto subK = KfMap[calledFunc];
+                if (subK)
                 {
-                    bool found = false;
-                    auto calledFunc = callInst->getCalledFunction();
-                    auto subK = KfMap[calledFunc];
-                    if (subK)
+                    for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
                     {
-                        for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
+                        for (auto b = KernelFunction->begin(); b != KernelFunction->end(); b++)
                         {
-                            for (auto b = KernelFunction->begin(); b != KernelFunction->end(); b++)
+                            for (BasicBlock::iterator j = b->begin(), BE2 = b->end(); j != BE2; ++j)
                             {
-                                for (BasicBlock::iterator j = b->begin(), BE2 = b->end(); j != BE2; ++j)
+                                if (subK->ArgumentMap[sarg] == cast<Instruction>(j))
                                 {
-                                    if (subK->ArgumentMap[sarg] == cast<Instruction>(j))
-                                    {
-                                        found = true;
-                                        embeddedCallArgs[sarg] = cast<Instruction>(j);
-                                    }
+                                    found = true;
+                                    embeddedCallArgs[sarg] = cast<Instruction>(j);
                                 }
-                            }
-                        }
-                        for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
-                        {
-                            for (auto arg = KernelFunction->arg_begin(); arg < KernelFunction->arg_end(); arg++)
-                            {
-                                if (subK->ArgumentMap[sarg] == ArgumentMap[arg])
-                                {
-                                    embeddedCallArgs[sarg] = arg;
-                                }
-                            }
-                        }
-                        auto limit = callInst->getNumArgOperands();
-                        for (int k = 0; k < limit; k++)
-                        {
-                            Value *op = callInst->getArgOperand(k);
-                            if (Argument *arg = dyn_cast<Argument>(op))
-                            {
-                                auto asdf = embeddedCallArgs[arg];
-                                callInst->setArgOperand(k, asdf);
-                            }
-                            else if (Constant *c = dyn_cast<Constant>(op))
-                            {
-                                //we don't have to do anything so ignore
-                            }
-                            else
-                            {
-                                throw TikException("Tik Error: Unexpected value passed to function");
                             }
                         }
                     }
+                    for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
+                    {
+                        for (auto arg = KernelFunction->arg_begin(); arg < KernelFunction->arg_end(); arg++)
+                        {
+                            if (subK->ArgumentMap[sarg] == ArgumentMap[arg])
+                            {
+                                embeddedCallArgs[sarg] = arg;
+                            }
+                        }
+                    }
+                    auto limit = callInst->getNumArgOperands();
+                    for (int k = 0; k < limit; k++)
+                    {
+                        Value *op = callInst->getArgOperand(k);
+                        if (Argument *arg = dyn_cast<Argument>(op))
+                        {
+                            auto asdf = embeddedCallArgs[arg];
+                            callInst->setArgOperand(k, asdf);
+                        }
+                        else if (Constant *c = dyn_cast<Constant>(op))
+                        {
+                            //we don't have to do anything so ignore
+                        }
+                        else
+                        {
+                            throw TikException("Tik Error: Unexpected value passed to function");
+                        }
+                    }
                 }
+                //}
             }
         }
     }
@@ -877,10 +881,10 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
     }
 }
 
+/*
 void Kernel::GetMemoryFunctions()
 {
     // first, get all the pointer operands of each load and store in Kernel::Body
-    /** new for loop grabbing all inputs of child kernels */
 
     set<LoadInst *> loadInst;
     set<StoreInst *> storeInst;
@@ -1067,6 +1071,7 @@ void Kernel::GetMemoryFunctions()
         inst->eraseFromParent();
     }
 }
+*/
 
 void Kernel::BuildExit()
 {
@@ -1207,8 +1212,8 @@ void Kernel::ApplyMetadata()
     //annotate the kernel functions
     MDNode *kernelNode = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), Name));
     KernelFunction->setMetadata("KernelName", kernelNode);
-    MemoryRead->setMetadata("KernelName", kernelNode);
-    MemoryWrite->setMetadata("KernelName", kernelNode);
+    //MemoryRead->setMetadata("KernelName", kernelNode);
+    //MemoryWrite->setMetadata("KernelName", kernelNode);
     for (auto global : GlobalMap)
     {
         global.second->setMetadata("KernelName", kernelNode);
@@ -1603,7 +1608,7 @@ void Kernel::InlineFunctions(set<BasicBlock *> &blocks)
                                 //#2
                                 int total = calledFunc->getNumOperands();
                                 int i = 0;
-                                for(auto ai = calledFunc->arg_begin(); ai != calledFunc->arg_end(); ai++)
+                                for (auto ai = calledFunc->arg_begin(); ai != calledFunc->arg_end(); ai++)
                                 {
                                     Argument *arg = cast<Argument>(ai);
                                     vmap[arg] = ci->getOperand(i++);
@@ -1623,7 +1628,7 @@ void Kernel::InlineFunctions(set<BasicBlock *> &blocks)
                                 for (auto fi = calledFunc->begin(); fi != calledFunc->end(); fi++)
                                 {
                                     BasicBlock *b = cast<BasicBlock>(fi);
-                                    if(blocks.find(b) == blocks.end())
+                                    if (blocks.find(b) == blocks.end())
                                     {
                                         continue;
                                     }
