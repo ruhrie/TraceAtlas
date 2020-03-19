@@ -4,7 +4,6 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Transforms/Utils/ValueMapper.h>
 #include <map>
-#include <nlohmann/json.hpp>
 #include <set>
 #include <string>
 #include <tuple>
@@ -16,7 +15,6 @@ public:
     ~Kernel();
     std::string GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures);
     std::string Name;
-    nlohmann::json GetJson();
     std::set<llvm::BasicBlock *> Conditional;
     std::set<llvm::BasicBlock *> Entrances;
     std::map<int, llvm::BasicBlock *> ExitTarget;

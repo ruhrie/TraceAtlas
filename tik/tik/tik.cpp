@@ -43,7 +43,7 @@ cl::opt<Filetype> InputType("t", cl::desc("Choose input file type"),
                                 clEnumVal(LLVM, "LLVM IR"),
                                 clEnumVal(DPDA, "DPDA")),
                             cl::init(LLVM));
-cl::opt<string> OutputType("f", cl::desc("Specify output file format. Can be either JSON or LLVM"), cl::value_desc("format"));
+cl::opt<string> OutputType("f", cl::desc("Specify output file format. Can be LLVM"), cl::value_desc("format"));
 cl::opt<bool> ASCIIFormat("S", cl::desc("output json as human-readable ASCII text"));
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
@@ -285,42 +285,29 @@ int main(int argc, char *argv[])
     // writing part
     try
     {
-        if (OutputType == "JSON")
+        if (ASCIIFormat)
         {
-            nlohmann::json finalJson;
-            for (auto kern : results)
-            {
-                finalJson["Kernels"][kern->Name] = kern->GetJson();
-            }
-            ofstream oStream(OutputFile);
-            oStream << finalJson;
-            oStream.close();
+            // print human readable tik module to file
+            AssemblyAnnotationWriter *write = new llvm::AssemblyAnnotationWriter();
+            std::string str;
+            llvm::raw_string_ostream rso(str);
+            std::filebuf f0;
+            f0.open(OutputFile, std::ios::out);
+            TikModule->print(rso, write);
+            std::ostream readableStream(&f0);
+            readableStream << str;
+            f0.close();
         }
         else
         {
-            if (ASCIIFormat)
-            {
-                // print human readable tik module to file
-                AssemblyAnnotationWriter *write = new llvm::AssemblyAnnotationWriter();
-                std::string str;
-                llvm::raw_string_ostream rso(str);
-                std::filebuf f0;
-                f0.open(OutputFile, std::ios::out);
-                TikModule->print(rso, write);
-                std::ostream readableStream(&f0);
-                readableStream << str;
-                f0.close();
-            }
-            else
-            {
-                // non-human readable IR
-                std::filebuf f;
-                f.open(OutputFile, std::ios::out);
-                std::ostream rawStream(&f);
-                raw_os_ostream raw_stream(rawStream);
-                WriteBitcodeToFile(*TikModule, raw_stream);
-            }
+            // non-human readable IR
+            std::filebuf f;
+            f.open(OutputFile, std::ios::out);
+            std::ostream rawStream(&f);
+            raw_os_ostream raw_stream(rawStream);
+            WriteBitcodeToFile(*TikModule, raw_stream);
         }
+
         spdlog::info("Successfully wrote tik to file");
     }
     catch (exception &e)

@@ -184,60 +184,6 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     }
 }
 
-nlohmann::json Kernel::GetJson()
-{
-    nlohmann::json j;
-    vector<string> args;
-    for (Argument *i = KernelFunction->arg_begin(); i < KernelFunction->arg_end(); i++)
-    {
-        args.push_back(GetString(i));
-    }
-    if (args.size() != 0)
-    {
-        j["Inputs"] = args;
-    }
-    if (Init != NULL)
-    {
-        j["Init"] = GetStrings(Init);
-    }
-    if (Body.size() != 0)
-    {
-        for (auto b : Body)
-        {
-            j["Body"].push_back(GetStrings(b));
-        }
-    }
-    if (Termination.size() != 0)
-    {
-        for (auto b : Termination)
-        {
-            j["Termination"].push_back(GetStrings(b));
-        }
-    }
-    if (Exit != NULL)
-    {
-        j["Exit"] = GetStrings(Exit);
-    }
-    /*
-    if (MemoryRead != NULL)
-    {
-        j["MemoryRead"] = GetStrings(MemoryRead);
-    }
-    if (MemoryWrite != NULL)
-    {
-        j["MemoryWrite"] = GetStrings(MemoryWrite);
-    }
-    */
-    if (!Conditional.empty())
-    {
-        for (auto cond : Conditional)
-        {
-            j["Conditional"].push_back(GetStrings(cond));
-        }
-    }
-    return j;
-}
-
 void Kernel::Cleanup()
 {
     if (KernelFunction)
@@ -253,11 +199,11 @@ void Kernel::Cleanup()
     {
         MemoryWrite->eraseFromParent();
     }
-    */
     for (auto g : GlobalMap)
     {
         g.second->eraseFromParent();
     }
+    */
 }
 
 Kernel::~Kernel()
