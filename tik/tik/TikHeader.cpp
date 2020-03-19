@@ -351,7 +351,6 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
         }
         else
         {
-            PrintVal(param);
             throw TikException("Unrecognized argument type is not supported for header generation.");
         }
     }
