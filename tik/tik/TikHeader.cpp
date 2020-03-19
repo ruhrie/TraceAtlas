@@ -201,8 +201,38 @@ std::string getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStr
 
 std::string getCVectorType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructures)
 {
-    std::string type = getCType(dyn_cast<llvm::VectorType>(elem)->getElementType(), AllStructures);
-    return "std::vector<" + type + ">";
+    llvm::VectorType *vecArg = dyn_cast<llvm::VectorType>(elem);
+    VectorsUsed = true;
+    unsigned int elemCount = vecArg->getElementCount().Min;
+    std::string type = getCType(vecArg->getElementType(), AllStructures);
+    if (type == "float" && elemCount == 4)
+    {
+        return "__m128";
+    }
+    else if (type == "float" && elemCount == 8)
+    {
+        return "__m256";
+    }
+    else if (type == "double" && elemCount == 2)
+    {
+        return "__m128d";
+    }
+    else if (type == "double" && elemCount == 4)
+    {
+        return "__m256d";
+    }
+    else if (type == "int" && elemCount == 4)
+    {
+        return "__m128i";
+    }
+    else if (type == "int" && elemCount == 8)
+    {
+        return "__m256i";
+    }
+    else
+    {
+        return "VectorSizeNotSupported";
+    }
 }
 
 std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructures)
@@ -230,6 +260,23 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
     else if (param->isFP128Ty())
     {
         return "__float128";
+    }
+    else if (param->isPPC_FP128Ty())
+    {
+        throw TikException("PPC_FP128Ty is not supported.")
+    }
+    else if (param->isFloatingPointTy())
+    {
+        throw TikException("This floating point type is not supported.")
+    }
+    else if (param->isX86_MMXTy())
+    {
+        throw TikException("This MMX type is not supported.")
+    }
+    else if (param->isFPOrFPVectorTy())
+    {
+        return getCVectorType(param, AllStructures);
+        //throw TikException("This FP type or FP vector type is not supported.")
     }
     else if (param->isIntegerTy(8))
     {
@@ -270,7 +317,6 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
         }
         else if (param->isVectorTy())
         {
-            VectorsUsed = true;
             return getCVectorType(param, AllStructures);
         }
         else if (param->isStructTy())
@@ -305,6 +351,7 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
         }
         else
         {
+            PrintVal(param);
             throw TikException("Unrecognized argument type is not supported for header generation.");
         }
     }

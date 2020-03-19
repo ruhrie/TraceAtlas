@@ -258,7 +258,7 @@ int main(int argc, char *argv[])
     if (VectorsUsed)
     {
         std::string stdIntHeader = "\n#include <stdint.h>\n";
-        std::string vectorHeader = "\n#include <vector>";
+        std::string vectorHeader = "\n#include <immintrin.h>";
         headerFile.insert(headerFile.find(stdIntHeader), vectorHeader);
     }
     headerFile += "\n#ifdef __cplusplus\n}\n#endif\n";
