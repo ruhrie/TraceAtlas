@@ -119,13 +119,6 @@ namespace TypeTwo
 
     std::set<std::set<int>> Get()
     {
-        free(openCount);
-        free(finalBlocks);
-        free(kernelStarts);
-        free(blocks);
-        free(kernelMap);
-        openBlocks.clear();
-        currentKernel.clear();
         if (!blocksLabeled)
         {
             blocksLabeled = true;
@@ -135,6 +128,13 @@ namespace TypeTwo
         {
             finalSets.insert(finalBlocks[i]);
         }
+        free(openCount);
+        free(finalBlocks);
+        free(kernelStarts);
+        free(blocks);
+        free(kernelMap);
+        openBlocks.clear();
+        currentKernel.clear();
         return finalSets;
     }
 } // namespace TypeTwo
