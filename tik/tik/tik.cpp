@@ -1,5 +1,6 @@
 #include "tik/tik.h"
 #include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Print.h"
 #include "tik/Exceptions.h"
 #include "tik/TikHeader.h"
 #include "tik/Util.h"
@@ -170,8 +171,12 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    Module *base = sourceBitcode.get();
+
+    CleanModule(base);
+
     //annotate it with the same algorithm used in the tracer
-    Annotate(sourceBitcode.get());
+    Annotate(base);
 
     TikModule = new Module(InputFile, context);
     TikModule->setDataLayout(sourceBitcode->getDataLayout());
@@ -324,5 +329,50 @@ int main(int argc, char *argv[])
     else
     {
         return EXIT_SUCCESS;
+    }
+}
+
+void CleanModule(Module *M)
+{
+    for (auto mi = M->begin(); mi != M->end(); mi++)
+    {
+        for (auto fi = mi->begin(); fi != mi->end(); fi++)
+        {
+            for (auto bi = fi->begin(); bi != fi->end(); bi++)
+            {
+                auto v = cast<Instruction>(bi);
+                SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
+                v->getAllMetadata(MDs);
+                for (auto MD : MDs)
+                {
+                    v->setMetadata(MD.first, NULL);
+                }
+                for (auto ii = bi->op_begin(); ii != bi->op_end(); ii++)
+                {
+                    if (auto *V = dyn_cast_or_null<MetadataAsValue>(ii))
+                    {
+                        PrintVal(V);
+                    }
+                }
+            }
+        }
+        Function *F = cast<Function>(mi);
+        SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
+        F->getAllMetadata(MDs);
+        for (auto MD : MDs)
+        {
+            F->setMetadata(MD.first, NULL);
+        }
+    }
+
+    for (auto gi = M->global_begin(); gi != M->global_end(); gi++)
+    {
+        auto gv = cast<GlobalVariable>(gi);
+        SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
+        gv->getAllMetadata(MDs);
+        for (auto MD : MDs)
+        {
+            gv->setMetadata(MD.first, NULL);
+        }
     }
 }

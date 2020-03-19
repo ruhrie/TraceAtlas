@@ -8,10 +8,10 @@
 #include "tik/Util.h"
 #include "tik/tik.h"
 #include <algorithm>
-#include <llvm/IR/Comdat.h>
 #include <iostream>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/IR/CFG.h>
+#include <llvm/IR/Comdat.h>
 #include <llvm/IR/DebugInfo.h>
 #include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/DebugLoc.h>
@@ -1460,26 +1460,39 @@ void Kernel::CopyOperand(llvm::User *inst)
                 if (VMap.find(gv) == VMap.end())
                 {
                     //and not already in the vmap
-                    GlobalVariable *newVar = new GlobalVariable(*TikModule, gv->getValueType(), gv->isConstant(), gv->getLinkage(), NULL, gv->getName(), NULL, gv->getThreadLocalMode(), gv->getAddressSpace());
+
+                    //for some reason if we don't do this first the verifier fails
+                    //we do absolutely nothing with it and it doesn't even end up in our output
+                    //its technically a memory leak, but its an acceptable sacrifice
+                    GlobalVariable *newVar = new GlobalVariable(
+                        gv->getValueType(),
+                        gv->isConstant(), gv->getLinkage(), NULL, "",
+                        gv->getThreadLocalMode(),
+                        gv->getType()->getAddressSpace());
                     newVar->copyAttributesFrom(gv);
+                    //end of the sacrifice
+                    auto newGlobal = cast<GlobalVariable>(TikModule->getOrInsertGlobal(gv->getName(), gv->getType()->getPointerElementType()));
+                    newGlobal->setConstant(gv->isConstant());
+                    newGlobal->setLinkage(gv->getLinkage());
+                    newGlobal->setThreadLocalMode(gv->getThreadLocalMode());
+                    newGlobal->copyAttributesFrom(gv);
                     if (gv->hasInitializer())
                     {
-                        newVar->setInitializer(MapValue(gv->getInitializer(), VMap));
+                        newGlobal->setInitializer(MapValue(gv->getInitializer(), VMap));
                     }
                     SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
                     gv->getAllMetadata(MDs);
                     for (auto MD : MDs)
                     {
-                        newVar->addMetadata(MD.first, *MapMetadata(MD.second, VMap, RF_MoveDistinctMDs));
+                        newGlobal->addMetadata(MD.first, *MapMetadata(MD.second, VMap, RF_MoveDistinctMDs));
                     }
                     if (Comdat *SC = gv->getComdat())
                     {
-                        Comdat *DC = newVar->getParent()->getOrInsertComdat(SC->getName());
+                        Comdat *DC = newGlobal->getParent()->getOrInsertComdat(SC->getName());
                         DC->setSelectionKind(SC->getSelectionKind());
-                        newVar->setComdat(DC);
+                        newGlobal->setComdat(DC);
                     }
-                    GlobalVariable *newVar = new GlobalVariable(*TikModule, gv->getValueType(), gv->isConstant(), gv->getLinkage(), initializer, gv->getName(), NULL, gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
-                    VMap[gv] = newVar;
+                    VMap[gv] = newGlobal;
                 }
             }
         }
