@@ -85,6 +85,27 @@ void RecurseForStructs(llvm::Type *input, std::set<llvm::StructType *> &AllStruc
         llvm::Type *memberType = newType->getElementType();
         RecurseForStructs(memberType, AllStructures);
     }
+    else if (input->isArrayTy())
+    {
+        llvm::ArrayType *array = cast<ArrayType>(input);
+        for (int i = 0; i < array->getNumElements(); i++)
+        {
+            RecurseForStructs(array->getTypeAtIndex(i), AllStructures);
+        }
+    }
+    else if (input->isVectorTy())
+    {
+        RecurseForStructs(cast<VectorType>(input)->getElementType(), AllStructures);
+    }
+    else if (input->isFunctionTy())
+    {
+        llvm::FunctionType *func = cast<llvm::FunctionType>(input);
+        for (int i = 0; i < func->getNumParams(); i++)
+        {
+            RecurseForStructs(func->getParamType(i), AllStructures);
+        }
+        RecurseForStructs(func->getReturnType(), AllStructures);
+    }
 }
 
 std::string GetTikStructures(std::vector<Kernel *> kernels, std::set<llvm::StructType *> &AllStructures)
@@ -231,6 +252,7 @@ std::string getCVectorType(llvm::Type *elem, std::set<llvm::StructType *> &AllSt
     }
     else
     {
+        throw TikException("Vector type bitwidth not supported.");
         return "VectorSizeNotSupported";
     }
 }
@@ -276,23 +298,25 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
     else if (param->isFPOrFPVectorTy())
     {
         return getCVectorType(param, AllStructures);
-        //throw TikException("This FP type or FP vector type is not supported.")
     }
-    else if (param->isIntegerTy(8))
+    else if (param->isIntOrIntVectorTy())
     {
-        return "uint8_t";
-    }
-    else if (param->isIntegerTy(16))
-    {
-        return "uint16_t";
-    }
-    else if (param->isIntegerTy(32))
-    {
-        return "uint32_t";
-    }
-    else if (param->isIntegerTy(64))
-    {
-        return "uint64_t";
+        if (param->isIntegerTy())
+        {
+            llvm::IntegerType *intArg = dyn_cast<llvm::IntegerType>(param);
+            if (intArg->getBitWidth() == 1)
+            {
+                return "bool";
+            }
+            else
+            {
+                return "uint" + std::to_string(intArg->getBitWidth()) + "_t";
+            }
+        }
+        else // must be a vector
+        {
+            return getCVectorType(param, AllStructures);
+        }
     }
     else if (param->isPointerTy())
     {
@@ -321,7 +345,7 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
         }
         else if (param->isStructTy())
         {
-            auto structureArg = AllStructures.find(dyn_cast<StructType>(param));
+            auto structureArg = AllStructures.find(cast<StructType>(param));
             if (structureArg != AllStructures.end())
             {
                 std::string structName = (*structureArg)->getName();
@@ -351,7 +375,6 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
         }
         else
         {
-            PrintVal(param);
             throw TikException("Unrecognized argument type is not supported for header generation.");
         }
     }
