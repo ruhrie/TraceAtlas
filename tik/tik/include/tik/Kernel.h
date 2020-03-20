@@ -114,6 +114,6 @@ private:
     void GetKernelLabels();
     void CopyArgument(llvm::CallBase *Call);
     void CopyOperand(llvm::User *inst);
-    void InlineFunctions(std::set<llvm::BasicBlock *> &blocks);
+    void InlineFunctions(std::set<int> &blocks);
     void RemapExports();
 };

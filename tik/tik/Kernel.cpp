@@ -35,6 +35,11 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 {
     //MemoryRead = NULL;
     //MemoryWrite = NULL;
+    set<int> blockSet;
+    for (auto b : basicBlocks)
+    {
+        blockSet.insert(b);
+    }
     Init = NULL;
     Exit = NULL;
     string Name = "";
@@ -91,7 +96,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
             }
         }
 
-        SplitBlocks(blocks);
+        //SplitBlocks(blocks);
 
         GetEntrances(blocks);
         //GetExits(blocks);
@@ -137,7 +142,9 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         //copy the appropriate blocks
         BuildKernel(blocks);
 
-        InlineFunctions(blocks);
+        Remap(); //we need to remap before inlining
+
+        InlineFunctions(blockSet);
 
         CopyGlobals();
 
@@ -1503,27 +1510,9 @@ void Kernel::CopyOperand(llvm::User *inst)
     }
 }
 
-void Kernel::InlineFunctions(set<BasicBlock *> &blocks)
+void Kernel::InlineFunctions(set<int> &blocks)
 {
     bool change = true;
-    map<Value *, Value *> callMap; //mapps the call in question to the original call
-    for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
-    {
-        for (auto bi = fi->begin(); bi != fi->end(); bi++)
-        {
-            if (CallInst *ci = dyn_cast<CallInst>(bi))
-            {
-                for (auto pair : VMap)
-                {
-                    if (pair.second == ci)
-                    {
-                        callMap[ci] = (Value *)pair.first;
-                    }
-                }
-            }
-        }
-    }
-
     while (change)
     {
         change = false;
@@ -1533,147 +1522,33 @@ void Kernel::InlineFunctions(set<BasicBlock *> &blocks)
             {
                 if (CallInst *ci = dyn_cast<CallInst>(bi))
                 {
-                    if (ci->getModule() == TikModule && !ci->getMetadata("KernelCall"))
+                    if(auto debug = ci->getMetadata("KernelCall"))
                     {
-                        if (ci->isIndirectCall())
-                        {
-                            throw TikException("Tik Error: Indirect calls aren't supported")
-                        }
-                        else
-                        {
-                            auto calledFunc = ci->getCalledFunction();
-                            if (!calledFunc)
-                            {
-                                throw TikException("Tik Error: Call inst was null")
-                            }
-
-                            if (!calledFunc->empty())
-                            {
-                                change = true;
-                                //we finally know this can be inlined
-                                ValueToValueMapTy vmap; //local vmap for this singular call
-                                BranchInst *brInst = cast<BranchInst>(ci->getNextNode());
-
-                                /*
-                                these are the inlining steps
-                                1. clone all blocks that are valid
-                                2. add the inputs to the vmap
-                                3. create a return block which will be a phi from all valid exits
-                                4. remap all the returns
-                                5. remap all the blocks
-                                6. replace the call with a branch
-                                */
-
-                                //so do #1
-                                vector<BasicBlock *> remappedBlocks;
-                                for (auto fi = calledFunc->begin(); fi != calledFunc->end(); fi++)
-                                {
-                                    BasicBlock *b = cast<BasicBlock>(fi);
-                                    if (blocks.find(b) != blocks.end())
-                                    {
-                                        //this is a valid block to clone
-                                        BasicBlock *cb = CloneBasicBlock(b, vmap, "", KernelFunction);
-                                        vmap[b] = cb;
-                                        remappedBlocks.push_back(cb);
-                                    }
-                                }
-
-                                //#2
-                                int total = calledFunc->getNumOperands();
-                                int i = 0;
-                                for (auto ai = calledFunc->arg_begin(); ai != calledFunc->arg_end(); ai++)
-                                {
-                                    Argument *arg = cast<Argument>(ai);
-                                    vmap[arg] = ci->getOperand(i++);
-                                }
-
-                                //intermediate step, not in above outline
-                                for (auto pair : vmap)
-                                {
-                                    if (CallInst *cit = dyn_cast<CallInst>((Value *)pair.first))
-                                    {
-                                        callMap[pair.second] = callMap[cit];
-                                    }
-                                }
-
-                                //#3
-                                map<BasicBlock *, Value *> phiMap; //both these values are old
-                                for (auto fi = calledFunc->begin(); fi != calledFunc->end(); fi++)
-                                {
-                                    BasicBlock *b = cast<BasicBlock>(fi);
-                                    if (blocks.find(b) == blocks.end())
-                                    {
-                                        continue;
-                                    }
-                                    auto term = b->getTerminator();
-                                    if (auto ret = dyn_cast<ReturnInst>(term))
-                                    {
-                                        if (calledFunc->getReturnType() != Type::getVoidTy(calledFunc->getContext()))
-                                        {
-                                            Value *a = ret->getOperand(0);
-                                            phiMap[b] = a;
-                                        }
-                                        else
-                                        {
-                                            phiMap[b] = NULL;
-                                        }
-                                    }
-                                    else if (isa<BranchInst>(term))
-                                    {
-                                    }
-                                    else if (isa<SwitchInst>(term))
-                                    {
-                                    }
-                                    else
-                                    {
-                                        spdlog::warn("Unimplemented terminator: {0}", term->getOpcodeName());
-                                    }
-                                }
-
-                                BasicBlock *retBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-                                IRBuilder<> retBuilder(retBlock);
-                                if (calledFunc->getReturnType() != Type::getVoidTy(calledFunc->getContext()))
-                                {
-                                    auto phi = retBuilder.CreatePHI(calledFunc->getReturnType(), phiMap.size());
-                                    for (auto &pair : phiMap)
-                                    {
-                                        phi->addIncoming(pair.second, pair.first);
-                                    }
-                                    VMap[callMap[ci]] = phi; //we use the external vmap since it won't be remapped properly otherwise
-                                }
-                                retBuilder.CreateBr(brInst->getSuccessor(0));
-                                remappedBlocks.push_back(retBlock);
-
-                                //#4
-                                for (auto &pair : phiMap)
-                                {
-                                    auto ret = cast<ReturnInst>(cast<BasicBlock>(vmap[pair.first])->getTerminator());
-                                    ret->eraseFromParent();
-                                    IRBuilder<> retBuilder(cast<BasicBlock>(vmap[pair.first]));
-                                    retBuilder.CreateBr(retBlock);
-                                }
-
-                                //#5
-                                for (auto &cb : remappedBlocks)
-                                {
-                                    for (auto bi = cb->begin(); bi != cb->end(); bi++)
-                                    {
-                                        Instruction *i = cast<Instruction>(bi);
-                                        RemapInstruction(i, vmap);
-                                    }
-                                }
-
-                                //#6
-                                IRBuilder<> finBuilder(ci);
-                                finBuilder.CreateBr(cast<BasicBlock>(vmap[&calledFunc->getEntryBlock()]));
-                                ci->eraseFromParent();
-                                brInst->eraseFromParent();
-                                break; //due to the prior split we know that this is the final inst anyway
-                            }
-                        }
+                        continue;
                     }
+                    auto info = InlineFunctionInfo();
+                    auto r = InlineFunction(ci, info);
+                    if (r == true)
+                    {
+                        change = true;
+                    }
+                    break;
                 }
             }
+        }
+    }
+    //now that everything is inlined we need to remove invalid blocks
+    //although some blocks are now an amalgamation of multiple,
+    //as a rule we don't need to worry about those.
+    //simple successors are enough
+    for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+    {
+        BasicBlock *block = cast<BasicBlock>(fi);
+        int64_t id = GetBlockID(block);
+        if(blocks.find(id) == blocks.end() && id != -1)
+        {
+            block->replaceAllUsesWith(Exit);
+            block->eraseFromParent();
         }
     }
 }

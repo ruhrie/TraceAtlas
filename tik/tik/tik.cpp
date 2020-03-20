@@ -10,6 +10,7 @@
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/Instructions.h>
+#include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/IRReader/IRReader.h>
@@ -338,22 +339,27 @@ void CleanModule(Module *M)
     {
         for (auto fi = mi->begin(); fi != mi->end(); fi++)
         {
+            vector<Instruction *> toRemove;
             for (auto bi = fi->begin(); bi != fi->end(); bi++)
             {
                 auto v = cast<Instruction>(bi);
-                SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
-                v->getAllMetadata(MDs);
-                for (auto MD : MDs)
+                if (auto ci = dyn_cast<DbgInfoIntrinsic>(v))
                 {
-                    v->setMetadata(MD.first, NULL);
+                    toRemove.push_back(ci);
                 }
-                for (auto ii = bi->op_begin(); ii != bi->op_end(); ii++)
+                else
                 {
-                    if (auto *V = dyn_cast_or_null<MetadataAsValue>(ii))
+                    SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
+                    v->getAllMetadata(MDs);
+                    for (auto MD : MDs)
                     {
-                        PrintVal(V);
+                        v->setMetadata(MD.first, NULL);
                     }
                 }
+            }
+            for(auto r : toRemove)
+            {
+                r->eraseFromParent();
             }
         }
         Function *F = cast<Function>(mi);
