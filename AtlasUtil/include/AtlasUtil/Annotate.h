@@ -30,7 +30,7 @@ inline void Annotate(llvm::Module *M)
 inline int64_t GetBlockID(llvm::BasicBlock *BB)
 {
     int64_t result = -1;
-    if(BB->empty())
+    if (BB->empty())
     {
         return result;
     }

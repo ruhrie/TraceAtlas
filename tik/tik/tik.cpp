@@ -357,7 +357,7 @@ void CleanModule(Module *M)
                     }
                 }
             }
-            for(auto r : toRemove)
+            for (auto r : toRemove)
             {
                 r->eraseFromParent();
             }

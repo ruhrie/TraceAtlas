@@ -1522,7 +1522,7 @@ void Kernel::InlineFunctions(set<int> &blocks)
             {
                 if (CallInst *ci = dyn_cast<CallInst>(bi))
                 {
-                    if(auto debug = ci->getMetadata("KernelCall"))
+                    if (auto debug = ci->getMetadata("KernelCall"))
                     {
                         continue;
                     }
@@ -1545,7 +1545,7 @@ void Kernel::InlineFunctions(set<int> &blocks)
     {
         BasicBlock *block = cast<BasicBlock>(fi);
         int64_t id = GetBlockID(block);
-        if(blocks.find(id) == blocks.end() && id != -1)
+        if (blocks.find(id) == blocks.end() && id != -1)
         {
             block->replaceAllUsesWith(Exit);
             block->eraseFromParent();
