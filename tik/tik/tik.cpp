@@ -1,5 +1,6 @@
 #include "tik/tik.h"
 #include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Print.h"
 #include "tik/Exceptions.h"
 #include "tik/TikHeader.h"
 #include "tik/Util.h"
@@ -9,6 +10,7 @@
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/Instructions.h>
+#include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/IRReader/IRReader.h>
@@ -43,7 +45,7 @@ cl::opt<Filetype> InputType("t", cl::desc("Choose input file type"),
                                 clEnumVal(LLVM, "LLVM IR"),
                                 clEnumVal(DPDA, "DPDA")),
                             cl::init(LLVM));
-cl::opt<string> OutputType("f", cl::desc("Specify output file format. Can be either JSON or LLVM"), cl::value_desc("format"));
+cl::opt<string> OutputType("f", cl::desc("Specify output file format. Can be LLVM"), cl::value_desc("format"));
 cl::opt<bool> ASCIIFormat("S", cl::desc("output json as human-readable ASCII text"));
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
@@ -170,8 +172,12 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    Module *base = sourceBitcode.get();
+
+    CleanModule(base);
+
     //annotate it with the same algorithm used in the tracer
-    Annotate(sourceBitcode.get());
+    Annotate(base);
 
     TikModule = new Module(InputFile, context);
     TikModule->setDataLayout(sourceBitcode->getDataLayout());
@@ -271,8 +277,7 @@ int main(int argc, char *argv[])
     //verify the module
     std::string str = "";
     llvm::raw_string_ostream rso(str);
-    bool debugBroken;
-    bool broken = verifyModule(*TikModule, &rso, &debugBroken);
+    bool broken = verifyModule(*TikModule, &rso);
     if (broken)
     {
         error = true;
@@ -286,42 +291,29 @@ int main(int argc, char *argv[])
     // writing part
     try
     {
-        if (OutputType == "JSON")
+        if (ASCIIFormat)
         {
-            nlohmann::json finalJson;
-            for (auto kern : results)
-            {
-                finalJson["Kernels"][kern->Name] = kern->GetJson();
-            }
-            ofstream oStream(OutputFile);
-            oStream << finalJson;
-            oStream.close();
+            // print human readable tik module to file
+            AssemblyAnnotationWriter *write = new llvm::AssemblyAnnotationWriter();
+            std::string str;
+            llvm::raw_string_ostream rso(str);
+            std::filebuf f0;
+            f0.open(OutputFile, std::ios::out);
+            TikModule->print(rso, write);
+            std::ostream readableStream(&f0);
+            readableStream << str;
+            f0.close();
         }
         else
         {
-            if (ASCIIFormat)
-            {
-                // print human readable tik module to file
-                AssemblyAnnotationWriter *write = new llvm::AssemblyAnnotationWriter();
-                std::string str;
-                llvm::raw_string_ostream rso(str);
-                std::filebuf f0;
-                f0.open(OutputFile, std::ios::out);
-                TikModule->print(rso, write);
-                std::ostream readableStream(&f0);
-                readableStream << str;
-                f0.close();
-            }
-            else
-            {
-                // non-human readable IR
-                std::filebuf f;
-                f.open(OutputFile, std::ios::out);
-                std::ostream rawStream(&f);
-                raw_os_ostream raw_stream(rawStream);
-                WriteBitcodeToFile(*TikModule, raw_stream);
-            }
+            // non-human readable IR
+            std::filebuf f;
+            f.open(OutputFile, std::ios::out);
+            std::ostream rawStream(&f);
+            raw_os_ostream raw_stream(rawStream);
+            WriteBitcodeToFile(*TikModule, raw_stream);
         }
+
         spdlog::info("Successfully wrote tik to file");
     }
     catch (exception &e)
@@ -338,5 +330,55 @@ int main(int argc, char *argv[])
     else
     {
         return EXIT_SUCCESS;
+    }
+}
+
+void CleanModule(Module *M)
+{
+    for (auto mi = M->begin(); mi != M->end(); mi++)
+    {
+        for (auto fi = mi->begin(); fi != mi->end(); fi++)
+        {
+            vector<Instruction *> toRemove;
+            for (auto bi = fi->begin(); bi != fi->end(); bi++)
+            {
+                auto v = cast<Instruction>(bi);
+                if (auto ci = dyn_cast<DbgInfoIntrinsic>(v))
+                {
+                    toRemove.push_back(ci);
+                }
+                else
+                {
+                    SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
+                    v->getAllMetadata(MDs);
+                    for (auto MD : MDs)
+                    {
+                        v->setMetadata(MD.first, NULL);
+                    }
+                }
+            }
+            for (auto r : toRemove)
+            {
+                r->eraseFromParent();
+            }
+        }
+        Function *F = cast<Function>(mi);
+        SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
+        F->getAllMetadata(MDs);
+        for (auto MD : MDs)
+        {
+            F->setMetadata(MD.first, NULL);
+        }
+    }
+
+    for (auto gi = M->global_begin(); gi != M->global_end(); gi++)
+    {
+        auto gv = cast<GlobalVariable>(gi);
+        SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
+        gv->getAllMetadata(MDs);
+        for (auto MD : MDs)
+        {
+            gv->setMetadata(MD.first, NULL);
+        }
     }
 }

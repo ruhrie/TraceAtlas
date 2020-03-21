@@ -21,3 +21,5 @@ extern llvm::Module *TikModule;
 extern std::map<llvm::Function *, Kernel *> KfMap;
 
 extern std::set<int64_t> ValidBlocks;
+
+void CleanModule(llvm::Module *M);

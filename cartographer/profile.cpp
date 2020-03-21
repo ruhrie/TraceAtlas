@@ -111,5 +111,6 @@ void ProfileBlock(BasicBlock *BB, map<int, map<string, int>> &rMap, map<int, map
             cerr << "Unrecognized type: " + str + "\n";
         }
         rMap[id]["instructionCount"]++;
+        cpMap[id]["instructionCount"]++;
     }
 }

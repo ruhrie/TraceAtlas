@@ -11,6 +11,7 @@
 #include <iostream>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/IR/CFG.h>
+#include <llvm/IR/Comdat.h>
 #include <llvm/IR/DebugInfo.h>
 #include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/DebugLoc.h>
@@ -32,8 +33,13 @@ set<string> reservedNames;
 
 Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 {
-    MemoryRead = NULL;
-    MemoryWrite = NULL;
+    //MemoryRead = NULL;
+    //MemoryWrite = NULL;
+    set<int> blockSet;
+    for (auto b : basicBlocks)
+    {
+        blockSet.insert(b);
+    }
     Init = NULL;
     Exit = NULL;
     string Name = "";
@@ -90,7 +96,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
             }
         }
 
-        SplitBlocks(blocks);
+        //SplitBlocks(blocks);
 
         GetEntrances(blocks);
         //GetExits(blocks);
@@ -136,7 +142,9 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         //copy the appropriate blocks
         BuildKernel(blocks);
 
-        InlineFunctions(blocks);
+        Remap(); //we need to remap before inlining
+
+        InlineFunctions(blockSet);
 
         CopyGlobals();
 
@@ -149,9 +157,9 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         ExportFunctionSignatures();
 
         //handle the memory operations
-        GetMemoryFunctions();
+        //GetMemoryFunctions();
 
-        UpdateMemory();
+        //UpdateMemory();
 
         BuildInit();
 
@@ -184,64 +192,13 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     }
 }
 
-nlohmann::json Kernel::GetJson()
-{
-    nlohmann::json j;
-    vector<string> args;
-    for (Argument *i = KernelFunction->arg_begin(); i < KernelFunction->arg_end(); i++)
-    {
-        args.push_back(GetString(i));
-    }
-    if (args.size() != 0)
-    {
-        j["Inputs"] = args;
-    }
-    if (Init != NULL)
-    {
-        j["Init"] = GetStrings(Init);
-    }
-    if (Body.size() != 0)
-    {
-        for (auto b : Body)
-        {
-            j["Body"].push_back(GetStrings(b));
-        }
-    }
-    if (Termination.size() != 0)
-    {
-        for (auto b : Termination)
-        {
-            j["Termination"].push_back(GetStrings(b));
-        }
-    }
-    if (Exit != NULL)
-    {
-        j["Exit"] = GetStrings(Exit);
-    }
-    if (MemoryRead != NULL)
-    {
-        j["MemoryRead"] = GetStrings(MemoryRead);
-    }
-    if (MemoryWrite != NULL)
-    {
-        j["MemoryWrite"] = GetStrings(MemoryWrite);
-    }
-    if (!Conditional.empty())
-    {
-        for (auto cond : Conditional)
-        {
-            j["Conditional"].push_back(GetStrings(cond));
-        }
-    }
-    return j;
-}
-
 void Kernel::Cleanup()
 {
     if (KernelFunction)
     {
         KernelFunction->eraseFromParent();
     }
+    /*
     if (MemoryRead)
     {
         MemoryRead->eraseFromParent();
@@ -254,6 +211,7 @@ void Kernel::Cleanup()
     {
         g.second->eraseFromParent();
     }
+    */
 }
 
 Kernel::~Kernel()
@@ -269,12 +227,12 @@ void Kernel::ExportFunctionSignatures()
             if (CallBase *callInst = dyn_cast<CallBase>(inst))
             {
                 Function *f = callInst->getCalledFunction();
-                if (f != MemoryRead && f != MemoryWrite)
-                {
-                    Function *funcDec = cast<Function>(TikModule->getOrInsertFunction(callInst->getCalledFunction()->getName(), callInst->getCalledFunction()->getFunctionType()).getCallee());
-                    funcDec->setAttributes(callInst->getCalledFunction()->getAttributes());
-                    callInst->setCalledFunction(funcDec);
-                }
+                //if (f != MemoryRead && f != MemoryWrite)
+                //{
+                Function *funcDec = cast<Function>(TikModule->getOrInsertFunction(callInst->getCalledFunction()->getName(), callInst->getCalledFunction()->getFunctionType()).getCallee());
+                funcDec->setAttributes(callInst->getCalledFunction()->getAttributes());
+                callInst->setCalledFunction(funcDec);
+                //}
             }
         }
     }
@@ -365,57 +323,57 @@ void Kernel::RemapNestedKernels()
                 {
                     // we have a non-kernel function call
                 }
-                else if (funcName != MemoryRead && funcName != MemoryWrite) // must be a kernel function call
+                //else if (funcName != MemoryRead && funcName != MemoryWrite) // must be a kernel function call
+                //{
+                bool found = false;
+                auto calledFunc = callInst->getCalledFunction();
+                auto subK = KfMap[calledFunc];
+                if (subK)
                 {
-                    bool found = false;
-                    auto calledFunc = callInst->getCalledFunction();
-                    auto subK = KfMap[calledFunc];
-                    if (subK)
+                    for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
                     {
-                        for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
+                        for (auto b = KernelFunction->begin(); b != KernelFunction->end(); b++)
                         {
-                            for (auto b = KernelFunction->begin(); b != KernelFunction->end(); b++)
+                            for (BasicBlock::iterator j = b->begin(), BE2 = b->end(); j != BE2; ++j)
                             {
-                                for (BasicBlock::iterator j = b->begin(), BE2 = b->end(); j != BE2; ++j)
+                                if (subK->ArgumentMap[sarg] == cast<Instruction>(j))
                                 {
-                                    if (subK->ArgumentMap[sarg] == cast<Instruction>(j))
-                                    {
-                                        found = true;
-                                        embeddedCallArgs[sarg] = cast<Instruction>(j);
-                                    }
+                                    found = true;
+                                    embeddedCallArgs[sarg] = cast<Instruction>(j);
                                 }
-                            }
-                        }
-                        for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
-                        {
-                            for (auto arg = KernelFunction->arg_begin(); arg < KernelFunction->arg_end(); arg++)
-                            {
-                                if (subK->ArgumentMap[sarg] == ArgumentMap[arg])
-                                {
-                                    embeddedCallArgs[sarg] = arg;
-                                }
-                            }
-                        }
-                        auto limit = callInst->getNumArgOperands();
-                        for (int k = 0; k < limit; k++)
-                        {
-                            Value *op = callInst->getArgOperand(k);
-                            if (Argument *arg = dyn_cast<Argument>(op))
-                            {
-                                auto asdf = embeddedCallArgs[arg];
-                                callInst->setArgOperand(k, asdf);
-                            }
-                            else if (Constant *c = dyn_cast<Constant>(op))
-                            {
-                                //we don't have to do anything so ignore
-                            }
-                            else
-                            {
-                                throw TikException("Tik Error: Unexpected value passed to function");
                             }
                         }
                     }
+                    for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
+                    {
+                        for (auto arg = KernelFunction->arg_begin(); arg < KernelFunction->arg_end(); arg++)
+                        {
+                            if (subK->ArgumentMap[sarg] == ArgumentMap[arg])
+                            {
+                                embeddedCallArgs[sarg] = arg;
+                            }
+                        }
+                    }
+                    auto limit = callInst->getNumArgOperands();
+                    for (int k = 0; k < limit; k++)
+                    {
+                        Value *op = callInst->getArgOperand(k);
+                        if (Argument *arg = dyn_cast<Argument>(op))
+                        {
+                            auto asdf = embeddedCallArgs[arg];
+                            callInst->setArgOperand(k, asdf);
+                        }
+                        else if (Constant *c = dyn_cast<Constant>(op))
+                        {
+                            //we don't have to do anything so ignore
+                        }
+                        else
+                        {
+                            throw TikException("Tik Error: Unexpected value passed to function");
+                        }
+                    }
                 }
+                //}
             }
         }
     }
@@ -877,10 +835,10 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
     }
 }
 
+/*
 void Kernel::GetMemoryFunctions()
 {
     // first, get all the pointer operands of each load and store in Kernel::Body
-    /** new for loop grabbing all inputs of child kernels */
 
     set<LoadInst *> loadInst;
     set<StoreInst *> storeInst;
@@ -1067,6 +1025,7 @@ void Kernel::GetMemoryFunctions()
         inst->eraseFromParent();
     }
 }
+*/
 
 void Kernel::BuildExit()
 {
@@ -1207,8 +1166,8 @@ void Kernel::ApplyMetadata()
     //annotate the kernel functions
     MDNode *kernelNode = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), Name));
     KernelFunction->setMetadata("KernelName", kernelNode);
-    MemoryRead->setMetadata("KernelName", kernelNode);
-    MemoryWrite->setMetadata("KernelName", kernelNode);
+    //MemoryRead->setMetadata("KernelName", kernelNode);
+    //MemoryWrite->setMetadata("KernelName", kernelNode);
     for (auto global : GlobalMap)
     {
         global.second->setMetadata("KernelName", kernelNode);
@@ -1508,13 +1467,39 @@ void Kernel::CopyOperand(llvm::User *inst)
                 if (VMap.find(gv) == VMap.end())
                 {
                     //and not already in the vmap
-                    Constant *initializer = NULL;
+
+                    //for some reason if we don't do this first the verifier fails
+                    //we do absolutely nothing with it and it doesn't even end up in our output
+                    //its technically a memory leak, but its an acceptable sacrifice
+                    GlobalVariable *newVar = new GlobalVariable(
+                        gv->getValueType(),
+                        gv->isConstant(), gv->getLinkage(), NULL, "",
+                        gv->getThreadLocalMode(),
+                        gv->getType()->getAddressSpace());
+                    newVar->copyAttributesFrom(gv);
+                    //end of the sacrifice
+                    auto newGlobal = cast<GlobalVariable>(TikModule->getOrInsertGlobal(gv->getName(), gv->getType()->getPointerElementType()));
+                    newGlobal->setConstant(gv->isConstant());
+                    newGlobal->setLinkage(gv->getLinkage());
+                    newGlobal->setThreadLocalMode(gv->getThreadLocalMode());
+                    newGlobal->copyAttributesFrom(gv);
                     if (gv->hasInitializer())
                     {
-                        initializer = gv->getInitializer();
+                        newGlobal->setInitializer(MapValue(gv->getInitializer(), VMap));
                     }
-                    GlobalVariable *newVar = new GlobalVariable(*TikModule, gv->getValueType(), gv->isConstant(), gv->getLinkage(), initializer, gv->getName(), NULL, gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
-                    VMap[gv] = newVar;
+                    SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
+                    gv->getAllMetadata(MDs);
+                    for (auto MD : MDs)
+                    {
+                        newGlobal->addMetadata(MD.first, *MapMetadata(MD.second, VMap, RF_MoveDistinctMDs));
+                    }
+                    if (Comdat *SC = gv->getComdat())
+                    {
+                        Comdat *DC = newGlobal->getParent()->getOrInsertComdat(SC->getName());
+                        DC->setSelectionKind(SC->getSelectionKind());
+                        newGlobal->setComdat(DC);
+                    }
+                    VMap[gv] = newGlobal;
                 }
             }
         }
@@ -1525,27 +1510,9 @@ void Kernel::CopyOperand(llvm::User *inst)
     }
 }
 
-void Kernel::InlineFunctions(set<BasicBlock *> &blocks)
+void Kernel::InlineFunctions(set<int> &blocks)
 {
     bool change = true;
-    map<Value *, Value *> callMap; //mapps the call in question to the original call
-    for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
-    {
-        for (auto bi = fi->begin(); bi != fi->end(); bi++)
-        {
-            if (CallInst *ci = dyn_cast<CallInst>(bi))
-            {
-                for (auto pair : VMap)
-                {
-                    if (pair.second == ci)
-                    {
-                        callMap[ci] = (Value *)pair.first;
-                    }
-                }
-            }
-        }
-    }
-
     while (change)
     {
         change = false;
@@ -1555,141 +1522,33 @@ void Kernel::InlineFunctions(set<BasicBlock *> &blocks)
             {
                 if (CallInst *ci = dyn_cast<CallInst>(bi))
                 {
-                    if (ci->getModule() == TikModule && !ci->getMetadata("KernelCall"))
+                    if (auto debug = ci->getMetadata("KernelCall"))
                     {
-                        if (ci->isIndirectCall())
-                        {
-                            throw TikException("Tik Error: Indirect calls aren't supported")
-                        }
-                        else
-                        {
-                            auto calledFunc = ci->getCalledFunction();
-                            if (!calledFunc)
-                            {
-                                throw TikException("Tik Error: Call inst was null")
-                            }
-
-                            if (!calledFunc->empty())
-                            {
-                                change = true;
-                                //we finally know this can be inlined
-                                ValueToValueMapTy vmap; //local vmap for this singular call
-                                BranchInst *brInst = cast<BranchInst>(ci->getNextNode());
-
-                                /*
-                                these are the inlining steps
-                                1. clone all blocks that are valid
-                                2. add the inputs to the vmap
-                                3. create a return block which will be a phi from all valid exits
-                                4. remap all the returns
-                                5. remap all the blocks
-                                6. replace the call with a branch
-                                */
-
-                                //so do #1
-                                vector<BasicBlock *> remappedBlocks;
-                                for (auto fi = calledFunc->begin(); fi != calledFunc->end(); fi++)
-                                {
-                                    BasicBlock *b = cast<BasicBlock>(fi);
-                                    if (blocks.find(b) != blocks.end())
-                                    {
-                                        //this is a valid block to clone
-                                        BasicBlock *cb = CloneBasicBlock(b, vmap, "", KernelFunction);
-                                        vmap[b] = cb;
-                                        remappedBlocks.push_back(cb);
-                                    }
-                                }
-
-                                //#2
-                                int total = calledFunc->getNumOperands();
-                                for (int i = 0; i < total; i++)
-                                {
-                                    vmap[calledFunc->getOperand(i)] = ci->getOperand(i);
-                                }
-
-                                //intermediate step, not in above outline
-                                for (auto pair : vmap)
-                                {
-                                    if (CallInst *cit = dyn_cast<CallInst>((Value *)pair.first))
-                                    {
-                                        callMap[pair.second] = callMap[cit];
-                                    }
-                                }
-
-                                //#3
-                                map<BasicBlock *, Value *> phiMap; //both these values are old
-                                for (auto fi = calledFunc->begin(); fi != calledFunc->end(); fi++)
-                                {
-                                    BasicBlock *b = cast<BasicBlock>(fi);
-                                    auto term = b->getTerminator();
-                                    if (auto ret = dyn_cast<ReturnInst>(term))
-                                    {
-                                        if (calledFunc->getReturnType() != Type::getVoidTy(calledFunc->getContext()))
-                                        {
-                                            Value *a = ret->getOperand(0);
-                                            phiMap[b] = a;
-                                        }
-                                        else
-                                        {
-                                            phiMap[b] = NULL;
-                                        }
-                                    }
-                                    else if (isa<BranchInst>(term))
-                                    {
-                                    }
-                                    else if (isa<SwitchInst>(term))
-                                    {
-                                    }
-                                    else
-                                    {
-                                        spdlog::warn("Unimplemented terminator: {0}", term->getOpcodeName());
-                                    }
-                                }
-
-                                BasicBlock *retBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-                                IRBuilder<> retBuilder(retBlock);
-                                if (calledFunc->getReturnType() != Type::getVoidTy(calledFunc->getContext()))
-                                {
-                                    auto phi = retBuilder.CreatePHI(calledFunc->getReturnType(), phiMap.size());
-                                    for (auto &pair : phiMap)
-                                    {
-                                        phi->addIncoming(pair.second, pair.first);
-                                    }
-                                    VMap[callMap[ci]] = phi; //we use the external vmap since it won't be remapped properly otherwise
-                                }
-                                retBuilder.CreateBr(brInst->getSuccessor(0));
-                                remappedBlocks.push_back(retBlock);
-
-                                //#4
-                                for (auto &pair : phiMap)
-                                {
-                                    auto ret = cast<ReturnInst>(cast<BasicBlock>(vmap[pair.first])->getTerminator());
-                                    ret->eraseFromParent();
-                                    IRBuilder<> retBuilder(cast<BasicBlock>(vmap[pair.first]));
-                                    retBuilder.CreateBr(retBlock);
-                                }
-
-                                //#5
-                                for (auto &cb : remappedBlocks)
-                                {
-                                    for (auto bi = cb->begin(); bi != cb->end(); bi++)
-                                    {
-                                        Instruction *i = cast<Instruction>(bi);
-                                        RemapInstruction(i, vmap);
-                                    }
-                                }
-
-                                //#6
-                                IRBuilder<> finBuilder(ci);
-                                finBuilder.CreateBr(cast<BasicBlock>(vmap[&calledFunc->getEntryBlock()]));
-                                ci->eraseFromParent();
-                                brInst->eraseFromParent();
-                                break; //due to the prior split we know that this is the final inst anyway
-                            }
-                        }
+                        continue;
                     }
+                    auto info = InlineFunctionInfo();
+                    auto r = InlineFunction(ci, info);
+                    if (r == true)
+                    {
+                        change = true;
+                    }
+                    break;
                 }
             }
+        }
+    }
+    //now that everything is inlined we need to remove invalid blocks
+    //although some blocks are now an amalgamation of multiple,
+    //as a rule we don't need to worry about those.
+    //simple successors are enough
+    for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+    {
+        BasicBlock *block = cast<BasicBlock>(fi);
+        int64_t id = GetBlockID(block);
+        if (blocks.find(id) == blocks.end() && id != -1)
+        {
+            block->replaceAllUsesWith(Exit);
+            block->eraseFromParent();
         }
     }
 }

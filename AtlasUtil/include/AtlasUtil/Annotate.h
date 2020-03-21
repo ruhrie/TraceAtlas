@@ -30,6 +30,10 @@ inline void Annotate(llvm::Module *M)
 inline int64_t GetBlockID(llvm::BasicBlock *BB)
 {
     int64_t result = -1;
+    if (BB->empty())
+    {
+        return result;
+    }
     llvm::Instruction *first = llvm::cast<llvm::Instruction>(BB->getFirstInsertionPt());
     if (llvm::MDNode *node = first->getMetadata("BlockID"))
     {

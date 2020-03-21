@@ -11,6 +11,22 @@ inline void PrintVal(llvm::Value *val)
     std::cout << str << "\n";
 }
 
+inline void PrintVal(llvm::Metadata *val)
+{
+    std::string str;
+    llvm::raw_string_ostream rso(str);
+    val->print(rso);
+    std::cout << str << "\n";
+}
+
+inline void PrintVal(llvm::NamedMDNode *val)
+{
+    std::string str;
+    llvm::raw_string_ostream rso(str);
+    val->print(rso);
+    std::cout << str << "\n";
+}
+
 inline void PrintVal(const llvm::Value *val)
 {
     PrintVal(val);
