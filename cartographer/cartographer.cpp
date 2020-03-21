@@ -1,9 +1,10 @@
 #include "AtlasUtil/Annotate.h"
-#include "EncodeDetect.h"
-#include "EncodeExtract.h"
-#include "Rectifier.h"
-#include "Smoothing.h"
+#include "AtlasUtil/Traces.h"
+#include "TypeFour.h"
+#include "TypeOne.h"
+#include "TypeTwo.h"
 #include "profile.h"
+#include <functional>
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
@@ -115,17 +116,22 @@ int main(int argc, char **argv)
 
     try
     {
-        std::set<std::set<int>> type1Kernels;
         spdlog::info("Started analysis");
-        type1Kernels = DetectKernels(inputTrace, threshold, hotThreshold);
+        ProcessTrace(inputTrace, &TypeOne::Process, "Detecting type 1 kernels", noBar);
+        auto type1Kernels = TypeOne::Get();
         spdlog::info("Detected " + to_string(type1Kernels.size()) + " type 1 kernels");
-        auto type2Kernels = ExtractKernels(inputTrace, type1Kernels, M);
+
+        TypeTwo::Setup(M, type1Kernels);
+        ProcessTrace(inputTrace, &TypeTwo::Process, "Detecting type 2 kernels", noBar);
+        auto type2Kernels = TypeTwo::Get();
         spdlog::info("Detected " + to_string(type2Kernels.size()) + " type 2 kernels");
-        auto type25Kernels = ExtractKernels(inputTrace, type2Kernels, M);
+
+        TypeTwo::Setup(M, type2Kernels);
+        ProcessTrace(inputTrace, &TypeTwo::Process, "Detecting type 2.5 kernels", noBar);
+        auto type25Kernels = TypeTwo::Get();
         spdlog::info("Detected " + to_string(type25Kernels.size()) + " type 2.5 kernels");
-        set<set<int>> type3Kernels = SmoothKernel(type25Kernels, M);
-        spdlog::info("Detected " + to_string(type3Kernels.size()) + " type 3 kernels");
-        auto type4Kernels = RectifyKernel(type3Kernels, M);
+
+        auto type4Kernels = TypeFour::Process(type25Kernels, M);
         spdlog::info("Detected " + to_string(type4Kernels.size()) + " type 4 kernels");
 
         map<int, set<int>> finalResult;
@@ -139,7 +145,7 @@ int main(int argc, char **argv)
         }
 
         vector<int> validBlocks;
-        for (auto &[block, count] : blockCount)
+        for (auto &[block, count] : TypeOne::blockCount)
         {
             if (count != 0)
             {

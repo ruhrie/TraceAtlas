@@ -11,6 +11,7 @@
 #include <iostream>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/IR/CFG.h>
+#include <llvm/IR/Comdat.h>
 #include <llvm/IR/DebugInfo.h>
 #include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/DebugLoc.h>
@@ -32,8 +33,13 @@ set<string> reservedNames;
 
 Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 {
-    MemoryRead = NULL;
-    MemoryWrite = NULL;
+    //MemoryRead = NULL;
+    //MemoryWrite = NULL;
+    set<int> blockSet;
+    for (auto b : basicBlocks)
+    {
+        blockSet.insert(b);
+    }
     Init = NULL;
     Exit = NULL;
     string Name = "";
@@ -90,7 +96,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
             }
         }
 
-        SplitBlocks(blocks);
+        //SplitBlocks(blocks);
 
         GetEntrances(blocks);
         //GetExits(blocks);
@@ -136,7 +142,9 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         //copy the appropriate blocks
         BuildKernel(blocks);
 
-        InlineFunctions();
+        Remap(); //we need to remap before inlining
+
+        InlineFunctions(blockSet);
 
         CopyGlobals();
 
@@ -149,9 +157,9 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         ExportFunctionSignatures();
 
         //handle the memory operations
-        GetMemoryFunctions();
+        //GetMemoryFunctions();
 
-        UpdateMemory();
+        //UpdateMemory();
 
         BuildInit();
 
@@ -184,64 +192,13 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
     }
 }
 
-nlohmann::json Kernel::GetJson()
-{
-    nlohmann::json j;
-    vector<string> args;
-    for (Argument *i = KernelFunction->arg_begin(); i < KernelFunction->arg_end(); i++)
-    {
-        args.push_back(GetString(i));
-    }
-    if (args.size() != 0)
-    {
-        j["Inputs"] = args;
-    }
-    if (Init != NULL)
-    {
-        j["Init"] = GetStrings(Init);
-    }
-    if (Body.size() != 0)
-    {
-        for (auto b : Body)
-        {
-            j["Body"].push_back(GetStrings(b));
-        }
-    }
-    if (Termination.size() != 0)
-    {
-        for (auto b : Termination)
-        {
-            j["Termination"].push_back(GetStrings(b));
-        }
-    }
-    if (Exit != NULL)
-    {
-        j["Exit"] = GetStrings(Exit);
-    }
-    if (MemoryRead != NULL)
-    {
-        j["MemoryRead"] = GetStrings(MemoryRead);
-    }
-    if (MemoryWrite != NULL)
-    {
-        j["MemoryWrite"] = GetStrings(MemoryWrite);
-    }
-    if (!Conditional.empty())
-    {
-        for (auto cond : Conditional)
-        {
-            j["Conditional"].push_back(GetStrings(cond));
-        }
-    }
-    return j;
-}
-
 void Kernel::Cleanup()
 {
     if (KernelFunction)
     {
         KernelFunction->eraseFromParent();
     }
+    /*
     if (MemoryRead)
     {
         MemoryRead->eraseFromParent();
@@ -254,6 +211,7 @@ void Kernel::Cleanup()
     {
         g.second->eraseFromParent();
     }
+    */
 }
 
 Kernel::~Kernel()
@@ -269,12 +227,12 @@ void Kernel::ExportFunctionSignatures()
             if (CallBase *callInst = dyn_cast<CallBase>(inst))
             {
                 Function *f = callInst->getCalledFunction();
-                if (f != MemoryRead && f != MemoryWrite)
-                {
-                    Function *funcDec = cast<Function>(TikModule->getOrInsertFunction(callInst->getCalledFunction()->getName(), callInst->getCalledFunction()->getFunctionType()).getCallee());
-                    funcDec->setAttributes(callInst->getCalledFunction()->getAttributes());
-                    callInst->setCalledFunction(funcDec);
-                }
+                //if (f != MemoryRead && f != MemoryWrite)
+                //{
+                Function *funcDec = cast<Function>(TikModule->getOrInsertFunction(callInst->getCalledFunction()->getName(), callInst->getCalledFunction()->getFunctionType()).getCallee());
+                funcDec->setAttributes(callInst->getCalledFunction()->getAttributes());
+                callInst->setCalledFunction(funcDec);
+                //}
             }
         }
     }
@@ -365,57 +323,57 @@ void Kernel::RemapNestedKernels()
                 {
                     // we have a non-kernel function call
                 }
-                else if (funcName != MemoryRead && funcName != MemoryWrite) // must be a kernel function call
+                //else if (funcName != MemoryRead && funcName != MemoryWrite) // must be a kernel function call
+                //{
+                bool found = false;
+                auto calledFunc = callInst->getCalledFunction();
+                auto subK = KfMap[calledFunc];
+                if (subK)
                 {
-                    bool found = false;
-                    auto calledFunc = callInst->getCalledFunction();
-                    auto subK = KfMap[calledFunc];
-                    if (subK)
+                    for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
                     {
-                        for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
+                        for (auto b = KernelFunction->begin(); b != KernelFunction->end(); b++)
                         {
-                            for (auto b = KernelFunction->begin(); b != KernelFunction->end(); b++)
+                            for (BasicBlock::iterator j = b->begin(), BE2 = b->end(); j != BE2; ++j)
                             {
-                                for (BasicBlock::iterator j = b->begin(), BE2 = b->end(); j != BE2; ++j)
+                                if (subK->ArgumentMap[sarg] == cast<Instruction>(j))
                                 {
-                                    if (subK->ArgumentMap[sarg] == cast<Instruction>(j))
-                                    {
-                                        found = true;
-                                        embeddedCallArgs[sarg] = cast<Instruction>(j);
-                                    }
+                                    found = true;
+                                    embeddedCallArgs[sarg] = cast<Instruction>(j);
                                 }
-                            }
-                        }
-                        for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
-                        {
-                            for (auto arg = KernelFunction->arg_begin(); arg < KernelFunction->arg_end(); arg++)
-                            {
-                                if (subK->ArgumentMap[sarg] == ArgumentMap[arg])
-                                {
-                                    embeddedCallArgs[sarg] = arg;
-                                }
-                            }
-                        }
-                        auto limit = callInst->getNumArgOperands();
-                        for (int k = 0; k < limit; k++)
-                        {
-                            Value *op = callInst->getArgOperand(k);
-                            if (Argument *arg = dyn_cast<Argument>(op))
-                            {
-                                auto asdf = embeddedCallArgs[arg];
-                                callInst->setArgOperand(k, asdf);
-                            }
-                            else if (Constant *c = dyn_cast<Constant>(op))
-                            {
-                                //we don't have to do anything so ignore
-                            }
-                            else
-                            {
-                                throw TikException("Tik Error: Unexpected value passed to function");
                             }
                         }
                     }
+                    for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
+                    {
+                        for (auto arg = KernelFunction->arg_begin(); arg < KernelFunction->arg_end(); arg++)
+                        {
+                            if (subK->ArgumentMap[sarg] == ArgumentMap[arg])
+                            {
+                                embeddedCallArgs[sarg] = arg;
+                            }
+                        }
+                    }
+                    auto limit = callInst->getNumArgOperands();
+                    for (int k = 0; k < limit; k++)
+                    {
+                        Value *op = callInst->getArgOperand(k);
+                        if (Argument *arg = dyn_cast<Argument>(op))
+                        {
+                            auto asdf = embeddedCallArgs[arg];
+                            callInst->setArgOperand(k, asdf);
+                        }
+                        else if (Constant *c = dyn_cast<Constant>(op))
+                        {
+                            //we don't have to do anything so ignore
+                        }
+                        else
+                        {
+                            throw TikException("Tik Error: Unexpected value passed to function");
+                        }
+                    }
                 }
+                //}
             }
         }
     }
@@ -615,9 +573,24 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
 
 void Kernel::BuildKernel(set<BasicBlock *> &blocks)
 {
+    set<Function *> headFunctions;
+    for (auto ent : Entrances)
+    {
+        headFunctions.insert(ent->getParent());
+    }
+
+    if (headFunctions.size() != 1)
+    {
+        throw TikException("Entrances not on same level");
+    }
+
     set<BasicBlock *> handeledExits;
     for (auto block : blocks)
     {
+        if (headFunctions.find(block->getParent()) == headFunctions.end())
+        {
+            continue;
+        }
         int64_t id = GetBlockID(block);
         if (KernelMap.find(id) != KernelMap.end())
         {
@@ -862,10 +835,10 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
     }
 }
 
+/*
 void Kernel::GetMemoryFunctions()
 {
     // first, get all the pointer operands of each load and store in Kernel::Body
-    /** new for loop grabbing all inputs of child kernels */
 
     set<LoadInst *> loadInst;
     set<StoreInst *> storeInst;
@@ -1052,6 +1025,7 @@ void Kernel::GetMemoryFunctions()
         inst->eraseFromParent();
     }
 }
+*/
 
 void Kernel::BuildExit()
 {
@@ -1192,8 +1166,8 @@ void Kernel::ApplyMetadata()
     //annotate the kernel functions
     MDNode *kernelNode = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), Name));
     KernelFunction->setMetadata("KernelName", kernelNode);
-    MemoryRead->setMetadata("KernelName", kernelNode);
-    MemoryWrite->setMetadata("KernelName", kernelNode);
+    //MemoryRead->setMetadata("KernelName", kernelNode);
+    //MemoryWrite->setMetadata("KernelName", kernelNode);
     for (auto global : GlobalMap)
     {
         global.second->setMetadata("KernelName", kernelNode);
@@ -1405,6 +1379,7 @@ std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStruct
     for (auto ai = KernelFunction->arg_begin(); ai < KernelFunction->arg_end(); ai++)
     {
         std::string type = "";
+        std::string argname = "arg" + std::to_string(i);
         if (i > 0)
         {
             headerString += ", ";
@@ -1420,14 +1395,15 @@ std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStruct
         }
         if (type.find("!") != std::string::npos)
         {
-            std::string varName = "arg" + std::to_string(i);
-            type.erase(type.begin() + type.find("!"));
-            std::size_t whiteSpacePosition = type.find(" ");
-            type.insert(whiteSpacePosition + 1, varName);
+            ProcessArrayArgument(type, argname);
+        }
+        else if (type.find("@") != std::string::npos)
+        {
+            ProcessFunctionArgument(type, argname);
         }
         else
         {
-            type += " arg" + std::to_string(i);
+            type += " " + argname;
         }
         headerString += type;
         i++;
@@ -1491,13 +1467,39 @@ void Kernel::CopyOperand(llvm::User *inst)
                 if (VMap.find(gv) == VMap.end())
                 {
                     //and not already in the vmap
-                    Constant *initializer = NULL;
+
+                    //for some reason if we don't do this first the verifier fails
+                    //we do absolutely nothing with it and it doesn't even end up in our output
+                    //its technically a memory leak, but its an acceptable sacrifice
+                    GlobalVariable *newVar = new GlobalVariable(
+                        gv->getValueType(),
+                        gv->isConstant(), gv->getLinkage(), NULL, "",
+                        gv->getThreadLocalMode(),
+                        gv->getType()->getAddressSpace());
+                    newVar->copyAttributesFrom(gv);
+                    //end of the sacrifice
+                    auto newGlobal = cast<GlobalVariable>(TikModule->getOrInsertGlobal(gv->getName(), gv->getType()->getPointerElementType()));
+                    newGlobal->setConstant(gv->isConstant());
+                    newGlobal->setLinkage(gv->getLinkage());
+                    newGlobal->setThreadLocalMode(gv->getThreadLocalMode());
+                    newGlobal->copyAttributesFrom(gv);
                     if (gv->hasInitializer())
                     {
-                        initializer = gv->getInitializer();
+                        newGlobal->setInitializer(MapValue(gv->getInitializer(), VMap));
                     }
-                    GlobalVariable *newVar = new GlobalVariable(*TikModule, gv->getValueType(), gv->isConstant(), gv->getLinkage(), initializer, gv->getName(), NULL, gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
-                    VMap[gv] = newVar;
+                    SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
+                    gv->getAllMetadata(MDs);
+                    for (auto MD : MDs)
+                    {
+                        newGlobal->addMetadata(MD.first, *MapMetadata(MD.second, VMap, RF_MoveDistinctMDs));
+                    }
+                    if (Comdat *SC = gv->getComdat())
+                    {
+                        Comdat *DC = newGlobal->getParent()->getOrInsertComdat(SC->getName());
+                        DC->setSelectionKind(SC->getSelectionKind());
+                        newGlobal->setComdat(DC);
+                    }
+                    VMap[gv] = newGlobal;
                 }
             }
         }
@@ -1508,175 +1510,51 @@ void Kernel::CopyOperand(llvm::User *inst)
     }
 }
 
-void Kernel::InlineFunctions()
+void Kernel::InlineFunctions(set<int> &blocks)
 {
-    vector<CallInst *> toInline;
-    for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+    bool change = true;
+    while (change)
     {
-        for (auto bi = fi->begin(); bi != fi->end(); bi++)
+        change = false;
+        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
         {
-            if (CallInst *ci = dyn_cast<CallInst>(bi))
+            for (auto bi = fi->begin(); bi != fi->end(); bi++)
             {
-                if (ci->getModule() == TikModule && !ci->getMetadata("KernelCall"))
+                if (CallInst *ci = dyn_cast<CallInst>(bi))
                 {
-                    toInline.push_back(ci);
+                    if (auto debug = ci->getMetadata("KernelCall"))
+                    {
+                        continue;
+                    }
+                    auto info = InlineFunctionInfo();
+                    auto r = InlineFunction(ci, info);
+                    if (r == true)
+                    {
+                        change = true;
+                    }
+                    break;
                 }
             }
         }
     }
-    for (auto ci : toInline)
+    //now that everything is inlined we need to remove invalid blocks
+    //although some blocks are now an amalgamation of multiple,
+    //as a rule we don't need to worry about those.
+    //simple successors are enough
+    for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
     {
-        BasicBlock *cb = ci->getParent();
-        if (ci->isIndirectCall())
+        BasicBlock *block = cast<BasicBlock>(fi);
+        int64_t id = GetBlockID(block);
+        if (blocks.find(id) == blocks.end() && id != -1)
         {
-            throw TikException("Tik Error: Indirect calls aren't supported")
-        }
-        else
-        {
-            auto calledFunc = ci->getCalledFunction();
-            if (!calledFunc)
-            {
-                throw TikException("Tik Error: Call inst was null")
-            }
-
-            if (!calledFunc->empty())
-            {
-                //we need to do a check here to see if we already inlined it
-                InlineStruct currentStruct;
-                for (auto inl : InlinedFunctions)
-                {
-                    if (inl.CalledFunction == calledFunc)
-                    {
-                        currentStruct = inl;
-                        break;
-                    }
-                }
-                if (currentStruct.CalledFunction == NULL)
-                {
-                    //needs to be inlined
-                    currentStruct.CalledFunction = calledFunc;
-                    //first create the phi block which is the entry point
-                    currentStruct.entranceBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-                    Body.insert(currentStruct.entranceBlock);
-                    IRBuilder<> phiBuilder(currentStruct.entranceBlock);
-                    //first phi we need is the number of exit paths
-                    vector<BasicBlock *> funcUses;
-                    vector<CallInst *> callUses;
-
-                    for (auto user : calledFunc->users())
-                    {
-                        if (CallInst *callUse = dyn_cast<CallInst>(user))
-                        {
-                            if (callUse->getModule() == TikModule)
-                            {
-                                BasicBlock *parent = callUse->getParent();
-                                funcUses.push_back(parent);
-                                callUses.push_back(callUse);
-                            }
-                        }
-                        else if (isa<StoreInst>(user))
-                        {
-                            //ignore, this is a jump table
-                        }
-                        else
-                        {
-                            throw TikException("Tik Error: Only expected callInst");
-                        }
-                    }
-                    //now that we know that we can create the phi for where to branch to
-                    currentStruct.branchPhi = phiBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), funcUses.size());
-                    for (auto pre : funcUses)
-                    {
-                        currentStruct.branchPhi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), currentStruct.phiIndex++), pre);
-                    }
-                    //then we do the same for every argument
-                    int argIndex = 0;
-                    for (auto ai = calledFunc->arg_begin(); ai != calledFunc->arg_end(); ai++)
-                    {
-                        Argument *arg = cast<Argument>(ai);
-                        auto argPhi = phiBuilder.CreatePHI(arg->getType(), funcUses.size()); //create a phi for the arg
-                        for (auto pre : funcUses)
-                        {
-                            Value *passedValue = ci->getOperand(argIndex);
-                            argPhi->addIncoming(passedValue, pre); //and give it a value for the current call instruction
-                        }
-                        argIndex++;
-                        VMap[arg] = argPhi;
-                        currentStruct.ArgNodes.push_back(argPhi);
-                    }
-                    auto a = cast<Value>(calledFunc->begin());
-                    phiBuilder.CreateBr(cast<BasicBlock>(a)); //after this we can finally branch into the function
-                    //we also need a block at the end to gather the return values
-                    auto returnBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-                    Body.insert(returnBlock);
-                    int returnCount = 0; //just like before we need a count
-                    map<BasicBlock *, Value *> returnMap;
-                    for (auto fi = calledFunc->begin(); fi != calledFunc->end(); fi++)
-                    {
-                        BasicBlock *fBasicBlock = cast<BasicBlock>(fi);
-                        if (VMap.find(fBasicBlock) != VMap.end())
-                        {
-                            fBasicBlock = cast<BasicBlock>(VMap[fBasicBlock]);
-                        }
-                        if (ReturnInst *ri = dyn_cast<ReturnInst>(fBasicBlock->getTerminator()))
-                        {
-                            returnMap[fBasicBlock] = ri->getReturnValue();
-                            ri->eraseFromParent(); //we also remove the return here because we don't need it
-                            returnCount++;
-                            IRBuilder<> fIteratorBuilder(fBasicBlock);
-                            fIteratorBuilder.CreateBr(returnBlock);
-                        }
-                    }
-
-                    //with the count we create the phi nodes iff the return type isn't void
-                    IRBuilder<> returnBuilder(returnBlock);
-                    if (calledFunc->getReturnType() != Type::getVoidTy(TikModule->getContext()))
-                    {
-                        auto returnPhi = returnBuilder.CreatePHI(calledFunc->getReturnType(), returnCount);
-                        for (auto pair : returnMap)
-                        {
-                            returnPhi->addIncoming(pair.second, pair.first);
-                        }
-                        currentStruct.returnPhi = returnPhi;
-                        ci->replaceAllUsesWith(returnPhi);
-                    }
-                    //finally we use the first phi we created to determine where we should return to
-                    currentStruct.SwitchInstruction = returnBuilder.CreateSwitch(currentStruct.branchPhi, Exception, funcUses.size());
-                    for (auto pre : funcUses)
-                    {
-                        auto term = pre->getTerminator();
-                        BasicBlock *suc;
-                        if (auto brInst = dyn_cast<BranchInst>(term))
-                        {
-                            suc = brInst->getSuccessor(0);
-                        }
-                        else
-                        {
-                            throw TikException("Unimplemented terminator");
-                        }
-                        currentStruct.SwitchInstruction->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), currentStruct.currentIndex++), suc);
-                    }
-
-                    //and redirect the first block
-                    BranchInst *priorBranch = cast<BranchInst>(cb->getTerminator());
-                    priorBranch->setSuccessor(0, currentStruct.entranceBlock);
-                    ci->eraseFromParent();
-                    InlinedFunctions.push_back(currentStruct); //finally add it to the already inlined functions
-                }
-                else
-                {
-                    BranchInst *priorBranch = cast<BranchInst>(cb->getTerminator());
-                    priorBranch->setSuccessor(0, currentStruct.entranceBlock);
-                    ci->eraseFromParent();
-                }
-            }
+            block->replaceAllUsesWith(Exit);
+            block->eraseFromParent();
         }
     }
 }
 
 void Kernel::RemapExports()
 {
-
     map<Value *, AllocaInst *> exportMap;
     for (auto ex : KernelExports)
     {
@@ -1719,6 +1597,10 @@ void Kernel::RemapExports()
                     for (int i = 0; i < call->getNumArgOperands(); i++)
                     {
                         auto arg = call->getArgOperand(i);
+                        if (arg == NULL)
+                        {
+                            continue;
+                        }
                         if (arg->getType() != fType->getParamType(i))
                         {
                             IRBuilder<> aBuilder(call);

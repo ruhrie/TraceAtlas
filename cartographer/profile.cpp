@@ -1,6 +1,6 @@
 #include "profile.h"
 #include "AtlasUtil/Annotate.h"
-#include "EncodeDetect.h"
+#include "TypeOne.h"
 #include <iostream>
 #include <llvm/Support/raw_ostream.h>
 
@@ -36,7 +36,7 @@ map<string, map<string, map<string, int>>> ProfileKernels(std::map<int, std::set
         auto blocks = kernel.second;
         for (auto block : blocks)
         {
-            int count = blockCount[block];
+            int count = TypeOne::blockCount[block];
             for (auto pair : rMap[block])
             {
                 cPigData[iString][pair.first] += pair.second * count;
@@ -111,5 +111,6 @@ void ProfileBlock(BasicBlock *BB, map<int, map<string, int>> &rMap, map<int, map
             cerr << "Unrecognized type: " + str + "\n";
         }
         rMap[id]["instructionCount"]++;
+        cpMap[id]["instructionCount"]++;
     }
 }

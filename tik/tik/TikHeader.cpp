@@ -10,6 +10,56 @@
 
 using namespace llvm;
 
+bool VectorsUsed = false;
+
+void ProcessArrayArgument(std::string &type, std::string argname)
+{
+    type.erase(type.begin() + type.find("!"));
+    // find all of our asterisks;
+    int ast = 0;
+    while (type.find("*") != std::string::npos)
+    {
+        type.erase(type.begin() + type.find("*"));
+        ast++;
+    }
+    std::size_t whiteSpacePosition;
+    // if we have a structure, find the first [] and insert the name before it
+    if (type.find("struct") != std::string::npos)
+    {
+        whiteSpacePosition = type.find("[") - 1;
+    }
+    else // just find the white space between type and []
+    {
+        whiteSpacePosition = type.find(" ");
+    }
+    type.insert(whiteSpacePosition + 1, argname);
+    for (int j = 0; j < ast; j++)
+    {
+        type.insert(whiteSpacePosition, "*");
+    }
+}
+
+void ProcessFunctionArgument(std::string &type, std::string argname)
+{
+    type.erase(type.begin() + type.find("@"));
+    // find all of our asterisks;
+    int ast = 0;
+    while (type.find("#") != std::string::npos)
+    {
+        type.erase(type.begin() + type.find("#"));
+        ast++;
+    }
+    std::size_t whiteSpacePosition = type.find("(") - 1;
+    type.insert(whiteSpacePosition + 1, ") ");
+    std::string pointerString = " (";
+    for (int j = 0; j < ast; j++)
+    {
+        pointerString += "*";
+    }
+    std::string funcName = pointerString + argname;
+    type.insert(type.find(" "), funcName);
+}
+
 void RecurseForStructs(llvm::Type *input, std::set<llvm::StructType *> &AllStructures)
 {
     if (input->isStructTy())
@@ -35,6 +85,27 @@ void RecurseForStructs(llvm::Type *input, std::set<llvm::StructType *> &AllStruc
         llvm::Type *memberType = newType->getElementType();
         RecurseForStructs(memberType, AllStructures);
     }
+    else if (input->isArrayTy())
+    {
+        llvm::ArrayType *array = cast<ArrayType>(input);
+        for (int i = 0; i < array->getNumElements(); i++)
+        {
+            RecurseForStructs(array->getTypeAtIndex(i), AllStructures);
+        }
+    }
+    else if (input->isVectorTy())
+    {
+        RecurseForStructs(cast<VectorType>(input)->getElementType(), AllStructures);
+    }
+    else if (input->isFunctionTy())
+    {
+        llvm::FunctionType *func = cast<llvm::FunctionType>(input);
+        for (int i = 0; i < func->getNumParams(); i++)
+        {
+            RecurseForStructs(func->getParamType(i), AllStructures);
+        }
+        RecurseForStructs(func->getReturnType(), AllStructures);
+    }
 }
 
 std::string GetTikStructures(std::vector<Kernel *> kernels, std::set<llvm::StructType *> &AllStructures)
@@ -49,13 +120,16 @@ std::string GetTikStructures(std::vector<Kernel *> kernels, std::set<llvm::Struc
     std::string AllStructureDefinitions;
     for (auto structure : AllStructures)
     {
-        char *memberName = new char[4];
         std::string a = structure->getName();
         std::string structureDefinition = "\nstruct " + a + " {\n";
         for (int i = 0; i < structure->getNumElements(); i++)
         {
-            memset(memberName, 0, 4);
-            memberName[0] = i % 26 + 97;
+            char memberChar = i % 26 + 97;
+            std::string memberName = "";
+            for (int j = 0; j < (int)(i / 26) + 1; j++)
+            {
+                memberName += static_cast<char>(memberChar);
+            }
             std::string varDec;
             try
             {
@@ -66,24 +140,14 @@ std::string GetTikStructures(std::vector<Kernel *> kernels, std::set<llvm::Struc
                 spdlog::error(e.what());
                 varDec = "TypeNotSupported";
             }
-            // if we find a bang, the variable name has to be inserted after the whitespace and before the array sizes
             if (varDec.find("!") != std::string::npos)
             {
-                varDec.erase(varDec.begin() + varDec.find("!"));
-                std::size_t whiteSpacePosition;
-                if (varDec.find("struct") != std::string::npos)
-                {
-                    whiteSpacePosition = varDec.find("[") - 1;
-                }
-                else
-                {
-                    whiteSpacePosition = varDec.find(" ");
-                }
-
-                for (int j = 0; j < (int)(i / 26) + 1; j++)
-                {
-                    varDec.insert(whiteSpacePosition + 1, &memberName[0]);
-                }
+                ProcessArrayArgument(varDec, memberName);
+                structureDefinition += "\t" + varDec + ";\n";
+            }
+            else if (varDec.find("@") != std::string::npos)
+            {
+                ProcessFunctionArgument(varDec, memberName);
                 structureDefinition += "\t" + varDec + ";\n";
             }
             else
@@ -91,7 +155,7 @@ std::string GetTikStructures(std::vector<Kernel *> kernels, std::set<llvm::Struc
                 structureDefinition += "\t" + varDec + " ";
                 for (int j = 0; j < (int)(i / 26) + 1; j++)
                 {
-                    structureDefinition.insert(structureDefinition.size(), &memberName[0]);
+                    structureDefinition.insert(structureDefinition.size(), memberName);
                 }
                 structureDefinition += ";\n";
             }
@@ -115,11 +179,12 @@ std::string getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStr
     {
         type = getCArrayType(dyn_cast<llvm::ArrayType>(elem)->getArrayElementType(), AllStructures, size);
         std::size_t whiteSpacePosition;
-        // if the type is a struct
+        // if the type is a struct, set the name insert position to be the end
         if (type.find("struct") != std::string::npos)
         {
             whiteSpacePosition = type.size() - 1;
         }
+        // else set the insert position to the end
         else
         {
             whiteSpacePosition = type.find(" ");
@@ -155,6 +220,43 @@ std::string getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStr
     }
 }
 
+std::string getCVectorType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructures)
+{
+    llvm::VectorType *vecArg = dyn_cast<llvm::VectorType>(elem);
+    VectorsUsed = true;
+    unsigned int elemCount = vecArg->getElementCount().Min;
+    std::string type = getCType(vecArg->getElementType(), AllStructures);
+    if (type == "float" && elemCount == 4)
+    {
+        return "__m128";
+    }
+    else if (type == "float" && elemCount == 8)
+    {
+        return "__m256";
+    }
+    else if (type == "double" && elemCount == 2)
+    {
+        return "__m128d";
+    }
+    else if (type == "double" && elemCount == 4)
+    {
+        return "__m256d";
+    }
+    else if (type == "int" && elemCount == 4)
+    {
+        return "__m128i";
+    }
+    else if (type == "int" && elemCount == 8)
+    {
+        return "__m256i";
+    }
+    else
+    {
+        throw TikException("Vector type bitwidth not supported.");
+        return "VectorSizeNotSupported";
+    }
+}
+
 std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructures)
 {
     if (param->isVoidTy())
@@ -181,21 +283,40 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
     {
         return "__float128";
     }
-    else if (param->isIntegerTy(8))
+    else if (param->isPPC_FP128Ty())
     {
-        return "uint8_t";
+        throw TikException("PPC_FP128Ty is not supported.")
     }
-    else if (param->isIntegerTy(16))
+    else if (param->isFloatingPointTy())
     {
-        return "uint16_t";
+        throw TikException("This floating point type is not supported.")
     }
-    else if (param->isIntegerTy(32))
+    else if (param->isX86_MMXTy())
     {
-        return "uint32_t";
+        throw TikException("This MMX type is not supported.")
     }
-    else if (param->isIntegerTy(64))
+    else if (param->isFPOrFPVectorTy())
     {
-        return "uint64_t";
+        return getCVectorType(param, AllStructures);
+    }
+    else if (param->isIntOrIntVectorTy())
+    {
+        if (param->isIntegerTy())
+        {
+            llvm::IntegerType *intArg = dyn_cast<llvm::IntegerType>(param);
+            if (intArg->getBitWidth() == 1)
+            {
+                return "bool";
+            }
+            else
+            {
+                return "uint" + std::to_string(intArg->getBitWidth()) + "_t";
+            }
+        }
+        else // must be a vector
+        {
+            return getCVectorType(param, AllStructures);
+        }
     }
     else if (param->isPointerTy())
     {
@@ -203,9 +324,9 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
         llvm::Type *memberType = newType->getElementType();
         std::string a = getCType(memberType, AllStructures);
         // check if we had an array type, don't add the star
-        if (a.find("!") != std::string::npos)
+        if (a.find("@") != std::string::npos)
         {
-            return a;
+            return a + "#";
         }
         else
         {
@@ -220,11 +341,11 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
         }
         else if (param->isVectorTy())
         {
-            throw TikException("Vector argument types are not supported for header generation.");
+            return getCVectorType(param, AllStructures);
         }
         else if (param->isStructTy())
         {
-            auto structureArg = AllStructures.find(dyn_cast<StructType>(param));
+            auto structureArg = AllStructures.find(cast<StructType>(param));
             if (structureArg != AllStructures.end())
             {
                 std::string structName = (*structureArg)->getName();
@@ -237,7 +358,20 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
         }
         else if (param->isFunctionTy())
         {
-            throw TikException("Function argument types are not supported for header generation.");
+            llvm::FunctionType *func = dyn_cast<llvm::FunctionType>(param);
+            std::string type = "@";
+            type += getCType(func->getReturnType(), AllStructures);
+            type += " (";
+            for (int i = 0; i < func->getNumParams(); i++)
+            {
+                if (i > 0)
+                {
+                    type += ", ";
+                }
+                type += getCType(func->getParamType(i), AllStructures);
+            }
+            type += ")";
+            return type;
         }
         else
         {
