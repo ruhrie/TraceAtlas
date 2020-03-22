@@ -224,15 +224,17 @@ void Kernel::ExportFunctionSignatures()
     {
         for (auto inst = bi->begin(); inst != bi->end(); inst++)
         {
-            if (CallBase *callInst = dyn_cast<CallBase>(inst))
+            if (CallBase *callBase = dyn_cast<CallBase>(inst))
             {
-                Function *f = callInst->getCalledFunction();
-                //if (f != MemoryRead && f != MemoryWrite)
-                //{
-                Function *funcDec = cast<Function>(TikModule->getOrInsertFunction(callInst->getCalledFunction()->getName(), callInst->getCalledFunction()->getFunctionType()).getCallee());
-                funcDec->setAttributes(callInst->getCalledFunction()->getAttributes());
-                callInst->setCalledFunction(funcDec);
-                //}
+                Function *f = callBase->getCalledFunction();
+                if (f == NULL)
+                {
+                    throw TikException("Null function call (indirect call)");
+                }
+
+                Function *funcDec = cast<Function>(TikModule->getOrInsertFunction(callBase->getCalledFunction()->getName(), callBase->getCalledFunction()->getFunctionType()).getCallee());
+                funcDec->setAttributes(callBase->getCalledFunction()->getAttributes());
+                callBase->setCalledFunction(funcDec);
             }
         }
     }
@@ -405,170 +407,6 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
             conditions.insert(block);
         }
     }
-
-    //now that we have these conditions we will go a depth search to see if it is a successor of itself
-    set<BasicBlock *> validConditions;
-    map<BasicBlock *, set<BasicBlock *>> exitDict;
-    map<BasicBlock *, set<BasicBlock *>> recurseDict;
-    for (auto cond : conditions)
-    {
-        bool exRecurses = false;
-        bool exExit = false;
-
-        set<BasicBlock *> exitPaths;
-        set<BasicBlock *> recursePaths;
-
-        //ideally one of them will recurse and one of them will exit
-        for (auto suc : successors(cond))
-        {
-            queue<BasicBlock *> toProcess;
-            set<BasicBlock *> checked;
-            toProcess.push(suc);
-            checked.insert(suc);
-            checked.insert(cond);
-            bool recurses = false;
-            bool exit = false;
-            while (!toProcess.empty())
-            {
-                BasicBlock *processing = toProcess.front();
-                toProcess.pop();
-                auto term = processing->getTerminator();
-                if (term->getNumSuccessors() == 0)
-                {
-                    exit = true;
-                }
-                for (auto succ : successors(processing))
-                {
-                    if (succ == cond)
-                    {
-                        recurses = true;
-                    }
-                    if (blocks.find(succ) == blocks.end())
-                    {
-                        exit = true;
-                    }
-                    if (checked.find(succ) == checked.end() && blocks.find(succ) != blocks.end())
-                    {
-                        toProcess.push(succ);
-                        checked.insert(succ);
-                    }
-                }
-            }
-            if (recurses && exit)
-            {
-                //this did both which implies that it can't be the condition
-                continue;
-            }
-            if (recurses)
-            {
-                exRecurses = true;
-                //this branch is the body branch
-                recursePaths.insert(suc);
-            }
-            if (exit)
-            {
-                exExit = true;
-                //and this one exits
-                exitPaths.insert(suc);
-            }
-        }
-
-        if (exExit && exRecurses)
-        {
-            validConditions.insert(cond);
-            recurseDict[cond] = recursePaths;
-            exitDict[cond] = exitPaths;
-        }
-    }
-
-    for (auto b : validConditions)
-    {
-        Conditional.insert(b);
-
-        auto exitPaths = exitDict[b];
-        auto recPaths = recurseDict[b];
-        //now process the body
-        {
-            queue<BasicBlock *> processing;
-            set<BasicBlock *> visited;
-            for (auto block : recPaths)
-            {
-                processing.push(block);
-                visited.insert(block);
-            }
-            for (auto c : validConditions)
-            {
-                visited.insert(c);
-            }
-            while (!processing.empty())
-            {
-                auto a = processing.front();
-                processing.pop();
-                visited.insert(a);
-                if (find(Body.begin(), Body.end(), a) == Body.end())
-                {
-                    if (blocks.find(a) != blocks.end())
-                    {
-                        Body.insert(a);
-                    }
-                }
-                for (auto suc : successors(a))
-                {
-                    if (validConditions.find(suc) == validConditions.end())
-                    {
-                        if (visited.find(suc) == visited.end())
-                        {
-                            processing.push(suc);
-                        }
-                    }
-                }
-            }
-        }
-        /*
-        //and the terminus
-        {
-            queue<BasicBlock *> processing;
-            set<BasicBlock *> visited;
-            for (auto block : exitPaths)
-            {
-                processing.push(block);
-                visited.insert(block);
-            }
-            while (!processing.empty())
-            {
-                auto a = processing.front();
-                processing.pop();
-                visited.insert(a);
-                if (find(Termination.begin(), Termination.end(), a) == Termination.end())
-                {
-                    if (blocks.find(a) != blocks.end())
-                    {
-                        //throw TikException("Tik Error: Detected terminus block");
-                        Termination.insert(a);
-                    }
-                }
-                for (auto suc : successors(a))
-                {
-                    if (validConditions.find(suc) == validConditions.end())
-                    {
-                        if (visited.find(suc) == visited.end())
-                        {
-                            processing.push(suc);
-                        }
-                    }
-                }
-            }
-        }
-        */
-    }
-
-    for (auto block : blocks)
-    {
-        if (Body.find(block) == Body.end())
-        {
-            Termination.insert(block);
-        }
-    }
 }
 
 void Kernel::BuildKernel(set<BasicBlock *> &blocks)
@@ -666,20 +504,6 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                         }
                     }
                     VMap[block] = intermediateBlock;
-                    if (Body.find(block) != Body.end())
-                    {
-                        Body.insert(intermediateBlock);
-                        Body.erase(intermediateBlock);
-                    }
-                    else if (Termination.find(block) != Termination.end())
-                    {
-                        Termination.insert(intermediateBlock);
-                        Termination.erase(intermediateBlock);
-                    }
-                    else
-                    {
-                        throw TikException("Tik Error: Block not assigned to Body or Terminus");
-                    }
                     i++;
                 }
             }
@@ -697,20 +521,6 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
             {
                 Conditional.erase(block);
                 Conditional.insert(cb);
-            }
-            if (Body.find(block) != Body.end())
-            {
-                Body.erase(block);
-                Body.insert(cb);
-            }
-            else if (Termination.find(block) != Termination.end())
-            {
-                Termination.erase(block);
-                Termination.insert(cb);
-            }
-            else
-            {
-                throw TikException("Tik Error: block not in Body or Termination");
             }
 
             //fix the phis
@@ -834,198 +644,6 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
         }
     }
 }
-
-/*
-void Kernel::GetMemoryFunctions()
-{
-    // first, get all the pointer operands of each load and store in Kernel::Body
-
-    set<LoadInst *> loadInst;
-    set<StoreInst *> storeInst;
-    for (auto ki = KernelFunction->begin(); ki != KernelFunction->end(); ki++)
-    {
-        auto bb = cast<BasicBlock>(ki);
-        for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
-        {
-            Instruction *inst = cast<Instruction>(BI);
-            if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
-            {
-                loadInst.insert(newInst);
-            }
-            else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
-            {
-                storeInst.insert(newInst);
-            }
-        }
-    }
-    set<Value *> loadValues;
-    set<Value *> storeValues;
-    for (LoadInst *load : loadInst)
-    {
-        Value *loadVal = load->getPointerOperand();
-        loadValues.insert(loadVal);
-    }
-    for (StoreInst *store : storeInst)
-    {
-        Value *storeVal = store->getPointerOperand();
-        storeValues.insert(storeVal);
-    }
-
-    // create MemoryRead, MemoryWrite functions
-    FunctionType *funcType = FunctionType::get(Type::getInt64Ty(TikModule->getContext()), Type::getInt64Ty(TikModule->getContext()), false);
-    MemoryRead = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, "MemoryRead", TikModule);
-    MemoryWrite = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, "MemoryWrite", TikModule);
-
-    int i = 0;
-    BasicBlock *loadBlock = BasicBlock::Create(TikModule->getContext(), "entry", MemoryRead);
-    IRBuilder<> loadBuilder(loadBlock);
-    Value *priorValue = NULL;
-
-    // Add KernelImports to the global map
-
-    // MemoryRead
-    map<Value *, Value *> loadMap;
-    for (Value *lVal : loadValues)
-    {
-        // since MemoryRead is a function, its pointers need to be globally scoped so it and the Kernel function can use them
-        if (GlobalMap.find(lVal) == GlobalMap.end())
-        {
-            llvm::Constant *globalInt = ConstantPointerNull::get(cast<PointerType>(lVal->getType()));
-            llvm::GlobalVariable *g = new GlobalVariable(*TikModule, globalInt->getType(), false, llvm::GlobalValue::LinkageTypes::ExternalLinkage, globalInt);
-            GlobalMap[lVal] = g;
-        }
-        VMap[lVal] = GlobalMap[lVal];
-        Constant *constant = ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), 0);
-        auto b = loadBuilder.CreateLoad(GlobalMap[lVal]);
-        LoadMap[i] = GlobalMap[lVal];
-        Instruction *converted = cast<Instruction>(loadBuilder.CreatePtrToInt(b, Type::getInt64Ty(TikModule->getContext())));
-        Constant *indexConstant = ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), i++);
-        loadMap[lVal] = indexConstant;
-        if (priorValue == NULL)
-        {
-            priorValue = converted;
-        }
-        else
-        {
-            ICmpInst *cmpInst = cast<ICmpInst>(loadBuilder.CreateICmpEQ(MemoryRead->arg_begin(), indexConstant));
-            SelectInst *sInst = cast<SelectInst>(loadBuilder.CreateSelect(cmpInst, converted, priorValue));
-            priorValue = sInst;
-        }
-    }
-    if (!priorValue)
-    {
-        spdlog::warn("Empty kernel read encountered");
-        loadBuilder.CreateRet(ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), 0));
-    }
-    else
-    {
-        loadBuilder.CreateRet(priorValue);
-    }
-
-    // MemoryWrite
-    i = 0;
-    BasicBlock *storeBlock = BasicBlock::Create(TikModule->getContext(), "entry", MemoryWrite);
-    IRBuilder<> storeBuilder(storeBlock);
-    map<Value *, Value *> storeMap;
-    priorValue = NULL;
-    for (Value *sVal : storeValues)
-    {
-        // since MemoryWrite is a function, its pointers need to be globally scoped so it and the Kernel function can use them
-        if (GlobalMap.find(sVal) == GlobalMap.end())
-        {
-            llvm::Constant *globalInt = ConstantPointerNull::get(cast<PointerType>(sVal->getType()));
-            llvm::GlobalVariable *g = new GlobalVariable(*TikModule, globalInt->getType(), false, llvm::GlobalValue::LinkageTypes::ExternalLinkage, globalInt);
-            GlobalMap[sVal] = g;
-        }
-        if (GlobalMap.find(sVal) == GlobalMap.end())
-        {
-            continue;
-        }
-        Constant *constant = ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), 0);
-        auto b = storeBuilder.CreateLoad(GlobalMap[sVal]);
-        StoreMap[i] = GlobalMap[sVal];
-        Instruction *converted = cast<Instruction>(storeBuilder.CreatePtrToInt(b, Type::getInt64Ty(TikModule->getContext())));
-        Constant *indexConstant = ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), i++);
-        if (priorValue == NULL)
-        {
-            priorValue = converted;
-            storeMap[sVal] = indexConstant;
-        }
-        else
-        {
-            ICmpInst *cmpInst = cast<ICmpInst>(storeBuilder.CreateICmpEQ(MemoryWrite->arg_begin(), indexConstant));
-            SelectInst *sInst = cast<SelectInst>(storeBuilder.CreateSelect(cmpInst, converted, priorValue));
-            priorValue = sInst;
-            storeMap[sVal] = indexConstant;
-        }
-    }
-    if (!priorValue)
-    {
-        spdlog::warn("Empty kernel write encountered");
-        storeBuilder.CreateRet(ConstantInt::get(Type::getInt64Ty(TikModule->getContext()), 0));
-    }
-    else
-    {
-        storeBuilder.CreateRet(priorValue);
-    }
-
-    // find instructions in body block not belonging to parent kernel
-    vector<Instruction *> toRemove;
-    for (auto bb = KernelFunction->begin(); bb != KernelFunction->end(); bb++)
-    {
-        for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
-        {
-            Instruction *inst = cast<Instruction>(BI);
-            IRBuilder<> builder(inst);
-            if (LoadInst *newInst = dyn_cast<LoadInst>(inst))
-            {
-                auto readAddr = loadMap[newInst->getPointerOperand()];
-                if (readAddr == NULL)
-                {
-                    throw TikException("Tik Error: Missing address for load");
-                }
-                auto memCall = builder.CreateCall(MemoryRead, readAddr);
-                auto casted = cast<Instruction>(builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType()));
-                MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Cast))));
-                casted->setMetadata("TikSynthetic", tikNode);
-                auto newLoad = builder.CreateLoad(casted);
-                newInst->replaceAllUsesWith(newLoad);
-                if (loadMap.find(newInst) != loadMap.end())
-                {
-                    loadMap[newLoad] = loadMap[newInst];
-                    loadMap.erase(newInst);
-                }
-                if (storeMap.find(newInst) != storeMap.end())
-                {
-                    storeMap[newLoad] = storeMap[newInst];
-                    storeMap.erase(newInst);
-                }
-                toRemove.push_back(newInst);
-            }
-            else if (StoreInst *newInst = dyn_cast<StoreInst>(inst))
-            {
-                auto writeAddr = storeMap[newInst->getPointerOperand()];
-                if (writeAddr == NULL)
-                {
-                    throw TikException("Tik Error: Missing address for store");
-                }
-                auto memCall = builder.CreateCall(MemoryWrite, writeAddr);
-                auto casted = cast<Instruction>(builder.CreateIntToPtr(memCall, newInst->getPointerOperand()->getType()));
-                MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Cast))));
-                casted->setMetadata("TikSynthetic", tikNode);
-                auto newStore = builder.CreateStore(newInst->getValueOperand(), casted); //storee);
-                toRemove.push_back(newInst);
-            }
-        }
-    }
-
-    // remove the instructions that don't belong
-    for (auto inst : toRemove)
-    {
-        inst->eraseFromParent();
-    }
-}
-*/
 
 void Kernel::BuildExit()
 {
@@ -1171,18 +789,6 @@ void Kernel::ApplyMetadata()
     for (auto global : GlobalMap)
     {
         global.second->setMetadata("KernelName", kernelNode);
-    }
-    //annotate the body
-    MDNode *bodyNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::Body))));
-    for (auto body : Body)
-    {
-        cast<Instruction>(body->getFirstInsertionPt())->setMetadata("TikMetadata", bodyNode);
-    }
-    //annotate the terminus
-    MDNode *termNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::Terminus))));
-    for (auto term : Termination)
-    {
-        cast<Instruction>(term->getFirstInsertionPt())->setMetadata("TikMetadata", termNode);
     }
     //annotate the conditional, has to happen after body since conditional is a part of the body
     MDNode *condNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::Conditional))));
@@ -1537,19 +1143,45 @@ void Kernel::InlineFunctions(set<int> &blocks)
             }
         }
     }
+    //erase null blocks here
+    auto blockList = &KernelFunction->getBasicBlockList();
+    vector<Function::iterator> toRemove;
+
+    for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+    {
+        if (BasicBlock *b = dyn_cast<BasicBlock>(fi))
+        {
+            //do nothing
+        }
+        else
+        {
+            toRemove.push_back(fi);
+        }
+    }
+
+    for (auto r : toRemove)
+    {
+        blockList->erase(r);
+    }
+
     //now that everything is inlined we need to remove invalid blocks
     //although some blocks are now an amalgamation of multiple,
     //as a rule we don't need to worry about those.
     //simple successors are enough
+    vector<BasicBlock *> bToRemove;
     for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
     {
         BasicBlock *block = cast<BasicBlock>(fi);
         int64_t id = GetBlockID(block);
-        if (blocks.find(id) == blocks.end() && id != -1)
+        if (blocks.find(id) == blocks.end() && block != Exit && block != Init && block != Exception)
         {
             block->replaceAllUsesWith(Exit);
-            block->eraseFromParent();
+            bToRemove.push_back(block);
         }
+    }
+    for (auto block : bToRemove)
+    {
+        block->eraseFromParent();
     }
 }
 
