@@ -165,6 +165,8 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 
         RemapExports();
 
+        PatchPhis();
+
         //apply metadata
         ApplyMetadata();
 
@@ -1315,6 +1317,51 @@ void Kernel::RemapExports()
                 b.CreateStore(i, exportMap[i]);
                 bi++;
             }
+        }
+    }
+}
+
+void Kernel::PatchPhis()
+{
+    for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+    {
+        BasicBlock *b = cast<BasicBlock>(fi);
+        vector<PHINode *> phisToRemove;
+        for (auto bi = b->begin(); bi != b->end(); bi++)
+        {
+            if (PHINode *phi = dyn_cast<PHINode>(bi))
+            {
+                set<BasicBlock *> toRemove;
+                for (int i = 0; i < phi->getNumIncomingValues(); i++)
+                {
+                    auto p = phi->getIncomingBlock(i);
+                    bool found = false;
+                    for (auto s : successors(p))
+                    {
+                        if (s == b)
+                        {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found)
+                    {
+                        toRemove.insert(p);
+                    }
+                }
+                for (auto r : toRemove)
+                {
+                    phi->removeIncomingValue(r, false);
+                }
+                if (phi->getNumIncomingValues() == 0)
+                {
+                    phisToRemove.push_back(phi);
+                }
+            }
+        }
+        for (auto phi : phisToRemove)
+        {
+            phi->removeFromParent();
         }
     }
 }
