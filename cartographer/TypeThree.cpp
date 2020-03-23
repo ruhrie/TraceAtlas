@@ -34,9 +34,11 @@ namespace TypeThree
                 {
                     BasicBlock *base = blockMap[block];
                     Function *F = base->getParent();
+                    Instruction *term = base->getTerminator();
+                    bool preFound = false;
+                    bool sucFound = false;
                     if (base == &F->getEntryBlock())
                     {
-                        bool used = false;
                         for (auto user : F->users())
                         {
                             if (CallBase *cb = dyn_cast<CallBase>(user))
@@ -45,23 +47,16 @@ namespace TypeThree
                                 int64_t id = GetBlockID(par);
                                 if (kernel.find(id) != kernel.end())
                                 {
-                                    used = true;
+                                    preFound = true;
+                                    break;
                                 }
                             }
-                        }
-                        if (!used)
-                        {
-                            kernel.erase(block);
-                            change = true;
-                            break;
                         }
                     }
                     else
                     {
-                        //check if there is a valid successor and predecessor
+                        //check if there is a valid predecessor
                         //aka mandate that everything has to be a part of the loop
-                        bool preFound = false;
-                        bool sucFound = false;
                         for (auto pred : predecessors(base))
                         {
                             int64_t id = GetBlockID(pred);
@@ -71,6 +66,28 @@ namespace TypeThree
                                 break;
                             }
                         }
+                    }
+
+                    if (isa<ReturnInst>(term)) //check if a ret
+                    {
+                        for (auto user : F->users())
+                        {
+                            if (CallBase *cb = dyn_cast<CallBase>(user))
+                            {
+                                BasicBlock *par = cb->getParent();
+                                int64_t id = GetBlockID(par);
+                                if (kernel.find(id) != kernel.end())
+                                {
+                                    sucFound = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        //check if there is a valid successor
+                        //aka mandate that everything has to be a part of the loop
                         for (auto suc : successors(base))
                         {
                             int64_t id = GetBlockID(suc);
@@ -80,12 +97,13 @@ namespace TypeThree
                                 break;
                             }
                         }
-                        if (!preFound || !sucFound)
-                        {
-                            kernel.erase(block);
-                            change = true;
-                            break;
-                        }
+                    }
+
+                    if (!preFound || !sucFound)
+                    {
+                        kernel.erase(block);
+                        change = true;
+                        break;
                     }
                 }
             }
