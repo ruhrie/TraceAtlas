@@ -33,15 +33,11 @@ set<string> reservedNames;
 
 Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 {
-    //MemoryRead = NULL;
-    //MemoryWrite = NULL;
     set<int> blockSet;
     for (auto b : basicBlocks)
     {
         blockSet.insert(b);
     }
-    Init = NULL;
-    Exit = NULL;
     string Name = "";
     if (name.empty())
     {
@@ -647,6 +643,7 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
 
 void Kernel::BuildExit()
 {
+    PrintVal(Exit, false); //another sacrifice
     IRBuilder<> exitBuilder(Exit);
     int i = 0;
     for (auto pred : predecessors(Exit))
@@ -888,7 +885,8 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
             else if (exte && inte)
             {
                 //both external and internal, so maybe an entrance
-                throw TikException("Mixed function uses, not implemented");
+                //ignore for the moment, worst case we will have no entrances
+                //throw TikException("Mixed function uses, not implemented");
             }
             else if (!exte && inte)
             {
