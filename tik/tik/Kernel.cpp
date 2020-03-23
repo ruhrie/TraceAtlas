@@ -874,6 +874,55 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
 
     if (Entrances.size() == 0)
     {
+        //the entrance has to be a function call
+        //so we check each entry block, its call sites, and see where they are external
+        set<Function *> fs;
+        for (auto block : blocks)
+        {
+            fs.insert(block->getParent());
+        }
+        for (auto f : fs)
+        {
+            bool exte = false;
+            bool inte = false;
+            for (auto user : f->users())
+            {
+                if (auto cb = dyn_cast<CallBase>(user))
+                {
+                    BasicBlock *parent = cb->getParent();
+                    if (blocks.find(parent) == blocks.end())
+                    {
+                        exte = true;
+                    }
+                    else
+                    {
+                        inte = true;
+                    }
+                }
+            }
+            if (exte && !inte)
+            {
+                //exclusively external so this is an entrance
+                Entrances.insert(&f->getEntryBlock());
+            }
+            else if (exte && inte)
+            {
+                //both external and internal, so maybe an entrance
+                throw TikException("Mixed function uses, not implemented");
+            }
+            else if (!exte && inte)
+            {
+                //only internal, so ignore
+            }
+            else
+            {
+                //neither internal or external, throw error
+                throw TikException("Function with no internal or external uses");
+            }
+        }
+    }
+    if (Entrances.size() == 0)
+    {
         throw TikException("Kernel Exception: tik requires a body entrance");
     }
 }
