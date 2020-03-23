@@ -856,40 +856,20 @@ void Kernel::SplitBlocks(set<BasicBlock *> &blocks)
 
 void Kernel::GetEntrances(set<BasicBlock *> &blocks)
 {
-    for (BasicBlock *block : blocks)
+    for (auto block : blocks)
     {
-        int id = GetBlockID(block);
-        if (KernelMap.find(id) == KernelMap.end())
-        {
-            for (BasicBlock *pred : predecessors(block))
-            {
-                int64_t predId = GetBlockID(pred);
-                if (blocks.find(pred) == blocks.end() && ValidBlocks.find(predId) != ValidBlocks.end())
-                {
-                    Entrances.insert(block);
-                }
-            }
-        }
-    }
-
-    if (Entrances.size() == 0)
-    {
-        //the entrance has to be a function call
-        //so we check each entry block, its call sites, and see where they are external
-        set<Function *> fs;
-        for (auto block : blocks)
-        {
-            fs.insert(block->getParent());
-        }
-        for (auto f : fs)
+        Function *F = block->getParent();
+        BasicBlock *par = &F->getEntryBlock();
+        //we first check if the block is an entry block, if it is the only way it could be an entry is through a function call
+        if (block == par)
         {
             bool exte = false;
             bool inte = false;
-            for (auto user : f->users())
+            for (auto user : F->users())
             {
                 if (auto cb = dyn_cast<CallBase>(user))
                 {
-                    BasicBlock *parent = cb->getParent();
+                    BasicBlock *parent = cb->getParent(); //the parent of the function call
                     if (blocks.find(parent) == blocks.end())
                     {
                         exte = true;
@@ -903,7 +883,7 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
             if (exte && !inte)
             {
                 //exclusively external so this is an entrance
-                Entrances.insert(&f->getEntryBlock());
+                Entrances.insert(block);
             }
             else if (exte && inte)
             {
@@ -918,6 +898,46 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
             {
                 //neither internal or external, throw error
                 throw TikException("Function with no internal or external uses");
+            }
+        }
+        else
+        {
+            //this isn't an entry block, therefore we apply the new algorithm
+            bool ent = false;
+            queue<BasicBlock *> workingSet;
+            set<BasicBlock *> visitedBlocks;
+            workingSet.push(block);
+            visitedBlocks.insert(block);
+            while (!workingSet.empty())
+            {
+                BasicBlock *current = workingSet.back();
+                workingSet.pop();
+                if (current == par)
+                {
+                    //this is the entry block. We know that there is a valid path through the computation to here
+                    //that doesn't somehow originate in the kernel
+                    //this is guaranteed by the prior type 2 detector in cartographer
+                    ent = true;
+                    break;
+                }
+                for (BasicBlock *pred : predecessors(current))
+                {
+                    //we now add every predecessor to the working set as long as
+                    //1. we haven't visited it before
+                    //2. it is not inside the kernel
+                    //we are trying to find the entrance to the function because it is was indicates a true entrance
+                    if (visitedBlocks.find(pred) == visitedBlocks.end() && blocks.find(pred) == blocks.end())
+                    {
+                        visitedBlocks.insert(pred);
+                        workingSet.push(pred);
+                    }
+                }
+            }
+            if (ent)
+            {
+                //this is assumed to be a true entrance
+                //if false it has no path that doesn't pass through the prior kernel
+                Entrances.insert(block);
             }
         }
     }
