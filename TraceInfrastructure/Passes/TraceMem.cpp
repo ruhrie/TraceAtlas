@@ -6,6 +6,7 @@
 #include "Passes/TraceMemIO.h"
 #include "llvm/IR/DataLayout.h"
 #include <fstream>
+#include <iostream>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instruction.h>
@@ -96,21 +97,21 @@ namespace DashTracer
             std::ifstream inputStream(KernelFilename);
             inputStream >> j;
             inputStream.close();
-            for (auto &[key, value] : j.items())
+            for (auto &[key, value] : j["Kernels"].items())
             {
                 string index = key;
                 if (stoi(index) == KernelIndex)
                 {
-                    nlohmann::json kernel;
-                    if (!value[0].empty() && value[0].is_array())
-                    {
-                        //embedded layout
-                        kernel = value[0];
-                    }
-                    else
-                    {
-                        kernel = value;
-                    }
+                    nlohmann::json kernel = value["Blocks"];;
+                    // if (!value[0].empty() && value[0].is_array())
+                    // {
+                    //     //embedded layout
+                    //     kernel = value[0];
+                    // }
+                    // else
+                    // {
+                    //     kernel = value;
+                    // }
                     kernelBlockValue = kernel.get<vector<uint64_t>>();
                 }
             }

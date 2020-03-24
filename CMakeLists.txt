@@ -25,6 +25,7 @@ add_subdirectory("cartographer")
 add_subdirectory("TraceInfrastructure")
 add_subdirectory("tik")
 add_subdirectory("Utilities")
+add_subdirectory("wstool")
 
 function(InjectTracer tar)
     add_custom_command(OUTPUT opt.bc
