@@ -185,7 +185,7 @@ int main(int argc, char *argv[])
 
     //we now process all kernels who have no children and then remove them as we go
     std::vector<Kernel *> results;
-
+    
     bool change = true;
     set<vector<int>> failedKernels;
     while (change)

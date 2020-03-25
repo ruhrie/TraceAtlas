@@ -30,6 +30,7 @@ using namespace std;
 static int KernelUID = 0;
 
 set<string> reservedNames;
+std::map<llvm::GlobalVariable*, llvm::GlobalVariable*> globalDeclaractionMap;
 
 Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 {
@@ -1116,11 +1117,37 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
         {
             CopyOperand(gop);
         }
-        // if we are anything else, we don't know what to do
+        /*// if we are anything else, we don't know what to do
         else if (GlobalValue *gv = dyn_cast<GlobalValue>(i))
         {
             spdlog::warn("Non variable global reference"); //basically this is a band aid. Needs some more help
         }
+        else if (llvm::BitCastOperator* op = dyn_cast<llvm::BitCastOperator>(i))
+        {
+            CopyOperand(op);
+            std::cout << "This is a bitcast operator." << std::endl;
+        }
+        else if (llvm::PtrToIntOperator* op = dyn_cast<llvm::PtrToIntOperator>(i))
+        {
+            std::cout << "This is a PtrToInt operator." << std::endl;
+        }
+        else if (llvm::ZExtOperator* op = dyn_cast<llvm::ZExtOperator>(i))
+        {
+            std::cout << "This is a Zext operator." << std::endl;
+        }
+        else if (llvm::FPMathOperator* op = dyn_cast<llvm::FPMathOperator>(i))
+        {
+            CopyOperand(op);
+            std::cout << "This is an FPMath operator." << std::endl;
+        }
+        else if (llvm::OverflowingBinaryOperator* op = dyn_cast<llvm::OverflowingBinaryOperator>(i))
+        {
+            std::cout << "This is an OF binary operator." << std::endl;
+        }
+        else if (llvm::PossiblyExactOperator* op = dyn_cast<llvm::PossiblyExactOperator>(i))
+        {
+            std::cout << "This is a possibly exact operator." << std::endl;
+        }*/
         else if (isa<Operator>(i))
         {
             spdlog::warn("Function argument operand type not supported for global copying."); //basically this is a band aid. Needs some more help
@@ -1139,7 +1166,7 @@ void Kernel::CopyOperand(llvm::User *inst)
             if (m != TikModule)
             {
                 //its the wrong module
-                if (VMap.find(gv) == VMap.end())
+                if (globalDeclaractionMap.find(gv) == globalDeclaractionMap.end())
                 {
                     //and not already in the vmap
 
@@ -1174,13 +1201,20 @@ void Kernel::CopyOperand(llvm::User *inst)
                         DC->setSelectionKind(SC->getSelectionKind());
                         newGlobal->setComdat(DC);
                     }
-                    VMap[gv] = newGlobal;
+                    globalDeclaractionMap[gv] = newGlobal;
                 }
+                VMap[gv] = globalDeclaractionMap[gv];
             }
         }
         else if (GlobalValue *gv = dyn_cast<GlobalValue>(v))
         {
             throw TikException("Tik Error: Non variable global reference");
+        }
+        else if (Constant *con = dyn_cast<Constant>(v))
+        {
+        }
+        else
+        {
         }
     }
 }
