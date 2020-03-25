@@ -3,9 +3,7 @@
 
 using namespace std;
 
-namespace TypeOne
+namespace WorkingSet
 {
     void Process(std::string &key, std::string &value);
-    std::set<std::set<int>> Get();
-    extern std::map<int, uint64_t> blockCount;
 } 
