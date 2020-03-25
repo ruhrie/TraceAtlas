@@ -30,7 +30,7 @@ using namespace std;
 static int KernelUID = 0;
 
 set<string> reservedNames;
-std::map<llvm::GlobalVariable*, llvm::GlobalVariable*> globalDeclaractionMap;
+std::map<llvm::GlobalVariable *, llvm::GlobalVariable *> globalDeclaractionMap;
 
 Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 {
