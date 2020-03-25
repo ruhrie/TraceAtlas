@@ -89,6 +89,10 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
                     {
                         throw TikException("Tik Error: Recursion is unimplemented")
                     }
+                    if (isa<InvokeInst>(cb))
+                    {
+                        throw TikException("Invoke Inst is unsupported")
+                    }
                 }
             }
         }
@@ -166,7 +170,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 
         RemapExports();
 
-        PatchPhis();
+        //PatchPhis();
 
         //apply metadata
         ApplyMetadata();
@@ -534,8 +538,19 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                         if (blocks.find(pred) == blocks.end())
                         {
                             //we have an invalid predecessor, replace with init
-                            p->replaceIncomingBlockWith(pred, Init);
-                            rescheduled++;
+                            if (Entrances.find(block) != Entrances.end())
+                            {
+                                p->replaceIncomingBlockWith(pred, Init);
+                                rescheduled++;
+                            }
+                            else
+                            {
+                                auto a = p->getBasicBlockIndex(pred);
+                                if (a != -1)
+                                {
+                                    p->removeIncomingValue(pred);
+                                }
+                            }
                         }
                     }
                 }
@@ -1278,7 +1293,17 @@ void Kernel::InlineFunctions(set<int> &blocks)
         int64_t id = GetBlockID(block);
         if (blocks.find(id) == blocks.end() && block != Exit && block != Init && block != Exception)
         {
-            block->replaceAllUsesWith(Exit);
+            for (auto user : block->users())
+            {
+                if (PHINode *phi = dyn_cast<PHINode>(user))
+                {
+                    phi->removeIncomingValue(block);
+                }
+                else
+                {
+                    user->replaceUsesOfWith(block, Exit);
+                }
+            }
             bToRemove.push_back(block);
         }
     }
@@ -1303,14 +1328,30 @@ void Kernel::RemapExports()
                 exportMap[mapped] = alloc;
                 for (auto u : mapped->users())
                 {
-                    IRBuilder<> uBuilder(cast<Instruction>(u));
-                    auto load = uBuilder.CreateLoad(alloc);
-                    for (int i = 0; i < u->getNumOperands(); i++)
+                    if (PHINode *p = dyn_cast<PHINode>(u))
                     {
-                        if (mapped == u->getOperand(i))
+                        for (int i = 0; i < p->getNumIncomingValues(); i++)
                         {
-                            u->setOperand(i, load);
-                            break;
+                            if (mapped == p->getIncomingValue(i))
+                            {
+                                BasicBlock *prev = p->getIncomingBlock(i);
+                                IRBuilder<> phiBuilder(prev->getTerminator());
+                                auto load = phiBuilder.CreateLoad(alloc);
+                                p->setIncomingValue(i, load);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        IRBuilder<> uBuilder(cast<Instruction>(u));
+                        auto load = uBuilder.CreateLoad(alloc);
+                        for (int i = 0; i < u->getNumOperands(); i++)
+                        {
+                            if (mapped == u->getOperand(i))
+                            {
+                                u->setOperand(i, load);
+                                break;
+                            }
                         }
                     }
                 }
@@ -1320,6 +1361,7 @@ void Kernel::RemapExports()
 
     for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
     {
+        BasicBlock *block = cast<BasicBlock>(fi);
         for (auto bi = fi->begin(); bi != fi->end(); bi++)
         {
             Instruction *i = cast<Instruction>(bi);
@@ -1347,7 +1389,16 @@ void Kernel::RemapExports()
             }
             if (exportMap.find(i) != exportMap.end())
             {
-                IRBuilder<> b(i->getNextNode());
+                Instruction *buildBase;
+                if (isa<PHINode>(i))
+                {
+                    buildBase = block->getFirstNonPHI();
+                }
+                else
+                {
+                    buildBase = i->getNextNode();
+                }
+                IRBuilder<> b(buildBase);
                 b.CreateStore(i, exportMap[i]);
                 bi++;
             }
@@ -1385,7 +1436,7 @@ void Kernel::PatchPhis()
                 }
                 for (auto r : toRemove)
                 {
-                    phi->removeIncomingValue(r, false);
+                    phi->removeIncomingValue(r);
                 }
                 if (phi->getNumIncomingValues() == 0)
                 {
