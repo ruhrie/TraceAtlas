@@ -24,6 +24,7 @@ bool noProgressBar;
 bool blocksLabeled = false;
 map<int, set<string>> blockLabelMap;
 map<int, BasicBlock *> blockMap;
+set<int> ValidBlocks;
 
 llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
 llvm::cl::opt<float> threshold("t", cl::desc("The threshold of block grouping required to complete a kernel."), llvm::cl::value_desc("float"), llvm::cl::init(0.9));
@@ -122,6 +123,14 @@ int main(int argc, char **argv)
         auto type1Kernels = TypeOne::Get();
         spdlog::info("Detected " + to_string(type1Kernels.size()) + " type 1 kernels");
 
+        for (auto &[block, count] : TypeOne::blockCount)
+        {
+            if (count != 0)
+            {
+                ValidBlocks.insert(block);
+            }
+        }
+
         TypeTwo::Setup(M, type1Kernels);
         ProcessTrace(inputTrace, &TypeTwo::Process, "Detecting type 2 kernels", noBar);
         auto type2Kernels = TypeTwo::Get();
@@ -148,14 +157,7 @@ int main(int argc, char **argv)
             }
         }
 
-        vector<int> validBlocks;
-        for (auto &[block, count] : TypeOne::blockCount)
-        {
-            if (count != 0)
-            {
-                validBlocks.push_back(block);
-            }
-        }
+        
 
         nlohmann::json outputJson;
         for (auto key : finalResult)
@@ -194,7 +196,7 @@ int main(int argc, char **argv)
                 outputJson["Kernels"][to_string(key.first)]["Blocks"] = key.second;
             }
         }
-        outputJson["ValidBlocks"] = validBlocks;
+        outputJson["ValidBlocks"] = ValidBlocks;
         ofstream oStream(kernelFile);
         oStream << outputJson;
         oStream.close();
