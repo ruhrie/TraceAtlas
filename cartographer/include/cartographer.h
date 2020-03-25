@@ -1,5 +1,6 @@
 #pragma once
 #include <llvm/IR/BasicBlock.h>
+#include <llvm/Support/CommandLine.h>
 #include <map>
 #include <set>
 #include <string>

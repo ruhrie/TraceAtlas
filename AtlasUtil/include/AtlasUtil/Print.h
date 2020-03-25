@@ -2,6 +2,7 @@
 #include <iostream>
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/Module.h>
+#include <llvm/Support/raw_ostream.h>
 
 inline void PrintVal(llvm::Value *val, bool print = true)
 {
