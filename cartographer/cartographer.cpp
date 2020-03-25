@@ -147,17 +147,18 @@ int main(int argc, char **argv)
         auto type4Kernels = TypeFour::Process(type3Kernels, M);
         spdlog::info("Detected " + to_string(type4Kernels.size()) + " type 4 kernels");
 
+        auto type35Kernels = TypeThree::Process(type4Kernels, M);
+        spdlog::info("Detected " + to_string(type35Kernels.size()) + " type 3.5 kernels");
+
         map<int, set<int>> finalResult;
         int j = 0;
-        for (auto set : type4Kernels)
+        for (auto set : type35Kernels)
         {
             if (!set.empty())
             {
                 finalResult[j++] = set;
             }
         }
-
-        
 
         nlohmann::json outputJson;
         for (auto key : finalResult)

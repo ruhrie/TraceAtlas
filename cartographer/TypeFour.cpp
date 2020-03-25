@@ -301,14 +301,12 @@ namespace TypeFour
         while (!workingSet.empty())
         {
             BasicBlock *b = workingSet.front();
-            cout << "process" << GetBlockID(b) << "\n";
             workingSet.pop();
             for (auto suc : successors(b))
             {
                 int id = GetBlockID(suc);
                 if (validBlocks.find(suc) != validBlocks.end() && visitedBlocks.find(suc) == visitedBlocks.end())
                 {
-                    cout << "push" << id << "\n";
                     workingSet.push(suc);
                     visitedBlocks.insert(suc);
                 }
