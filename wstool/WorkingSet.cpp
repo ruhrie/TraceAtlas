@@ -1,11 +1,5 @@
 #include "WorkingSet.h"
-#include <algorithm>
-#include <map>
-#include <queue>
-#include <set>
-#include <string>
-#include <sstream>
-#include<iostream>
+
 
 using namespace std;
 
@@ -82,22 +76,22 @@ namespace WorkingSet
     {
         long int addrIndex = stol(value, 0, 0);
         string address = value;
-        std::cout<<"key:"<< key << std::endl;
-        std::cout<<"value:"<< value << std::endl;
-        printf("addrIndex : %ld \n",addrIndex);
+        //std::cout<<"key:"<< key << std::endl;
+        //std::cout<<"value:"<< value << std::endl;
+        //printf("addrIndex : %ld \n",addrIndex);
         if ((deAlias.count(addrIndex) != 0) && (key == "WSLoadAddress"))
         {
-            printf ("11111 \n");
+            //printf ("11111 \n");
             livingLoad(address,timing);
         }                    
         else if (key == "WSLoadAddress")
         {
-            printf ("2222 \n");
+            //printf ("2222 \n");
             firstStore(address,timing, -1);            
         }          
         else if (key == "WSStoreAddress")
         {
-            printf ("3333 \n");
+            //printf ("3333 \n");
             firstStore(address,timing,1);
         }   
         timing++;         
