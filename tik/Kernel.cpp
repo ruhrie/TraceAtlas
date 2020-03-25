@@ -170,7 +170,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
 
         RemapExports();
 
-        //PatchPhis();
+        PatchPhis();
 
         //apply metadata
         ApplyMetadata();
@@ -1412,41 +1412,29 @@ void Kernel::PatchPhis()
     {
         BasicBlock *b = cast<BasicBlock>(fi);
         vector<PHINode *> phisToRemove;
-        for (auto bi = b->begin(); bi != b->end(); bi++)
+        for(auto &phi : b->phis())
         {
-            if (PHINode *phi = dyn_cast<PHINode>(bi))
+            vector<BasicBlock *> valuesToRemove;
+            for(int i = 0; i < phi.getNumIncomingValues(); i++)
             {
-                set<BasicBlock *> toRemove;
-                for (int i = 0; i < phi->getNumIncomingValues(); i++)
+                auto block = phi.getIncomingBlock(i);
+                if(block->getParent() != KernelFunction)
                 {
-                    auto p = phi->getIncomingBlock(i);
-                    bool found = false;
-                    for (auto s : successors(p))
-                    {
-                        if (s == b)
-                        {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found)
-                    {
-                        toRemove.insert(p);
-                    }
-                }
-                for (auto r : toRemove)
-                {
-                    phi->removeIncomingValue(r);
-                }
-                if (phi->getNumIncomingValues() == 0)
-                {
-                    phisToRemove.push_back(phi);
+                    valuesToRemove.push_back(block);
                 }
             }
+            for(auto toR : valuesToRemove)
+            {
+                phi.removeIncomingValue(toR, false);
+            }
+            if(phi.getNumIncomingValues() == 0)
+            {
+                phisToRemove.push_back(&phi);
+            }
         }
-        for (auto phi : phisToRemove)
+        for(auto phi : phisToRemove)
         {
-            phi->removeFromParent();
+            phi->eraseFromParent();
         }
     }
 }
