@@ -830,7 +830,15 @@ void Kernel::Repipe()
             auto suc = cTerm->getSuccessor(i);
             if (suc->getParent() != KernelFunction)
             {
-                cTerm->setSuccessor(i, Exit);
+                if (ExitBlockMap.find(suc) == ExitBlockMap.end())
+                {
+                    BasicBlock *tmpExit = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
+                    IRBuilder<> exitBuilder(tmpExit);
+                    exitBuilder.CreateBr(Exit);
+                    ExitBlockMap[suc] = tmpExit;
+                }
+
+                cTerm->setSuccessor(i, ExitBlockMap[suc]);
             }
         }
     }
@@ -1412,27 +1420,42 @@ void Kernel::PatchPhis()
     {
         BasicBlock *b = cast<BasicBlock>(fi);
         vector<PHINode *> phisToRemove;
-        for(auto &phi : b->phis())
+        for (auto &phi : b->phis())
         {
             vector<BasicBlock *> valuesToRemove;
-            for(int i = 0; i < phi.getNumIncomingValues(); i++)
+            for (int i = 0; i < phi.getNumIncomingValues(); i++)
             {
                 auto block = phi.getIncomingBlock(i);
-                if(block->getParent() != KernelFunction)
+                if (block->getParent() != KernelFunction)
                 {
                     valuesToRemove.push_back(block);
                 }
+                else
+                {
+                    bool isPred = false;
+                    for (auto pred : predecessors(b))
+                    {
+                        if (pred == block)
+                        {
+                            isPred = true;
+                        }
+                    }
+                    if (!isPred)
+                    {
+                        valuesToRemove.push_back(block);
+                    }
+                }
             }
-            for(auto toR : valuesToRemove)
+            for (auto toR : valuesToRemove)
             {
                 phi.removeIncomingValue(toR, false);
             }
-            if(phi.getNumIncomingValues() == 0)
+            if (phi.getNumIncomingValues() == 0)
             {
                 phisToRemove.push_back(&phi);
             }
         }
-        for(auto phi : phisToRemove)
+        for (auto phi : phisToRemove)
         {
             phi->eraseFromParent();
         }
