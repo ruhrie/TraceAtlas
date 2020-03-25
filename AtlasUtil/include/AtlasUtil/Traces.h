@@ -11,6 +11,7 @@
 
 static void ProcessTrace(std::string TraceFile, std::function<void(std::string &, std::string &)> LogicFunction, std::string barPrefix = "", bool noBar = false)
 {
+    std::cout << "\e[?25l";
     indicators::ProgressBar bar;
     int previousCount = 0;
     if (!noBar)
@@ -138,4 +139,5 @@ static void ProcessTrace(std::string TraceFile, std::function<void(std::string &
 
     inflateEnd(&strm);
     inputTrace.close();
+    std::cout << "\e[?25h";
 }

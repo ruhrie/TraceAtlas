@@ -24,7 +24,6 @@ cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging le
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 static int UID = 0;
 
-int lastBlock;
 string currentKernel = "-1";
 int currentUid = -1;
 
@@ -35,14 +34,11 @@ map<string, set<int>> kernelMap;
 map<string, set<string>> parentMap;
 map<int, set<int>> consumerMap;
 
-std::vector<int> basicBlocks;
-
 void Process(string &key, string &value)
 {
     if (key == "BBEnter")
     {
         int block = stoi(value, 0, 0);
-        lastBlock = block;
         if (currentKernel == "-1" || kernelMap[currentKernel].find(block) == kernelMap[currentKernel].end())
         {
             //we aren't in the same kernel as last time
@@ -63,7 +59,6 @@ void Process(string &key, string &value)
                 kernelIdMap[UID++] = currentKernel;
             }
         }
-        basicBlocks.push_back(block);
     }
     else if (key == "LoadAddress")
     {
