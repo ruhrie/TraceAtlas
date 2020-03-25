@@ -112,6 +112,8 @@ private:
 
     void CopyGlobals();
 
+    void PatchPhis();
+
     void GetKernelLabels();
     void CopyArgument(llvm::CallBase *Call);
     void CopyOperand(llvm::User *inst);

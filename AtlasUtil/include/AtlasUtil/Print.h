@@ -3,12 +3,15 @@
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/Module.h>
 
-inline void PrintVal(llvm::Value *val)
+inline void PrintVal(llvm::Value *val, bool print = true)
 {
     std::string str;
     llvm::raw_string_ostream rso(str);
     val->print(rso);
-    std::cout << str << "\n";
+    if (print)
+    {
+        std::cout << str << "\n";
+    }
 }
 
 inline void PrintVal(llvm::Metadata *val)
