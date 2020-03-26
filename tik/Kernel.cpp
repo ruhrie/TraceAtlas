@@ -89,6 +89,10 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
                     {
                         throw TikException("Tik Error: Recursion is unimplemented")
                     }
+                    if (isa<InvokeInst>(cb))
+                    {
+                        throw TikException("Invoke Inst is unsupported")
+                    }
                 }
             }
         }
@@ -534,8 +538,19 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                         if (blocks.find(pred) == blocks.end())
                         {
                             //we have an invalid predecessor, replace with init
-                            p->replaceIncomingBlockWith(pred, Init);
-                            rescheduled++;
+                            if (Entrances.find(block) != Entrances.end())
+                            {
+                                p->replaceIncomingBlockWith(pred, Init);
+                                rescheduled++;
+                            }
+                            else
+                            {
+                                auto a = p->getBasicBlockIndex(pred);
+                                if (a != -1)
+                                {
+                                    p->removeIncomingValue(pred);
+                                }
+                            }
                         }
                     }
                 }
@@ -815,7 +830,15 @@ void Kernel::Repipe()
             auto suc = cTerm->getSuccessor(i);
             if (suc->getParent() != KernelFunction)
             {
-                cTerm->setSuccessor(i, Exit);
+                if (ExitBlockMap.find(suc) == ExitBlockMap.end())
+                {
+                    BasicBlock *tmpExit = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
+                    IRBuilder<> exitBuilder(tmpExit);
+                    exitBuilder.CreateBr(Exit);
+                    ExitBlockMap[suc] = tmpExit;
+                }
+
+                cTerm->setSuccessor(i, ExitBlockMap[suc]);
             }
         }
     }
@@ -1347,7 +1370,17 @@ void Kernel::InlineFunctions(set<int> &blocks)
         int64_t id = GetBlockID(block);
         if (blocks.find(id) == blocks.end() && block != Exit && block != Init && block != Exception)
         {
-            block->replaceAllUsesWith(Exit);
+            for (auto user : block->users())
+            {
+                if (PHINode *phi = dyn_cast<PHINode>(user))
+                {
+                    phi->removeIncomingValue(block);
+                }
+                else
+                {
+                    user->replaceUsesOfWith(block, Exit);
+                }
+            }
             bToRemove.push_back(block);
         }
     }
@@ -1372,14 +1405,30 @@ void Kernel::RemapExports()
                 exportMap[mapped] = alloc;
                 for (auto u : mapped->users())
                 {
-                    IRBuilder<> uBuilder(cast<Instruction>(u));
-                    auto load = uBuilder.CreateLoad(alloc);
-                    for (int i = 0; i < u->getNumOperands(); i++)
+                    if (PHINode *p = dyn_cast<PHINode>(u))
                     {
-                        if (mapped == u->getOperand(i))
+                        for (int i = 0; i < p->getNumIncomingValues(); i++)
                         {
-                            u->setOperand(i, load);
-                            break;
+                            if (mapped == p->getIncomingValue(i))
+                            {
+                                BasicBlock *prev = p->getIncomingBlock(i);
+                                IRBuilder<> phiBuilder(prev->getTerminator());
+                                auto load = phiBuilder.CreateLoad(alloc);
+                                p->setIncomingValue(i, load);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        IRBuilder<> uBuilder(cast<Instruction>(u));
+                        auto load = uBuilder.CreateLoad(alloc);
+                        for (int i = 0; i < u->getNumOperands(); i++)
+                        {
+                            if (mapped == u->getOperand(i))
+                            {
+                                u->setOperand(i, load);
+                                break;
+                            }
                         }
                     }
                 }
@@ -1389,6 +1438,7 @@ void Kernel::RemapExports()
 
     for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
     {
+        BasicBlock *block = cast<BasicBlock>(fi);
         for (auto bi = fi->begin(); bi != fi->end(); bi++)
         {
             Instruction *i = cast<Instruction>(bi);
@@ -1416,7 +1466,16 @@ void Kernel::RemapExports()
             }
             if (exportMap.find(i) != exportMap.end())
             {
-                IRBuilder<> b(i->getNextNode());
+                Instruction *buildBase;
+                if (isa<PHINode>(i))
+                {
+                    buildBase = block->getFirstNonPHI();
+                }
+                else
+                {
+                    buildBase = i->getNextNode();
+                }
+                IRBuilder<> b(buildBase);
                 b.CreateStore(i, exportMap[i]);
                 bi++;
             }
@@ -1430,41 +1489,44 @@ void Kernel::PatchPhis()
     {
         BasicBlock *b = cast<BasicBlock>(fi);
         vector<PHINode *> phisToRemove;
-        for (auto bi = b->begin(); bi != b->end(); bi++)
+        for (auto &phi : b->phis())
         {
-            if (PHINode *phi = dyn_cast<PHINode>(bi))
+            vector<BasicBlock *> valuesToRemove;
+            for (int i = 0; i < phi.getNumIncomingValues(); i++)
             {
-                set<BasicBlock *> toRemove;
-                for (int i = 0; i < phi->getNumIncomingValues(); i++)
+                auto block = phi.getIncomingBlock(i);
+                if (block->getParent() != KernelFunction)
                 {
-                    auto p = phi->getIncomingBlock(i);
-                    bool found = false;
-                    for (auto s : successors(p))
+                    valuesToRemove.push_back(block);
+                }
+                else
+                {
+                    bool isPred = false;
+                    for (auto pred : predecessors(b))
                     {
-                        if (s == b)
+                        if (pred == block)
                         {
-                            found = true;
-                            break;
+                            isPred = true;
                         }
                     }
-                    if (!found)
+                    if (!isPred)
                     {
-                        toRemove.insert(p);
+                        valuesToRemove.push_back(block);
                     }
                 }
-                for (auto r : toRemove)
-                {
-                    phi->removeIncomingValue(r, false);
-                }
-                if (phi->getNumIncomingValues() == 0)
-                {
-                    phisToRemove.push_back(phi);
-                }
+            }
+            for (auto toR : valuesToRemove)
+            {
+                phi.removeIncomingValue(toR, false);
+            }
+            if (phi.getNumIncomingValues() == 0)
+            {
+                phisToRemove.push_back(&phi);
             }
         }
         for (auto phi : phisToRemove)
         {
-            phi->removeFromParent();
+            phi->eraseFromParent();
         }
     }
 }

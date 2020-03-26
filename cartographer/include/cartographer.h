@@ -11,3 +11,4 @@ extern llvm::cl::opt<int> hotThreshold;
 extern bool blocksLabeled;
 extern std::map<int, std::set<std::string>> blockLabelMap;
 extern std::map<int, llvm::BasicBlock *> blockMap;
+extern std::set<int> ValidBlocks;

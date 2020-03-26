@@ -19,7 +19,7 @@ jobs:
       - name: Cache vcpkg artifacts
         uses: actions/cache@v1
         with:
-          path: ${{github.workspace}}/vcpkg
+          path: ${{github.workspace}}/vcpkg/
           key: ${{ hashFiles( env.vcpkgResponseFile ) }}
       - name: Run vcpkg
         uses: lukka/run-vcpkg@v0
