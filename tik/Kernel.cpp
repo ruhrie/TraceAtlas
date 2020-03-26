@@ -425,7 +425,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
         throw TikException("Entrances not on same level");
     }
 
-    set<BasicBlock *> handeledExits;
+    set<BasicBlock *> handledExits;
     for (auto block : blocks)
     {
         if (headFunctions.find(block->getParent()) == headFunctions.end())
@@ -470,7 +470,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                         }
                         else
                         {
-                            if (handeledExits.find(pair.second) == handeledExits.end())
+                            if (handledExits.find(pair.second) == handledExits.end())
                             {
                                 //exits both kernels simultaneously
                                 //we create a temp block and remab the exit so the phi has a value
@@ -502,7 +502,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                                 int index = ExitMap[tar];
                                 ExitMap.erase(tar);
                                 ExitMap[newBlock] = index;
-                                handeledExits.insert(pair.second);
+                                handledExits.insert(pair.second);
                             }
                         }
                     }
@@ -1122,16 +1122,63 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
             if (m != TikModule)
             {
                 //its the wrong module
-                if (VMap.find(gv) == VMap.end())
+                if (gv->getParent() != TikModule)
                 {
-                    //and not already in the vmap
-                    Constant *initializer = NULL;
                     if (gv->hasInitializer())
                     {
-                        initializer = gv->getInitializer();
+                        llvm::Constant *value = gv->getInitializer();
+                        auto opList = value->getNumOperands();
+                        for (int iter = 0; iter < value->getNumOperands(); iter++)
+                        {
+                            llvm::User *internal = cast<llvm::User>(value->getOperand(iter));
+                            CopyOperand(internal);
+                        }
                     }
-                    GlobalVariable *newVar = new GlobalVariable(*TikModule, gv->getValueType(), gv->isConstant(), gv->getLinkage(), initializer, gv->getName(), NULL, gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
-                    VMap[gv] = newVar;
+                    //and not already in the vmap
+
+                    //for some reason if we don't do this first the verifier fails
+                    //we do absolutely nothing with it and it doesn't even end up in our output
+                    //its technically a memory leak, but its an acceptable sacrifice
+                    GlobalVariable *newVar = new GlobalVariable(
+                        gv->getValueType(),
+                        gv->isConstant(), gv->getLinkage(), NULL, "",
+                        gv->getThreadLocalMode(),
+                        gv->getType()->getAddressSpace());
+                    newVar->copyAttributesFrom(gv);
+                    //end of the sacrifice
+                    auto newGlobal = cast<GlobalVariable>(TikModule->getOrInsertGlobal(gv->getName(), gv->getType()->getPointerElementType()));
+                    newGlobal->setConstant(gv->isConstant());
+                    newGlobal->setLinkage(gv->getLinkage());
+                    newGlobal->setThreadLocalMode(gv->getThreadLocalMode());
+                    newGlobal->copyAttributesFrom(gv);
+                    if (gv->hasInitializer())
+                    {
+                        newGlobal->setInitializer(MapValue(gv->getInitializer(), VMap));
+                    }
+                    SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
+                    gv->getAllMetadata(MDs);
+                    for (auto MD : MDs)
+                    {
+                        newGlobal->addMetadata(MD.first, *MapMetadata(MD.second, VMap, RF_MoveDistinctMDs));
+                    }
+                    if (Comdat *SC = gv->getComdat())
+                    {
+                        Comdat *DC = newGlobal->getParent()->getOrInsertComdat(SC->getName());
+                        DC->setSelectionKind(SC->getSelectionKind());
+                        newGlobal->setComdat(DC);
+                    }
+                    globalDeclaractionMap[gv] = newGlobal;
+                    VMap[gv] = newGlobal;
+                    for (auto user : gv->users())
+                    {
+                        if (llvm::Instruction *inst = dyn_cast<llvm::Instruction>(user))
+                        {
+                            if (inst->getModule() == TikModule)
+                            {
+                                user->replaceUsesOfWith(gv, newGlobal);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1191,6 +1238,18 @@ void Kernel::CopyOperand(llvm::User *inst)
                 //its the wrong module
                 if (globalDeclaractionMap.find(gv) == globalDeclaractionMap.end())
                 {
+                    // iterate through all internal operators of this global
+                    PrintVal(gv);
+                    if (gv->hasInitializer())
+                    {
+                        llvm::Constant *value = gv->getInitializer();
+                        auto opList = value->getNumOperands();
+                        for (int iter = 0; iter < value->getNumOperands(); iter++)
+                        {
+                            llvm::User *internal = cast<llvm::User>(value->getOperand(iter));
+                            CopyOperand(internal);
+                        }
+                    }
                     //and not already in the vmap
 
                     //for some reason if we don't do this first the verifier fails
@@ -1225,8 +1284,18 @@ void Kernel::CopyOperand(llvm::User *inst)
                         newGlobal->setComdat(DC);
                     }
                     globalDeclaractionMap[gv] = newGlobal;
+                    VMap[gv] = newGlobal;
+                    for (auto user : gv->users())
+                    {
+                        if (llvm::Instruction *inst = dyn_cast<llvm::Instruction>(user))
+                        {
+                            if (inst->getModule() == TikModule)
+                            {
+                                user->replaceUsesOfWith(gv, newGlobal);
+                            }
+                        }
+                    }
                 }
-                VMap[gv] = globalDeclaractionMap[gv];
             }
         }
         else if (GlobalValue *gv = dyn_cast<GlobalValue>(v))

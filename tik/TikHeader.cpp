@@ -57,7 +57,7 @@ void ProcessFunctionArgument(std::string &type, std::string argname)
         pointerString += "*";
     }
     std::string funcName = pointerString + argname;
-    type.insert(type.find(" "), funcName);
+    type.insert(whiteSpacePosition, funcName);
 }
 
 void RecurseForStructs(llvm::Type *input, std::set<llvm::StructType *> &AllStructures)
@@ -226,7 +226,11 @@ std::string getCVectorType(llvm::Type *elem, std::set<llvm::StructType *> &AllSt
     VectorsUsed = true;
     unsigned int elemCount = vecArg->getElementCount().Min;
     std::string type = getCType(vecArg->getElementType(), AllStructures);
-    if (type == "float" && elemCount == 4)
+    if (type == "float" && elemCount == 2)
+    {
+        return "__m128";
+    }
+    else if (type == "float" && elemCount == 4)
     {
         return "__m128";
     }
@@ -249,6 +253,66 @@ std::string getCVectorType(llvm::Type *elem, std::set<llvm::StructType *> &AllSt
     else if (type == "int" && elemCount == 8)
     {
         return "__m256i";
+    }
+    else if (type == "uint8_t" && elemCount == 8)
+    {
+        return "__m64";
+    }
+    else if (type == "uint8_t" && elemCount == 16)
+    {
+        return "__m128i";
+    }
+    else if (type == "uint8_t" && elemCount == 32)
+    {
+        return "__m256i";
+    }
+    else if (type == "uint8_t" && elemCount == 64)
+    {
+        return "__m512i";
+    }
+    else if (type == "uint16_t" && elemCount == 4)
+    {
+        return "__m64";
+    }
+    else if (type == "uint16_t" && elemCount == 8)
+    {
+        return "__m128i";
+    }
+    else if (type == "uint16_t" && elemCount == 16)
+    {
+        return "__m256i";
+    }
+    else if (type == "uint16_t" && elemCount == 32)
+    {
+        return "__m512i";
+    }
+    else if (type == "uint32_t" && elemCount == 2)
+    {
+        return "__m64";
+    }
+    else if (type == "uint32_t" && elemCount == 4)
+    {
+        return "__m128i";
+    }
+    else if (type == "uint32_t" && elemCount == 8)
+    {
+        return "__m256i";
+    }
+    else if (type == "uint32_t" && elemCount == 16)
+    {
+        return "__m512i";
+    }
+    else if (type == "uint64_t" && elemCount == 2)
+    {
+        return "__m128i";
+    }
+    else if (type == "uint64_t" && elemCount == 4)
+    {
+        return "__m256i";
+    }
+    else if (type == "uint64_t" && elemCount == 8)
+    {
+        return "__m512i";
     }
     else
     {
