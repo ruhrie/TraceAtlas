@@ -68,7 +68,7 @@ namespace TypeFour
             if (auto cb = dyn_cast<CallBase>(bi))
             {
                 Function *F = cb->getCalledFunction();
-                if (F && !F->empty())
+                if (F != NULL && !F->empty())
                 {
                     BasicBlock *entry = &F->getEntryBlock();
                     auto entryId = GetBlockID(entry);
@@ -177,7 +177,7 @@ namespace TypeFour
                 if (auto ci = dyn_cast<CallBase>(bi))
                 {
                     Function *f = ci->getCalledFunction();
-                    if (f && !f->empty())
+                    if (f != NULL && !f->empty())
                     {
                         BasicBlock *entry = &f->getEntryBlock();
                         if (entry == base)

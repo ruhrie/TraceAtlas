@@ -76,11 +76,11 @@ namespace DashTracer
                 }
                 else
                 {
-                    if (local & contExt)
+                    if (local && contExt)
                     {
                         borderBuilder.CreateCall(certOn);
                     }
-                    else if (!local & contInt)
+                    else if (!local && contInt)
                     {
                         borderBuilder.CreateCall(certOff);
                     }

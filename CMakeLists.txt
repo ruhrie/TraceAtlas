@@ -22,8 +22,8 @@ set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld-9")
 
 set(CMAKE_CXX_CLANG_TIDY 
     clang-tidy-9;
-    --header-filter=.;
     --warnings-as-errors=*;
+    --checks=readability-*,-readability-magic-numbers;
     --format-style=file;
     )
 

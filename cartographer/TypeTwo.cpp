@@ -18,7 +18,7 @@ namespace TypeTwo
     set<int64_t> *blocks = NULL;
 
     bool blocksLabeled = false;
-    string currentKernel = "";
+    string currentKernel;
     std::set<std::set<int64_t>> kernels;
     void Setup(llvm::Module *bitcode, std::set<std::set<int64_t>> k)
     {

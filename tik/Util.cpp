@@ -36,7 +36,7 @@ std::map<std::string, vector<string>> GetStrings(Function *f)
     {
         args.push_back(GetString(i));
     }
-    if (args.size() != 0)
+    if (!args.empty())
     {
         result["Inputs"] = args;
     }

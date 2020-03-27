@@ -30,8 +30,8 @@ public:
 
 private:
     void Cleanup();
-    void GetEntrances(std::set<llvm::BasicBlock *> &);
-    void GetExits(std::set<llvm::BasicBlock *> &);
+    void GetEntrances(std::set<llvm::BasicBlock *> &blocks);
+    void GetExits(std::set<llvm::BasicBlock *> &blocks);
     std::map<llvm::BasicBlock *, int> ExitMap;
     std::map<int, llvm::GlobalValue *> LoadMap;
     std::map<int, llvm::GlobalValue *> StoreMap;

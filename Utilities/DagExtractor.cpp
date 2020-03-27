@@ -152,7 +152,7 @@ int main(int argc, char **argv)
             }
             vector<int> intSet;
             set_difference(kernel.second.begin(), kernel.second.end(), kernel2.second.begin(), kernel2.second.end(), std::inserter(intSet, intSet.begin()));
-            if (intSet.size() == 0)
+            if (intSet.empty())
             {
                 parentMap[kernel.first].insert(kernel2.first);
             }

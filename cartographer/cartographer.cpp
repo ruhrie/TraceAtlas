@@ -165,7 +165,7 @@ int main(int argc, char **argv)
         {
             if (label)
             {
-                string strLabel = "";
+                string strLabel;
                 bool first = true;
                 set<string> labels;
                 for (auto block : key.second)

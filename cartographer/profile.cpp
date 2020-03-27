@@ -64,7 +64,7 @@ void ProfileBlock(BasicBlock *BB, map<int64_t, map<string, uint64_t>> &rMap, map
     for (auto bi = BB->begin(); bi != BB->end(); bi++)
     {
         Instruction *i = cast<Instruction>(bi);
-        if (i->getMetadata("TikSynthetic"))
+        if (i->getMetadata("TikSynthetic") != NULL)
         {
             continue;
         }

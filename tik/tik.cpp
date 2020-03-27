@@ -165,7 +165,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    if (sourceBitcode.get() == NULL)
+    if (sourceBitcode == NULL)
     {
         std::cerr << "Couldn't open input bitcode file: " << InputFile << "\n";
         spdlog::critical("Failed to open source bitcode: " + InputFile);
@@ -201,7 +201,14 @@ int main(int argc, char *argv[])
             {
                 //this kernel has no unexplained parents
                 Kernel *kern = new Kernel(kernel.second, sourceBitcode.get(), kernel.first);
-                if (kern->Valid)
+                if (!kern->Valid)
+                {
+                    delete kern;
+                    failedKernels.insert(kernel.second);
+                    error = true;
+                    spdlog::error("Failed to convert kernel: " + kernel.first);
+                }
+                else
                 {
                     KfMap[kern->KernelFunction] = kern;
                     //so we remove its blocks from all parents
@@ -212,7 +219,7 @@ int main(int argc, char *argv[])
                         if (loc != child.second.end())
                         {
                             child.second.erase(loc);
-                            if (child.second.size() == 0)
+                            if (child.second.empty())
                             {
                                 toRemove.push_back(child.first);
                             }
@@ -240,13 +247,6 @@ int main(int argc, char *argv[])
                     spdlog::info("Successfully converted kernel: " + kernel.first);
                     //and restart the iterator to ensure cohesion
                     break;
-                }
-                else
-                {
-                    delete kern;
-                    failedKernels.insert(kernel.second);
-                    error = true;
-                    spdlog::error("Failed to convert kernel: " + kernel.first);
                 }
             }
         }
@@ -276,7 +276,7 @@ int main(int argc, char *argv[])
     header.close();
 
     //verify the module
-    std::string str = "";
+    std::string str;
     llvm::raw_string_ostream rso(str);
     bool broken = verifyModule(*TikModule, &rso);
     if (broken)
@@ -328,10 +328,7 @@ int main(int argc, char *argv[])
     {
         return EXIT_FAILURE;
     }
-    else
-    {
-        return EXIT_SUCCESS;
-    }
+    return EXIT_SUCCESS;
 }
 
 void CleanModule(Module *M)

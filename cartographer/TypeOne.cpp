@@ -62,25 +62,24 @@ namespace TypeOne
         }
 
         std::sort(blockPairs.begin(), blockPairs.end(), [=](std::pair<int64_t, int64_t> &a, std::pair<int64_t, int64_t> &b) {
+            bool result;
             if (a.second > b.second)
             {
-                return true;
+                result = true;
             }
-            else if (a.second == b.second)
+            else if (a.second == b.second && a.first < b.first)
             {
-                if (a.first < b.first)
-                {
-                    return true;
-                }
-                else
-                {
-                    return false;
-                }
+                result = true;
+            }
+            else if (a.second == b.second && a.first >= b.first)
+            {
+                result = false;
             }
             else
             {
-                return false;
+                result = false;
             }
+            return result;
         });
         for (auto &it : blockPairs)
         {
@@ -91,25 +90,24 @@ namespace TypeOne
                     float sum = 0.0;
                     vector<pair<int64_t, float>> values = fBlockMap[it.first];
                     std::sort(values.begin(), values.end(), [=](std::pair<int64_t, float> &a, std::pair<int64_t, float> &b) {
+                        bool result;
                         if (a.second > b.second)
                         {
-                            return true;
+                            result = true;
                         }
-                        else if (a.second == b.second)
+                        else if (a.second == b.second && a.first < b.first)
                         {
-                            if (a.first < b.first)
-                            {
-                                return true;
-                            }
-                            else
-                            {
-                                return false;
-                            }
+                            result = true;
+                        }
+                        else if (a.second == b.second && a.first >= b.first)
+                        {
+                            result = false;
                         }
                         else
                         {
-                            return false;
+                            result = false;
                         }
+                        return result;
                     });
                     std::set<int64_t> kernel;
                     while (sum < threshold)

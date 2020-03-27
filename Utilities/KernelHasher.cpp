@@ -67,7 +67,7 @@ int main(int argc, char **argv)
         {
             BasicBlock *toConvert = blockMap[block];
             valueId = 0;
-            string blockStr = "";
+            string blockStr;
             vector<Value *> namedVals;
             for (BasicBlock::iterator BI = toConvert->begin(), BE = toConvert->end(); BI != BE; ++BI)
             {
@@ -100,7 +100,7 @@ int main(int argc, char **argv)
 
         std::sort(blockStrings.begin(), blockStrings.begin());
 
-        string toHash = "";
+        string toHash;
         for (auto str : blockStrings)
         {
             toHash += str + "\n";
@@ -111,7 +111,7 @@ int main(int argc, char **argv)
     }
 
     json j_map(outputMap);
-    if (OutputFilename != "")
+    if (!OutputFilename.empty())
     {
         std::ofstream file;
         file.open(OutputFilename);

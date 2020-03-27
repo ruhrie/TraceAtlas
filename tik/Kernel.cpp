@@ -39,7 +39,7 @@ Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
     {
         blockSet.insert(b);
     }
-    string Name = "";
+    string Name;
     if (name.empty())
     {
         Name = "Kernel_" + to_string(KernelUID++);
@@ -197,7 +197,7 @@ Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
 
 void Kernel::Cleanup()
 {
-    if (KernelFunction)
+    if (KernelFunction != NULL)
     {
         KernelFunction->eraseFromParent();
     }
@@ -324,7 +324,7 @@ void Kernel::RemapNestedKernels()
             {
                 Function *funcCal = callInst->getCalledFunction();
                 llvm::Function *funcName = TikModule->getFunction(funcCal->getName());
-                if (!funcName)
+                if (funcName == NULL)
                 {
                     // we have a non-kernel function call
                 }
@@ -332,7 +332,7 @@ void Kernel::RemapNestedKernels()
                 //{
                 auto calledFunc = callInst->getCalledFunction();
                 auto subK = KfMap[calledFunc];
-                if (subK)
+                if (subK != NULL)
                 {
                     for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
                     {
@@ -391,22 +391,6 @@ void Kernel::BuildInit()
     {
         initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[ent]));
         i++;
-    }
-}
-
-void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
-{
-    set<BasicBlock *> conditions;
-
-    //start by marking all blocks that have conditions
-    for (auto block : blocks)
-    {
-        auto term = block->getTerminator();
-        uint32_t sucCount = term->getNumSuccessors();
-        if (sucCount > 1)
-        {
-            conditions.insert(block);
-        }
     }
 }
 
@@ -602,7 +586,7 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
                                 //we now can check if they are in our vmap, if so they aren't external
                                 //if not they are and should be mapped as is appropriate
                                 Value *v = VMap[sExtVal];
-                                if (!v)
+                                if (v == NULL)
                                 {
                                     if (find(KernelImports.begin(), KernelImports.end(), sExtVal) == KernelImports.end())
                                     {
@@ -744,7 +728,7 @@ vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blo
     {
         throw TikException("Tik Error: Not Implemented");
     }
-    if (result.size() == 0)
+    if (result.empty())
     {
         throw TikException("Tik Error: Return instruction tree must have at least one result");
     }
@@ -806,7 +790,7 @@ void Kernel::Repipe()
     {
         auto c = cast<BasicBlock>(ki);
         auto cTerm = c->getTerminator();
-        if (!cTerm)
+        if (cTerm == NULL)
         {
             continue;
         }
@@ -825,39 +809,6 @@ void Kernel::Repipe()
                 }
 
                 cTerm->setSuccessor(i, ExitBlockMap[suc]);
-            }
-        }
-    }
-}
-
-void Kernel::SplitBlocks(set<BasicBlock *> &blocks)
-{
-    vector<BasicBlock *> toProcess;
-    for (auto block : blocks)
-    {
-        toProcess.push_back(block);
-    }
-
-    while (toProcess.size() != 0)
-    {
-        BasicBlock *next = toProcess.back();
-        toProcess.pop_back();
-        for (auto bi = next->begin(); bi != next->end(); bi++)
-        {
-            if (auto ci = dyn_cast<CallBase>(bi))
-            {
-                if (!ci->isTerminator())
-                {
-                    Function *f = ci->getCalledFunction();
-                    if (f && !f->empty())
-                    {
-                        int64_t id = GetBlockID(next);
-                        auto spl = next->splitBasicBlock(ci->getNextNode());
-                        SetBlockID(spl, id);
-                        blocks.insert(spl);
-                        toProcess.push_back(spl);
-                    }
-                }
             }
         }
     }
@@ -951,7 +902,7 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
             }
         }
     }
-    if (Entrances.size() == 0)
+    if (Entrances.empty())
     {
         throw TikException("Kernel Exception: tik requires a body entrance");
     }
@@ -1045,7 +996,7 @@ void Kernel::CopyGlobals()
 
 std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures)
 {
-    std::string headerString = "";
+    std::string headerString;
     try
     {
         headerString = getCType(KernelFunction->getReturnType(), AllStructures) + " ";
@@ -1060,7 +1011,7 @@ std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStruct
     int i = 0;
     for (auto ai = KernelFunction->arg_begin(); ai < KernelFunction->arg_end(); ai++)
     {
-        std::string type = "";
+        std::string type;
         std::string argname = "arg" + std::to_string(i);
         if (i > 0)
         {
@@ -1310,7 +1261,7 @@ void Kernel::InlineFunctions(set<int64_t> &blocks)
                     }
                     auto info = InlineFunctionInfo();
                     auto r = InlineFunction(ci, info);
-                    if (r == true)
+                    if (r)
                     {
                         change = true;
                     }
@@ -1377,7 +1328,7 @@ void Kernel::RemapExports()
     for (auto ex : KernelExports)
     {
         Value *mapped = VMap[ex];
-        if (mapped)
+        if (mapped != NULL)
         {
             if (mapped->getNumUses() != 0)
             {
@@ -1425,7 +1376,7 @@ void Kernel::RemapExports()
             Instruction *i = cast<Instruction>(bi);
             if (auto call = dyn_cast<CallInst>(i))
             {
-                if (call->getMetadata("KernelCall"))
+                if (call->getMetadata("KernelCall") != NULL)
                 {
                     Function *F = call->getCalledFunction();
                     auto fType = F->getFunctionType();
