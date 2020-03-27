@@ -59,7 +59,7 @@ int main(int argc, char *argv[])
         {
             BasicBlock *b = cast<BasicBlock>(BB);
             int64_t id = GetBlockID(b);
-            for (auto kernel : kernels)
+            for (const auto &kernel : kernels)
             {
                 auto blocks = kernel.second;
                 if (find(blocks.begin(), blocks.end(), id) != blocks.end())

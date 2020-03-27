@@ -101,7 +101,7 @@ int main(int argc, char **argv)
         std::sort(blockStrings.begin(), blockStrings.begin());
 
         string toHash;
-        for (auto str : blockStrings)
+        for (const auto &str : blockStrings)
         {
             toHash += str + "\n";
         }

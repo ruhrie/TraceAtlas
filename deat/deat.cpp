@@ -37,7 +37,7 @@ void Process(string &key, string &value)
     if (key == "BBEnter")
     {
         block = stol(value, 0, 0);
-        for (auto kernel : kernels)
+        for (const auto &kernel : kernels)
         {
             if (kernelMap[kernel].find(block) != kernelMap[kernel].end())
             {
@@ -80,7 +80,7 @@ void Process(string &key, string &value)
     else if (key == "LoadAddress")
     {
         uint64_t address = stoul(value, 0, 0);
-        for (auto kernel : kernels)
+        for (const auto &kernel : kernels)
         {
             if (kernelMap[kernel].find(block) != kernelMap[kernel].end())
             {
@@ -98,7 +98,7 @@ void Process(string &key, string &value)
     else if (key == "StoreAddress")
     {
         uint64_t address = stoul(value, 0, 0);
-        for (auto kernel : kernels)
+        for (const auto &kernel : kernels)
         {
             if (kernelMap[kernel].find(block) != kernelMap[kernel].end())
             {
@@ -184,9 +184,9 @@ int main(int argc, char *argv[])
     kernels.push_back("-2");
 
     //get parent child relationships
-    for (auto kernel : kernelMap)
+    for (const auto &kernel : kernelMap)
     {
-        for (auto kernel2 : kernelMap)
+        for (const auto &kernel2 : kernelMap)
         {
             if (kernel.first == kernel2.first)
             {

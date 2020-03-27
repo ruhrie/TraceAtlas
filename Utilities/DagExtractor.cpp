@@ -142,9 +142,9 @@ int main(int argc, char **argv)
     }
 
     //get parent child relationships
-    for (auto kernel : kernelMap)
+    for (const auto &kernel : kernelMap)
     {
-        for (auto kernel2 : kernelMap)
+        for (const auto &kernel2 : kernelMap)
         {
             if (kernel.first == kernel2.first)
             {
@@ -160,7 +160,7 @@ int main(int argc, char **argv)
     }
 
     std::set<string> topKernels;
-    for (auto kernel : kernelMap)
+    for (const auto &kernel : kernelMap)
     {
         if (parentMap.find(kernel.first) == parentMap.end())
         {

@@ -100,8 +100,7 @@ Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
         //SplitBlocks(blocks);
 
         GetEntrances(blocks);
-        //GetExits(blocks);
-        GetConditional(blocks);
+        //GetExits(blocks);        
         GetExternalValues(blocks);
 
         //we now have all the information we need
@@ -1026,11 +1025,11 @@ std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStruct
             spdlog::error(e.what());
             type = "TypeNotSupported";
         }
-        if (type.find("!") != std::string::npos)
+        if (type.find('!') != std::string::npos)
         {
             ProcessArrayArgument(type, argname);
         }
-        else if (type.find("@") != std::string::npos)
+        else if (type.find('@') != std::string::npos)
         {
             ProcessFunctionArgument(type, argname);
         }

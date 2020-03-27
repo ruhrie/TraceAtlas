@@ -152,7 +152,7 @@ int main(int argc, char **argv)
 
         map<int, set<int64_t>> finalResult;
         int j = 0;
-        for (auto set : type35Kernels)
+        for (const auto &set : type35Kernels)
         {
             if (!set.empty())
             {
@@ -161,7 +161,7 @@ int main(int argc, char **argv)
         }
 
         nlohmann::json outputJson;
-        for (auto key : finalResult)
+        for (const auto &key : finalResult)
         {
             if (label)
             {
@@ -172,7 +172,7 @@ int main(int argc, char **argv)
                 {
                     labels.insert(blockLabelMap[block].begin(), blockLabelMap[block].end());
                 }
-                for (const auto entry : labels)
+                for (const auto &entry : labels)
                 {
                     if (entry.empty())
                     {

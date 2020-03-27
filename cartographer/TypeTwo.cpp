@@ -30,7 +30,7 @@ namespace TypeTwo
             }
         }
 
-        kernels = k;
+        kernels = move(k);
 
         openCount = (int *)calloc(sizeof(int), blockCount);                         // counter to know where we are in the callstack
         finalBlocks = (set<int64_t> *)calloc(sizeof(set<int64_t>), kernels.size()); // final kernel definitions
@@ -49,7 +49,7 @@ namespace TypeTwo
             kernelStarts[i] = -1;
         }
         int a = 0;
-        for (auto kernel : kernels)
+        for (const auto &kernel : kernels)
         {
             for (auto block : kernel)
             {

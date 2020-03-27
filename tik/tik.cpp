@@ -191,7 +191,7 @@ int main(int argc, char *argv[])
     while (change)
     {
         change = false;
-        for (auto kernel : kernels)
+        for (const auto &kernel : kernels)
         {
             if (failedKernels.find(kernel.second) != failedKernels.end())
             {
@@ -226,7 +226,7 @@ int main(int argc, char *argv[])
                         }
                     }
                     //if necessary remove the entry from the map
-                    for (auto r : toRemove)
+                    for (const auto &r : toRemove)
                     {
                         auto it = childParentMapping.find(r);
                         childParentMapping.erase(it);

@@ -43,9 +43,9 @@ std::map<std::string, vector<string>> GetStrings(Function *f)
     return result;
 }
 
-std::vector<std::string> GetStrings(std::set<Instruction *> instructions)
+std::vector<std::string> GetStrings(const std::set<Instruction *> &instructions)
 {
-    std::vector<std::string> result;
+    std::vector<std::string> result(instructions.size());
     for (Instruction *inst : instructions)
     {
         result.push_back(GetString(inst));
@@ -53,7 +53,7 @@ std::vector<std::string> GetStrings(std::set<Instruction *> instructions)
     return result;
 }
 
-std::vector<std::string> GetStrings(std::vector<Instruction *> instructions)
+std::vector<std::string> GetStrings(const std::vector<Instruction *> &instructions)
 {
     std::vector<std::string> result;
     for (Instruction *inst : instructions)

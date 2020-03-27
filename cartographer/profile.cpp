@@ -7,7 +7,7 @@
 using namespace std;
 using namespace llvm;
 
-map<string, map<string, map<string, int>>> ProfileKernels(std::map<int, std::set<int64_t>> kernels, Module *M)
+map<string, map<string, map<string, int>>> ProfileKernels(const std::map<int, std::set<int64_t>> &kernels, Module *M)
 {
     map<int64_t, map<string, uint64_t>> rMap;  //dictionary which keeps track of the actual information per block
     map<int64_t, map<string, uint64_t>> cpMap; //dictionary which keeps track of the cross product information per block
@@ -29,7 +29,7 @@ map<string, map<string, map<string, int>>> ProfileKernels(std::map<int, std::set
     map<string, map<string, int>> ecPigData; //cross product from the trace
     map<string, map<string, int>> epigData;  //cross product from the bitcode
 
-    for (auto kernel : kernels)
+    for (const auto &kernel : kernels)
     {
         int index = kernel.first;
         string iString = to_string(index);
@@ -37,13 +37,13 @@ map<string, map<string, map<string, int>>> ProfileKernels(std::map<int, std::set
         for (auto block : blocks)
         {
             uint64_t count = TypeOne::blockCount[block];
-            for (auto pair : rMap[block])
+            for (const auto &pair : rMap[block])
             {
                 cPigData[iString][pair.first] += pair.second * count;
                 pigData[iString][pair.first] += pair.second;
             }
 
-            for (auto pair : cpMap[block])
+            for (const auto &pair : cpMap[block])
             {
                 ecPigData[iString][pair.first] += pair.second * count;
                 epigData[iString][pair.first] += pair.second;

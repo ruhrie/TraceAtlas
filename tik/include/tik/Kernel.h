@@ -60,14 +60,6 @@ private:
     ///          This is done before morphing KernelFunction into a new function with inputs.
     void Remap();
 
-    /// @brief  Searches for the loop condition instruction, and adds its eligible users to the body block
-    ///
-    /// The loop condition instruction needs to be identified and store in LoopCondition for later use in MorphKernelFunction
-    /// Later, the condition's user instructions are evaluated, and those that are eligible to be in the tik representation are cloned into the VMap.
-    /// Eligible instructions are those that belong to the kernel's original basic blocks, and not eligible otherwise.
-    /// This function assumes that we will only find one conditional exit instruction, because we assume that the kernel will not have embedded loops in it.
-    void GetConditional(std::set<llvm::BasicBlock *> &blocks);
-
     /// @brief  Find all instructions not initialized in the kernel representation.
     ///
     /// The parent block of each instruction in Kernel::Body is checked for its membership in the tik representation.
@@ -106,7 +98,6 @@ private:
     void UpdateMemory();
 
     void Repipe();
-    void SplitBlocks(std::set<llvm::BasicBlock *> &blocks);
     void ExportFunctionSignatures();
     void SanityChecks();
 

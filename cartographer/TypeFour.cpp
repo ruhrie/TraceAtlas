@@ -45,7 +45,7 @@ namespace TypeFour
         return functionIdMap[b];
     }
 
-    void GetReachable(const BlockSigniture &base, vector<BlockSigniture> &result, const set<int64_t> validBlocks)
+    void GetReachable(const BlockSigniture &base, vector<BlockSigniture> &result, const set<int64_t> &validBlocks)
     {
         //so we will start by adding every successor, they are in the same function so they have the same function id
         for (auto suc : successors(base.Block))
@@ -255,7 +255,7 @@ namespace TypeFour
         return checked;
     }
 
-    set<set<int64_t>> Process(set<set<int64_t>> type3Kernels)
+    set<set<int64_t>> Process(const set<set<int64_t>> &type3Kernels)
     {
         indicators::ProgressBar bar;
         if (!noBar)
@@ -270,7 +270,7 @@ namespace TypeFour
         int status = 0;
 
         set<set<int64_t>> result;
-        for (auto kernel : type3Kernels)
+        for (const auto &kernel : type3Kernels)
         {
             set<int64_t> blocks;
             map<int64_t, set<BasicBlock *>> reachableMap;
@@ -307,7 +307,7 @@ namespace TypeFour
                 }
                 subSets.insert(sub);
             }
-            for (auto subSet : subSets)
+            for (const auto &subSet : subSets)
             {
                 result.insert(subSet);
             }
