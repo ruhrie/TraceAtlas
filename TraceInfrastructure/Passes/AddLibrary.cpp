@@ -11,7 +11,6 @@ namespace DashTracer
 {
     namespace Passes
     {
-        static uint64_t UID = 0;
         MDNode *libName;
         bool AddLibrary::runOnFunction(Function &F)
         {
