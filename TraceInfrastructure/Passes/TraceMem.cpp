@@ -52,7 +52,7 @@ namespace DashTracer
                                 Value *addr = load->getPointerOperand();
                                 Type *tyaddr = addr->getType();
                                 Type *tyaddrContain = tyaddr->getContainedType(0);
-                                int sizeSig = dl.getTypeAllocSize(tyaddrContain);
+                                uint64_t sizeSig = dl.getTypeAllocSize(tyaddrContain);
                                 auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(block->getContext()), 0), true);
                                 Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(block->getContext()));
                                 values.push_back(cast);
