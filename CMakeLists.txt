@@ -20,13 +20,16 @@ endfunction()
 
 set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld-9")
 
-set(CMAKE_CXX_CLANG_TIDY 
-    clang-tidy-9;
-    --warnings-as-errors=*;
-    --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type;
-    --fix;
-    --format-style=file;
-    )
+option(ENABLE_LINTER "Run linter" OFF)
+if(${ENABLE_LINTER})
+    set(CMAKE_CXX_CLANG_TIDY 
+        clang-tidy-9;
+        --warnings-as-errors=*;
+        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type;
+        --fix;
+        --format-style=file;
+        )
+endif()
 
 add_subdirectory("AtlasUtil")
 add_subdirectory("cartographer")
