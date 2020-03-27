@@ -33,7 +33,7 @@ void Kernel::GetKernelLabels()
             throw TikException("Unrecognized conditional terminator");
         }
 
-        if (ICmpInst *cmp = dyn_cast<ICmpInst>(condition))
+        if (auto *cmp = dyn_cast<ICmpInst>(condition))
         {
             auto left = cmp->getOperand(0);
             auto right = cmp->getOperand(1);
@@ -54,7 +54,7 @@ void Kernel::GetKernelLabels()
                     nonConst = left;
                 }
 
-                if (LoadInst *li = dyn_cast<LoadInst>(nonConst))
+                if (auto *li = dyn_cast<LoadInst>(nonConst))
                 {
                     //this load should be formatted by us so we look for the index
                     //auto call = cast<CallInst>(cast<IntToPtrInst>(li->getPointerOperand())->getOperand(0));

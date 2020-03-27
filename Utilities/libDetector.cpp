@@ -16,7 +16,7 @@ cl::opt<string> JsonFile("k", cl::desc("Specify input kernel json filename"), cl
 cl::opt<string> InputFile("i", cl::desc("Specify input bitcode filename"), cl::value_desc("bitcode filename"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output json filename"), cl::value_desc("json filename"));
 
-int main(int argc, char *argv[])
+auto main(int argc, char *argv[]) -> int
 {
     cl::ParseCommandLineOptions(argc, argv);
     ifstream inputJson(JsonFile);
@@ -54,10 +54,10 @@ int main(int argc, char *argv[])
     map<string, set<string>> kernelParents;
     for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
     {
-        Function *f = cast<Function>(F);
+        auto *f = cast<Function>(F);
         for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
         {
-            BasicBlock *b = cast<BasicBlock>(BB);
+            auto *b = cast<BasicBlock>(BB);
             int64_t id = GetBlockID(b);
             for (const auto &kernel : kernels)
             {

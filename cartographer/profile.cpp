@@ -7,16 +7,16 @@
 using namespace std;
 using namespace llvm;
 
-map<string, map<string, map<string, int>>> ProfileKernels(const std::map<int, std::set<int64_t>> &kernels, Module *M)
+auto ProfileKernels(const std::map<int, std::set<int64_t>> &kernels, Module *M) -> map<string, map<string, map<string, int>>>
 {
     map<int64_t, map<string, uint64_t>> rMap;  //dictionary which keeps track of the actual information per block
     map<int64_t, map<string, uint64_t>> cpMap; //dictionary which keeps track of the cross product information per block
     //annotate it with the same algorithm used in the tracer
     Annotate(M);
     //start by profiling every basic block
-    for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
+    for (auto &F : *M)
     {
-        for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
+        for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
         {
             ProfileBlock(cast<BasicBlock>(BB), rMap, cpMap);
         }
@@ -63,8 +63,8 @@ void ProfileBlock(BasicBlock *BB, map<int64_t, map<string, uint64_t>> &rMap, map
     int64_t id = GetBlockID(BB);
     for (auto bi = BB->begin(); bi != BB->end(); bi++)
     {
-        Instruction *i = cast<Instruction>(bi);
-        if (i->getMetadata("TikSynthetic") != NULL)
+        auto *i = cast<Instruction>(bi);
+        if (i->getMetadata("TikSynthetic") != nullptr)
         {
             continue;
         }

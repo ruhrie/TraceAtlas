@@ -50,7 +50,7 @@ cl::opt<bool> ASCIIFormat("S", cl::desc("output json as human-readable ASCII tex
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
 
-int main(int argc, char *argv[])
+auto main(int argc, char *argv[]) -> int
 {
     bool error = false;
     cl::ParseCommandLineOptions(argc, argv);
@@ -165,7 +165,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    if (sourceBitcode == NULL)
+    if (sourceBitcode == nullptr)
     {
         std::cerr << "Couldn't open input bitcode file: " << InputFile << "\n";
         spdlog::critical("Failed to open source bitcode: " + InputFile);
@@ -200,7 +200,7 @@ int main(int argc, char *argv[])
             if (childParentMapping.find(kernel.first) == childParentMapping.end())
             {
                 //this kernel has no unexplained parents
-                Kernel *kern = new Kernel(kernel.second, sourceBitcode.get(), kernel.first);
+                auto *kern = new Kernel(kernel.second, sourceBitcode.get(), kernel.first);
                 if (!kern->Valid)
                 {
                     delete kern;
@@ -295,7 +295,7 @@ int main(int argc, char *argv[])
         if (ASCIIFormat)
         {
             // print human readable tik module to file
-            AssemblyAnnotationWriter *write = new llvm::AssemblyAnnotationWriter();
+            auto *write = new llvm::AssemblyAnnotationWriter();
             std::string str;
             llvm::raw_string_ostream rso(str);
             std::filebuf f0;
@@ -335,10 +335,10 @@ void CleanModule(Module *M)
 {
     for (auto mi = M->begin(); mi != M->end(); mi++)
     {
-        for (auto fi = mi->begin(); fi != mi->end(); fi++)
+        for (auto &fi : *mi)
         {
             vector<Instruction *> toRemove;
-            for (auto bi = fi->begin(); bi != fi->end(); bi++)
+            for (auto bi = fi.begin(); bi != fi.end(); bi++)
             {
                 auto v = cast<Instruction>(bi);
                 if (auto ci = dyn_cast<DbgInfoIntrinsic>(v))
@@ -351,7 +351,7 @@ void CleanModule(Module *M)
                     v->getAllMetadata(MDs);
                     for (auto MD : MDs)
                     {
-                        v->setMetadata(MD.first, NULL);
+                        v->setMetadata(MD.first, nullptr);
                     }
                 }
             }
@@ -360,12 +360,12 @@ void CleanModule(Module *M)
                 r->eraseFromParent();
             }
         }
-        Function *F = cast<Function>(mi);
+        auto *F = cast<Function>(mi);
         SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
         F->getAllMetadata(MDs);
         for (auto MD : MDs)
         {
-            F->setMetadata(MD.first, NULL);
+            F->setMetadata(MD.first, nullptr);
         }
     }
 
@@ -376,7 +376,7 @@ void CleanModule(Module *M)
         gv->getAllMetadata(MDs);
         for (auto MD : MDs)
         {
-            gv->setMetadata(MD.first, NULL);
+            gv->setMetadata(MD.first, nullptr);
         }
     }
 }

@@ -17,7 +17,7 @@ namespace TypeOne
     {
         if (key == "BBEnter")
         {
-            long int block = stoi(value, 0, 0);
+            long int block = stoi(value, nullptr, 0);
             blockCount[block] += 1;
             priorBlocks.push_back(block);
 
@@ -35,7 +35,7 @@ namespace TypeOne
         }
     }
 
-    std::set<std::set<int64_t>> Get()
+    auto Get() -> std::set<std::set<int64_t>>
     {
         std::map<int64_t, std::vector<std::pair<int64_t, float>>> fBlockMap;
         for (auto &key : blockMap)
@@ -56,9 +56,10 @@ namespace TypeOne
         std::vector<std::set<int64_t>> kernels;
 
         std::vector<std::pair<int64_t, int64_t>> blockPairs;
-        for (auto iter = blockCount.begin(); iter != blockCount.end(); iter++)
+        blockPairs.reserve(blockCount.size());
+        for (auto &iter : blockCount)
         {
-            blockPairs.push_back(*iter);
+            blockPairs.emplace_back(iter);
         }
 
         std::sort(blockPairs.begin(), blockPairs.end(), [=](std::pair<int64_t, int64_t> &a, std::pair<int64_t, int64_t> &b) {

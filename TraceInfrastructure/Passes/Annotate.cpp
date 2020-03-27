@@ -9,21 +9,18 @@
 
 using namespace llvm;
 
-namespace DashTracer
+namespace DashTracer::Passes
 {
-    namespace Passes
+    auto EncodedAnnotate::runOnModule(Module &M) -> bool
     {
-        bool EncodedAnnotate::runOnModule(Module &M)
-        {
-            Annotate(&M);
-            return true;
-        }
+        Annotate(&M);
+        return true;
+    }
 
-        void EncodedAnnotate::getAnalysisUsage(AnalysisUsage &AU) const
-        {
-            AU.setPreservesAll();
-        }
-        char EncodedAnnotate::ID = 0;
-        static RegisterPass<EncodedAnnotate> Z("EncodedAnnotate", "Renames the basic blocks in the module", true, false);
-    } // namespace Passes
-} // namespace DashTracer
+    void EncodedAnnotate::getAnalysisUsage(AnalysisUsage &AU) const
+    {
+        AU.setPreservesAll();
+    }
+    char EncodedAnnotate::ID = 0;
+    static RegisterPass<EncodedAnnotate> Z("EncodedAnnotate", "Renames the basic blocks in the module", true, false);
+} // namespace DashTracer::Passes

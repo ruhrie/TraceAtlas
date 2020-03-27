@@ -38,7 +38,7 @@ void Process(string &key, string &value)
 {
     if (key == "BBEnter")
     {
-        int block = stoi(value, 0, 0);
+        int block = stoi(value, nullptr, 0);
         if (currentKernel == "-1" || kernelMap[currentKernel].find(block) == kernelMap[currentKernel].end())
         {
             //we aren't in the same kernel as last time
@@ -62,7 +62,7 @@ void Process(string &key, string &value)
     }
     else if (key == "LoadAddress")
     {
-        uint64_t address = stoul(value, 0, 0);
+        uint64_t address = stoul(value, nullptr, 0);
         int prodUid = writeMap[address];
         if (prodUid != -1 && prodUid != currentUid)
         {
@@ -71,12 +71,12 @@ void Process(string &key, string &value)
     }
     else if (key == "StoreAddress")
     {
-        uint64_t address = stoul(value, 0, 0);
+        uint64_t address = stoul(value, nullptr, 0);
         writeMap[address] = currentUid;
     }
 }
 
-int main(int argc, char **argv)
+auto main(int argc, char **argv) -> int
 {
     cl::ParseCommandLineOptions(argc, argv);
 

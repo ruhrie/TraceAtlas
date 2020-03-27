@@ -36,7 +36,7 @@ void Process(string &key, string &value)
 {
     if (key == "BBEnter")
     {
-        block = stol(value, 0, 0);
+        block = stol(value, nullptr, 0);
         for (const auto &kernel : kernels)
         {
             if (kernelMap[kernel].find(block) != kernelMap[kernel].end())
@@ -79,7 +79,7 @@ void Process(string &key, string &value)
     }
     else if (key == "LoadAddress")
     {
-        uint64_t address = stoul(value, 0, 0);
+        uint64_t address = stoul(value, nullptr, 0);
         for (const auto &kernel : kernels)
         {
             if (kernelMap[kernel].find(block) != kernelMap[kernel].end())
@@ -97,7 +97,7 @@ void Process(string &key, string &value)
     }
     else if (key == "StoreAddress")
     {
-        uint64_t address = stoul(value, 0, 0);
+        uint64_t address = stoul(value, nullptr, 0);
         for (const auto &kernel : kernels)
         {
             if (kernelMap[kernel].find(block) != kernelMap[kernel].end())
@@ -111,7 +111,7 @@ void Process(string &key, string &value)
     }
 }
 
-int main(int argc, char *argv[])
+auto main(int argc, char *argv[]) -> int
 {
     cl::ParseCommandLineOptions(argc, argv);
 
@@ -181,7 +181,7 @@ int main(int argc, char *argv[])
     {
         kernelMap["-2"].insert(b.get<int64_t>());
     }
-    kernels.push_back("-2");
+    kernels.emplace_back("-2");
 
     //get parent child relationships
     for (const auto &kernel : kernelMap)

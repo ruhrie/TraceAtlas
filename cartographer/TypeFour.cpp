@@ -28,7 +28,7 @@ namespace TypeFour
             Block = block;
             FunctionID = function;
         }
-        bool operator==(const BlockSigniture &lhs) //needed for searching
+        auto operator==(const BlockSigniture &lhs) -> bool //needed for searching
         {
             return Block == lhs.Block && FunctionID == lhs.FunctionID;
         }
@@ -36,7 +36,7 @@ namespace TypeFour
 
     map<CallBase *, int64_t> functionIdMap; //dictionary for function id lookup, NOT for direct use!
     int64_t nextId = 0;                     //next id for the function map, NOT for direct use!
-    int64_t getFunctionId(CallBase *b)      //if you need a new id, use this function, it will lookup the id or assign a new one and return that
+    auto getFunctionId(CallBase *b) -> int64_t //if you need a new id, use this function, it will lookup the id or assign a new one and return that
     {
         if (functionIdMap.find(b) == functionIdMap.end())
         {
@@ -68,7 +68,7 @@ namespace TypeFour
             if (auto cb = dyn_cast<CallBase>(bi))
             {
                 Function *F = cb->getCalledFunction();
-                if (F != NULL && !F->empty())
+                if (F != nullptr && !F->empty())
                 {
                     BasicBlock *entry = &F->getEntryBlock();
                     auto entryId = GetBlockID(entry);
@@ -97,7 +97,7 @@ namespace TypeFour
                     Function *F = base.Block->getParent();
                     for (auto user : F->users())
                     {
-                        if (CallBase *cb = dyn_cast<CallBase>(user))
+                        if (auto *cb = dyn_cast<CallBase>(user))
                         {
                             auto parId = GetBlockID(cb->getParent());
                             if (validBlocks.find(parId) != validBlocks.end())
@@ -144,7 +144,7 @@ namespace TypeFour
         }
     }
 
-    set<BasicBlock *> GetReachable(BasicBlock *base, set<int64_t> validBlocks)
+    auto GetReachable(BasicBlock *base, set<int64_t> validBlocks) -> set<BasicBlock *>
     {
         bool foundSelf = false;
         queue<BasicBlock *> toProcess;
@@ -177,7 +177,7 @@ namespace TypeFour
                 if (auto ci = dyn_cast<CallBase>(bi))
                 {
                     Function *f = ci->getCalledFunction();
-                    if (f != NULL && !f->empty())
+                    if (f != nullptr && !f->empty())
                     {
                         BasicBlock *entry = &f->getEntryBlock();
                         if (entry == base)
@@ -255,7 +255,7 @@ namespace TypeFour
         return checked;
     }
 
-    set<set<int64_t>> Process(const set<set<int64_t>> &type3Kernels)
+    auto Process(const set<set<int64_t>> &type3Kernels) -> set<set<int64_t>>
     {
         indicators::ProgressBar bar;
         if (!noBar)

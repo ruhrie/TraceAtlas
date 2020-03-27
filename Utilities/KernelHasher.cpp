@@ -26,13 +26,13 @@ static int UID = 0;
 
 static int valueId = 0;
 
-string getName()
+auto getName() -> string
 {
     string name = "v_" + to_string(valueId++);
     return name;
 }
 
-int main(int argc, char **argv)
+auto main(int argc, char **argv) -> int
 {
     cl::ParseCommandLineOptions(argc, argv);
     LLVMContext context;
@@ -42,11 +42,11 @@ int main(int argc, char **argv)
 
     map<int, BasicBlock *> blockMap;
 
-    for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
+    for (auto &F : *M)
     {
-        for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
+        for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
         {
-            BasicBlock *b = cast<BasicBlock>(BB);
+            auto *b = cast<BasicBlock>(BB);
             blockMap[UID++] = b;
         }
     }
@@ -71,8 +71,8 @@ int main(int argc, char **argv)
             vector<Value *> namedVals;
             for (BasicBlock::iterator BI = toConvert->begin(), BE = toConvert->end(); BI != BE; ++BI)
             {
-                Instruction *inst = cast<Instruction>(BI);
-                int ops = inst->getNumOperands();
+                auto *inst = cast<Instruction>(BI);
+                uint32_t ops = inst->getNumOperands();
                 for (int i = 0; i < ops; i++)
                 {
                     Value *op = inst->getOperand(i);

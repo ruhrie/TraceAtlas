@@ -36,7 +36,7 @@ llvm::cl::opt<bool> label("L", llvm::cl::desc("ExportLabel"), llvm::cl::value_de
 llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::value_desc("No progress bar"));
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
-int main(int argc, char **argv)
+auto main(int argc, char **argv) -> int
 {
     cl::ParseCommandLineOptions(argc, argv);
     noProgressBar = noBar;
@@ -106,11 +106,11 @@ int main(int argc, char **argv)
     Annotate(M);
 
     //build the blockMap
-    for (auto mi = M->begin(); mi != M->end(); mi++)
+    for (auto &mi : *M)
     {
-        for (auto fi = mi->begin(); fi != mi->end(); fi++)
+        for (auto fi = mi.begin(); fi != mi.end(); fi++)
         {
-            BasicBlock *bb = cast<BasicBlock>(fi);
+            auto *bb = cast<BasicBlock>(fi);
             int64_t id = GetBlockID(bb);
             blockMap[id] = bb;
         }

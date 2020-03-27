@@ -9,7 +9,7 @@ using namespace std;
 using namespace llvm;
 namespace TypeThree
 {
-    std::set<std::set<int64_t>> Process(const std::set<std::set<int64_t>> &type25Kernels)
+    auto Process(const std::set<std::set<int64_t>> &type25Kernels) -> std::set<std::set<int64_t>>
     {
         indicators::ProgressBar bar;
         if (!noBar)
@@ -41,7 +41,7 @@ namespace TypeThree
                     {
                         for (auto user : F->users())
                         {
-                            if (CallBase *cb = dyn_cast<CallBase>(user))
+                            if (auto *cb = dyn_cast<CallBase>(user))
                             {
                                 BasicBlock *par = cb->getParent();
                                 int64_t id = GetBlockID(par);
@@ -72,7 +72,7 @@ namespace TypeThree
                     {
                         for (auto user : F->users())
                         {
-                            if (CallBase *cb = dyn_cast<CallBase>(user))
+                            if (auto *cb = dyn_cast<CallBase>(user))
                             {
                                 BasicBlock *par = cb->getParent();
                                 int64_t id = GetBlockID(par);

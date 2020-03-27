@@ -24,7 +24,7 @@ namespace DashTracer
     {
         Function *papiInitiate;
         Function *papiTerminate;
-        bool PapiIO::runOnModule(Module &M)
+        auto PapiIO::runOnModule(Module &M) -> bool
         {
             appendToGlobalCtors(M, papiInitiate, 0);
             appendToGlobalDtors(M, papiTerminate, 0);
@@ -35,7 +35,7 @@ namespace DashTracer
         {
             AU.setPreservesAll();
         }
-        bool PapiIO::doInitialization(Module &M)
+        auto PapiIO::doInitialization(Module &M) -> bool
         {
             papiTerminate = cast<Function>(M.getOrInsertFunction("TerminatePapi", Type::getVoidTy(M.getContext())).getCallee());
             papiInitiate = cast<Function>(M.getOrInsertFunction("InitializePapi", Type::getVoidTy(M.getContext())).getCallee());
