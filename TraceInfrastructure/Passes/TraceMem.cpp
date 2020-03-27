@@ -1,8 +1,8 @@
-#include "Passes/TraceMem.h"
 #include "AtlasUtil/Annotate.h"
 #include "Passes/Annotate.h"
 #include "Passes/CommandArgs.h"
 #include "Passes/Functions.h"
+#include "Passes/TraceMem.h"
 #include "Passes/TraceMemIO.h"
 #include "llvm/IR/DataLayout.h"
 #include <fstream>
@@ -102,16 +102,7 @@ namespace DashTracer
                 string index = key;
                 if (stoi(index) == KernelIndex)
                 {
-                    nlohmann::json kernel = value["Blocks"];;
-                    // if (!value[0].empty() && value[0].is_array())
-                    // {
-                    //     //embedded layout
-                    //     kernel = value[0];
-                    // }
-                    // else
-                    // {
-                    //     kernel = value;
-                    // }
+                    nlohmann::json kernel = value["Blocks"];
                     kernelBlockValue = kernel.get<vector<uint64_t>>();
                 }
             }
