@@ -7,16 +7,16 @@
 using namespace std;
 using namespace llvm;
 
-map<string, map<string, map<string, int>>> ProfileKernels(std::map<int, std::set<int64_t>> kernels, Module *M)
+map<string, map<string, map<string, int>>> ProfileKernels(const std::map<int, std::set<int64_t>> &kernels, Module *M)
 {
     map<int64_t, map<string, uint64_t>> rMap;  //dictionary which keeps track of the actual information per block
     map<int64_t, map<string, uint64_t>> cpMap; //dictionary which keeps track of the cross product information per block
     //annotate it with the same algorithm used in the tracer
     Annotate(M);
     //start by profiling every basic block
-    for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
+    for (auto &F : *M)
     {
-        for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
+        for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
         {
             ProfileBlock(cast<BasicBlock>(BB), rMap, cpMap);
         }
@@ -29,7 +29,7 @@ map<string, map<string, map<string, int>>> ProfileKernels(std::map<int, std::set
     map<string, map<string, int>> ecPigData; //cross product from the trace
     map<string, map<string, int>> epigData;  //cross product from the bitcode
 
-    for (auto kernel : kernels)
+    for (const auto &kernel : kernels)
     {
         int index = kernel.first;
         string iString = to_string(index);
@@ -37,13 +37,13 @@ map<string, map<string, map<string, int>>> ProfileKernels(std::map<int, std::set
         for (auto block : blocks)
         {
             uint64_t count = TypeOne::blockCount[block];
-            for (auto pair : rMap[block])
+            for (const auto &pair : rMap[block])
             {
                 cPigData[iString][pair.first] += pair.second * count;
                 pigData[iString][pair.first] += pair.second;
             }
 
-            for (auto pair : cpMap[block])
+            for (const auto &pair : cpMap[block])
             {
                 ecPigData[iString][pair.first] += pair.second * count;
                 epigData[iString][pair.first] += pair.second;
@@ -63,8 +63,8 @@ void ProfileBlock(BasicBlock *BB, map<int64_t, map<string, uint64_t>> &rMap, map
     int64_t id = GetBlockID(BB);
     for (auto bi = BB->begin(); bi != BB->end(); bi++)
     {
-        Instruction *i = cast<Instruction>(bi);
-        if (i->getMetadata("TikSynthetic"))
+        auto *i = cast<Instruction>(bi);
+        if (i->getMetadata("TikSynthetic") != nullptr)
         {
             continue;
         }

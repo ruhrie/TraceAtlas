@@ -9,7 +9,7 @@
 
 #define BLOCK_SIZE 4096
 
-static void ProcessTrace(std::string TraceFile, std::function<void(std::string &, std::string &)> LogicFunction, std::string barPrefix = "", bool noBar = false)
+static void ProcessTrace(const std::string &TraceFile, const std::function<void(std::string &, std::string &)> &LogicFunction, const std::string &barPrefix = "", bool noBar = false)
 {
     std::cout << "\e[?25l";
     indicators::ProgressBar bar;
@@ -48,7 +48,7 @@ static void ProcessTrace(std::string TraceFile, std::function<void(std::string &
 
     bool notDone = true;
     bool seenFirst;
-    std::string priorLine = "";
+    std::string priorLine;
 
     while (notDone)
     {
@@ -77,7 +77,7 @@ static void ProcessTrace(std::string TraceFile, std::function<void(std::string &
             {
                 if (!seenFirst)
                 {
-                    segment = priorLine + segment;
+                    segment = priorLine.append(segment);
                     seenFirst = true;
                 }
                 // split it by the colon between the instruction and value

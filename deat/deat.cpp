@@ -36,8 +36,8 @@ void Process(string &key, string &value)
 {
     if (key == "BBEnter")
     {
-        block = stol(value, 0, 0);
-        for (auto kernel : kernels)
+        block = stol(value, nullptr, 0);
+        for (const auto &kernel : kernels)
         {
             if (kernelMap[kernel].find(block) != kernelMap[kernel].end())
             {
@@ -79,8 +79,8 @@ void Process(string &key, string &value)
     }
     else if (key == "LoadAddress")
     {
-        uint64_t address = stoul(value, 0, 0);
-        for (auto kernel : kernels)
+        uint64_t address = stoul(value, nullptr, 0);
+        for (const auto &kernel : kernels)
         {
             if (kernelMap[kernel].find(block) != kernelMap[kernel].end())
             {
@@ -97,8 +97,8 @@ void Process(string &key, string &value)
     }
     else if (key == "StoreAddress")
     {
-        uint64_t address = stoul(value, 0, 0);
-        for (auto kernel : kernels)
+        uint64_t address = stoul(value, nullptr, 0);
+        for (const auto &kernel : kernels)
         {
             if (kernelMap[kernel].find(block) != kernelMap[kernel].end())
             {
@@ -181,12 +181,12 @@ int main(int argc, char *argv[])
     {
         kernelMap["-2"].insert(b.get<int64_t>());
     }
-    kernels.push_back("-2");
+    kernels.emplace_back("-2");
 
     //get parent child relationships
-    for (auto kernel : kernelMap)
+    for (const auto &kernel : kernelMap)
     {
-        for (auto kernel2 : kernelMap)
+        for (const auto &kernel2 : kernelMap)
         {
             if (kernel.first == kernel2.first)
             {
@@ -194,7 +194,7 @@ int main(int argc, char *argv[])
             }
             vector<int> intSet;
             set_difference(kernel.second.begin(), kernel.second.end(), kernel2.second.begin(), kernel2.second.end(), std::inserter(intSet, intSet.begin()));
-            if (intSet.size() == 0)
+            if (intSet.empty())
             {
                 parentMap[kernel.first].insert(kernel2.first);
             }

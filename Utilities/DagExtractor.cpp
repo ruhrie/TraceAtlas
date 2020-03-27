@@ -38,7 +38,7 @@ void Process(string &key, string &value)
 {
     if (key == "BBEnter")
     {
-        int block = stoi(value, 0, 0);
+        int block = stoi(value, nullptr, 0);
         if (currentKernel == "-1" || kernelMap[currentKernel].find(block) == kernelMap[currentKernel].end())
         {
             //we aren't in the same kernel as last time
@@ -62,7 +62,7 @@ void Process(string &key, string &value)
     }
     else if (key == "LoadAddress")
     {
-        uint64_t address = stoul(value, 0, 0);
+        uint64_t address = stoul(value, nullptr, 0);
         int prodUid = writeMap[address];
         if (prodUid != -1 && prodUid != currentUid)
         {
@@ -71,7 +71,7 @@ void Process(string &key, string &value)
     }
     else if (key == "StoreAddress")
     {
-        uint64_t address = stoul(value, 0, 0);
+        uint64_t address = stoul(value, nullptr, 0);
         writeMap[address] = currentUid;
     }
 }
@@ -142,9 +142,9 @@ int main(int argc, char **argv)
     }
 
     //get parent child relationships
-    for (auto kernel : kernelMap)
+    for (const auto &kernel : kernelMap)
     {
-        for (auto kernel2 : kernelMap)
+        for (const auto &kernel2 : kernelMap)
         {
             if (kernel.first == kernel2.first)
             {
@@ -152,7 +152,7 @@ int main(int argc, char **argv)
             }
             vector<int> intSet;
             set_difference(kernel.second.begin(), kernel.second.end(), kernel2.second.begin(), kernel2.second.end(), std::inserter(intSet, intSet.begin()));
-            if (intSet.size() == 0)
+            if (intSet.empty())
             {
                 parentMap[kernel.first].insert(kernel2.first);
             }
@@ -160,7 +160,7 @@ int main(int argc, char **argv)
     }
 
     std::set<string> topKernels;
-    for (auto kernel : kernelMap)
+    for (const auto &kernel : kernelMap)
     {
         if (parentMap.find(kernel.first) == parentMap.end())
         {

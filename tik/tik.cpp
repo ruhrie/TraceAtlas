@@ -165,7 +165,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    if (sourceBitcode.get() == NULL)
+    if (sourceBitcode == nullptr)
     {
         std::cerr << "Couldn't open input bitcode file: " << InputFile << "\n";
         spdlog::critical("Failed to open source bitcode: " + InputFile);
@@ -191,7 +191,7 @@ int main(int argc, char *argv[])
     while (change)
     {
         change = false;
-        for (auto kernel : kernels)
+        for (const auto &kernel : kernels)
         {
             if (failedKernels.find(kernel.second) != failedKernels.end())
             {
@@ -200,8 +200,15 @@ int main(int argc, char *argv[])
             if (childParentMapping.find(kernel.first) == childParentMapping.end())
             {
                 //this kernel has no unexplained parents
-                Kernel *kern = new Kernel(kernel.second, sourceBitcode.get(), kernel.first);
-                if (kern->Valid)
+                auto *kern = new Kernel(kernel.second, sourceBitcode.get(), kernel.first);
+                if (!kern->Valid)
+                {
+                    delete kern;
+                    failedKernels.insert(kernel.second);
+                    error = true;
+                    spdlog::error("Failed to convert kernel: " + kernel.first);
+                }
+                else
                 {
                     KfMap[kern->KernelFunction] = kern;
                     //so we remove its blocks from all parents
@@ -212,14 +219,14 @@ int main(int argc, char *argv[])
                         if (loc != child.second.end())
                         {
                             child.second.erase(loc);
-                            if (child.second.size() == 0)
+                            if (child.second.empty())
                             {
                                 toRemove.push_back(child.first);
                             }
                         }
                     }
                     //if necessary remove the entry from the map
-                    for (auto r : toRemove)
+                    for (const auto &r : toRemove)
                     {
                         auto it = childParentMapping.find(r);
                         childParentMapping.erase(it);
@@ -240,13 +247,6 @@ int main(int argc, char *argv[])
                     spdlog::info("Successfully converted kernel: " + kernel.first);
                     //and restart the iterator to ensure cohesion
                     break;
-                }
-                else
-                {
-                    delete kern;
-                    failedKernels.insert(kernel.second);
-                    error = true;
-                    spdlog::error("Failed to convert kernel: " + kernel.first);
                 }
             }
         }
@@ -276,7 +276,7 @@ int main(int argc, char *argv[])
     header.close();
 
     //verify the module
-    std::string str = "";
+    std::string str;
     llvm::raw_string_ostream rso(str);
     bool broken = verifyModule(*TikModule, &rso);
     if (broken)
@@ -295,7 +295,7 @@ int main(int argc, char *argv[])
         if (ASCIIFormat)
         {
             // print human readable tik module to file
-            AssemblyAnnotationWriter *write = new llvm::AssemblyAnnotationWriter();
+            auto *write = new llvm::AssemblyAnnotationWriter();
             std::string str;
             llvm::raw_string_ostream rso(str);
             std::filebuf f0;
@@ -328,20 +328,17 @@ int main(int argc, char *argv[])
     {
         return EXIT_FAILURE;
     }
-    else
-    {
-        return EXIT_SUCCESS;
-    }
+    return EXIT_SUCCESS;
 }
 
 void CleanModule(Module *M)
 {
     for (auto mi = M->begin(); mi != M->end(); mi++)
     {
-        for (auto fi = mi->begin(); fi != mi->end(); fi++)
+        for (auto &fi : *mi)
         {
             vector<Instruction *> toRemove;
-            for (auto bi = fi->begin(); bi != fi->end(); bi++)
+            for (auto bi = fi.begin(); bi != fi.end(); bi++)
             {
                 auto v = cast<Instruction>(bi);
                 if (auto ci = dyn_cast<DbgInfoIntrinsic>(v))
@@ -354,7 +351,7 @@ void CleanModule(Module *M)
                     v->getAllMetadata(MDs);
                     for (auto MD : MDs)
                     {
-                        v->setMetadata(MD.first, NULL);
+                        v->setMetadata(MD.first, nullptr);
                     }
                 }
             }
@@ -363,12 +360,12 @@ void CleanModule(Module *M)
                 r->eraseFromParent();
             }
         }
-        Function *F = cast<Function>(mi);
+        auto *F = cast<Function>(mi);
         SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
         F->getAllMetadata(MDs);
         for (auto MD : MDs)
         {
-            F->setMetadata(MD.first, NULL);
+            F->setMetadata(MD.first, nullptr);
         }
     }
 
@@ -379,7 +376,7 @@ void CleanModule(Module *M)
         gv->getAllMetadata(MDs);
         for (auto MD : MDs)
         {
-            gv->setMetadata(MD.first, NULL);
+            gv->setMetadata(MD.first, nullptr);
         }
     }
 }

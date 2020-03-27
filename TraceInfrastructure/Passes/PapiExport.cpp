@@ -21,136 +21,132 @@
 using namespace llvm;
 using namespace std;
 
-namespace DashTracer
+namespace DashTracer::Passes
 {
 
-    namespace Passes
+    std::vector<uint64_t> kernelBlock;
+    Function *certOn;
+    Function *certOff;
+
+    bool PapiExport::runOnFunction(Function &F)
     {
-
-        std::vector<uint64_t> kernelBlock;
-        Function *certOn;
-        Function *certOff;
-
-        bool PapiExport::runOnFunction(Function &F)
+        std::string functionName = F.getName();
+        for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
         {
-            std::string functionName = F.getName();
-            for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
+            auto *block = cast<BasicBlock>(BB);
+            std::vector<Instruction *> toRemove;
+            auto blockId = GetBlockID(block);
+            bool local = std::find(kernelBlock.begin(), kernelBlock.end(), blockId) != kernelBlock.end();
+            bool contInt = false;
+            bool contExt = false;
+            for (BasicBlock *pred : predecessors(block))
             {
-                BasicBlock *block = cast<BasicBlock>(BB);
-                std::vector<Instruction *> toRemove;
-                auto blockId = GetBlockID(block);
-                bool local = std::find(kernelBlock.begin(), kernelBlock.end(), blockId) != kernelBlock.end();
-                bool contInt = false;
-                bool contExt = false;
-                for (BasicBlock *pred : predecessors(block))
+                auto subId = GetBlockID(pred);
+                if (std::find(kernelBlock.begin(), kernelBlock.end(), subId) != kernelBlock.end())
                 {
-                    auto subId = GetBlockID(pred);
-                    if (std::find(kernelBlock.begin(), kernelBlock.end(), subId) != kernelBlock.end())
-                    {
-                        contInt = true;
-                    }
-                    else
-                    {
-                        contExt = true;
-                    }
-                }
-
-                IRBuilder<> borderBuilder(block);
-                Instruction *nonPhi = block->getFirstNonPHI();
-                while (Instruction *lp = dyn_cast<LandingPadInst>(nonPhi))
-                {
-                    nonPhi = lp->getNextNode();
-                }
-                borderBuilder.SetInsertPoint(nonPhi);
-
-                if (&F.getEntryBlock() == block)
-                {
-                    if (local)
-                    {
-                        borderBuilder.CreateCall(certOn);
-                    }
-                    else
-                    {
-                        borderBuilder.CreateCall(certOff);
-                    }
+                    contInt = true;
                 }
                 else
                 {
-                    if (local & contExt)
-                    {
-                        borderBuilder.CreateCall(certOn);
-                    }
-                    else if (!local & contInt)
-                    {
-                        borderBuilder.CreateCall(certOff);
-                    }
+                    contExt = true;
                 }
+            }
 
-                for (BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; ++BI)
+            IRBuilder<> borderBuilder(block);
+            Instruction *nonPhi = block->getFirstNonPHI();
+            while (Instruction *lp = dyn_cast<LandingPadInst>(nonPhi))
+            {
+                nonPhi = lp->getNextNode();
+            }
+            borderBuilder.SetInsertPoint(nonPhi);
+
+            if (&F.getEntryBlock() == block)
+            {
+                if (local)
                 {
-                    if (CallInst *callInst = dyn_cast<CallInst>(BI))
+                    borderBuilder.CreateCall(certOn);
+                }
+                else
+                {
+                    borderBuilder.CreateCall(certOff);
+                }
+            }
+            else
+            {
+                if (local && contExt)
+                {
+                    borderBuilder.CreateCall(certOn);
+                }
+                else if (!local && contInt)
+                {
+                    borderBuilder.CreateCall(certOff);
+                }
+            }
+
+            for (BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; ++BI)
+            {
+                if (auto *callInst = dyn_cast<CallInst>(BI))
+                {
+                    Function *calledFunc = callInst->getCalledFunction();
+                    if (calledFunc != certOn && calledFunc != certOff)
                     {
-                        Function *calledFunc = callInst->getCalledFunction();
-                        if (calledFunc != certOn && calledFunc != certOff)
+                        IRBuilder<> callBuilder(callInst);
+                        if (local)
                         {
-                            IRBuilder<> callBuilder(callInst);
-                            if (local)
-                            {
-                                callBuilder.CreateCall(certOn);
-                                BI++;
-                            }
-                            else
-                            {
-                                assert(certOff != NULL);
-                                callBuilder.CreateCall(certOff);
-                                BI++;
-                            }
+                            callBuilder.CreateCall(certOn);
+                            BI++;
+                        }
+                        else
+                        {
+                            assert(certOff != nullptr);
+                            callBuilder.CreateCall(certOff);
+                            BI++;
                         }
                     }
                 }
             }
-            return true;
-        } // namespace Passes
-
-        bool PapiExport::doInitialization(Module &M)
-        {
-            certOn = cast<Function>(M.getOrInsertFunction("CertifyPapiOn", Type::getVoidTy(M.getContext())).getCallee());
-            certOff = cast<Function>(M.getOrInsertFunction("CertifyPapiOff", Type::getVoidTy(M.getContext())).getCallee());
-
-            kernelBlock.clear();
-            nlohmann::json j;
-            std::ifstream inputStream(KernelFilename);
-            inputStream >> j;
-            inputStream.close();
-            for (auto &[key, value] : j.items())
-            {
-                string index = key;
-                if (stoi(index) == KernelIndex)
-                {
-                    nlohmann::json kernel;
-                    if (!value[0].empty() && value[0].is_array())
-                    {
-                        //embedded layout
-                        kernel = value[0];
-                    }
-                    else
-                    {
-                        kernel = value;
-                    }
-                    kernelBlock = kernel.get<vector<uint64_t>>();
-                }
-            }
-
-            return false;
         }
-
-        void PapiExport::getAnalysisUsage(AnalysisUsage &AU) const
-        {
-            AU.addRequired<DashTracer::Passes::EncodedAnnotate>();
-            AU.addRequired<DashTracer::Passes::PapiIO>();
-        }
-
-        char PapiExport::ID = 0;
-        static RegisterPass<PapiExport> Y("PapiExport", "Adds papi instrumentation calls to the binary", false, false);
+        return true;
     } // namespace Passes
-} // namespace DashTracer
+
+    bool PapiExport::doInitialization(Module &M)
+    {
+        certOn = cast<Function>(M.getOrInsertFunction("CertifyPapiOn", Type::getVoidTy(M.getContext())).getCallee());
+        certOff = cast<Function>(M.getOrInsertFunction("CertifyPapiOff", Type::getVoidTy(M.getContext())).getCallee());
+
+        kernelBlock.clear();
+        nlohmann::json j;
+        std::ifstream inputStream(KernelFilename);
+        inputStream >> j;
+        inputStream.close();
+        for (auto &[key, value] : j.items())
+        {
+            string index = key;
+            if (stoi(index) == KernelIndex)
+            {
+                nlohmann::json kernel;
+                if (!value[0].empty() && value[0].is_array())
+                {
+                    //embedded layout
+                    kernel = value[0];
+                }
+                else
+                {
+                    kernel = value;
+                }
+                kernelBlock = kernel.get<vector<uint64_t>>();
+            }
+        }
+
+        return false;
+    }
+
+    void PapiExport::getAnalysisUsage(AnalysisUsage &AU) const
+    {
+        AU.addRequired<DashTracer::Passes::EncodedAnnotate>();
+        AU.addRequired<DashTracer::Passes::PapiIO>();
+    }
+
+    char PapiExport::ID = 0;
+    static RegisterPass<PapiExport> Y("PapiExport", "Adds papi instrumentation calls to the binary", false, false);
+} // namespace DashTracer::Passes

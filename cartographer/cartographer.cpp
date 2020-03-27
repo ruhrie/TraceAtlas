@@ -106,11 +106,11 @@ int main(int argc, char **argv)
     Annotate(M);
 
     //build the blockMap
-    for (auto mi = M->begin(); mi != M->end(); mi++)
+    for (auto &mi : *M)
     {
-        for (auto fi = mi->begin(); fi != mi->end(); fi++)
+        for (auto fi = mi.begin(); fi != mi.end(); fi++)
         {
-            BasicBlock *bb = cast<BasicBlock>(fi);
+            auto *bb = cast<BasicBlock>(fi);
             int64_t id = GetBlockID(bb);
             blockMap[id] = bb;
         }
@@ -152,7 +152,7 @@ int main(int argc, char **argv)
 
         map<int, set<int64_t>> finalResult;
         int j = 0;
-        for (auto set : type35Kernels)
+        for (const auto &set : type35Kernels)
         {
             if (!set.empty())
             {
@@ -161,18 +161,18 @@ int main(int argc, char **argv)
         }
 
         nlohmann::json outputJson;
-        for (auto key : finalResult)
+        for (const auto &key : finalResult)
         {
             if (label)
             {
-                string strLabel = "";
+                string strLabel;
                 bool first = true;
                 set<string> labels;
                 for (auto block : key.second)
                 {
                     labels.insert(blockLabelMap[block].begin(), blockLabelMap[block].end());
                 }
-                for (const auto entry : labels)
+                for (const auto &entry : labels)
                 {
                     if (entry.empty())
                     {

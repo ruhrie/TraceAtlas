@@ -10,27 +10,27 @@ namespace TypeTwo
 {
     uint64_t blockCount = 0;
 
-    int *openCount = NULL;
-    set<int64_t> *finalBlocks = NULL;
-    set<int> *kernelMap = NULL;
+    int *openCount = nullptr;
+    set<int64_t> *finalBlocks = nullptr;
+    set<int> *kernelMap = nullptr;
     set<int64_t> openBlocks;
-    int *kernelStarts = NULL;
-    set<int64_t> *blocks = NULL;
+    int *kernelStarts = nullptr;
+    set<int64_t> *blocks = nullptr;
 
     bool blocksLabeled = false;
-    string currentKernel = "";
+    string currentKernel;
     std::set<std::set<int64_t>> kernels;
     void Setup(llvm::Module *bitcode, std::set<std::set<int64_t>> k)
     {
-        for (auto mi = bitcode->begin(); mi != bitcode->end(); mi++)
+        for (auto &mi : *bitcode)
         {
-            for (auto fi = mi->begin(); fi != mi->end(); fi++)
+            for (auto fi = mi.begin(); fi != mi.end(); fi++)
             {
                 blockCount++;
             }
         }
 
-        kernels = k;
+        kernels = move(k);
 
         openCount = (int *)calloc(sizeof(int), blockCount);                         // counter to know where we are in the callstack
         finalBlocks = (set<int64_t> *)calloc(sizeof(set<int64_t>), kernels.size()); // final kernel definitions
@@ -49,7 +49,7 @@ namespace TypeTwo
             kernelStarts[i] = -1;
         }
         int a = 0;
-        for (auto kernel : kernels)
+        for (const auto &kernel : kernels)
         {
             for (auto block : kernel)
             {
@@ -62,7 +62,7 @@ namespace TypeTwo
     {
         if (key == "BBEnter")
         {
-            int block = stoi(value, 0, 0);
+            int block = stoi(value, nullptr, 0);
             openCount[block]++; //mark this block as being entered
             openBlocks.insert(block);
 
@@ -100,7 +100,7 @@ namespace TypeTwo
         }
         else if (key == "BBExit")
         {
-            int block = stoi(value, 0, 0);
+            int block = stoi(value, nullptr, 0);
             openCount[block]--;
             if (openCount[block] == 0)
             {
