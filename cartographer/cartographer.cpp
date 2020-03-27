@@ -22,9 +22,9 @@ using namespace llvm;
 
 bool noProgressBar;
 bool blocksLabeled = false;
-map<int, set<string>> blockLabelMap;
-map<int, BasicBlock *> blockMap;
-set<int> ValidBlocks;
+map<int64_t, set<string>> blockLabelMap;
+map<int64_t, BasicBlock *> blockMap;
+set<int64_t> ValidBlocks;
 
 llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
 llvm::cl::opt<float> threshold("t", cl::desc("The threshold of block grouping required to complete a kernel."), llvm::cl::value_desc("float"), llvm::cl::init(0.9));
@@ -96,7 +96,7 @@ int main(int argc, char **argv)
     {
         sourceBitcode = parseIRFile(bitcodeFile, smerror, context);
     }
-    catch (exception e)
+    catch (exception &e)
     {
         spdlog::critical("Failed to open bitcode file: " + bitcodeFile);
         return EXIT_FAILURE;
@@ -141,16 +141,16 @@ int main(int argc, char **argv)
         auto type25Kernels = TypeTwo::Get();
         spdlog::info("Detected " + to_string(type25Kernels.size()) + " type 2.5 kernels");
 
-        auto type3Kernels = TypeThree::Process(type25Kernels, M);
+        auto type3Kernels = TypeThree::Process(type25Kernels);
         spdlog::info("Detected " + to_string(type3Kernels.size()) + " type 3 kernels");
 
-        auto type4Kernels = TypeFour::Process(type3Kernels, M);
+        auto type4Kernels = TypeFour::Process(type3Kernels);
         spdlog::info("Detected " + to_string(type4Kernels.size()) + " type 4 kernels");
 
-        auto type35Kernels = TypeThree::Process(type4Kernels, M);
+        auto type35Kernels = TypeThree::Process(type4Kernels);
         spdlog::info("Detected " + to_string(type35Kernels.size()) + " type 3.5 kernels");
 
-        map<int, set<int>> finalResult;
+        map<int, set<int64_t>> finalResult;
         int j = 0;
         for (auto set : type35Kernels)
         {
@@ -167,13 +167,12 @@ int main(int argc, char **argv)
             {
                 string strLabel = "";
                 bool first = true;
-                int i = 0;
                 set<string> labels;
                 for (auto block : key.second)
                 {
                     labels.insert(blockLabelMap[block].begin(), blockLabelMap[block].end());
                 }
-                for (auto entry : labels)
+                for (const auto entry : labels)
                 {
                     if (entry.empty())
                     {

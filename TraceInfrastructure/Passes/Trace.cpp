@@ -33,7 +33,7 @@ namespace DashTracer
 
                 IRBuilder<> firstBuilder(firstInst);
                 int64_t id = GetBlockID(BB);
-                Value *idValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), id);
+                Value *idValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), (uint64_t)id);
                 std::vector<Value *> args;
                 args.push_back(idValue);
                 args.push_back(trueConst);
@@ -42,9 +42,8 @@ namespace DashTracer
                 args.push_back(falseConst);
                 for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
                 {
-                    bool done = false;
                     Instruction *CI = dyn_cast<Instruction>(BI);
-                    if (DumpLoads && !done)
+                    if (DumpLoads)
                     {
                         if (LoadInst *load = dyn_cast<LoadInst>(CI))
                         {
@@ -53,10 +52,9 @@ namespace DashTracer
                             auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB->getContext()), 0), true);
                             Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB->getContext()));
                             builder.CreateCall(LoadDump, cast);
-                            done = true;
                         }
                     }
-                    if (DumpStores && !done)
+                    if (DumpStores)
                     {
                         if (StoreInst *store = dyn_cast<StoreInst>(CI))
                         {
@@ -65,7 +63,6 @@ namespace DashTracer
                             auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB->getContext()), 0), true);
                             Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB->getContext()));
                             builder.CreateCall(StoreDump, cast);
-                            done = true;
                         }
                     }
                 }

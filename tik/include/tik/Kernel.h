@@ -12,7 +12,7 @@
 class Kernel
 {
 public:
-    Kernel(std::vector<int> basicBlocks, llvm::Module *M, std::string name = "");
+    Kernel(std::vector<int64_t> basicBlocks, llvm::Module *M, std::string name = "");
     ~Kernel();
     std::string GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures);
     std::string Name;
@@ -118,7 +118,7 @@ private:
     void GetKernelLabels();
     void CopyArgument(llvm::CallBase *Call);
     void CopyOperand(llvm::User *inst);
-    void InlineFunctions(std::set<int> &blocks);
+    void InlineFunctions(std::set<int64_t> &blocks);
     void RemapExports();
     void RemapOperand(llvm::Operator* op);
 

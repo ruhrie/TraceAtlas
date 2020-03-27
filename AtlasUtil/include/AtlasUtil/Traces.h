@@ -42,9 +42,9 @@ static void ProcessTrace(std::string TraceFile, std::function<void(std::string &
 
     //get the file size
     inputTrace.seekg(0, std::ios_base::end);
-    uint64_t size = inputTrace.tellg();
+    int64_t size = inputTrace.tellg();
     inputTrace.seekg(0, std::ios_base::beg);
-    int blocks = size / BLOCK_SIZE + 1;
+    int64_t blocks = size / BLOCK_SIZE + 1;
 
     bool notDone = true;
     bool seenFirst;
@@ -54,8 +54,8 @@ static void ProcessTrace(std::string TraceFile, std::function<void(std::string &
     {
         // read a block size of the trace
         inputTrace.readsome(dataArray, BLOCK_SIZE);
-        strm.next_in = (Bytef *)dataArray;   // input data to z_lib for decompression
-        strm.avail_in = inputTrace.gcount(); // remaining characters in the compressed inputTrace
+        strm.next_in = (Bytef *)dataArray;             // input data to z_lib for decompression
+        strm.avail_in = (uint32_t)inputTrace.gcount(); // remaining characters in the compressed inputTrace
         while (strm.avail_in != 0)
         {
             // decompress our data

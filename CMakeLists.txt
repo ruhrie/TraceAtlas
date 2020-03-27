@@ -20,6 +20,13 @@ endfunction()
 
 set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld-9")
 
+set(CMAKE_CXX_CLANG_TIDY 
+    clang-tidy-9;
+    --header-filter=.;
+    --warnings-as-errors=*;
+    --format-style=file;
+    )
+
 add_subdirectory("AtlasUtil")
 add_subdirectory("cartographer")
 add_subdirectory("TraceInfrastructure")

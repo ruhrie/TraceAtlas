@@ -4,5 +4,5 @@
 
 namespace TypeThree
 {
-    std::set<std::set<int>> Process(std::set<std::set<int>> type25Kernels, llvm::Module *M);
+    std::set<std::set<int64_t>> Process(std::set<std::set<int64_t>> type25Kernels);
 } // namespace TypeThree

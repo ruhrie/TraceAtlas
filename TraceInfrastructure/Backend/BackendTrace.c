@@ -41,8 +41,7 @@ void BufferData()
     strm_DashTracer.avail_out = BUFSIZE;
     while (strm_DashTracer.avail_in != 0)
     {
-        int res = deflate(&strm_DashTracer, Z_NO_FLUSH);
-        assert(res == Z_OK);
+        deflate(&strm_DashTracer, Z_NO_FLUSH);
 
         if (strm_DashTracer.avail_out == 0)
         {
@@ -54,7 +53,7 @@ void BufferData()
             strm_DashTracer.avail_out = BUFSIZE;
         }
     }
-    for (int i = 0; i < BUFSIZE - strm_DashTracer.avail_out; i++)
+    for (uint32_t i = 0; i < BUFSIZE - strm_DashTracer.avail_out; i++)
     {
         fputc(temp_buffer[i], myfile);
     }
@@ -109,8 +108,7 @@ void OpenFile()
     strm_DashTracer.zalloc = Z_NULL;
     strm_DashTracer.zfree = Z_NULL;
     strm_DashTracer.opaque = Z_NULL;
-    int ret = deflateInit(&strm_DashTracer, TraceCompressionLevel);
-    assert(ret == Z_OK);
+    deflateInit(&strm_DashTracer, TraceCompressionLevel);
     char *tfn = getenv("TRACE_NAME");
     if (tfn != NULL)
     {
@@ -131,9 +129,8 @@ void CloseFile()
     strm_DashTracer.avail_in = bufferIndex;
     strm_DashTracer.next_out = temp_buffer;
     strm_DashTracer.avail_out = BUFSIZE;
-    int deflate_res = deflate(&strm_DashTracer, Z_FINISH);
-    assert(deflate_res == Z_STREAM_END);
-    for (int i = 0; i < BUFSIZE - strm_DashTracer.avail_out; i++)
+    deflate(&strm_DashTracer, Z_FINISH);
+    for (uint32_t i = 0; i < BUFSIZE - strm_DashTracer.avail_out; i++)
     {
         fputc(temp_buffer[i], myfile);
     }

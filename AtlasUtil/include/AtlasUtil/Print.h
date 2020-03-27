@@ -31,11 +31,6 @@ inline void PrintVal(llvm::NamedMDNode *val)
     std::cout << str << "\n";
 }
 
-inline void PrintVal(const llvm::Value *val)
-{
-    PrintVal(val);
-}
-
 inline void PrintVal(llvm::Module *mod)
 {
     llvm::AssemblyAnnotationWriter *write = new llvm::AssemblyAnnotationWriter();

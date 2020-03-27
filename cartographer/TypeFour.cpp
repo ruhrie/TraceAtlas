@@ -13,7 +13,138 @@ using namespace llvm;
 
 namespace TypeFour
 {
-    set<BasicBlock *> GetReachable(BasicBlock *base, set<int> validBlocks)
+    ///Represents a basic block and a function call signiture, only for local use
+    struct BlockSigniture
+    {
+        BasicBlock *Block;
+        int64_t FunctionID;
+        BlockSigniture(BasicBlock *block) //default the functionid to -1
+        {
+            Block = block;
+            FunctionID = -1;
+        }
+        BlockSigniture(BasicBlock *block, int64_t function)
+        {
+            Block = block;
+            FunctionID = function;
+        }
+        bool operator==(const BlockSigniture &lhs) //needed for searching
+        {
+            return Block == lhs.Block && FunctionID == lhs.FunctionID;
+        }
+    };
+
+    map<CallBase *, int64_t> functionIdMap; //dictionary for function id lookup, NOT for direct use!
+    int64_t nextId = 0;                     //next id for the function map, NOT for direct use!
+    int64_t getFunctionId(CallBase *b)      //if you need a new id, use this function, it will lookup the id or assign a new one and return that
+    {
+        if (functionIdMap.find(b) == functionIdMap.end())
+        {
+            functionIdMap[b] = nextId++;
+        }
+        return functionIdMap[b];
+    }
+
+    void GetReachable(const BlockSigniture &base, vector<BlockSigniture> &result, const set<int64_t> validBlocks)
+    {
+        //so we will start by adding every successor, they are in the same function so they have the same function id
+        for (auto suc : successors(base.Block))
+        {
+            int64_t id = GetBlockID(suc);
+            if (validBlocks.find(id) != validBlocks.end())
+            {
+                auto candidate = BlockSigniture(suc, base.FunctionID);
+                if (find(result.begin(), result.end(), candidate) == result.end())
+                {
+                    result.push_back(candidate);
+                    GetReachable(candidate, result, validBlocks);
+                }
+            }
+        }
+        //next we need to check every intstruction
+        for (auto bi = base.Block->begin(); bi != base.Block->end(); bi++)
+        {
+            //if it is a call, we will get a block id and add it to the queue
+            if (auto cb = dyn_cast<CallBase>(bi))
+            {
+                Function *F = cb->getCalledFunction();
+                if (F && !F->empty())
+                {
+                    BasicBlock *entry = &F->getEntryBlock();
+                    auto entryId = GetBlockID(entry);
+                    if (validBlocks.find(entryId) != validBlocks.end())
+                    {
+                        auto candidate = BlockSigniture(entry, getFunctionId(cb));
+                        if (find(result.begin(), result.end(), candidate) == result.end())
+                        {
+                            result.push_back(candidate);
+                            GetReachable(candidate, result, validBlocks);
+                        }
+                    }
+                }
+            }
+            //if it is a return (or exception) we go into the virtual caller
+            else if (isa<ReturnInst>(bi) || isa<ResumeInst>(bi))
+            {
+                if (base.FunctionID == -1) //we only need to care if it doesn't have a function id, otherwise it is already handeled
+                {
+                    //we are in a function at the start
+                    //get the number of uses (call base)
+                    //duplicate every entry in result where the function id is -1 with the new id, these are the block in the current function that haven't been mapped
+                    //then push back into the result each calling block and remove the prior not incorrect blocks
+                    //this is order dependent, unlike the rest of the code
+                    vector<CallBase *> calls;
+                    Function *F = base.Block->getParent();
+                    for (auto user : F->users())
+                    {
+                        if (CallBase *cb = dyn_cast<CallBase>(user))
+                        {
+                            auto parId = GetBlockID(cb->getParent());
+                            if (validBlocks.find(parId) != validBlocks.end())
+                            {
+                                calls.push_back(cb);
+                            }
+                        }
+                    }
+                    vector<BlockSigniture> toRemove;
+                    for (auto r : result)
+                    {
+                        if (r.FunctionID == -1)
+                        {
+                            for (auto call : calls)
+                            {
+                                auto fId = getFunctionId(call);
+                                auto newR = BlockSigniture(r.Block, fId);
+                                result.push_back(newR);
+                            }
+                            toRemove.push_back(r);
+                        }
+                    }
+                    for (auto r : toRemove)
+                    {
+                        result.erase(remove(result.begin(), result.end(), r), result.end());
+                    }
+                    //now that we repaired the result retroactively, we can recurse once for each caller
+                    //we don't know if this needs a function id, so we just pass -1 for the time being
+                    //worst case this is going to chain and operate again above to repair
+                    for (auto call : calls)
+                    {
+                        auto parent = call->getParent();
+                        auto candidate = BlockSigniture(parent);
+                        //we will check for the id here, but I'd be shocked if it was already added
+                        //better to be safe though
+                        if (find(result.begin(), result.end(), candidate) == result.end())
+                        {
+                            result.push_back(candidate);
+                            GetReachable(candidate, result, validBlocks);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    set<BasicBlock *> GetReachable(BasicBlock *base, set<int64_t> validBlocks)
     {
         bool foundSelf = false;
         queue<BasicBlock *> toProcess;
@@ -124,7 +255,7 @@ namespace TypeFour
         return checked;
     }
 
-    set<set<int>> Process(set<set<int>> type3Kernels, Module *M)
+    set<set<int64_t>> Process(set<set<int64_t>> type3Kernels)
     {
         indicators::ProgressBar bar;
         if (!noBar)
@@ -135,14 +266,14 @@ namespace TypeFour
             bar.show_remaining_time();
         }
 
-        int total = type3Kernels.size();
+        uint64_t total = type3Kernels.size();
         int status = 0;
 
-        set<set<int>> result;
+        set<set<int64_t>> result;
         for (auto kernel : type3Kernels)
         {
-            set<int> blocks;
-            map<int, set<BasicBlock *>> reachableMap;
+            set<int64_t> blocks;
+            map<int64_t, set<BasicBlock *>> reachableMap;
             for (auto block : kernel)
             {
                 //we need to see if this block can ever reach itself
@@ -155,43 +286,30 @@ namespace TypeFour
                 reachableMap[block] = reachable;
             }
             //blocks is now a set, but it may be disjoint, so we need to check that now
-            map<int, set<BasicBlock *>> reachableBlockSets;
+            map<int64_t, set<BasicBlock *>> reachableBlockSets;
             for (auto block : blocks)
             {
                 reachableBlockSets[block] = GetReachable(blockMap[block], blocks);
+                //vector<BlockSigniture> a; //results are stored here
+                //GetReachable(BlockSigniture(blockMap[block]), a, blocks);
             }
-            set<set<BasicBlock *>> subSets;
+            set<set<int64_t>> subSets;
             for (auto block : blocks)
             {
-                set<BasicBlock *> sub;
+                set<int64_t> sub;
                 for (auto a : reachableBlockSets[block])
                 {
                     int64_t id = GetBlockID(a);
                     if (reachableBlockSets[id].find(blockMap[block]) != reachableBlockSets[id].end())
                     {
-                        sub.insert(a);
+                        sub.insert(id);
                     }
                 }
                 subSets.insert(sub);
             }
-
-            //we need to do a final split based upon the entrances
             for (auto subSet : subSets)
             {
-                auto entrances = GetEntrances(subSet);
-                for (auto entrance : entrances)
-                {
-                    //we will basically follow the path of the computation
-                    //adding all blocks that are valid
-                    auto visit = GetVisitable(entrance, subSet);
-                    set<int> fin;
-                    for (auto v : visit)
-                    {
-                        fin.insert(GetBlockID(v));
-                    }
-                    result.insert(fin);
-                }
-                //result.insert(subSet);
+                result.insert(subSet);
             }
             status++;
             float percent = float(status) / float(total) * 100;
@@ -207,127 +325,5 @@ namespace TypeFour
         }
 
         return result;
-    }
-
-    //stolen from tik
-    set<BasicBlock *> GetEntrances(set<BasicBlock *> blocks)
-    {
-        set<BasicBlock *> result;
-        for (auto block : blocks)
-        {
-            Function *F = block->getParent();
-            BasicBlock *par = &F->getEntryBlock();
-            //we first check if the block is an entry block, if it is the only way it could be an entry is through a function call
-            if (block == par)
-            {
-                bool exte = false;
-                bool inte = false;
-                for (auto user : F->users())
-                {
-                    if (auto cb = dyn_cast<CallBase>(user))
-                    {
-                        BasicBlock *parent = cb->getParent(); //the parent of the function call
-                        if (blocks.find(parent) == blocks.end())
-                        {
-                            exte = true;
-                        }
-                        else
-                        {
-                            inte = true;
-                        }
-                    }
-                }
-                if (exte && !inte)
-                {
-                    //exclusively external so this is an entrance
-                    result.insert(block);
-                }
-                else if (exte && inte)
-                {
-                    //both external and internal, so maybe an entrance
-                    //ignore for the moment, worst case we will have no entrances
-                    //throw TikException("Mixed function uses, not implemented");
-                }
-                else if (!exte && inte)
-                {
-                    //only internal, so ignore
-                }
-                else
-                {
-                    //neither internal or external, throw error
-                    //throw TikException("Function with no internal or external uses");
-                }
-            }
-            else
-            {
-                bool ent = false;
-                queue<BasicBlock *> workingSet;
-                set<BasicBlock *> visitedBlocks;
-                workingSet.push(block);
-                visitedBlocks.insert(block);
-                while (!workingSet.empty())
-                {
-                    BasicBlock *current = workingSet.back();
-                    workingSet.pop();
-                    if (current == par)
-                    {
-                        ent = true;
-                        break;
-                    }
-                    for (BasicBlock *pred : predecessors(current))
-                    {
-                        if (visitedBlocks.find(pred) == visitedBlocks.end() && blocks.find(pred) == blocks.end())
-                        {
-                            visitedBlocks.insert(pred);
-                            workingSet.push(pred);
-                        }
-                    }
-                }
-                if (ent)
-                {
-                    result.insert(block);
-                }
-            }
-        }
-        return result;
-    }
-
-    set<BasicBlock *> GetVisitable(BasicBlock *base, set<BasicBlock *> &validBlocks)
-    {
-        queue<BasicBlock *> workingSet;
-        set<BasicBlock *> visitedBlocks;
-        workingSet.push(base);
-        visitedBlocks.insert(base);
-        while (!workingSet.empty())
-        {
-            BasicBlock *b = workingSet.front();
-            workingSet.pop();
-            for (auto suc : successors(b))
-            {
-                int id = GetBlockID(suc);
-                if (validBlocks.find(suc) != validBlocks.end() && visitedBlocks.find(suc) == visitedBlocks.end())
-                {
-                    workingSet.push(suc);
-                    visitedBlocks.insert(suc);
-                }
-            }
-            for (auto bi = b->begin(); bi != b->end(); bi++)
-            {
-                if (auto cb = dyn_cast<CallBase>(bi))
-                {
-                    Function *F = cb->getCalledFunction();
-                    if (F && !F->empty())
-                    {
-                        BasicBlock *c = &F->getEntryBlock();
-                        if (validBlocks.find(c) != validBlocks.end() && visitedBlocks.find(c) == visitedBlocks.end())
-                        {
-                            workingSet.push(c);
-                            visitedBlocks.insert(c);
-                        }
-                    }
-                }
-            }
-        }
-        return visitedBlocks;
     }
 } // namespace TypeFour

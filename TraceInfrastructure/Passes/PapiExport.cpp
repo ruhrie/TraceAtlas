@@ -101,6 +101,7 @@ namespace DashTracer
                             }
                             else
                             {
+                                assert(certOff != NULL);
                                 callBuilder.CreateCall(certOff);
                                 BI++;
                             }

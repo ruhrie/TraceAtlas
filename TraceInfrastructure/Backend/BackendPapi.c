@@ -1,13 +1,14 @@
 #include "Backend/BackendPapi.h"
 #include <papi.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 char *BackendPapiNames;
 int PapiEventSet = PAPI_NULL;
-int PapiEventCount;
+uint64_t PapiEventCount;
 long long *PapiData;
 FILE *BackendPapiFile;
 bool PapiRunning = 0;
@@ -309,7 +310,7 @@ void InitializePapi()
         }
     }
 
-    for (int i = 0; i < PapiEventCount; i++)
+    for (uint32_t i = 0; i < PapiEventCount; i++)
     {
         int code = PAPI_NULL;
         int index = indeces[i];
@@ -346,7 +347,7 @@ void TerminatePapi()
     }
 
     BackendPapiFile = fopen(pn, "w");
-    for (int i = 0; i < PapiEventCount; i++)
+    for (uint32_t i = 0; i < PapiEventCount; i++)
     {
         char stringData[PAPI_MAX_STR_LEN + 64];
         char tempData[PAPI_MAX_STR_LEN];

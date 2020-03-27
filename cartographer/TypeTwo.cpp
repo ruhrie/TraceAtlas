@@ -8,19 +8,19 @@ using namespace llvm;
 
 namespace TypeTwo
 {
-    int blockCount = 0;
+    uint64_t blockCount = 0;
 
     int *openCount = NULL;
-    set<int> *finalBlocks = NULL;
+    set<int64_t> *finalBlocks = NULL;
     set<int> *kernelMap = NULL;
-    set<int> openBlocks;
+    set<int64_t> openBlocks;
     int *kernelStarts = NULL;
-    set<int> *blocks = NULL;
+    set<int64_t> *blocks = NULL;
 
     bool blocksLabeled = false;
     string currentKernel = "";
-    std::set<std::set<int>> kernels;
-    void Setup(llvm::Module *bitcode, std::set<std::set<int>> k)
+    std::set<std::set<int64_t>> kernels;
+    void Setup(llvm::Module *bitcode, std::set<std::set<int64_t>> k)
     {
         for (auto mi = bitcode->begin(); mi != bitcode->end(); mi++)
         {
@@ -32,26 +32,26 @@ namespace TypeTwo
 
         kernels = k;
 
-        openCount = (int *)calloc(sizeof(int), blockCount);                 // counter to know where we are in the callstack
-        finalBlocks = (set<int> *)calloc(sizeof(set<int>), kernels.size()); // final kernel definitions
-        kernelStarts = (int *)calloc(sizeof(int), kernels.size());          // map of a kernel index to the first block seen
-        blocks = (set<int> *)calloc(sizeof(set<int>), kernels.size());      // temporary kernel blocks
+        openCount = (int *)calloc(sizeof(int), blockCount);                         // counter to know where we are in the callstack
+        finalBlocks = (set<int64_t> *)calloc(sizeof(set<int64_t>), kernels.size()); // final kernel definitions
+        kernelStarts = (int *)calloc(sizeof(int), kernels.size());                  // map of a kernel index to the first block seen
+        blocks = (set<int64_t> *)calloc(sizeof(set<int64_t>), kernels.size());      // temporary kernel blocks
         kernelMap = (set<int> *)calloc(sizeof(set<int>), blockCount);
-        for (int i = 0; i < blockCount; i++)
+        for (uint32_t i = 0; i < blockCount; i++)
         {
             kernelMap[i] = set<int>();
             openCount[i] = 0;
         }
-        for (int i = 0; i < kernels.size(); i++)
+        for (uint32_t i = 0; i < kernels.size(); i++)
         {
-            blocks[i] = set<int>();
-            finalBlocks[i] = set<int>();
+            blocks[i] = set<int64_t>();
+            finalBlocks[i] = set<int64_t>();
             kernelStarts[i] = -1;
         }
         int a = 0;
         for (auto kernel : kernels)
         {
-            for (int block : kernel)
+            for (auto block : kernel)
             {
                 kernelMap[block].insert(a);
             }
@@ -66,7 +66,7 @@ namespace TypeTwo
             openCount[block]++; //mark this block as being entered
             openBlocks.insert(block);
 
-            for (int i = 0; i < kernels.size(); i++)
+            for (uint64_t i = 0; i < kernels.size(); i++)
             {
                 blocks[i].insert(block);
             }
@@ -117,14 +117,14 @@ namespace TypeTwo
         }
     }
 
-    std::set<std::set<int>> Get()
+    std::set<std::set<int64_t>> Get()
     {
         if (!blocksLabeled)
         {
             blocksLabeled = true;
         }
-        std::set<set<int>> finalSets;
-        for (int i = 0; i < kernels.size(); i++)
+        std::set<set<int64_t>> finalSets;
+        for (uint64_t i = 0; i < kernels.size(); i++)
         {
             finalSets.insert(finalBlocks[i]);
         }

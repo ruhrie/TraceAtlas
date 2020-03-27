@@ -7,10 +7,10 @@
 using namespace std;
 using namespace llvm;
 
-map<string, map<string, map<string, int>>> ProfileKernels(std::map<int, std::set<int>> kernels, Module *M)
+map<string, map<string, map<string, int>>> ProfileKernels(std::map<int, std::set<int64_t>> kernels, Module *M)
 {
-    map<int, map<string, int>> rMap;  //dictionary which keeps track of the actual information per block
-    map<int, map<string, int>> cpMap; //dictionary which keeps track of the cross product information per block
+    map<int64_t, map<string, uint64_t>> rMap;  //dictionary which keeps track of the actual information per block
+    map<int64_t, map<string, uint64_t>> cpMap; //dictionary which keeps track of the cross product information per block
     //annotate it with the same algorithm used in the tracer
     Annotate(M);
     //start by profiling every basic block
@@ -36,7 +36,7 @@ map<string, map<string, map<string, int>>> ProfileKernels(std::map<int, std::set
         auto blocks = kernel.second;
         for (auto block : blocks)
         {
-            int count = TypeOne::blockCount[block];
+            uint64_t count = TypeOne::blockCount[block];
             for (auto pair : rMap[block])
             {
                 cPigData[iString][pair.first] += pair.second * count;
@@ -58,7 +58,7 @@ map<string, map<string, map<string, int>>> ProfileKernels(std::map<int, std::set
     return fin;
 }
 
-void ProfileBlock(BasicBlock *BB, map<int, map<string, int>> &rMap, map<int, map<string, int>> &cpMap)
+void ProfileBlock(BasicBlock *BB, map<int64_t, map<string, uint64_t>> &rMap, map<int64_t, map<string, uint64_t>> &cpMap)
 {
     int64_t id = GetBlockID(BB);
     for (auto bi = BB->begin(); bi != BB->end(); bi++)
