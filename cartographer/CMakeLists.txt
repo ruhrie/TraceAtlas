@@ -8,6 +8,6 @@ set_target_properties(cartographer
 target_link_libraries(cartographer PRIVATE ${ZLIB_LIBRARY} ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil spdlog::spdlog spdlog::spdlog_header_only)
 target_include_directories(cartographer PRIVATE "include/")
 target_include_directories(cartographer SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
-target_compile_options(cartographer PRIVATE -Wall -Wextra -Wconversion)
+target_compile_options(cartographer PRIVATE -Wall -Wextra -Wconversion -Werror)
 
 install(TARGETS cartographer RUNTIME DESTINATION bin)

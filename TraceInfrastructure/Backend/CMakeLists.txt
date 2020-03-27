@@ -7,7 +7,7 @@ set_target_properties(
 
 target_link_libraries(AtlasBackend ${llvm_libs} ZLIB::ZLIB)
 target_include_directories(AtlasBackend PUBLIC ${TRACE_INC})
-target_compile_options(AtlasBackend PRIVATE -Wall  -Wextra -Wconversion)
+target_compile_options(AtlasBackend PRIVATE -Wall  -Wextra -Wconversion -Werror)
 
 install(TARGETS AtlasBackend
     ARCHIVE DESTINATION lib
