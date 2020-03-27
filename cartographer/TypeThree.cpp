@@ -9,7 +9,7 @@ using namespace std;
 using namespace llvm;
 namespace TypeThree
 {
-    set<set<int>> Process(set<set<int>> type25Kernels, Module *M)
+    set<set<int>> Process(set<set<int>> type25Kernels)
     {
         indicators::ProgressBar bar;
         if (!noBar)

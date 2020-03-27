@@ -255,7 +255,7 @@ namespace TypeFour
         return checked;
     }
 
-    set<set<int>> Process(set<set<int>> type3Kernels, Module *M)
+    set<set<int>> Process(set<set<int>> type3Kernels)
     {
         indicators::ProgressBar bar;
         if (!noBar)

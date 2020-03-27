@@ -74,7 +74,7 @@ void RecurseForStructs(llvm::Type *input, std::set<llvm::StructType *> &AllStruc
         llvm::StringRef newName = llvm::StringRef(newStringName);
         newStruct->setName(newName);
         AllStructures.insert(newStruct);
-        for (int i = 0; i < newStruct->getNumElements(); i++)
+        for (uint32_t i = 0; i < newStruct->getNumElements(); i++)
         {
             RecurseForStructs(newStruct->getElementType(i), AllStructures);
         }
@@ -88,7 +88,7 @@ void RecurseForStructs(llvm::Type *input, std::set<llvm::StructType *> &AllStruc
     else if (input->isArrayTy())
     {
         llvm::ArrayType *array = cast<ArrayType>(input);
-        for (int i = 0; i < array->getNumElements(); i++)
+        for (uint64_t i = 0; i < array->getNumElements(); i++)
         {
             RecurseForStructs(array->getTypeAtIndex(i), AllStructures);
         }
@@ -100,7 +100,7 @@ void RecurseForStructs(llvm::Type *input, std::set<llvm::StructType *> &AllStruc
     else if (input->isFunctionTy())
     {
         llvm::FunctionType *func = cast<llvm::FunctionType>(input);
-        for (int i = 0; i < func->getNumParams(); i++)
+        for (uint32_t i = 0; i < func->getNumParams(); i++)
         {
             RecurseForStructs(func->getParamType(i), AllStructures);
         }
@@ -122,7 +122,7 @@ std::string GetTikStructures(std::vector<Kernel *> kernels, std::set<llvm::Struc
     {
         std::string a = structure->getName();
         std::string structureDefinition = "\nstruct " + a + " {\n";
-        for (int i = 0; i < structure->getNumElements(); i++)
+        for (uint32_t i = 0; i < structure->getNumElements(); i++)
         {
             char memberChar = i % 26 + 97;
             std::string memberName = "";
@@ -426,7 +426,7 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
             std::string type = "@";
             type += getCType(func->getReturnType(), AllStructures);
             type += " (";
-            for (int i = 0; i < func->getNumParams(); i++)
+            for (uint32_t i = 0; i < func->getNumParams(); i++)
             {
                 if (i > 0)
                 {

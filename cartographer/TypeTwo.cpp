@@ -42,7 +42,7 @@ namespace TypeTwo
             kernelMap[i] = set<int>();
             openCount[i] = 0;
         }
-        for (int i = 0; i < kernels.size(); i++)
+        for (uint64_t i = 0; i < kernels.size(); i++)
         {
             blocks[i] = set<int>();
             finalBlocks[i] = set<int>();
@@ -66,7 +66,7 @@ namespace TypeTwo
             openCount[block]++; //mark this block as being entered
             openBlocks.insert(block);
 
-            for (int i = 0; i < kernels.size(); i++)
+            for (uint64_t i = 0; i < kernels.size(); i++)
             {
                 blocks[i].insert(block);
             }
@@ -124,7 +124,7 @@ namespace TypeTwo
             blocksLabeled = true;
         }
         std::set<set<int>> finalSets;
-        for (int i = 0; i < kernels.size(); i++)
+        for (uint64_t i = 0; i < kernels.size(); i++)
         {
             finalSets.insert(finalBlocks[i]);
         }

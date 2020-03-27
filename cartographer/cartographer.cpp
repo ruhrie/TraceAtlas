@@ -141,13 +141,13 @@ int main(int argc, char **argv)
         auto type25Kernels = TypeTwo::Get();
         spdlog::info("Detected " + to_string(type25Kernels.size()) + " type 2.5 kernels");
 
-        auto type3Kernels = TypeThree::Process(type25Kernels, M);
+        auto type3Kernels = TypeThree::Process(type25Kernels);
         spdlog::info("Detected " + to_string(type3Kernels.size()) + " type 3 kernels");
 
-        auto type4Kernels = TypeFour::Process(type3Kernels, M);
+        auto type4Kernels = TypeFour::Process(type3Kernels);
         spdlog::info("Detected " + to_string(type4Kernels.size()) + " type 4 kernels");
 
-        auto type35Kernels = TypeThree::Process(type4Kernels, M);
+        auto type35Kernels = TypeThree::Process(type4Kernels);
         spdlog::info("Detected " + to_string(type35Kernels.size()) + " type 3.5 kernels");
 
         map<int, set<int>> finalResult;

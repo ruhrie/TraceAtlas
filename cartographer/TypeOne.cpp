@@ -12,7 +12,7 @@ namespace TypeOne
     std::map<int, std::map<int, uint64_t>> blockMap;
     std::map<int, uint64_t> blockCount;
     std::deque<int> priorBlocks;
-    int radius = 5;
+    uint32_t radius = 5;
     void Process(std::string &key, std::string &value)
     {
         if (key == "BBEnter")

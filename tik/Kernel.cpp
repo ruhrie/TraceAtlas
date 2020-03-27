@@ -119,7 +119,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
         }
         FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
         KernelFunction = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
-        int i;
+        uint64_t i;
         for (i = 0; i < KernelImports.size(); i++)
         {
             Argument *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i);
@@ -127,7 +127,7 @@ Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
             VMap[KernelImports[i]] = a;
             ArgumentMap[a] = KernelImports[i];
         }
-        int j;
+        uint64_t j;
         for (j = 0; j < KernelExports.size(); j++)
         {
             Argument *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i + j);
@@ -248,7 +248,7 @@ void Kernel::UpdateMemory()
     std::set<llvm::Value *> coveredGlobals;
     std::set<llvm::StoreInst *> newStores;
     IRBuilder<> initBuilder(Init);
-    for (int i = 0; i < KernelImports.size(); i++)
+    for (uint64_t i = 0; i < KernelImports.size(); i++)
     {
         if (GlobalMap.find(VMap[KernelImports[i]]) != GlobalMap.end())
         {
@@ -360,7 +360,7 @@ void Kernel::RemapNestedKernels()
                         }
                     }
                     auto limit = callInst->getNumArgOperands();
-                    for (int k = 0; k < limit; k++)
+                    for (uint32_t k = 0; k < limit; k++)
                     {
                         Value *op = callInst->getArgOperand(k);
                         if (Argument *arg = dyn_cast<Argument>(op))
@@ -442,7 +442,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                 //we need to make a unique block for each entrance (there is currently only one)
                 //int i = 0;
                 //for (auto ent : nestedKernel->Entrances)
-                for (int i = 0; i < nestedKernel->Entrances.size(); i++)
+                for (uint64_t i = 0; i < nestedKernel->Entrances.size(); i++)
                 {
                     std::vector<llvm::Value *> inargs;
                     for (auto ai = nestedKernel->KernelFunction->arg_begin(); ai < nestedKernel->KernelFunction->arg_end(); ai++)
@@ -1124,7 +1124,7 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
                     if (gv->hasInitializer())
                     {
                         llvm::Constant *value = gv->getInitializer();
-                        for (int iter = 0; iter < value->getNumOperands(); iter++)
+                        for (uint32_t iter = 0; iter < value->getNumOperands(); iter++)
                         {
                             llvm::User *internal = cast<llvm::User>(value->getOperand(iter));
                             CopyOperand(internal);
@@ -1223,7 +1223,7 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
 
 void Kernel::CopyOperand(llvm::User *inst)
 {
-    for (int j = 0; j < inst->getNumOperands(); j++)
+    for (uint32_t j = 0; j < inst->getNumOperands(); j++)
     {
         Value *v = inst->getOperand(j);
         if (GlobalVariable *gv = dyn_cast<GlobalVariable>(v))
@@ -1239,7 +1239,7 @@ void Kernel::CopyOperand(llvm::User *inst)
                     if (gv->hasInitializer())
                     {
                         llvm::Constant *value = gv->getInitializer();
-                        for (int iter = 0; iter < value->getNumOperands(); iter++)
+                        for (uint32_t iter = 0; iter < value->getNumOperands(); iter++)
                         {
                             llvm::User *internal = cast<llvm::User>(value->getOperand(iter));
                             CopyOperand(internal);
@@ -1402,7 +1402,7 @@ void Kernel::RemapExports()
                 {
                     if (PHINode *p = dyn_cast<PHINode>(u))
                     {
-                        for (int i = 0; i < p->getNumIncomingValues(); i++)
+                        for (uint32_t i = 0; i < p->getNumIncomingValues(); i++)
                         {
                             if (mapped == p->getIncomingValue(i))
                             {
@@ -1417,7 +1417,7 @@ void Kernel::RemapExports()
                     {
                         IRBuilder<> uBuilder(cast<Instruction>(u));
                         auto load = uBuilder.CreateLoad(alloc);
-                        for (int i = 0; i < u->getNumOperands(); i++)
+                        for (uint32_t i = 0; i < u->getNumOperands(); i++)
                         {
                             if (mapped == u->getOperand(i))
                             {
@@ -1443,7 +1443,7 @@ void Kernel::RemapExports()
                 {
                     Function *F = call->getCalledFunction();
                     auto fType = F->getFunctionType();
-                    for (int i = 0; i < call->getNumArgOperands(); i++)
+                    for (uint32_t i = 0; i < call->getNumArgOperands(); i++)
                     {
                         auto arg = call->getArgOperand(i);
                         if (arg == NULL)
@@ -1487,7 +1487,7 @@ void Kernel::PatchPhis()
         for (auto &phi : b->phis())
         {
             vector<BasicBlock *> valuesToRemove;
-            for (int i = 0; i < phi.getNumIncomingValues(); i++)
+            for (uint32_t i = 0; i < phi.getNumIncomingValues(); i++)
             {
                 auto block = phi.getIncomingBlock(i);
                 if (block->getParent() != KernelFunction)
