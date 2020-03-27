@@ -54,7 +54,6 @@ namespace TypeFour
             if (validBlocks.find(id) != validBlocks.end())
             {
                 auto candidate = BlockSigniture(suc, base.FunctionID);
-                auto loc = find(result.begin(), result.end(), candidate);
                 if (find(result.begin(), result.end(), candidate) == result.end())
                 {
                     result.push_back(candidate);
