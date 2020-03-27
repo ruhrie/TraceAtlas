@@ -1,16 +1,17 @@
 #include <algorithm>
+#include <iostream>
 #include <map>
 #include <queue>
 #include <set>
-#include <string>
 #include <sstream>
-#include <iostream>
+#include <string>
 
 using namespace std;
 
 namespace WorkingSet
 {
-    extern map< string,  vector<uint64_t> > virAddr;
-    extern uint64_t inputSize;
-    void Process(std::string &key, std::string &value);  
-} 
+    extern int64_t timing;
+    extern map<string, vector<int64_t>> virAddr;
+    extern int64_t inputSize;
+    void Process(std::string &key, std::string &value);
+} // namespace WorkingSet

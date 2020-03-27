@@ -13,37 +13,19 @@
 #include <tuple>
 #include <vector>
 
-
-
 using namespace std;
 using namespace llvm;
 
 llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
-// cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
-// cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 
-
-bool sortKey(string xin, string yin)
+bool sortKeyInput(string xin, string yin)
 {
-    std::cout<<"sort in " << std::endl;
-    string pattern("@");
-    size_t pos = xin.find(pattern);
-    string x = xin.substr(pos+1, xin.size());
-    int xValue = stoi(x, 0, 0);
-    pos = yin.find(pattern);
-    string y = yin.substr(pos+1, yin.size());
-    int yValue = stoi(y, 0, 0);
+    return WorkingSet::virAddr[xin][2] < WorkingSet::virAddr[yin][2];
+}
 
-    if (xValue== -1 && yValue == -1)
-    {
-        //std::cout<<"sort 1: " << WorkingSet::virAddr[xin][2]<< "%%% " << WorkingSet::virAddr[yin][2] << std::endl;
-        return WorkingSet::virAddr[xin][2] < WorkingSet::virAddr[yin][2];
-    }
-    else
-    {
-        //std::cout<<"sort 2 " << std::endl;
-        return xValue < yValue;
-    } 	    
+bool sortKeyInternel(string xin, string yin)
+{
+    return WorkingSet::virAddr[xin][1] < WorkingSet::virAddr[yin][1];
 }
 
 int main(int argc, char **argv)
@@ -51,55 +33,138 @@ int main(int argc, char **argv)
     cl::ParseCommandLineOptions(argc, argv);
     ProcessTrace(inputTrace, &WorkingSet::Process, "working set analysis", false);
     int keySize = WorkingSet::virAddr.size();
-    vector<string> keyVector;
-    
-    for(map< string,  vector<uint64_t> > ::iterator it = WorkingSet::virAddr.begin(); it != WorkingSet::virAddr.end();++it)
+    vector<string> InputkeyVector;
+    vector<string> InternelkeyVector;
+    map<string, vector<int64_t>> InputVirAddr;
+    map<string, vector<int64_t>> InternelVirAddr;
+    for (map<string, vector<int64_t>>::iterator it = WorkingSet::virAddr.begin(); it != WorkingSet::virAddr.end(); ++it)
     {
-        keyVector.push_back(it->first);
+        if ((it->second)[1] > 0)
+        {
+            InternelkeyVector.push_back(it->first);
+            InternelVirAddr.insert(pair<string, vector<int64_t>>(it->first, it->second));
+        }
+        else
+        {
+            InputkeyVector.push_back(it->first);
+            InputVirAddr.insert(pair<string, vector<int64_t>>(it->first, it->second));
+        }
     }
 
-    std::sort(keyVector.begin(), keyVector.end(), sortKey);
+    std::sort(InternelkeyVector.begin(), InternelkeyVector.end(), sortKeyInternel);
+    std::sort(InputkeyVector.begin(), InputkeyVector.end(), sortKeyInput);
+    int64_t alivenumber = WorkingSet::inputSize;
 
+    vector<int> outputWS;
+    vector<int> inputWS;
+    vector<int> internalWS;
+    int maxInput = 0;
+    int maxOutput = 0;
+    int maxinternal = 0;
+    vector<string> outputList;
 
-    // alivenumber = inputSize
-    // for time in range(0, timing+1):
-    //     timeline = []
-    //     reviseDic = []
-    //     for addrPair in L:
-    //         if virAddr[addrPair][1] > time:
-    //             break
-    //         if virAddr[addrPair][2]:
-    //             if int(virAddr[addrPair][1]) <= time < int(virAddr[addrPair][2][-1]):
-    //                 timeline.append(addrPair)
-    //             elif time > int(virAddr[addrPair][2][-1]):
-    //                 reviseDic.append(addrPair)
-    //         else:
-    //             if addrPair not in outputList:
-    //                 outputList.append(addrPair)
-    //     for i in reviseDic:
-    //         del virAddr[i]
-    //         L.remove(i)
-    //     aliveTbl.append(timeline)
-    //     outputWorking.append(outputList.__len__())
-    //     output.append(timeline.__len__())
+    for (int64_t time = 0; time < WorkingSet::timing; time++)
+    {
+        vector<string> inputList;
+        vector<string> timeline;
+        for (vector<string>::iterator itv = InternelkeyVector.begin(); itv != InternelkeyVector.end(); ++itv)
+        {
+            string key = *itv;
+            if (InternelVirAddr[key].size() > 0)
+            {
 
-    //     timeline = []
-    //     reviseDic = []
-    //     for addrPair in Lin:
-    //         if virAddrInput[addrPair][1][0] > time:
-    //             break
-    //         if time > int(virAddrInput[addrPair][1][-1]):
-    //             reviseDic.append(addrPair)
-    //     if Lin.__len__():
-    //         alivenumber = alivenumber - reviseDic.__len__()
-    //     else:
-    //         alivenumber = 0
-    //     inputWorking.append(alivenumber)
-    //     for i in reviseDic:
-    //         del virAddrInput[i]
-    //         Lin.remove(i)
-    //     if time%100 == 0:
-    //         print("time progress:",time)
+                if (InternelVirAddr[key][1] > time)
+                {
+                    break;
+                }
+                if (InternelVirAddr[key].size() > 2)
+                {
+                    if (InternelVirAddr[key][1] <= time && InternelVirAddr[key][InternelVirAddr[key].size() - 1] > time)
+                    {
+                        timeline.push_back(key);
+                    }
+                    else if (time > InternelVirAddr[key][InternelVirAddr[key].size() - 1])
+                    {
+                        InternelVirAddr.erase(key);
+                        InternelkeyVector.erase(itv);
+                    }
+                }
+                else if (std::find(outputList.begin(), outputList.end(), key) == outputList.end())
+                {
 
+                    outputList.push_back(key);
+                    InternelVirAddr.erase(key);
+                    InternelkeyVector.erase(itv);
+                }
+            }
+        }
 
+        if (maxOutput < outputList.size())
+        {
+            maxOutput = outputList.size();
+        }
+        if (maxinternal < timeline.size())
+        {
+            maxinternal = timeline.size();
+        }
+        outputWS.push_back(outputList.size());
+        internalWS.push_back(timeline.size());
+
+        timeline.clear();
+        for (vector<string>::iterator itv = InputkeyVector.begin(); itv != InputkeyVector.end(); ++itv)
+        {
+            string key = *itv;
+            if (InputkeyVector.size() == 1)
+            {
+                inputList.push_back(key);
+                break;
+            }
+
+            if (InputVirAddr.count(key) > 0)
+            {
+                if (InputVirAddr[key].size() > 2)
+                {
+                    if (InputVirAddr[key][2] > time)
+                    {
+                        break;
+                    }
+                }
+
+                if (time > InputVirAddr[key][InputVirAddr[key].size() - 1])
+                {
+                    inputList.push_back(key);
+                    InputVirAddr.erase(key);
+                    InputkeyVector.erase(itv);
+                }
+            }
+        }
+        alivenumber = alivenumber - inputList.size();
+        if (maxInput < alivenumber)
+        {
+            maxInput = alivenumber;
+        }
+        inputWS.push_back(alivenumber);
+    }
+
+    printf("maxInput: %d \n maxinternal: %d \n maxOutput: %d \n", maxInput, maxinternal, maxOutput);
+
+    ofstream f;
+    f.open("./inputWorkingSet.txt");
+    for (int j = 0; j < inputWS.size(); j++)
+    {
+        f << inputWS[j] << endl;
+    }
+    f.close();
+    f.open("./outputWorkingSet.txt");
+    for (int j = 0; j < outputWS.size(); j++)
+    {
+        f << outputWS[j] << endl;
+    }
+    f.close();
+    f.open("./internalWorkingSet.txt");
+    for (int j = 0; j < internalWS.size(); j++)
+    {
+        f << internalWS[j] << endl;
+    }
+    f.close();
 }
