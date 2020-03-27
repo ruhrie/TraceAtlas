@@ -111,7 +111,7 @@ private:
     void CopyOperand(llvm::User *inst);
     void InlineFunctions(std::set<int64_t> &blocks);
     void RemapExports();
-    void RemapOperand(llvm::Operator* op);
+    void RemapOperand(llvm::Operator *op);
 
     std::map<llvm::BasicBlock *, llvm::BasicBlock *> ExitBlockMap;
 };

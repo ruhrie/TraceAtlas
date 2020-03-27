@@ -1,13 +1,12 @@
+#include "tik/TikHeader.h"
+#include "AtlasUtil/Print.h"
+#include "tik/Exceptions.h"
+#include "tik/Kernel.h"
 #include <cstring>
 #include <iostream>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/Support/Casting.h>
 #include <spdlog/spdlog.h>
-#include "tik/TikHeader.h"
-#include "AtlasUtil/Print.h"
-#include "tik/Exceptions.h"
-#include "tik/Kernel.h"
-
 
 using namespace llvm;
 
@@ -167,7 +166,7 @@ std::string GetTikStructures(const std::vector<Kernel *> &kernels, std::set<llvm
     return AllStructureDefinitions;
 }
 
-std::string getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructures, uint64_t& size)
+std::string getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructures, uint64_t &size)
 {
     std::string type;
     // if our elements are arrays, recurse
