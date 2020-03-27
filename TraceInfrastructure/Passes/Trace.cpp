@@ -33,7 +33,7 @@ namespace DashTracer
 
                 IRBuilder<> firstBuilder(firstInst);
                 int64_t id = GetBlockID(BB);
-                Value *idValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), id);
+                Value *idValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), (uint64_t)id);
                 std::vector<Value *> args;
                 args.push_back(idValue);
                 args.push_back(trueConst);

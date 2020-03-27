@@ -13,6 +13,6 @@ std::string GetTikStructures(std::vector<Kernel *> kernels, std::set<llvm::Struc
 
 std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructures);
 
-std::string getCArrayType(llvm::Type *arrayElem, std::set<llvm::StructType *> &AllStructures, int *size = NULL);
+std::string getCArrayType(llvm::Type *arrayElem, std::set<llvm::StructType *> &AllStructures, uint64_t *size = NULL);
 
 std::string getVectorType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructures);

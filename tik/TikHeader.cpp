@@ -14,12 +14,12 @@ bool VectorsUsed = false;
 
 void ProcessArrayArgument(std::string &type, std::string argname)
 {
-    type.erase(type.begin() + type.find("!"));
+    type.erase(type.begin() + (long)type.find("!"));
     // find all of our asterisks;
     int ast = 0;
     while (type.find("*") != std::string::npos)
     {
-        type.erase(type.begin() + type.find("*"));
+        type.erase(type.begin() + (long)type.find("*"));
         ast++;
     }
     std::size_t whiteSpacePosition;
@@ -41,12 +41,12 @@ void ProcessArrayArgument(std::string &type, std::string argname)
 
 void ProcessFunctionArgument(std::string &type, std::string argname)
 {
-    type.erase(type.begin() + type.find("@"));
+    type.erase(type.begin() + (long)type.find("@"));
     // find all of our asterisks;
     int ast = 0;
     while (type.find("#") != std::string::npos)
     {
-        type.erase(type.begin() + type.find("#"));
+        type.erase(type.begin() + (long)type.find("#"));
         ast++;
     }
     std::size_t whiteSpacePosition = type.find("(") - 1;
@@ -88,7 +88,7 @@ void RecurseForStructs(llvm::Type *input, std::set<llvm::StructType *> &AllStruc
     else if (input->isArrayTy())
     {
         llvm::ArrayType *array = cast<ArrayType>(input);
-        for (uint64_t i = 0; i < array->getNumElements(); i++)
+        for (uint32_t i = 0; i < array->getNumElements(); i++)
         {
             RecurseForStructs(array->getTypeAtIndex(i), AllStructures);
         }
@@ -166,13 +166,13 @@ std::string GetTikStructures(std::vector<Kernel *> kernels, std::set<llvm::Struc
     return AllStructureDefinitions;
 }
 
-std::string getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructures, int *size)
+std::string getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructures, uint64_t *size)
 {
     std::string type = "";
     // if this is the first time calling, size will be null, so allocate for it
     if (!size)
     {
-        size = new int;
+        size = new uint64_t;
     }
     // if our elements are arrays, recurse
     if (elem->isArrayTy())

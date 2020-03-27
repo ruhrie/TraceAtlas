@@ -9,7 +9,7 @@ using namespace std;
 using namespace llvm;
 namespace TypeThree
 {
-    set<set<int>> Process(set<set<int>> type25Kernels)
+    std::set<std::set<int64_t>> Process(std::set<std::set<int64_t>> type25Kernels)
     {
         indicators::ProgressBar bar;
         if (!noBar)
@@ -20,10 +20,10 @@ namespace TypeThree
             bar.show_remaining_time();
         }
 
-        int total = type25Kernels.size();
+        uint64_t total = type25Kernels.size();
         int status = 0;
 
-        set<set<int>> result;
+        set<set<int64_t>> result;
         for (auto kernel : type25Kernels)
         {
             bool change = true;

@@ -32,9 +32,9 @@ static int KernelUID = 0;
 set<string> reservedNames;
 std::map<llvm::GlobalVariable *, llvm::GlobalVariable *> globalDeclaractionMap;
 
-Kernel::Kernel(std::vector<int> basicBlocks, Module *M, string name)
+Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
 {
-    set<int> blockSet;
+    set<int64_t> blockSet;
     for (auto b : basicBlocks)
     {
         blockSet.insert(b);
@@ -387,8 +387,8 @@ void Kernel::RemapNestedKernels()
 void Kernel::BuildInit()
 {
     IRBuilder<> initBuilder(Init);
-    auto initSwitch = initBuilder.CreateSwitch(KernelFunction->arg_begin(), Exception, Entrances.size());
-    int i = 0;
+    auto initSwitch = initBuilder.CreateSwitch(KernelFunction->arg_begin(), Exception, (uint32_t)Entrances.size());
+    uint64_t i = 0;
     for (auto ent : Entrances)
     {
         initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[ent]));
@@ -404,7 +404,7 @@ void Kernel::GetConditional(std::set<llvm::BasicBlock *> &blocks)
     for (auto block : blocks)
     {
         auto term = block->getTerminator();
-        int sucCount = term->getNumSuccessors();
+        uint32_t sucCount = term->getNumSuccessors();
         if (sucCount > 1)
         {
             conditions.insert(block);
@@ -461,13 +461,13 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                     auto cc = intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
                     MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(TikModule->getContext()), 1)));
                     cc->setMetadata("KernelCall", tikNode);
-                    auto sw = intBuilder.CreateSwitch(cc, Exception, nestedKernel->ExitTarget.size());
+                    auto sw = intBuilder.CreateSwitch(cc, Exception, (uint32_t)nestedKernel->ExitTarget.size());
                     for (auto pair : nestedKernel->ExitTarget)
                     {
 
                         if (blocks.find(pair.second) != blocks.end())
                         {
-                            sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.first), pair.second);
+                            sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)pair.first), pair.second);
                         }
                         else
                         {
@@ -499,7 +499,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                                 BasicBlock *newBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
                                 IRBuilder<> newBlockBuilder(newBlock);
                                 newBlockBuilder.CreateBr(Exit);
-                                sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.first), newBlock);
+                                sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)pair.first), newBlock);
                                 int index = ExitMap[tar];
                                 ExitMap.erase(tar);
                                 ExitMap[newBlock] = index;
@@ -576,8 +576,8 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
             Instruction *inst = cast<Instruction>(BI);
             //start by getting all the inputs
             //they will be composed of the operands whose input is not defined in one of the parent blocks
-            int numOps = inst->getNumOperands();
-            for (int i = 0; i < numOps; i++)
+            uint32_t numOps = inst->getNumOperands();
+            for (uint32_t i = 0; i < numOps; i++)
             {
                 Value *op = inst->getOperand(i);
                 if (Instruction *operand = dyn_cast<Instruction>(op))
@@ -668,7 +668,7 @@ void Kernel::BuildExit()
     {
         ExitMap[pred] = i++;
     }
-    auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), ExitMap.size());
+    auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), (uint32_t)ExitMap.size());
     for (auto pair : ExitMap)
     {
         Value *v;
@@ -680,13 +680,13 @@ void Kernel::BuildExit()
         {
             v = VMap[pair.first];
         }
-        phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), pair.second), cast<BasicBlock>(v));
+        phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)pair.second), cast<BasicBlock>(v));
     }
 
     exitBuilder.CreateRet(phi);
 
     IRBuilder<> exceptionBuilder(Exception);
-    exceptionBuilder.CreateRet(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), -2));
+    exceptionBuilder.CreateRet(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)-2));
 }
 
 //if the result is one entry long it is a value. Otherwise its a list of instructions
@@ -824,8 +824,8 @@ void Kernel::Repipe()
         {
             continue;
         }
-        int cSuc = cTerm->getNumSuccessors();
-        for (int i = 0; i < cSuc; i++)
+        uint32_t cSuc = cTerm->getNumSuccessors();
+        for (uint32_t i = 0; i < cSuc; i++)
         {
             auto suc = cTerm->getSuccessor(i);
             if (suc->getParent() != KernelFunction)
@@ -977,7 +977,7 @@ void Kernel::SanityChecks()
     {
         BasicBlock *BB = cast<BasicBlock>(fi);
         auto predIter = predecessors(BB);
-        int predCount = distance(predIter.begin(), predIter.end());
+        int64_t predCount = distance(predIter.begin(), predIter.end());
         if (predCount == 0)
         {
             if (BB != Init)
@@ -1306,7 +1306,7 @@ void Kernel::CopyOperand(llvm::User *inst)
     }
 }
 
-void Kernel::InlineFunctions(set<int> &blocks)
+void Kernel::InlineFunctions(set<int64_t> &blocks)
 {
     bool change = true;
     while (change)

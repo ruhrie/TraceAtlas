@@ -4,8 +4,8 @@
 
 namespace TypeFour
 {
-    std::set<llvm::BasicBlock *> GetReachable(llvm::BasicBlock *base, std::set<int> validBlocks);
+    std::set<llvm::BasicBlock *> GetReachable(llvm::BasicBlock *base, std::set<int64_t> validBlocks);
     std::set<llvm::BasicBlock *> GetEntrances(std::set<llvm::BasicBlock *> blocks);
-    std::set<std::set<int>> Process(std::set<std::set<int>> type3Kernels);
+    std::set<std::set<int64_t>> Process(std::set<std::set<int64_t>> type3Kernels);
     std::set<llvm::BasicBlock *> GetVisitable(llvm::BasicBlock *base, std::set<llvm::BasicBlock *> &validBlocks);
 } // namespace TypeFour

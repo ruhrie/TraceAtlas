@@ -34,7 +34,7 @@ enum Filetype
 };
 
 llvm::Module *TikModule;
-std::map<int, Kernel *> KernelMap;
+std::map<int64_t, Kernel *> KernelMap;
 std::map<llvm::Function *, Kernel *> KfMap;
 set<int64_t> ValidBlocks;
 cl::opt<string> JsonFile("j", cl::desc("Specify input json filename"), cl::value_desc("json filename"));
@@ -118,13 +118,13 @@ int main(int argc, char *argv[])
     }
     spdlog::info("Found " + to_string(j["Kernels"].size()) + " kernels in the kernel file");
 
-    map<string, vector<int>> kernels;
+    map<string, vector<int64_t>> kernels;
 
     for (auto &[k, l] : j["Kernels"].items())
     {
         string index = k;
         nlohmann::json kernel = l["Blocks"];
-        kernels[index] = kernel.get<vector<int>>();
+        kernels[index] = kernel.get<vector<int64_t>>();
     }
     ValidBlocks = j["ValidBlocks"].get<set<int64_t>>();
 
@@ -138,7 +138,7 @@ int main(int argc, char *argv[])
             {
                 if (element.second < comparison.second)
                 {
-                    vector<int> i;
+                    vector<int64_t> i;
                     set_intersection(element.second.begin(), element.second.end(), comparison.second.begin(), comparison.second.end(), back_inserter(i));
                     if (i == comparison.second)
                     {
@@ -187,7 +187,7 @@ int main(int argc, char *argv[])
     std::vector<Kernel *> results;
 
     bool change = true;
-    set<vector<int>> failedKernels;
+    set<vector<int64_t>> failedKernels;
     while (change)
     {
         change = false;

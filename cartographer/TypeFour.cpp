@@ -45,7 +45,7 @@ namespace TypeFour
         return functionIdMap[b];
     }
 
-    void GetReachable(const BlockSigniture &base, vector<BlockSigniture> &result, const set<int> validBlocks)
+    void GetReachable(const BlockSigniture &base, vector<BlockSigniture> &result, const set<int64_t> validBlocks)
     {
         //so we will start by adding every successor, they are in the same function so they have the same function id
         for (auto suc : successors(base.Block))
@@ -144,7 +144,7 @@ namespace TypeFour
         }
     }
 
-    set<BasicBlock *> GetReachable(BasicBlock *base, set<int> validBlocks)
+    set<BasicBlock *> GetReachable(BasicBlock *base, set<int64_t> validBlocks)
     {
         bool foundSelf = false;
         queue<BasicBlock *> toProcess;
@@ -255,7 +255,7 @@ namespace TypeFour
         return checked;
     }
 
-    set<set<int>> Process(set<set<int>> type3Kernels)
+    set<set<int64_t>> Process(set<set<int64_t>> type3Kernels)
     {
         indicators::ProgressBar bar;
         if (!noBar)
@@ -266,14 +266,14 @@ namespace TypeFour
             bar.show_remaining_time();
         }
 
-        int total = type3Kernels.size();
+        uint64_t total = type3Kernels.size();
         int status = 0;
 
-        set<set<int>> result;
+        set<set<int64_t>> result;
         for (auto kernel : type3Kernels)
         {
-            set<int> blocks;
-            map<int, set<BasicBlock *>> reachableMap;
+            set<int64_t> blocks;
+            map<int64_t, set<BasicBlock *>> reachableMap;
             for (auto block : kernel)
             {
                 //we need to see if this block can ever reach itself
@@ -286,17 +286,17 @@ namespace TypeFour
                 reachableMap[block] = reachable;
             }
             //blocks is now a set, but it may be disjoint, so we need to check that now
-            map<int, set<BasicBlock *>> reachableBlockSets;
+            map<int64_t, set<BasicBlock *>> reachableBlockSets;
             for (auto block : blocks)
             {
                 reachableBlockSets[block] = GetReachable(blockMap[block], blocks);
                 //vector<BlockSigniture> a; //results are stored here
                 //GetReachable(BlockSigniture(blockMap[block]), a, blocks);
             }
-            set<set<int>> subSets;
+            set<set<int64_t>> subSets;
             for (auto block : blocks)
             {
-                set<int> sub;
+                set<int64_t> sub;
                 for (auto a : reachableBlockSets[block])
                 {
                     int64_t id = GetBlockID(a);
