@@ -32,9 +32,9 @@ namespace TypeTwo
 
         kernels = k;
 
-        openCount = (int *)calloc(sizeof(int), blockCount);                 // counter to know where we are in the callstack
+        openCount = (int *)calloc(sizeof(int), blockCount);                         // counter to know where we are in the callstack
         finalBlocks = (set<int64_t> *)calloc(sizeof(set<int64_t>), kernels.size()); // final kernel definitions
-        kernelStarts = (int *)calloc(sizeof(int), kernels.size());          // map of a kernel index to the first block seen
+        kernelStarts = (int *)calloc(sizeof(int), kernels.size());                  // map of a kernel index to the first block seen
         blocks = (set<int64_t> *)calloc(sizeof(set<int64_t>), kernels.size());      // temporary kernel blocks
         kernelMap = (set<int> *)calloc(sizeof(set<int>), blockCount);
         for (uint32_t i = 0; i < blockCount; i++)

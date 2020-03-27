@@ -54,7 +54,7 @@ static void ProcessTrace(std::string TraceFile, std::function<void(std::string &
     {
         // read a block size of the trace
         inputTrace.readsome(dataArray, BLOCK_SIZE);
-        strm.next_in = (Bytef *)dataArray;   // input data to z_lib for decompression
+        strm.next_in = (Bytef *)dataArray;             // input data to z_lib for decompression
         strm.avail_in = (uint32_t)inputTrace.gcount(); // remaining characters in the compressed inputTrace
         while (strm.avail_in != 0)
         {
