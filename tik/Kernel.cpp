@@ -330,7 +330,6 @@ void Kernel::RemapNestedKernels()
                 }
                 //else if (funcName != MemoryRead && funcName != MemoryWrite) // must be a kernel function call
                 //{
-                bool found = false;
                 auto calledFunc = callInst->getCalledFunction();
                 auto subK = KfMap[calledFunc];
                 if (subK)
@@ -343,7 +342,6 @@ void Kernel::RemapNestedKernels()
                             {
                                 if (subK->ArgumentMap[sarg] == cast<Instruction>(j))
                                 {
-                                    found = true;
                                     embeddedCallArgs[sarg] = cast<Instruction>(j);
                                 }
                             }
@@ -619,18 +617,6 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
                         if (find(KernelImports.begin(), KernelImports.end(), ar) == KernelImports.end())
                         {
                             KernelImports.push_back(ar);
-                        }
-
-                        bool external = false;
-                        for (auto user : ar->getParent()->users())
-                        {
-                            if (auto a = dyn_cast<Instruction>(user))
-                            {
-                                if (blocks.find(a->getParent()) == blocks.end())
-                                {
-                                    external = true;
-                                }
-                            }
                         }
                     }
                 }

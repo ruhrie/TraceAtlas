@@ -9,7 +9,7 @@ using namespace std;
 
 void Kernel::GetKernelLabels()
 {
-    LoopGrammar lg = LoopGrammar::None;
+    //LoopGrammar lg = LoopGrammar::None;
     if (Conditional.size() != 1)
     {
         throw TikException("Expected a single conditoinal");
@@ -19,13 +19,13 @@ void Kernel::GetKernelLabels()
 
         auto term = cond->getTerminator();
         Value *condition;
-        bool shouldTrue = false; //we should continue if true
+        //bool shouldTrue = false; //we should continue if true
         if (auto c = dyn_cast<BranchInst>(term))
         {
             condition = c->getCondition();
             if (c->getSuccessor(1) == Exit)
             {
-                shouldTrue = true;
+                //shouldTrue = true;
             }
         }
         else
@@ -68,14 +68,14 @@ void Kernel::GetKernelLabels()
             }
             else
             {
-                lg = LoopGrammar::Internal;
+                //lg = LoopGrammar::Internal;
             }
         }
         else
         {
             //if this is a load to a value we don't write, it is external. Otherwise it is internal
             //not implemented right now
-            lg = LoopGrammar::Internal;
+            //lg = LoopGrammar::Internal;
             throw TikException("Unrecognized condition parameter");
         }
     }

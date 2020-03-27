@@ -243,6 +243,7 @@ int main(int argc, char *argv[])
                 }
                 else
                 {
+                    delete kern;
                     failedKernels.insert(kernel.second);
                     error = true;
                     spdlog::error("Failed to convert kernel: " + kernel.first);

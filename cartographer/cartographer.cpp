@@ -96,7 +96,7 @@ int main(int argc, char **argv)
     {
         sourceBitcode = parseIRFile(bitcodeFile, smerror, context);
     }
-    catch (exception e)
+    catch (exception &e)
     {
         spdlog::critical("Failed to open bitcode file: " + bitcodeFile);
         return EXIT_FAILURE;
@@ -172,7 +172,7 @@ int main(int argc, char **argv)
                 {
                     labels.insert(blockLabelMap[block].begin(), blockLabelMap[block].end());
                 }
-                for (auto entry : labels)
+                for (const auto entry : labels)
                 {
                     if (entry.empty())
                     {

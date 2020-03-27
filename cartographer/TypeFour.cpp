@@ -116,8 +116,8 @@ namespace TypeFour
                                 auto fId = getFunctionId(call);
                                 auto newR = BlockSigniture(r.Block, fId);
                                 result.push_back(newR);
-                                toRemove.push_back(r);
                             }
+                            toRemove.push_back(r);
                         }
                     }
                     for (auto r : toRemove)
