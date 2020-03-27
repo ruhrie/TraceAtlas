@@ -207,15 +207,15 @@ std::string getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStr
     }
     // else return the type we have
 
-        try
-        {
-            return getCType(elem, AllStructures);
-        }
-        catch (TikException &e)
-        {
-            spdlog::error(e.what());
-            return "TypeNotSupported";
-        }
+    try
+    {
+        return getCType(elem, AllStructures);
+    }
+    catch (TikException &e)
+    {
+        spdlog::error(e.what());
+        return "TypeNotSupported";
+    }
 }
 
 std::string getCVectorType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructures)
@@ -276,47 +276,45 @@ std::string getCVectorType(llvm::Type *elem, std::set<llvm::StructType *> &AllSt
     {
         return "__m128i";
     }
-    else if (type == "uint16_t" && elemCount == 16)
+    if (type == "uint16_t" && elemCount == 16)
     {
         return "__m256i";
     }
-    else if (type == "uint16_t" && elemCount == 32)
+    if (type == "uint16_t" && elemCount == 32)
     {
         return "__m512i";
     }
-    else if (type == "uint32_t" && elemCount == 2)
+    if (type == "uint32_t" && elemCount == 2)
     {
         return "__m64";
     }
-    else if (type == "uint32_t" && elemCount == 4)
+    if (type == "uint32_t" && elemCount == 4)
     {
         return "__m128i";
     }
-    else if (type == "uint32_t" && elemCount == 8)
+    if (type == "uint32_t" && elemCount == 8)
     {
         return "__m256i";
     }
-    else if (type == "uint32_t" && elemCount == 16)
+    if (type == "uint32_t" && elemCount == 16)
     {
         return "__m512i";
     }
-    else if (type == "uint64_t" && elemCount == 2)
+    if (type == "uint64_t" && elemCount == 2)
     {
         return "__m128i";
     }
-    else if (type == "uint64_t" && elemCount == 4)
+    if (type == "uint64_t" && elemCount == 4)
     {
         return "__m256i";
     }
-    else if (type == "uint64_t" && elemCount == 8)
+    if (type == "uint64_t" && elemCount == 8)
     {
         return "__m512i";
     }
-    else
-    {
-        throw TikException("Vector type bitwidth not supported.");
-        return "VectorSizeNotSupported";
-    }
+
+    throw TikException("Vector type bitwidth not supported.");
+    return "VectorSizeNotSupported";
 }
 
 std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructures)
@@ -371,7 +369,7 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
                 return "bool";
             }
 
-                return "uint" + std::to_string(intArg->getBitWidth()) + "_t";
+            return "uint" + std::to_string(intArg->getBitWidth()) + "_t";
         }
         // must be a vector
 
@@ -388,45 +386,45 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
             return a + "#";
         }
 
-            return a + "*";
+        return a + "*";
     }
 
-        if (param->isArrayTy())
+    if (param->isArrayTy())
+    {
+        return getCArrayType(param, AllStructures);
+    }
+    if (param->isVectorTy())
+    {
+        return getCVectorType(param, AllStructures);
+    }
+    if (param->isStructTy())
+    {
+        auto structureArg = AllStructures.find(cast<StructType>(param));
+        if (structureArg != AllStructures.end())
         {
-            return getCArrayType(param, AllStructures);
-        }
-        if (param->isVectorTy())
-        {
-            return getCVectorType(param, AllStructures);
-        }
-        if (param->isStructTy())
-        {
-            auto structureArg = AllStructures.find(cast<StructType>(param));
-            if (structureArg != AllStructures.end())
-            {
-                std::string structName = (*structureArg)->getName();
-                return "struct " + structName;
-            }
-
-                throw TikException("Could not find structure argument in AllStructures vector.");
-        }
-        if (param->isFunctionTy())
-        {
-            auto *func = dyn_cast<llvm::FunctionType>(param);
-            std::string type = "@";
-            type += getCType(func->getReturnType(), AllStructures);
-            type += " (";
-            for (uint32_t i = 0; i < func->getNumParams(); i++)
-            {
-                if (i > 0)
-                {
-                    type += ", ";
-                }
-                type += getCType(func->getParamType(i), AllStructures);
-            }
-            type += ")";
-            return type;
+            std::string structName = (*structureArg)->getName();
+            return "struct " + structName;
         }
 
-            throw TikException("Unrecognized argument type is not supported for header generation.");
+        throw TikException("Could not find structure argument in AllStructures vector.");
+    }
+    if (param->isFunctionTy())
+    {
+        auto *func = dyn_cast<llvm::FunctionType>(param);
+        std::string type = "@";
+        type += getCType(func->getReturnType(), AllStructures);
+        type += " (";
+        for (uint32_t i = 0; i < func->getNumParams(); i++)
+        {
+            if (i > 0)
+            {
+                type += ", ";
+            }
+            type += getCType(func->getParamType(i), AllStructures);
+        }
+        type += ")";
+        return type;
+    }
+
+    throw TikException("Unrecognized argument type is not supported for header generation.");
 }

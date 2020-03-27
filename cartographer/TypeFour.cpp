@@ -36,7 +36,7 @@ namespace TypeFour
 
     map<CallBase *, int64_t> functionIdMap; //dictionary for function id lookup, NOT for direct use!
     int64_t nextId = 0;                     //next id for the function map, NOT for direct use!
-    int64_t getFunctionId(CallBase *b) //if you need a new id, use this function, it will lookup the id or assign a new one and return that
+    int64_t getFunctionId(CallBase *b)      //if you need a new id, use this function, it will lookup the id or assign a new one and return that
     {
         if (functionIdMap.find(b) == functionIdMap.end())
         {
