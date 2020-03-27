@@ -160,38 +160,23 @@ namespace TypeFour
             {
                 reachableBlockSets[block] = GetReachable(blockMap[block], blocks);
             }
-            set<set<BasicBlock *>> subSets;
+            set<set<int>> subSets;
             for (auto block : blocks)
             {
-                set<BasicBlock *> sub;
+                set<int> sub;
                 for (auto a : reachableBlockSets[block])
                 {
                     int64_t id = GetBlockID(a);
                     if (reachableBlockSets[id].find(blockMap[block]) != reachableBlockSets[id].end())
                     {
-                        sub.insert(a);
+                        sub.insert(id);
                     }
                 }
                 subSets.insert(sub);
             }
-
-            //we need to do a final split based upon the entrances
             for (auto subSet : subSets)
             {
-                auto entrances = GetEntrances(subSet);
-                for (auto entrance : entrances)
-                {
-                    //we will basically follow the path of the computation
-                    //adding all blocks that are valid
-                    auto visit = GetVisitable(entrance, subSet);
-                    set<int> fin;
-                    for (auto v : visit)
-                    {
-                        fin.insert(GetBlockID(v));
-                    }
-                    result.insert(fin);
-                }
-                //result.insert(subSet);
+                result.insert(subSet);
             }
             status++;
             float percent = float(status) / float(total) * 100;
@@ -207,127 +192,5 @@ namespace TypeFour
         }
 
         return result;
-    }
-
-    //stolen from tik
-    set<BasicBlock *> GetEntrances(set<BasicBlock *> blocks)
-    {
-        set<BasicBlock *> result;
-        for (auto block : blocks)
-        {
-            Function *F = block->getParent();
-            BasicBlock *par = &F->getEntryBlock();
-            //we first check if the block is an entry block, if it is the only way it could be an entry is through a function call
-            if (block == par)
-            {
-                bool exte = false;
-                bool inte = false;
-                for (auto user : F->users())
-                {
-                    if (auto cb = dyn_cast<CallBase>(user))
-                    {
-                        BasicBlock *parent = cb->getParent(); //the parent of the function call
-                        if (blocks.find(parent) == blocks.end())
-                        {
-                            exte = true;
-                        }
-                        else
-                        {
-                            inte = true;
-                        }
-                    }
-                }
-                if (exte && !inte)
-                {
-                    //exclusively external so this is an entrance
-                    result.insert(block);
-                }
-                else if (exte && inte)
-                {
-                    //both external and internal, so maybe an entrance
-                    //ignore for the moment, worst case we will have no entrances
-                    //throw TikException("Mixed function uses, not implemented");
-                }
-                else if (!exte && inte)
-                {
-                    //only internal, so ignore
-                }
-                else
-                {
-                    //neither internal or external, throw error
-                    //throw TikException("Function with no internal or external uses");
-                }
-            }
-            else
-            {
-                bool ent = false;
-                queue<BasicBlock *> workingSet;
-                set<BasicBlock *> visitedBlocks;
-                workingSet.push(block);
-                visitedBlocks.insert(block);
-                while (!workingSet.empty())
-                {
-                    BasicBlock *current = workingSet.back();
-                    workingSet.pop();
-                    if (current == par)
-                    {
-                        ent = true;
-                        break;
-                    }
-                    for (BasicBlock *pred : predecessors(current))
-                    {
-                        if (visitedBlocks.find(pred) == visitedBlocks.end() && blocks.find(pred) == blocks.end())
-                        {
-                            visitedBlocks.insert(pred);
-                            workingSet.push(pred);
-                        }
-                    }
-                }
-                if (ent)
-                {
-                    result.insert(block);
-                }
-            }
-        }
-        return result;
-    }
-
-    set<BasicBlock *> GetVisitable(BasicBlock *base, set<BasicBlock *> &validBlocks)
-    {
-        queue<BasicBlock *> workingSet;
-        set<BasicBlock *> visitedBlocks;
-        workingSet.push(base);
-        visitedBlocks.insert(base);
-        while (!workingSet.empty())
-        {
-            BasicBlock *b = workingSet.front();
-            workingSet.pop();
-            for (auto suc : successors(b))
-            {
-                int id = GetBlockID(suc);
-                if (validBlocks.find(suc) != validBlocks.end() && visitedBlocks.find(suc) == visitedBlocks.end())
-                {
-                    workingSet.push(suc);
-                    visitedBlocks.insert(suc);
-                }
-            }
-            for (auto bi = b->begin(); bi != b->end(); bi++)
-            {
-                if (auto cb = dyn_cast<CallBase>(bi))
-                {
-                    Function *F = cb->getCalledFunction();
-                    if (F && !F->empty())
-                    {
-                        BasicBlock *c = &F->getEntryBlock();
-                        if (validBlocks.find(c) != validBlocks.end() && visitedBlocks.find(c) == visitedBlocks.end())
-                        {
-                            workingSet.push(c);
-                            visitedBlocks.insert(c);
-                        }
-                    }
-                }
-            }
-        }
-        return visitedBlocks;
     }
 } // namespace TypeFour
