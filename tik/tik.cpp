@@ -50,7 +50,7 @@ cl::opt<bool> ASCIIFormat("S", cl::desc("output json as human-readable ASCII tex
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
 
-auto main(int argc, char *argv[]) -> int
+int main(int argc, char *argv[])
 {
     bool error = false;
     cl::ParseCommandLineOptions(argc, argv);

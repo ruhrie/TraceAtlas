@@ -7,7 +7,7 @@
 using namespace std;
 using namespace llvm;
 
-auto ProfileKernels(const std::map<int, std::set<int64_t>> &kernels, Module *M) -> map<string, map<string, map<string, int>>>
+map<string, map<string, map<string, int>>> ProfileKernels(const std::map<int, std::set<int64_t>> &kernels, Module *M)
 {
     map<int64_t, map<string, uint64_t>> rMap;  //dictionary which keeps track of the actual information per block
     map<int64_t, map<string, uint64_t>> cpMap; //dictionary which keeps track of the cross product information per block

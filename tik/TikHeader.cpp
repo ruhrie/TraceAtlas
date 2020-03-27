@@ -108,7 +108,7 @@ void RecurseForStructs(llvm::Type *input, std::set<llvm::StructType *> &AllStruc
     }
 }
 
-auto GetTikStructures(const std::vector<Kernel *> &kernels, std::set<llvm::StructType *> &AllStructures) -> std::string
+std::string GetTikStructures(const std::vector<Kernel *> &kernels, std::set<llvm::StructType *> &AllStructures)
 {
     for (auto kernel : kernels)
     {
@@ -166,7 +166,7 @@ auto GetTikStructures(const std::vector<Kernel *> &kernels, std::set<llvm::Struc
     return AllStructureDefinitions;
 }
 
-auto getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructures, uint64_t *size) -> std::string
+std::string getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructures, uint64_t *size)
 {
     std::string type;
     // if this is the first time calling, size will be null, so allocate for it
@@ -218,7 +218,7 @@ auto getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructures
         }
 }
 
-auto getCVectorType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructures) -> std::string
+std::string getCVectorType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructures)
 {
     auto *vecArg = dyn_cast<llvm::VectorType>(elem);
     VectorsUsed = true;
@@ -264,15 +264,15 @@ auto getCVectorType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructure
     {
         return "__m256i";
     }
-    else if (type == "uint8_t" && elemCount == 64)
+    if (type == "uint8_t" && elemCount == 64)
     {
         return "__m512i";
     }
-    else if (type == "uint16_t" && elemCount == 4)
+    if (type == "uint16_t" && elemCount == 4)
     {
         return "__m64";
     }
-    else if (type == "uint16_t" && elemCount == 8)
+    if (type == "uint16_t" && elemCount == 8)
     {
         return "__m128i";
     }
@@ -319,7 +319,7 @@ auto getCVectorType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructure
     }
 }
 
-auto getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructures) -> std::string
+std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructures)
 {
     if (param->isVoidTy())
     {
@@ -361,7 +361,7 @@ auto getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructures) ->
     {
         return getCVectorType(param, AllStructures);
     }
-    else if (param->isIntOrIntVectorTy())
+    if (param->isIntOrIntVectorTy())
     {
         if (param->isIntegerTy())
         {
@@ -377,7 +377,7 @@ auto getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructures) ->
 
         return getCVectorType(param, AllStructures);
     }
-    else if (param->isPointerTy())
+    if (param->isPointerTy())
     {
         auto *newType = dyn_cast<llvm::PointerType>(param);
         llvm::Type *memberType = newType->getElementType();
@@ -390,8 +390,7 @@ auto getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructures) ->
 
             return a + "*";
     }
-    else
-    {
+
         if (param->isArrayTy())
         {
             return getCArrayType(param, AllStructures);
@@ -430,5 +429,4 @@ auto getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructures) ->
         }
 
             throw TikException("Unrecognized argument type is not supported for header generation.");
-    }
 }

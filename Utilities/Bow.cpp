@@ -15,7 +15,7 @@ cl::opt<string> JsonFile("j", cl::desc("Specify input json filename"), cl::value
 cl::opt<string> NameFile("o", cl::desc("Specify output name filename"), cl::value_desc("name filename"));
 cl::opt<string> InputFile(cl::Positional, cl::Required, cl::desc("<input file>"));
 
-auto main(int argc, char *argv[]) -> int
+int main(int argc, char *argv[])
 {
     cl::ParseCommandLineOptions(argc, argv);
     std::cout << InputFile << " " << JsonFile << "\n";

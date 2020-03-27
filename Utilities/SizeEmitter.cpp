@@ -19,7 +19,7 @@ using json = nlohmann::json;
 cl::opt<std::string> InputFilename("i", cl::desc("Specify input filename"), cl::value_desc("filename"), cl::Required);
 cl::opt<std::string> OutputFilename("o", cl::desc("Specify output filename"), cl::value_desc("filename"), cl::Required);
 
-auto main(int argc, char **argv) -> int
+int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
     std::map<uint64_t, std::vector<int>> storeSizes;

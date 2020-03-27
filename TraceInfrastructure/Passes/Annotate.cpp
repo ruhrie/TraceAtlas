@@ -11,7 +11,7 @@ using namespace llvm;
 
 namespace DashTracer::Passes
 {
-    auto EncodedAnnotate::runOnModule(Module &M) -> bool
+    bool EncodedAnnotate::runOnModule(Module &M)
     {
         Annotate(&M);
         return true;

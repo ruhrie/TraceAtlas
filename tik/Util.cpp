@@ -6,7 +6,7 @@
 using namespace std;
 using namespace llvm;
 
-auto GetString(Value *v) -> string
+string GetString(Value *v)
 {
     std::string str;
     llvm::raw_string_ostream rso(str);
@@ -16,7 +16,7 @@ auto GetString(Value *v) -> string
     return str;
 }
 
-auto GetStrings(BasicBlock *bb) -> std::vector<std::string>
+std::vector<std::string> GetStrings(BasicBlock *bb)
 {
     std::vector<std::string> result;
     for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
@@ -27,7 +27,7 @@ auto GetStrings(BasicBlock *bb) -> std::vector<std::string>
     return result;
 }
 
-auto GetStrings(Function *f) -> std::map<std::string, vector<string>>
+std::map<std::string, vector<string>> GetStrings(Function *f)
 {
     map<string, vector<string>> result;
     result["Body"] = GetStrings(&f->getEntryBlock());
@@ -43,7 +43,7 @@ auto GetStrings(Function *f) -> std::map<std::string, vector<string>>
     return result;
 }
 
-auto GetStrings(const std::set<Instruction *> &instructions) -> std::vector<std::string>
+std::vector<std::string> GetStrings(const std::set<Instruction *> &instructions)
 {
     std::vector<std::string> result(instructions.size());
     for (Instruction *inst : instructions)
@@ -53,7 +53,7 @@ auto GetStrings(const std::set<Instruction *> &instructions) -> std::vector<std:
     return result;
 }
 
-auto GetStrings(const std::vector<Instruction *> &instructions) -> std::vector<std::string>
+std::vector<std::string> GetStrings(const std::vector<Instruction *> &instructions)
 {
     std::vector<std::string> result;
     for (Instruction *inst : instructions)

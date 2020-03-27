@@ -657,7 +657,7 @@ void Kernel::BuildExit()
 }
 
 //if the result is one entry long it is a value. Otherwise its a list of instructions
-auto Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blocks) -> vector<Value *>
+vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blocks)
 {
     vector<Value *> result;
     Instruction *term = bb->getTerminator();
@@ -991,7 +991,7 @@ void Kernel::CopyGlobals()
     }
 }
 
-auto Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures) -> std::string
+std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures)
 {
     std::string headerString;
     try

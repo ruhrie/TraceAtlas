@@ -10,7 +10,7 @@ using namespace llvm;
 namespace DashTracer::Passes
 {
     MDNode *libName;
-    auto AddLibrary::runOnFunction(Function &F) -> bool
+    bool AddLibrary::runOnFunction(Function &F)
     {
         if (!F.empty())
         {
@@ -24,7 +24,7 @@ namespace DashTracer::Passes
         AU.setPreservesAll();
     }
 
-    auto AddLibrary::doInitialization(Module &M) -> bool
+    bool AddLibrary::doInitialization(Module &M)
     {
         libName = MDNode::get(M.getContext(), MDString::get(M.getContext(), LibraryName));
         return false;

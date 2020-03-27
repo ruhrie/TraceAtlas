@@ -117,7 +117,7 @@ namespace TypeTwo
         }
     }
 
-    auto Get() -> std::set<std::set<int64_t>>
+    std::set<std::set<int64_t>> Get()
     {
         if (!blocksLabeled)
         {

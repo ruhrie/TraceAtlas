@@ -28,7 +28,7 @@ namespace TypeFour
             Block = block;
             FunctionID = function;
         }
-        auto operator==(const BlockSigniture &lhs) -> bool //needed for searching
+        bool operator==(const BlockSigniture &lhs) //needed for searching
         {
             return Block == lhs.Block && FunctionID == lhs.FunctionID;
         }
@@ -36,7 +36,7 @@ namespace TypeFour
 
     map<CallBase *, int64_t> functionIdMap; //dictionary for function id lookup, NOT for direct use!
     int64_t nextId = 0;                     //next id for the function map, NOT for direct use!
-    auto getFunctionId(CallBase *b) -> int64_t //if you need a new id, use this function, it will lookup the id or assign a new one and return that
+    int64_t getFunctionId(CallBase *b) //if you need a new id, use this function, it will lookup the id or assign a new one and return that
     {
         if (functionIdMap.find(b) == functionIdMap.end())
         {
@@ -144,7 +144,7 @@ namespace TypeFour
         }
     }
 
-    auto GetReachable(BasicBlock *base, set<int64_t> validBlocks) -> set<BasicBlock *>
+    set<BasicBlock *> GetReachable(BasicBlock *base, set<int64_t> validBlocks)
     {
         bool foundSelf = false;
         queue<BasicBlock *> toProcess;
@@ -255,7 +255,7 @@ namespace TypeFour
         return checked;
     }
 
-    auto Process(const set<set<int64_t>> &type3Kernels) -> set<set<int64_t>>
+    set<set<int64_t>> Process(const set<set<int64_t>> &type3Kernels)
     {
         indicators::ProgressBar bar;
         if (!noBar)

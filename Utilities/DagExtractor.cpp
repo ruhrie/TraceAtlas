@@ -76,7 +76,7 @@ void Process(string &key, string &value)
     }
 }
 
-auto main(int argc, char **argv) -> int
+int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
 

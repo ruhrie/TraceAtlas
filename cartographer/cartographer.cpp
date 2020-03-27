@@ -36,7 +36,7 @@ llvm::cl::opt<bool> label("L", llvm::cl::desc("ExportLabel"), llvm::cl::value_de
 llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::value_desc("No progress bar"));
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
-auto main(int argc, char **argv) -> int
+int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
     noProgressBar = noBar;

@@ -21,7 +21,7 @@ namespace DashTracer
 {
     namespace Passes
     {
-        auto TraceIO::runOnModule(Module &M) -> bool
+        bool TraceIO::runOnModule(Module &M)
         {
             appendToGlobalCtors(M, openFunc, 0);
             appendToGlobalDtors(M, closeFunc, 0);
@@ -32,7 +32,7 @@ namespace DashTracer
         {
             AU.setPreservesAll();
         }
-        auto TraceIO::doInitialization(Module &M) -> bool
+        bool TraceIO::doInitialization(Module &M)
         {
             openFunc = cast<Function>(M.getOrInsertFunction("OpenFile", Type::getVoidTy(M.getContext())).getCallee());
             closeFunc = cast<Function>(M.getOrInsertFunction("CloseFile", Type::getVoidTy(M.getContext())).getCallee());

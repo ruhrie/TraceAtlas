@@ -18,7 +18,7 @@ using namespace llvm;
 
 namespace DashTracer::Passes
 {
-    auto EncodedTrace::runOnFunction(Function &F) -> bool
+    bool EncodedTrace::runOnFunction(Function &F)
     {
         for (auto fi = F.begin(); fi != F.end(); fi++)
         {
@@ -70,7 +70,7 @@ namespace DashTracer::Passes
         return true;
     }
 
-    auto EncodedTrace::doInitialization(Module &M) -> bool
+    bool EncodedTrace::doInitialization(Module &M)
     {
         BB_ID = cast<Function>(M.getOrInsertFunction("BB_ID_Dump", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext()), Type::getInt1Ty(M.getContext())).getCallee());
         LoadDump = cast<Function>(M.getOrInsertFunction("LoadDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());

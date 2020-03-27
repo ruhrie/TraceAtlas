@@ -16,7 +16,7 @@ cl::opt<string> JsonFile("k", cl::desc("Specify input kernel json filename"), cl
 cl::opt<string> InputFile("i", cl::desc("Specify input bitcode filename"), cl::value_desc("bitcode filename"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output json filename"), cl::value_desc("json filename"));
 
-auto main(int argc, char *argv[]) -> int
+int main(int argc, char *argv[])
 {
     cl::ParseCommandLineOptions(argc, argv);
     ifstream inputJson(JsonFile);

@@ -20,12 +20,12 @@ public:
     std::map<int, llvm::BasicBlock *> ExitTarget;
     //std::set<llvm::BasicBlock *> Body;
     //std::set<llvm::BasicBlock *> Termination;
-    llvm::BasicBlock *Init = NULL;
-    llvm::BasicBlock *Exit = NULL;
-    llvm::BasicBlock *Exception = NULL;
+    llvm::BasicBlock *Init = nullptr;
+    llvm::BasicBlock *Exit = nullptr;
+    llvm::BasicBlock *Exception = nullptr;
     //llvm::Function *MemoryRead = NULL;
     //llvm::Function *MemoryWrite = NULL;
-    llvm::Function *KernelFunction = NULL;
+    llvm::Function *KernelFunction = nullptr;
     bool Valid = false;
 
 private:

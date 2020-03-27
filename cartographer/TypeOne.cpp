@@ -35,7 +35,7 @@ namespace TypeOne
         }
     }
 
-    auto Get() -> std::set<std::set<int64_t>>
+    std::set<std::set<int64_t>> Get()
     {
         std::map<int64_t, std::vector<std::pair<int64_t, float>>> fBlockMap;
         for (auto &key : blockMap)

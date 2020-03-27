@@ -28,7 +28,7 @@ namespace DashTracer::Passes
     Function *certOn;
     Function *certOff;
 
-    auto PapiExport::runOnFunction(Function &F) -> bool
+    bool PapiExport::runOnFunction(Function &F)
     {
         std::string functionName = F.getName();
         for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
@@ -109,7 +109,7 @@ namespace DashTracer::Passes
         return true;
     } // namespace Passes
 
-    auto PapiExport::doInitialization(Module &M) -> bool
+    bool PapiExport::doInitialization(Module &M)
     {
         certOn = cast<Function>(M.getOrInsertFunction("CertifyPapiOn", Type::getVoidTy(M.getContext())).getCallee());
         certOff = cast<Function>(M.getOrInsertFunction("CertifyPapiOff", Type::getVoidTy(M.getContext())).getCallee());

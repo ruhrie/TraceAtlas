@@ -26,13 +26,13 @@ static int UID = 0;
 
 static int valueId = 0;
 
-auto getName() -> string
+string getName()
 {
     string name = "v_" + to_string(valueId++);
     return name;
 }
 
-auto main(int argc, char **argv) -> int
+int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
     LLVMContext context;
