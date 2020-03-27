@@ -440,8 +440,9 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
             if (nestedKernel->Entrances.find(block) != nestedKernel->Entrances.end())
             {
                 //we need to make a unique block for each entrance (there is currently only one)
-                int i = 0;
-                for (auto ent : nestedKernel->Entrances)
+                //int i = 0;
+                //for (auto ent : nestedKernel->Entrances)
+                for (int i = 0; i < nestedKernel->Entrances.size(); i++)
                 {
                     std::vector<llvm::Value *> inargs;
                     for (auto ai = nestedKernel->KernelFunction->arg_begin(); ai < nestedKernel->KernelFunction->arg_end(); ai++)
@@ -507,7 +508,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                         }
                     }
                     VMap[block] = intermediateBlock;
-                    i++;
+                    //i++;
                 }
             }
             else
@@ -530,7 +531,6 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
             int rescheduled = 0; //the number of blocks we rescheduled
             for (auto bi = cb->begin(); bi != cb->end(); bi++)
             {
-                auto i = cast<Instruction>(bi);
                 if (PHINode *p = dyn_cast<PHINode>(bi))
                 {
                     for (auto pred : p->blocks())
@@ -976,11 +976,8 @@ void Kernel::SanityChecks()
     for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
     {
         BasicBlock *BB = cast<BasicBlock>(fi);
-        int predCount = 0;
-        for (auto pred : predecessors(BB))
-        {
-            predCount++;
-        }
+        auto predIter = predecessors(BB);
+        int predCount = distance(predIter.begin(), predIter.end());
         if (predCount == 0)
         {
             if (BB != Init)
@@ -1127,7 +1124,6 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
                     if (gv->hasInitializer())
                     {
                         llvm::Constant *value = gv->getInitializer();
-                        auto opList = value->getNumOperands();
                         for (int iter = 0; iter < value->getNumOperands(); iter++)
                         {
                             llvm::User *internal = cast<llvm::User>(value->getOperand(iter));
@@ -1243,7 +1239,6 @@ void Kernel::CopyOperand(llvm::User *inst)
                     if (gv->hasInitializer())
                     {
                         llvm::Constant *value = gv->getInitializer();
-                        auto opList = value->getNumOperands();
                         for (int iter = 0; iter < value->getNumOperands(); iter++)
                         {
                             llvm::User *internal = cast<llvm::User>(value->getOperand(iter));

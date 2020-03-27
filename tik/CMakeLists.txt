@@ -9,6 +9,7 @@ set_target_properties(tik
 target_link_libraries(tik PRIVATE ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json spdlog::spdlog spdlog::spdlog_header_only AtlasUtil)
 target_compile_definitions(tik PRIVATE ${LLVM_DEFINITIONS})
 target_include_directories(tik PRIVATE ${LLVM_INCLUDE_DIRS} "include/")
+target_compile_options(tik PRIVATE -Wall)
 if(${CMAKE_BUILD_TYPE} MATCHES Debug)
     target_compile_definitions(tik PRIVATE DEBUG)
 endif()

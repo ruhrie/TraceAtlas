@@ -57,10 +57,7 @@ void Kernel::GetKernelLabels()
                 if (LoadInst *li = dyn_cast<LoadInst>(nonConst))
                 {
                     //this load should be formatted by us so we look for the index
-                    auto call = cast<CallInst>(cast<IntToPtrInst>(li->getPointerOperand())->getOperand(0));
-                    uint64_t index = cast<ConstantInt>(call->getArgOperand(0))->getValue().getSExtValue();
-                    //PrintVal(LoadMap[index]);
-                    //cout << index << "\n";
+                    //auto call = cast<CallInst>(cast<IntToPtrInst>(li->getPointerOperand())->getOperand(0));
                 }
                 else
                 {
