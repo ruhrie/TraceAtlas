@@ -40,7 +40,7 @@ jobs:
           useVcpkgToolchainFile: true
           buildWithCMakeArgs: '-- -v'
           buildDirectory: ${{github.workspace}}/build
-          cmakeAppendedArgs: '-DENABLE_LINTER=ON'
+          cmakeAppendedArgs: '-G Ninja -DENABLE_LINTER=ON'
       - name: Run ctest
         run: ctest
         shell: bash
