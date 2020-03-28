@@ -5,8 +5,8 @@ jobs:
   Tests:
     runs-on: ubuntu-18.04
     steps:
-      - name: Install papi
-        run: sudo apt install libpapi-dev
+      - name: Install dependencies
+        run: sudo apt install libpapi-dev clang-tidy-9
         shell: bash 
       - uses: actions/checkout@v1
         with:
