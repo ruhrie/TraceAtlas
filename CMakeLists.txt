@@ -67,3 +67,23 @@ if(DOXYGEN_FOUND)
     configure_file(Doxyfile ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
     add_custom_target(doc COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile)
 endif(DOXYGEN_FOUND)
+
+#stollen from https://github.com/ttroy50/cmake-examples/blob/master/04-static-analysis/clang-format/cmake/modules/clang-format.cmake
+set(CLANG_FORMAT_EXCLUDE_PATTERNS "build" "vcpkg")
+file(GLOB_RECURSE ALL_SOURCE_FILES *.cpp *.h *.c)
+foreach (SOURCE_FILE ${ALL_SOURCE_FILES})
+    foreach (EXCLUDE_PATTERN ${CLANG_FORMAT_EXCLUDE_PATTERNS})
+        string(FIND ${SOURCE_FILE} ${EXCLUDE_PATTERN} PROJECT_TRDPARTY_DIR_FOUND)
+        if (NOT ${PROJECT_TRDPARTY_DIR_FOUND} EQUAL -1)
+            list(REMOVE_ITEM ALL_SOURCE_FILES ${SOURCE_FILE})
+        endif ()
+    endforeach()
+endforeach ()
+
+add_custom_target(
+        format
+        COMMAND /usr/bin/clang-format-9
+        -style=file
+        -i
+        ${ALL_SOURCE_FILES}
+)
