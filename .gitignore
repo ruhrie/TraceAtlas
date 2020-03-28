@@ -3,3 +3,6 @@ build*/
 *.pyc
 *.swp
 testing/
+.vs/
+CMakeSettings.json
+out/
