@@ -37,7 +37,7 @@ jobs:
         with:
           cmakeListsTxtPath: '${{ github.workspace }}/CMakeLists.txt'
           useVcpkgToolchainFile: true
-          buildWithCMakeArgs: '-- -v -DENABLE_LINTER=ON'
+          buildWithCMakeArgs: '-DENABLE_LINTER=ON -- -v'
           buildDirectory: ${{github.workspace}}/build
       - name: Run ctest
         run: ctest
