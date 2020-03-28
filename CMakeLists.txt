@@ -26,7 +26,6 @@ if(${ENABLE_LINTER})
         clang-tidy-9;
         --warnings-as-errors=*;
         --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type;
-        --fix;
         --format-style=file;
         )
 endif()

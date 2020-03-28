@@ -12,6 +12,7 @@
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/Comdat.h>
+#include <llvm/IR/Constants.h>
 #include <llvm/IR/DebugInfo.h>
 #include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/DebugLoc.h>
@@ -288,7 +289,46 @@ void Kernel::UpdateMemory()
         }
     }
 }
-
+/*
+void Kernel::RemapOperand(llvm::Operator* op)
+{
+    for(int i = 0; i < op->getNumOperands(); i++)
+    {
+        llvm::Value* val = op->getOperand(i);
+        if (Operator* embeddedOp = dyn_cast<Operator>(val))
+        {
+            RemapOperand(embeddedOp);
+        }
+        else
+        {
+            if (llvm::Constant* con = dyn_cast<llvm::Constant>(val))
+            {
+                // we have to reconstruct the operator. 
+                if (llvm::GEPOperator* gep = dyn_cast<llvm::GEPOperator>(op))
+                {
+                    for (auto index = gep->idx_begin(), end = gep->idx_end(); index != end; index++)
+                    {
+                        PrintVal(index);
+                    }
+                    static llvm::Constant* newGep = llvm::ConstantExpr::getGetElementPtr(gep->getType(), con, );
+                }
+                //auto uses = op->getOperandUse(i);
+                //llvm::Instruction* inst = dyn_cast<Instruction>(uses);
+                PrintVal(val);
+                continue;
+            }
+            if (VMap[val])
+            {
+                op->setOperand(i, VMap[val]);
+            }
+            else
+            {
+                spdlog::warn("Could not remap value in operand.");
+            }
+        }
+    }
+}
+*/
 void Kernel::Remap()
 {
     for (auto &BB : *KernelFunction)
@@ -296,6 +336,10 @@ void Kernel::Remap()
         for (BasicBlock::iterator BI = BB.begin(), BE = BB.end(); BI != BE; ++BI)
         {
             auto *inst = cast<Instruction>(BI);
+            /*if (llvm::Operator* op = dyn_cast<Operator>(inst))
+            {
+                RemapOperand(op);
+            }*/
             RemapInstruction(inst, VMap, llvm::RF_None);
         }
     }

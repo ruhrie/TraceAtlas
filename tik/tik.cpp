@@ -281,11 +281,12 @@ int main(int argc, char *argv[])
     bool broken = verifyModule(*TikModule, &rso);
     if (broken)
     {
-        error = true;
         auto err = rso.str();
         spdlog::critical("Tik Module Corrupted: " + err);
 #ifndef DEBUG
         return EXIT_FAILURE;
+#else
+        error = true;
 #endif
     }
 
