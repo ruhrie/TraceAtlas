@@ -21,7 +21,7 @@ std::vector<std::string> GetStrings(BasicBlock *bb)
     std::vector<std::string> result;
     for (BasicBlock::iterator BI = bb->begin(), BE = bb->end(); BI != BE; ++BI)
     {
-        Instruction *inst = cast<Instruction>(BI);
+        auto *inst = cast<Instruction>(BI);
         result.push_back(GetString(inst));
     }
     return result;
@@ -36,16 +36,16 @@ std::map<std::string, vector<string>> GetStrings(Function *f)
     {
         args.push_back(GetString(i));
     }
-    if (args.size() != 0)
+    if (!args.empty())
     {
         result["Inputs"] = args;
     }
     return result;
 }
 
-std::vector<std::string> GetStrings(std::set<Instruction *> instructions)
+std::vector<std::string> GetStrings(const std::set<Instruction *> &instructions)
 {
-    std::vector<std::string> result;
+    std::vector<std::string> result(instructions.size());
     for (Instruction *inst : instructions)
     {
         result.push_back(GetString(inst));
@@ -53,7 +53,7 @@ std::vector<std::string> GetStrings(std::set<Instruction *> instructions)
     return result;
 }
 
-std::vector<std::string> GetStrings(std::vector<Instruction *> instructions)
+std::vector<std::string> GetStrings(const std::vector<Instruction *> &instructions)
 {
     std::vector<std::string> result;
     for (Instruction *inst : instructions)

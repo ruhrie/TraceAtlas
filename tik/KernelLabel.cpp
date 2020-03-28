@@ -9,7 +9,7 @@ using namespace std;
 
 void Kernel::GetKernelLabels()
 {
-    LoopGrammar lg = LoopGrammar::None;
+    //LoopGrammar lg = LoopGrammar::None;
     if (Conditional.size() != 1)
     {
         throw TikException("Expected a single conditoinal");
@@ -19,13 +19,13 @@ void Kernel::GetKernelLabels()
 
         auto term = cond->getTerminator();
         Value *condition;
-        bool shouldTrue = false; //we should continue if true
+        //bool shouldTrue = false; //we should continue if true
         if (auto c = dyn_cast<BranchInst>(term))
         {
             condition = c->getCondition();
             if (c->getSuccessor(1) == Exit)
             {
-                shouldTrue = true;
+                //shouldTrue = true;
             }
         }
         else
@@ -33,7 +33,7 @@ void Kernel::GetKernelLabels()
             throw TikException("Unrecognized conditional terminator");
         }
 
-        if (ICmpInst *cmp = dyn_cast<ICmpInst>(condition))
+        if (auto *cmp = dyn_cast<ICmpInst>(condition))
         {
             auto left = cmp->getOperand(0);
             auto right = cmp->getOperand(1);
@@ -54,13 +54,10 @@ void Kernel::GetKernelLabels()
                     nonConst = left;
                 }
 
-                if (LoadInst *li = dyn_cast<LoadInst>(nonConst))
+                if (auto *li = dyn_cast<LoadInst>(nonConst))
                 {
                     //this load should be formatted by us so we look for the index
-                    auto call = cast<CallInst>(cast<IntToPtrInst>(li->getPointerOperand())->getOperand(0));
-                    uint64_t index = cast<ConstantInt>(call->getArgOperand(0))->getValue().getSExtValue();
-                    //PrintVal(LoadMap[index]);
-                    //cout << index << "\n";
+                    //auto call = cast<CallInst>(cast<IntToPtrInst>(li->getPointerOperand())->getOperand(0));
                 }
                 else
                 {
@@ -71,14 +68,14 @@ void Kernel::GetKernelLabels()
             }
             else
             {
-                lg = LoopGrammar::Internal;
+                //lg = LoopGrammar::Internal;
             }
         }
         else
         {
             //if this is a load to a value we don't write, it is external. Otherwise it is internal
             //not implemented right now
-            lg = LoopGrammar::Internal;
+            //lg = LoopGrammar::Internal;
             throw TikException("Unrecognized condition parameter");
         }
     }

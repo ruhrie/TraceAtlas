@@ -15,6 +15,7 @@ public:
         o << file << ":" << line << ": " << arg;
         msg = o.str();
     }
+    using std::exception::what;
     const char *what()
     {
         return msg.c_str();

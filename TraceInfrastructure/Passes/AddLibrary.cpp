@@ -7,33 +7,29 @@
 
 using namespace llvm;
 
-namespace DashTracer
+namespace DashTracer::Passes
 {
-    namespace Passes
+    MDNode *libName;
+    bool AddLibrary::runOnFunction(Function &F)
     {
-        static uint64_t UID = 0;
-        MDNode *libName;
-        bool AddLibrary::runOnFunction(Function &F)
+        if (!F.empty())
         {
-            if (!F.empty())
-            {
-                F.setMetadata("libs", libName);
-            }
-            return false;
+            F.setMetadata("libs", libName);
         }
+        return false;
+    }
 
-        void AddLibrary::getAnalysisUsage(AnalysisUsage &AU) const
-        {
-            AU.setPreservesAll();
-        }
+    void AddLibrary::getAnalysisUsage(AnalysisUsage &AU) const
+    {
+        AU.setPreservesAll();
+    }
 
-        bool AddLibrary::doInitialization(Module &M)
-        {
-            libName = MDNode::get(M.getContext(), MDString::get(M.getContext(), LibraryName));
-            return false;
-        }
+    bool AddLibrary::doInitialization(Module &M)
+    {
+        libName = MDNode::get(M.getContext(), MDString::get(M.getContext(), LibraryName));
+        return false;
+    }
 
-        char AddLibrary::ID = 0;
-        static RegisterPass<AddLibrary> X("AddLibrary", "Labels functions with the library name", true, true);
-    } // namespace Passes
-} // namespace DashTracer
+    char AddLibrary::ID = 0;
+    static RegisterPass<AddLibrary> X("AddLibrary", "Labels functions with the library name", true, true);
+} // namespace DashTracer::Passes

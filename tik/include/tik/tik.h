@@ -9,7 +9,7 @@
 ///
 /// When making decisions about termination instructions, its important to know
 /// which basic blocks are valid and which are not
-extern std::map<int, Kernel *> KernelMap;
+extern std::map<int64_t, Kernel *> KernelMap;
 
 /// Global pointer to the module of tik representations.
 extern llvm::Module *TikModule;
@@ -21,3 +21,5 @@ extern llvm::Module *TikModule;
 extern std::map<llvm::Function *, Kernel *> KfMap;
 
 extern std::set<int64_t> ValidBlocks;
+
+void CleanModule(llvm::Module *M);

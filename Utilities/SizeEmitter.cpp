@@ -34,22 +34,23 @@ int main(int argc, char **argv)
     //std::cout << m->getName();
     //std::cout << m->size();
 
-    for (Module::iterator F = m->begin(), E = m->end(); F != E; ++F)
+    for (auto &mi : *m)
     {
-        for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
+        for (auto fi = mi.begin(); fi != mi.end(); fi++)
         {
+            auto *BB = cast<BasicBlock>(fi);
             std::string name = BB->getName();
             uint64_t id = std::stoul(name.substr(7));
             for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
             {
-                Instruction *CI = cast<Instruction>(BI);
-                if (LoadInst *li = dyn_cast<LoadInst>(CI))
+                auto *CI = cast<Instruction>(BI);
+                if (auto *li = dyn_cast<LoadInst>(CI))
                 {
                     Type *type = li->getType();
                     int size = dl.getTypeAllocSize(type);
                     loadSizes[id].push_back(size);
                 }
-                else if (StoreInst *si = dyn_cast<StoreInst>(CI))
+                else if (auto *si = dyn_cast<StoreInst>(CI))
                 {
                     Type *type = si->getValueOperand()->getType();
                     int size = dl.getTypeAllocSize(type);

@@ -1,5 +1,6 @@
 #include "tik/tik.h"
 #include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Print.h"
 #include "tik/Exceptions.h"
 #include "tik/TikHeader.h"
 #include "tik/Util.h"
@@ -9,6 +10,7 @@
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/Instructions.h>
+#include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/IRReader/IRReader.h>
@@ -32,7 +34,7 @@ enum Filetype
 };
 
 llvm::Module *TikModule;
-std::map<int, Kernel *> KernelMap;
+std::map<int64_t, Kernel *> KernelMap;
 std::map<llvm::Function *, Kernel *> KfMap;
 set<int64_t> ValidBlocks;
 cl::opt<string> JsonFile("j", cl::desc("Specify input json filename"), cl::value_desc("json filename"));
@@ -43,7 +45,7 @@ cl::opt<Filetype> InputType("t", cl::desc("Choose input file type"),
                                 clEnumVal(LLVM, "LLVM IR"),
                                 clEnumVal(DPDA, "DPDA")),
                             cl::init(LLVM));
-cl::opt<string> OutputType("f", cl::desc("Specify output file format. Can be either JSON or LLVM"), cl::value_desc("format"));
+cl::opt<string> OutputType("f", cl::desc("Specify output file format. Can be LLVM"), cl::value_desc("format"));
 cl::opt<bool> ASCIIFormat("S", cl::desc("output json as human-readable ASCII text"));
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
@@ -116,13 +118,13 @@ int main(int argc, char *argv[])
     }
     spdlog::info("Found " + to_string(j["Kernels"].size()) + " kernels in the kernel file");
 
-    map<string, vector<int>> kernels;
+    map<string, vector<int64_t>> kernels;
 
     for (auto &[k, l] : j["Kernels"].items())
     {
         string index = k;
         nlohmann::json kernel = l["Blocks"];
-        kernels[index] = kernel.get<vector<int>>();
+        kernels[index] = kernel.get<vector<int64_t>>();
     }
     ValidBlocks = j["ValidBlocks"].get<set<int64_t>>();
 
@@ -136,7 +138,7 @@ int main(int argc, char *argv[])
             {
                 if (element.second < comparison.second)
                 {
-                    vector<int> i;
+                    vector<int64_t> i;
                     set_intersection(element.second.begin(), element.second.end(), comparison.second.begin(), comparison.second.end(), back_inserter(i));
                     if (i == comparison.second)
                     {
@@ -163,15 +165,19 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    if (sourceBitcode.get() == NULL)
+    if (sourceBitcode == nullptr)
     {
         std::cerr << "Couldn't open input bitcode file: " << InputFile << "\n";
         spdlog::critical("Failed to open source bitcode: " + InputFile);
         return EXIT_FAILURE;
     }
 
+    Module *base = sourceBitcode.get();
+
+    CleanModule(base);
+
     //annotate it with the same algorithm used in the tracer
-    Annotate(sourceBitcode.get());
+    Annotate(base);
 
     TikModule = new Module(InputFile, context);
     TikModule->setDataLayout(sourceBitcode->getDataLayout());
@@ -181,11 +187,11 @@ int main(int argc, char *argv[])
     std::vector<Kernel *> results;
 
     bool change = true;
-    set<vector<int>> failedKernels;
+    set<vector<int64_t>> failedKernels;
     while (change)
     {
         change = false;
-        for (auto kernel : kernels)
+        for (const auto &kernel : kernels)
         {
             if (failedKernels.find(kernel.second) != failedKernels.end())
             {
@@ -194,8 +200,15 @@ int main(int argc, char *argv[])
             if (childParentMapping.find(kernel.first) == childParentMapping.end())
             {
                 //this kernel has no unexplained parents
-                Kernel *kern = new Kernel(kernel.second, sourceBitcode.get(), kernel.first);
-                if (kern->Valid)
+                auto *kern = new Kernel(kernel.second, sourceBitcode.get(), kernel.first);
+                if (!kern->Valid)
+                {
+                    delete kern;
+                    failedKernels.insert(kernel.second);
+                    error = true;
+                    spdlog::error("Failed to convert kernel: " + kernel.first);
+                }
+                else
                 {
                     KfMap[kern->KernelFunction] = kern;
                     //so we remove its blocks from all parents
@@ -206,14 +219,14 @@ int main(int argc, char *argv[])
                         if (loc != child.second.end())
                         {
                             child.second.erase(loc);
-                            if (child.second.size() == 0)
+                            if (child.second.empty())
                             {
                                 toRemove.push_back(child.first);
                             }
                         }
                     }
                     //if necessary remove the entry from the map
-                    for (auto r : toRemove)
+                    for (const auto &r : toRemove)
                     {
                         auto it = childParentMapping.find(r);
                         childParentMapping.erase(it);
@@ -235,12 +248,6 @@ int main(int argc, char *argv[])
                     //and restart the iterator to ensure cohesion
                     break;
                 }
-                else
-                {
-                    failedKernels.insert(kernel.second);
-                    error = true;
-                    spdlog::error("Failed to convert kernel: " + kernel.first);
-                }
             }
         }
     }
@@ -258,7 +265,7 @@ int main(int argc, char *argv[])
     if (VectorsUsed)
     {
         std::string stdIntHeader = "\n#include <stdint.h>\n";
-        std::string vectorHeader = "\n#include <vector>";
+        std::string vectorHeader = "\n#include <immintrin.h>";
         headerFile.insert(headerFile.find(stdIntHeader), vectorHeader);
     }
     headerFile += "\n#ifdef __cplusplus\n}\n#endif\n";
@@ -269,59 +276,46 @@ int main(int argc, char *argv[])
     header.close();
 
     //verify the module
-    std::string str = "";
+    std::string str;
     llvm::raw_string_ostream rso(str);
-    bool debugBroken;
-    bool broken = verifyModule(*TikModule, &rso, &debugBroken);
+    bool broken = verifyModule(*TikModule, &rso);
     if (broken)
     {
-        error = true;
         auto err = rso.str();
         spdlog::critical("Tik Module Corrupted: " + err);
 #ifndef DEBUG
         return EXIT_FAILURE;
+#else
+        error = true;
 #endif
     }
 
     // writing part
     try
     {
-        if (OutputType == "JSON")
+        if (ASCIIFormat)
         {
-            nlohmann::json finalJson;
-            for (auto kern : results)
-            {
-                finalJson["Kernels"][kern->Name] = kern->GetJson();
-            }
-            ofstream oStream(OutputFile);
-            oStream << finalJson;
-            oStream.close();
+            // print human readable tik module to file
+            auto *write = new llvm::AssemblyAnnotationWriter();
+            std::string str;
+            llvm::raw_string_ostream rso(str);
+            std::filebuf f0;
+            f0.open(OutputFile, std::ios::out);
+            TikModule->print(rso, write);
+            std::ostream readableStream(&f0);
+            readableStream << str;
+            f0.close();
         }
         else
         {
-            if (ASCIIFormat)
-            {
-                // print human readable tik module to file
-                AssemblyAnnotationWriter *write = new llvm::AssemblyAnnotationWriter();
-                std::string str;
-                llvm::raw_string_ostream rso(str);
-                std::filebuf f0;
-                f0.open(OutputFile, std::ios::out);
-                TikModule->print(rso, write);
-                std::ostream readableStream(&f0);
-                readableStream << str;
-                f0.close();
-            }
-            else
-            {
-                // non-human readable IR
-                std::filebuf f;
-                f.open(OutputFile, std::ios::out);
-                std::ostream rawStream(&f);
-                raw_os_ostream raw_stream(rawStream);
-                WriteBitcodeToFile(*TikModule, raw_stream);
-            }
+            // non-human readable IR
+            std::filebuf f;
+            f.open(OutputFile, std::ios::out);
+            std::ostream rawStream(&f);
+            raw_os_ostream raw_stream(rawStream);
+            WriteBitcodeToFile(*TikModule, raw_stream);
         }
+
         spdlog::info("Successfully wrote tik to file");
     }
     catch (exception &e)
@@ -335,8 +329,55 @@ int main(int argc, char *argv[])
     {
         return EXIT_FAILURE;
     }
-    else
+    return EXIT_SUCCESS;
+}
+
+void CleanModule(Module *M)
+{
+    for (auto mi = M->begin(); mi != M->end(); mi++)
     {
-        return EXIT_SUCCESS;
+        for (auto &fi : *mi)
+        {
+            vector<Instruction *> toRemove;
+            for (auto bi = fi.begin(); bi != fi.end(); bi++)
+            {
+                auto v = cast<Instruction>(bi);
+                if (auto ci = dyn_cast<DbgInfoIntrinsic>(v))
+                {
+                    toRemove.push_back(ci);
+                }
+                else
+                {
+                    SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
+                    v->getAllMetadata(MDs);
+                    for (auto MD : MDs)
+                    {
+                        v->setMetadata(MD.first, nullptr);
+                    }
+                }
+            }
+            for (auto r : toRemove)
+            {
+                r->eraseFromParent();
+            }
+        }
+        auto *F = cast<Function>(mi);
+        SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
+        F->getAllMetadata(MDs);
+        for (auto MD : MDs)
+        {
+            F->setMetadata(MD.first, nullptr);
+        }
+    }
+
+    for (auto gi = M->global_begin(); gi != M->global_end(); gi++)
+    {
+        auto gv = cast<GlobalVariable>(gi);
+        SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
+        gv->getAllMetadata(MDs);
+        for (auto MD : MDs)
+        {
+            gv->setMetadata(MD.first, nullptr);
+        }
     }
 }

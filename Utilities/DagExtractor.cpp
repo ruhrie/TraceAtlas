@@ -24,7 +24,6 @@ cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging le
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 static int UID = 0;
 
-int lastBlock;
 string currentKernel = "-1";
 int currentUid = -1;
 
@@ -35,14 +34,11 @@ map<string, set<int>> kernelMap;
 map<string, set<string>> parentMap;
 map<int, set<int>> consumerMap;
 
-std::vector<int> basicBlocks;
-
 void Process(string &key, string &value)
 {
     if (key == "BBEnter")
     {
-        int block = stoi(value, 0, 0);
-        lastBlock = block;
+        int block = stoi(value, nullptr, 0);
         if (currentKernel == "-1" || kernelMap[currentKernel].find(block) == kernelMap[currentKernel].end())
         {
             //we aren't in the same kernel as last time
@@ -63,11 +59,10 @@ void Process(string &key, string &value)
                 kernelIdMap[UID++] = currentKernel;
             }
         }
-        basicBlocks.push_back(block);
     }
     else if (key == "LoadAddress")
     {
-        uint64_t address = stoul(value, 0, 0);
+        uint64_t address = stoul(value, nullptr, 0);
         int prodUid = writeMap[address];
         if (prodUid != -1 && prodUid != currentUid)
         {
@@ -76,7 +71,7 @@ void Process(string &key, string &value)
     }
     else if (key == "StoreAddress")
     {
-        uint64_t address = stoul(value, 0, 0);
+        uint64_t address = stoul(value, nullptr, 0);
         writeMap[address] = currentUid;
     }
 }
@@ -147,9 +142,9 @@ int main(int argc, char **argv)
     }
 
     //get parent child relationships
-    for (auto kernel : kernelMap)
+    for (const auto &kernel : kernelMap)
     {
-        for (auto kernel2 : kernelMap)
+        for (const auto &kernel2 : kernelMap)
         {
             if (kernel.first == kernel2.first)
             {
@@ -157,7 +152,7 @@ int main(int argc, char **argv)
             }
             vector<int> intSet;
             set_difference(kernel.second.begin(), kernel.second.end(), kernel2.second.begin(), kernel2.second.end(), std::inserter(intSet, intSet.begin()));
-            if (intSet.size() == 0)
+            if (intSet.empty())
             {
                 parentMap[kernel.first].insert(kernel2.first);
             }
@@ -165,7 +160,7 @@ int main(int argc, char **argv)
     }
 
     std::set<string> topKernels;
-    for (auto kernel : kernelMap)
+    for (const auto &kernel : kernelMap)
     {
         if (parentMap.find(kernel.first) == parentMap.end())
         {
