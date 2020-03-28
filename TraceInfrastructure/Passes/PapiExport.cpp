@@ -64,11 +64,17 @@ namespace DashTracer::Passes
             {
                 if (local)
                 {
-                    borderBuilder.CreateCall(certOn);
+                    if (certOn != nullptr)
+                    {
+                        borderBuilder.CreateCall(certOn);
+                    }
                 }
                 else
                 {
-                    borderBuilder.CreateCall(certOff);
+                    if (certOff != nullptr)
+                    {
+                        borderBuilder.CreateCall(certOff);
+                    }
                 }
             }
             else
@@ -93,14 +99,19 @@ namespace DashTracer::Passes
                         IRBuilder<> callBuilder(callInst);
                         if (local)
                         {
-                            callBuilder.CreateCall(certOn);
-                            BI++;
+                            if (certOn != nullptr)
+                            {
+                                callBuilder.CreateCall(certOn);
+                                BI++;
+                            }
                         }
                         else
                         {
-                            assert(certOff != nullptr);
-                            callBuilder.CreateCall(certOff);
-                            BI++;
+                            if (certOff != nullptr)
+                            {
+                                callBuilder.CreateCall(certOff);
+                                BI++;
+                            }
                         }
                     }
                 }
