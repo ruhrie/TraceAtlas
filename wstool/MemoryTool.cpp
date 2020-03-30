@@ -64,13 +64,13 @@ int main(int argc, char **argv)
         std::sort(InputkeyVector.begin(), InputkeyVector.end(), sortKeyInput);
     }
     
-    int64_t alivenumber = WorkingSet::inputSize;
-    vector<int> outputWS;
-    vector<int> inputWS;
-    vector<int> internalWS;
-    int maxInput = 0;
-    int maxOutput = 0;
-    int maxinternal = 0;
+    uint64_t alivenumber = WorkingSet::inputSize;
+    vector<uint64_t> outputWS;
+    vector<uint64_t> inputWS;
+    vector<uint64_t> internalWS;
+    uint64_t maxInput = 0;
+    uint64_t maxOutput = 0;
+    uint64_t maxinternal = 0;
     vector<string> outputList;
 
     if(writeAll)
@@ -169,7 +169,7 @@ int main(int argc, char **argv)
     }
     else
     {
-        int InternelSize = 0;
+        uint64_t InternelSize = 0;
         for (vector<string>::iterator itv = InternelkeyVector.begin(); itv != InternelkeyVector.end(); ++itv)
         {
             string key = *itv;
@@ -182,7 +182,7 @@ int main(int argc, char **argv)
             }
             else
             {
-                InternelSize = InternelVirAddr[key][InputVirAddr[key].size() - 1] - InternelVirAddr[key][1];
+                InternelSize =uint64_t( InternelVirAddr[key][InputVirAddr[key].size() - 1] - InternelVirAddr[key][1]);
             }
             if (InternelSize > maxinternal)
             {
@@ -192,25 +192,25 @@ int main(int argc, char **argv)
         maxInput = alivenumber;
     }
 
-    printf("maxInput: %d \n maxinternal: %d \n maxOutput: %d \n", maxInput, maxinternal, maxOutput);
+    printf("maxInput: %lu \n maxinternal: %lu \n maxOutput: %lu \n", maxInput, maxinternal, maxOutput);
 
     if (writeAll)
     {
         ofstream f;
         f.open("./inputWorkingSet.txt");
-        for (int j = 0; j < inputWS.size(); j++)
+        for (uint64_t j = 0; j < inputWS.size(); j++)
         {
             f << inputWS[j] << endl;
         }
         f.close();
         f.open("./outputWorkingSet.txt");
-        for (int j = 0; j < outputWS.size(); j++)
+        for (uint64_t j = 0; j < outputWS.size(); j++)
         {
             f << outputWS[j] << endl;
         }
         f.close();
         f.open("./internalWorkingSet.txt");
-        for (int j = 0; j < internalWS.size(); j++)
+        for (uint64_t j = 0; j < internalWS.size(); j++)
         {
             f << internalWS[j] << endl;
         }

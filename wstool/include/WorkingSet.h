@@ -11,6 +11,6 @@ namespace WorkingSet
 {
     extern int64_t timing;
     extern map<string, vector<int64_t>> virAddr;
-    extern int64_t inputSize;
+    extern uint64_t inputSize;
     void Process(std::string &key, std::string &value);
 } // namespace WorkingSet

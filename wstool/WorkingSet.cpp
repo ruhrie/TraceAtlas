@@ -7,7 +7,7 @@ namespace WorkingSet
     int64_t timing = 0;
     map<int64_t, string> deAlias;
     map<string, vector<int64_t>> virAddr;
-    int64_t inputSize;
+    uint64_t inputSize;
     void firstStore(string addr, int64_t t, int op)
     {
         int64_t addrIndex = stol(addr, 0, 0);
