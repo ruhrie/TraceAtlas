@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
     LLVMContext context;
     SMDiagnostic smerror;
     unique_ptr<Module> sourceBitcode = parseIRFile(InputFile, smerror, context);
-    if (sourceBitcode == NULL)
+    if (sourceBitcode == nullptr)
     {
         std::cerr << "Failed to load bitcode file\n";
         return -1;
@@ -48,13 +48,13 @@ int main(int argc, char *argv[])
     map<string, set<string>> kernelParents;
     for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
     {
-        Function *f = cast<Function>(F);
+        auto *f = cast<Function>(F);
         string functionName = f->getName();
         for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
         {
-            BasicBlock *b = cast<BasicBlock>(BB);
+            auto *b = cast<BasicBlock>(BB);
             int64_t id = GetBlockID(b);
-            for (auto kernel : kernels)
+            for (const auto &kernel : kernels)
             {
                 auto blocks = kernel.second;
                 if (find(blocks.begin(), blocks.end(), id) != blocks.end())

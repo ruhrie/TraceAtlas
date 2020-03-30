@@ -2,9 +2,9 @@
 #include "tik/InlineStruct.h"
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/Module.h>
+#include <llvm/IR/Operator.h>
 #include <llvm/Transforms/Utils/ValueMapper.h>
 #include <map>
-#include <nlohmann/json.hpp>
 #include <set>
 #include <string>
 #include <tuple>
@@ -12,28 +12,27 @@
 class Kernel
 {
 public:
-    Kernel(std::vector<int> basicBlocks, llvm::Module *M, std::string name = "");
+    Kernel(std::vector<int64_t> basicBlocks, llvm::Module *M, std::string name = "");
     ~Kernel();
     std::string GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures);
     std::string Name;
-    nlohmann::json GetJson();
     std::set<llvm::BasicBlock *> Conditional;
     std::set<llvm::BasicBlock *> Entrances;
     std::map<int, llvm::BasicBlock *> ExitTarget;
-    std::set<llvm::BasicBlock *> Body;
-    std::set<llvm::BasicBlock *> Termination;
-    llvm::BasicBlock *Init = NULL;
-    llvm::BasicBlock *Exit = NULL;
-    llvm::BasicBlock *Exception = NULL;
-    llvm::Function *MemoryRead = NULL;
-    llvm::Function *MemoryWrite = NULL;
-    llvm::Function *KernelFunction = NULL;
+    //std::set<llvm::BasicBlock *> Body;
+    //std::set<llvm::BasicBlock *> Termination;
+    llvm::BasicBlock *Init = nullptr;
+    llvm::BasicBlock *Exit = nullptr;
+    llvm::BasicBlock *Exception = nullptr;
+    //llvm::Function *MemoryRead = NULL;
+    //llvm::Function *MemoryWrite = NULL;
+    llvm::Function *KernelFunction = nullptr;
     bool Valid = false;
 
 private:
     void Cleanup();
-    void GetEntrances(std::set<llvm::BasicBlock *> &);
-    void GetExits(std::set<llvm::BasicBlock *> &);
+    void GetEntrances(std::set<llvm::BasicBlock *> &blocks);
+    void GetExits(std::set<llvm::BasicBlock *> &blocks);
     std::map<llvm::BasicBlock *, int> ExitMap;
     std::map<int, llvm::GlobalValue *> LoadMap;
     std::map<int, llvm::GlobalValue *> StoreMap;
@@ -61,14 +60,6 @@ private:
     /// @brief   Function for remapping instructions based on VMap.
     ///          This is done before morphing KernelFunction into a new function with inputs.
     void Remap();
-
-    /// @brief  Searches for the loop condition instruction, and adds its eligible users to the body block
-    ///
-    /// The loop condition instruction needs to be identified and store in LoopCondition for later use in MorphKernelFunction
-    /// Later, the condition's user instructions are evaluated, and those that are eligible to be in the tik representation are cloned into the VMap.
-    /// Eligible instructions are those that belong to the kernel's original basic blocks, and not eligible otherwise.
-    /// This function assumes that we will only find one conditional exit instruction, because we assume that the kernel will not have embedded loops in it.
-    void GetConditional(std::set<llvm::BasicBlock *> &blocks);
 
     /// @brief  Find all instructions not initialized in the kernel representation.
     ///
@@ -108,15 +99,19 @@ private:
     void UpdateMemory();
 
     void Repipe();
-    void SplitBlocks(std::set<llvm::BasicBlock *> &blocks);
     void ExportFunctionSignatures();
     void SanityChecks();
 
     void CopyGlobals();
 
+    void PatchPhis();
+
     void GetKernelLabels();
     void CopyArgument(llvm::CallBase *Call);
     void CopyOperand(llvm::User *inst);
-    void InlineFunctions(std::set<llvm::BasicBlock *> &blocks);
+    void InlineFunctions(std::set<int64_t> &blocks);
     void RemapExports();
+    void RemapOperand(llvm::Operator *op);
+
+    std::map<llvm::BasicBlock *, llvm::BasicBlock *> ExitBlockMap;
 };

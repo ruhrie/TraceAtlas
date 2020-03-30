@@ -5,21 +5,21 @@ jobs:
   Tests:
     runs-on: ubuntu-18.04
     steps:
-      - name: Install papi
-        run: sudo apt install libpapi-dev
+      - name: Install dependencies
+        run: sudo apt install libpapi-dev clang-tidy-9
         shell: bash 
       - uses: actions/checkout@v1
         with:
           submodules: true
       - name: Set environment variables
         env:
-          vcpkgResponseFile: ${{github.workspace}}/scripts/vcpkg.txt
+          vcpkgResponseFile: ${{github.workspace}}/vcpkg.txt
         run: echo "::set-env name=vcpkgResponseFile::$vcpkgResponseFile"
         shell: bash
       - name: Cache vcpkg artifacts
         uses: actions/cache@v1
         with:
-          path: ${{github.workspace}}/vcpkg
+          path: ${{github.workspace}}/vcpkg/
           key: ${{ hashFiles( env.vcpkgResponseFile ) }}
       - name: Run vcpkg
         uses: lukka/run-vcpkg@v0
@@ -35,10 +35,12 @@ jobs:
         uses: lukka/run-cmake@v0
         id: runcmake
         with:
+          cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
           cmakeListsTxtPath: '${{ github.workspace }}/CMakeLists.txt'
           useVcpkgToolchainFile: true
           buildWithCMakeArgs: '-- -v'
           buildDirectory: ${{github.workspace}}/build
+          cmakeAppendedArgs: '-G Ninja -DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=Debug'
       - name: Run ctest
         run: ctest
         shell: bash
