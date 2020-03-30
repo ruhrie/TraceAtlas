@@ -113,9 +113,12 @@ namespace TypeFour
                         {
                             for (auto call : calls)
                             {
-                                auto fId = getFunctionId(call);
-                                auto newR = BlockSigniture(r.Block, fId);
-                                result.push_back(newR);
+                                if (call->getFunction() == r.Block->getParent())
+                                {
+                                    auto fId = getFunctionId(call);
+                                    auto newR = BlockSigniture(r.Block, fId);
+                                    result.push_back(newR);
+                                }
                             }
                             toRemove.push_back(r);
                         }
