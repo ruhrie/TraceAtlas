@@ -1,4 +1,3 @@
-
 #include "Passes/TraceMemIO.h"
 #include "Passes/Annotate.h"
 #include "Passes/CommandArgs.h"
@@ -34,8 +33,8 @@ namespace DashTracer
         }
         bool TraceMemIO::doInitialization(Module &M)
         {
-            openFunc = dyn_cast<Function>(M.getOrInsertFunction("OpenFile", Type::getVoidTy(M.getContext())));
-            closeFunc = dyn_cast<Function>(M.getOrInsertFunction("CloseFile", Type::getVoidTy(M.getContext())));
+            openFunc = cast<Function>(M.getOrInsertFunction("OpenFile", Type::getVoidTy(M.getContext())).getCallee());
+            closeFunc = cast<Function>(M.getOrInsertFunction("CloseFile", Type::getVoidTy(M.getContext())).getCallee());
             return true;
         }
     } // namespace Passes
