@@ -1,4 +1,5 @@
 #include "Passes/TraceMem.h"
+#include "AtlasUtil/Annotate.h"
 #include "Passes/Annotate.h"
 #include "Passes/CommandArgs.h"
 #include "Passes/Functions.h"
@@ -13,186 +14,99 @@
 #include <llvm/Pass.h>
 #include <llvm/Support/raw_ostream.h>
 #include <map>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
 using namespace llvm;
+using namespace std;
 
-namespace DashTracer
+namespace DashTracer::Passes
 {
 
-    namespace Passes
+    std::vector<uint64_t> kernelBlockValue;
+
+    bool EncodedTraceMemory::runOnFunction(Function &F)
     {
-        std::vector<uint64_t> kernelBlockForValue;
 
-        bool EncodedTraceMemory::runOnFunction(Function &F)
+        for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
         {
-
-            for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
+            auto *block = cast<BasicBlock>(BB);
+            auto dl = block->getModule()->getDataLayout();
+            int64_t blockId = GetBlockID(block);
+            if (std::find(kernelBlockValue.begin(), kernelBlockValue.end(), blockId) != kernelBlockValue.end())
             {
-                BasicBlock *block = cast<BasicBlock>(BB);
-                auto dl = block->getModule()->getDataLayout();
-                int64_t blockId = GetBlockID(block);
-                if (std::find(kernelBlockForValue.begin(), kernelBlockForValue.end(), blockId) != kernelBlockForValue.end())
+                for (BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; ++BI)
                 {
-                    for (BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; ++BI)
+
+                    auto *CI = dyn_cast<Instruction>(BI);
+                    std::vector<Value *> values;
+                    if (auto *load = dyn_cast<LoadInst>(CI))
                     {
+                        IRBuilder<> builder(load);
+                        Value *addr = load->getPointerOperand();
+                        Type *tyaddr = addr->getType();
+                        Type *tyaddrContain = tyaddr->getContainedType(0);
+                        uint64_t sizeSig = dl.getTypeAllocSize(tyaddrContain);
+                        auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(block->getContext()), 0), true);
+                        Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(block->getContext()));
+                        values.push_back(cast);
+                        ConstantInt *sizeSigVal = ConstantInt::get(llvm::Type::getInt8Ty(block->getContext()), sizeSig);
+                        values.push_back(sizeSigVal);
+                        auto ref = ArrayRef<Value *>(values);
+                        builder.CreateCall(DumpLoadAddrValue, ref);
+                    }
 
-                        bool done = false;
-                        Instruction *CI = dyn_cast<Instruction>(BI);
-                        if (!done)
-                        {
-                            std::vector<Value *> values;
-                            if (LoadInst *load = dyn_cast<LoadInst>(CI))
-                            {
-                                IRBuilder<> builder(load);
-                                Value *addr = load->getPointerOperand();
-                                Type *tyaddr = addr->getType();
-                                Type *tyaddrContain = tyaddr->getContainedType(0);
-                                int sizeSig = dl.getTypeAllocSize(tyaddrContain);
-                                auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(block->getContext()), 0), true);
-                                Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(block->getContext()));
-                                values.push_back(cast);
-                                ConstantInt *sizeSigVal = ConstantInt::get(llvm::Type::getInt8Ty(block->getContext()), sizeSig);
-                                values.push_back(sizeSigVal);
-                                ArrayRef<Value *> ref = ArrayRef<Value *>(values);
-                                builder.CreateCall(DumpLoadAddrValue, ref);
-                                done = true;
-                            }
-
-                            if (StoreInst *store = dyn_cast<StoreInst>(CI))
-                            {
-                                IRBuilder<> builder(store);
-                                Value *addr = store->getPointerOperand();
-                                Type *tyaddr = addr->getType();
-                                Type *tyaddrContain = tyaddr->getContainedType(0);
-                                int sizeSig = dl.getTypeAllocSize(tyaddrContain);
-                                auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(block->getContext()), 0), true);
-                                Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(block->getContext()));
-                                values.push_back(cast);
-                                ConstantInt *sizeSigVal = ConstantInt::get(llvm::Type::getInt8Ty(block->getContext()), sizeSig);
-                                values.push_back(sizeSigVal);
-                                ArrayRef<Value *> ref = ArrayRef<Value *>(values);
-                                builder.CreateCall(DumpStoreAddrValue, ref);
-                                done = true;
-                            }
-                        }
+                    if (auto *store = dyn_cast<StoreInst>(CI))
+                    {
+                        IRBuilder<> builder(store);
+                        Value *addr = store->getPointerOperand();
+                        Type *tyaddr = addr->getType();
+                        Type *tyaddrContain = tyaddr->getContainedType(0);
+                        uint64_t sizeSig = dl.getTypeAllocSize(tyaddrContain);
+                        auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(block->getContext()), 0), true);
+                        Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(block->getContext()));
+                        values.push_back(cast);
+                        ConstantInt *sizeSigVal = ConstantInt::get(llvm::Type::getInt8Ty(block->getContext()), sizeSig);
+                        values.push_back(sizeSigVal);
+                        auto ref = ArrayRef<Value *>(values);
+                        builder.CreateCall(DumpStoreAddrValue, ref);
                     }
                 }
             }
-            return true;
         }
+        return true;
+    }
 
-        bool EncodedTraceMemory::doInitialization(Module &M)
+    bool EncodedTraceMemory::doInitialization(Module &M)
+    {
+        DumpLoadAddrValue = cast<Function>(M.getOrInsertFunction("DumpLoadAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
+        DumpStoreAddrValue = cast<Function>(M.getOrInsertFunction("DumpStoreAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
+
+        kernelBlockValue.clear();
+        nlohmann::json j;
+        std::ifstream inputStream(KernelFilename);
+        inputStream >> j;
+        inputStream.close();
+        for (auto &[key, value] : j["Kernels"].items())
         {
-            DumpLoadAddrValue = dyn_cast<Function>(M.getOrInsertFunction("DumpLoadAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())));
-            DumpStoreAddrValue = dyn_cast<Function>(M.getOrInsertFunction("DumpStoreAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())));
-
-            kernelBlockForValue.clear();
-            std::ifstream inputStream(KernelFilename);
-            if (inputStream.is_open())
+            string index = key;
+            if (stoi(index) == KernelIndex)
             {
-                std::string data = "";
-                std::string line;
-                while (std::getline(inputStream, line))
-                {
-                    data += line;
-                }
-                data.erase(std::remove(data.begin(), data.end(), '\n'), data.end());
-                data.erase(std::remove(data.begin(), data.end(), ' '), data.end());
-                data.erase(std::remove(data.begin(), data.end(), '\t'), data.end());
-                std::vector<std::string> kernels;
-                std::string temp = "";
-                for (int i = 1; i < data.length() - 1; i++)
-                {
-                    if (data[i - 1] == ']' && data[i] == ',')
-                    {
-                        kernels.push_back(temp);
-                        temp = "";
-                    }
-                    else
-                    {
-                        temp += data[i];
-                    }
-                }
-                kernels.push_back(temp);
-                bool found = false;
-                for (int i = 0; i < kernels.size(); i++)
-                {
-                    if (found)
-                    {
-                        break;
-                    }
-                    std::string kern = kernels[i];
-                    for (int i = 1; i < kern.length(); i++)
-                    {
-                        if (kern[i] == '"')
-                        {
-                            uint64_t index = std::stoul(kern.substr(1, i - 1));
-                            if (index == KernelIndex)
-                            {
-                                std::string kernString = kern.substr(i + 3, kern.length() - i - 4);
-                                std::string intString = "";
-                                for (int j = 0; j < kernString.length(); j++)
-                                {
-                                    if (kernString[j] == ',')
-                                    {
-                                        uint64_t resultInt;
-                                        if (intString.rfind("0X", 0) == 0 || intString.rfind("0x", 0) == 0)
-                                        {
-                                            resultInt = std::stoul(intString.substr(1, intString.size() - 2), nullptr, 16);
-                                        }
-                                        else
-                                        {
-                                            resultInt = std::stoul(intString);
-                                        }
-
-                                        kernelBlockForValue.push_back(resultInt);
-                                        intString = "";
-                                    }
-                                    else
-                                    {
-                                        intString += kernString[j];
-                                    }
-                                }
-                                if (intString.length() != 0)
-                                {
-                                    uint64_t resultInt;
-                                    if (intString.rfind("0X", 0) == 0 || intString.rfind("0x", 0) == 0)
-                                    {
-                                        resultInt = std::stoul(intString.substr(1, intString.size() - 2), nullptr, 16);
-                                    }
-                                    else
-                                    {
-                                        resultInt = std::stoul(intString);
-                                    }
-                                    kernelBlockForValue.push_back(resultInt);
-                                }
-                                found = true;
-                            }
-                            break;
-                        }
-                    }
-                }
-
-                inputStream.close();
+                nlohmann::json kernel = value["Blocks"];
+                kernelBlockValue = kernel.get<vector<uint64_t>>();
             }
-
-            else
-            {
-                std::cout << "Failed to open kernel file. Will not trace events\n";
-            }
-
-            return false;
         }
 
-        void EncodedTraceMemory::getAnalysisUsage(AnalysisUsage &AU) const
-        {
-            AU.addRequired<DashTracer::Passes::EncodedAnnotate>();
-            AU.addRequired<DashTracer::Passes::TraceMemIO>();
-            AU.setPreservesCFG();
-        }
-        char EncodedTraceMemory::ID = 1;
-        static RegisterPass<EncodedTraceMemory> Y("EncodedTraceMemory", "Adds encoded tracing memory value in the kernel to the binary", true, false);
-    } // namespace Passes
-} // namespace DashTracer
+        return false;
+    }
+
+    void EncodedTraceMemory::getAnalysisUsage(AnalysisUsage &AU) const
+    {
+        AU.addRequired<DashTracer::Passes::EncodedAnnotate>();
+        AU.addRequired<DashTracer::Passes::TraceMemIO>();
+        AU.setPreservesCFG();
+    }
+    char EncodedTraceMemory::ID = 1;
+    static RegisterPass<EncodedTraceMemory> Y("EncodedTraceMemory", "Adds encoded tracing memory value in the kernel to the binary", true, false);
+} // namespace DashTracer::Passes
