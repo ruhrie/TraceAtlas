@@ -86,6 +86,6 @@ namespace WorkingSet
         {
             firstStore(address, timing, 1);
             timing++;
-        }        
+        }
     }
 } // namespace WorkingSet

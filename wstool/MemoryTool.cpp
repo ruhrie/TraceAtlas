@@ -42,7 +42,8 @@ int main(int argc, char **argv)
         internalSampleTime = WorkingSet::timing;
     }
     vector<string> InputkeyVector;    // InputkeyVector is a vector which stores keys of input virtual address map
-    vector<string> InternelkeyVector; // InputkeyVector is a vector which stores keys of internal virtual address map
+    vector<string> InternelkeyVector; // InternelkeyVector is a vector which stores keys of internal virtual address map
+    // InternelkeyVector is a vector which stores keys of a part of internal virtual address map
     vector<string> InternelSampleKeyVector;
     map<string, vector<int64_t>> InputVirAddr;
     map<string, vector<int64_t>> InternelVirAddr;
@@ -231,7 +232,6 @@ int main(int argc, char **argv)
             }
         }
     }
-    //maxinternal = *max_element(internalWSForMax.begin(),internalWSForMax.end());
     maxInput = alivenumber;
     printf("maxInput: %lu \n maxinternal: %lu \n maxOutput: %lu \n", maxInput, maxinternal, maxOutput);
 
