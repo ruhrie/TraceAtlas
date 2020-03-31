@@ -155,11 +155,11 @@ void DumpLoadValue(void *MemValue, int size)
     {
         if (i == 0)
         {
-            sprintf(fin, "0X%02X", bitwisePrint[i]);           
+            sprintf(fin, "0X%02X", bitwisePrint[i]);
         }
         else
         {
-            sprintf(fin, "%02X", bitwisePrint[i]);            
+            sprintf(fin, "%02X", bitwisePrint[i]);
         }
         WriteStream(fin);
     }
@@ -183,11 +183,11 @@ void DumpStoreValue(void *MemValue, int size)
     {
         if (i == 0)
         {
-            sprintf(fin, "0X%02X", bitwisePrint[i]);           
+            sprintf(fin, "0X%02X", bitwisePrint[i]);
         }
         else
         {
-            sprintf(fin, "%02X", bitwisePrint[i]);            
+            sprintf(fin, "%02X", bitwisePrint[i]);
         }
         WriteStream(fin);
     }
