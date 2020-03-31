@@ -50,11 +50,12 @@ namespace DashTracer::Passes
                         uint64_t sizeSig = dl.getTypeAllocSize(tyaddrContain);
                         auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(block->getContext()), 0), true);
                         Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(block->getContext()));
+                        builder.CreateCall(LoadDump, cast);
                         values.push_back(cast);
                         ConstantInt *sizeSigVal = ConstantInt::get(llvm::Type::getInt8Ty(block->getContext()), sizeSig);
                         values.push_back(sizeSigVal);
                         auto ref = ArrayRef<Value *>(values);
-                        builder.CreateCall(DumpLoadAddrValue, ref);
+                        builder.CreateCall(DumpLoadValue, ref);
                     }
 
                     if (auto *store = dyn_cast<StoreInst>(CI))
@@ -66,11 +67,12 @@ namespace DashTracer::Passes
                         uint64_t sizeSig = dl.getTypeAllocSize(tyaddrContain);
                         auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(block->getContext()), 0), true);
                         Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(block->getContext()));
+                        builder.CreateCall(StoreDump, cast);
                         values.push_back(cast);
                         ConstantInt *sizeSigVal = ConstantInt::get(llvm::Type::getInt8Ty(block->getContext()), sizeSig);
                         values.push_back(sizeSigVal);
                         auto ref = ArrayRef<Value *>(values);
-                        builder.CreateCall(DumpStoreAddrValue, ref);
+                        builder.CreateCall(DumpStoreValue, ref);
                     }
                 }
             }
@@ -80,9 +82,10 @@ namespace DashTracer::Passes
 
     bool EncodedTraceMemory::doInitialization(Module &M)
     {
-        DumpLoadAddrValue = cast<Function>(M.getOrInsertFunction("DumpLoadAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
-        DumpStoreAddrValue = cast<Function>(M.getOrInsertFunction("DumpStoreAddrValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
-
+        DumpLoadValue = cast<Function>(M.getOrInsertFunction("DumpLoadValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
+        DumpStoreValue = cast<Function>(M.getOrInsertFunction("DumpStoreValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
+        LoadDump = cast<Function>(M.getOrInsertFunction("LoadDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
+        StoreDump = cast<Function>(M.getOrInsertFunction("StoreDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
         kernelBlockValue.clear();
         nlohmann::json j;
         std::ifstream inputStream(KernelFilename);
