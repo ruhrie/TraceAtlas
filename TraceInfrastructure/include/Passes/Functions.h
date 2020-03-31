@@ -13,9 +13,9 @@ namespace DashTracer
         extern Function *closeFunc;
         extern Function *BB_ID;
         extern Function *StoreDump;
-        extern Function *StoreValue;
+        extern Function *DumpStoreValue;
         extern Function *LoadDump;
-        extern Function *LoadValue;
+        extern Function *DumpLoadValue;
         extern Function *fullFunc;
         extern Function *fullAddrFunc;
     } // namespace Passes
