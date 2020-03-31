@@ -55,7 +55,7 @@ namespace DashTracer::Passes
                         ConstantInt *sizeSigVal = ConstantInt::get(llvm::Type::getInt8Ty(block->getContext()), sizeSig);
                         values.push_back(sizeSigVal);
                         auto ref = ArrayRef<Value *>(values);
-                        builder.CreateCall(DumpLoadValue, ref);
+                        builder.CreateCall(LoadValue, ref);
                     }
 
                     if (auto *store = dyn_cast<StoreInst>(CI))
@@ -72,7 +72,7 @@ namespace DashTracer::Passes
                         ConstantInt *sizeSigVal = ConstantInt::get(llvm::Type::getInt8Ty(block->getContext()), sizeSig);
                         values.push_back(sizeSigVal);
                         auto ref = ArrayRef<Value *>(values);
-                        builder.CreateCall(DumpStoreValue, ref);
+                        builder.CreateCall(StoreValue, ref);
                     }
                 }
             }
@@ -82,8 +82,8 @@ namespace DashTracer::Passes
 
     bool EncodedTraceMemory::doInitialization(Module &M)
     {
-        DumpLoadValue = cast<Function>(M.getOrInsertFunction("DumpLoadValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
-        DumpStoreValue = cast<Function>(M.getOrInsertFunction("DumpStoreValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
+        LoadValue = cast<Function>(M.getOrInsertFunction("LoadValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
+        StoreValue = cast<Function>(M.getOrInsertFunction("StoreValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
         LoadDump = cast<Function>(M.getOrInsertFunction("LoadDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
         StoreDump = cast<Function>(M.getOrInsertFunction("StoreDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
         kernelBlockValue.clear();

@@ -8,9 +8,9 @@ namespace DashTracer::Passes
     Function *closeFunc;
     Function *BB_ID;
     Function *StoreDump;
-    Function *DumpStoreValue;
+    Function *StoreValue;
     Function *LoadDump;
-    Function *DumpLoadValue;
+    Function *LoadValue;
     Function *fullFunc;
     Function *fullAddrFunc;
 } // namespace DashTracer::Passes
