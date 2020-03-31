@@ -1,6 +1,6 @@
+#include "WorkingSet.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Traces.h"
-#include "WorkingSet.h"
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
@@ -31,18 +31,18 @@ bool sortKeyInternel(string xin, string yin)
 int main(int argc, char **argv)
 {
     // writeAll is a flag to indicate if working set size for every moment should be monitored
-    // or we only need to know the maximum working set size. 
-    bool writeAll=false;
+    // or we only need to know the maximum working set size.
+    bool writeAll = false;
     cl::ParseCommandLineOptions(argc, argv);
     ProcessTrace(inputTrace, &WorkingSet::Process, "working set analysis", false);
 
     int64_t internalSampleTime = 10000;
-    if(internalSampleTime> WorkingSet::timing)
+    if (internalSampleTime > WorkingSet::timing)
     {
         internalSampleTime = WorkingSet::timing;
     }
-    vector<string> InputkeyVector; // InputkeyVector is a vector which stores keys of input virtual address map
-    vector<string> InternelkeyVector;// InputkeyVector is a vector which stores keys of internal virtual address map
+    vector<string> InputkeyVector;    // InputkeyVector is a vector which stores keys of input virtual address map
+    vector<string> InternelkeyVector; // InputkeyVector is a vector which stores keys of internal virtual address map
     vector<string> InternelSampleKeyVector;
     map<string, vector<int64_t>> InputVirAddr;
     map<string, vector<int64_t>> InternelVirAddr;
@@ -59,7 +59,7 @@ int main(int argc, char **argv)
             if ((it->second)[1] < internalSampleTime)
             {
                 InternelSampleKeyVector.push_back(it->first);
-                InternelSampleVirAddr.insert(pair<string, vector<int64_t>>(it->first, it->second)); 
+                InternelSampleVirAddr.insert(pair<string, vector<int64_t>>(it->first, it->second));
             }
         }
         else
@@ -68,18 +68,18 @@ int main(int argc, char **argv)
             InputVirAddr.insert(pair<string, vector<int64_t>>(it->first, it->second));
         }
     }
-    if(writeAll)
+    if (writeAll)
     {
-        // for the internal map, sort the key vector according to the start time 
+        // for the internal map, sort the key vector according to the start time
         std::sort(InternelkeyVector.begin(), InternelkeyVector.end(), sortKeyInternel);
-        // for the input map, sort the key vector according to the first load time 
+        // for the input map, sort the key vector according to the first load time
         std::sort(InputkeyVector.begin(), InputkeyVector.end(), sortKeyInput);
     }
     else
     {
         std::sort(InternelSampleKeyVector.begin(), InternelSampleKeyVector.end(), sortKeyInternel);
     }
-    
+
     uint64_t alivenumber = WorkingSet::inputSize;
     vector<uint64_t> outputWS;
     vector<uint64_t> inputWS;
@@ -89,7 +89,7 @@ int main(int argc, char **argv)
     uint64_t maxinternal = 0;
     vector<string> outputList;
 
-    if(writeAll)
+    if (writeAll)
     {
         for (int64_t time = 0; time < WorkingSet::timing; time++)
         {
@@ -134,7 +134,7 @@ int main(int argc, char **argv)
             {
                 maxinternal = timeline.size();
             }
-            if(writeAll)
+            if (writeAll)
             {
                 outputWS.push_back(outputList.size());
                 internalWS.push_back(timeline.size());
@@ -172,15 +172,15 @@ int main(int argc, char **argv)
             {
                 maxInput = alivenumber;
             }
-            if(writeAll)
+            if (writeAll)
             {
                 inputWS.push_back(alivenumber);
             }
-            if (time % 1000 ==0)
+            if (time % 1000 == 0)
             {
-                float ProcessRatio = (float) time/WorkingSet::timing;
-                printf ("process time :%ld, %ld, %.5f \n", time, WorkingSet::timing , ProcessRatio);
-            }               
+                float ProcessRatio = (float)time / WorkingSet::timing;
+                printf("process time :%ld, %ld, %.5f \n", time, WorkingSet::timing, ProcessRatio);
+            }
         }
     }
     else
@@ -190,7 +190,7 @@ int main(int argc, char **argv)
             string key = *itv;
             if (InternelVirAddr[key].size() < 3)
             {
-                maxOutput++; 
+                maxOutput++;
             }
         }
         for (int64_t time = 0; time < internalSampleTime; time++)
@@ -229,7 +229,7 @@ int main(int argc, char **argv)
             {
                 maxinternal = timeline.size();
             }
-        }                
+        }
     }
     //maxinternal = *max_element(internalWSForMax.begin(),internalWSForMax.end());
     maxInput = alivenumber;
