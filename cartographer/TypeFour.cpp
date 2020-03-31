@@ -63,101 +63,108 @@ namespace TypeFour
         return functionIdMap[b];
     }
 
-    void GetReachable(const BlockSigniture &base, vector<BlockSigniture> &result, const set<int64_t> &validBlocks)
+    void GetReachable(const BlockSigniture &base2, vector<BlockSigniture> &result, const set<int64_t> &validBlocks)
     {
         //so we will start by adding every successor, they are in the same function so they have the same function id
-        for (auto suc : successors(base.Block))
+        queue<BlockSigniture> processing;
+        processing.push(base2);
+        while (!processing.empty())
         {
-            int64_t id = GetBlockID(suc);
-            if (validBlocks.find(id) != validBlocks.end())
+            BlockSigniture base = processing.front();
+            processing.pop();
+            for (auto suc : successors(base.Block))
             {
-                auto candidate = BlockSigniture(suc, base.FunctionID);
-                if (find(result.begin(), result.end(), candidate) == result.end())
+                int64_t id = GetBlockID(suc);
+                if (validBlocks.find(id) != validBlocks.end())
                 {
-                    result.push_back(candidate);
-                    GetReachable(candidate, result, validBlocks);
-                }
-            }
-        }
-        //next we need to check every intstruction
-        for (auto bi = base.Block->begin(); bi != base.Block->end(); bi++)
-        {
-            //if it is a call, we will get a block id and add it to the queue
-            if (auto cb = dyn_cast<CallBase>(bi))
-            {
-                Function *F = cb->getCalledFunction();
-                if (F != nullptr && !F->empty())
-                {
-                    BasicBlock *entry = &F->getEntryBlock();
-                    auto entryId = GetBlockID(entry);
-                    if (validBlocks.find(entryId) != validBlocks.end())
+                    auto candidate = BlockSigniture(suc, base.FunctionID);
+                    if (find(result.begin(), result.end(), candidate) == result.end())
                     {
-                        auto candidate = BlockSigniture(entry, getFunctionId(cb));
-                        if (find(result.begin(), result.end(), candidate) == result.end())
-                        {
-                            result.push_back(candidate);
-                            GetReachable(candidate, result, validBlocks);
-                        }
+                        result.push_back(candidate);
+                        processing.push(candidate);
                     }
                 }
             }
-            //if it is a return (or exception) we go into the virtual caller
-            else if (isa<ReturnInst>(bi) || isa<ResumeInst>(bi))
+            //next we need to check every intstruction
+            for (auto bi = base.Block->begin(); bi != base.Block->end(); bi++)
             {
-                if (base.FunctionID == -1) //we only need to care if it doesn't have a function id, otherwise it is already handeled
+                //if it is a call, we will get a block id and add it to the queue
+                if (auto cb = dyn_cast<CallBase>(bi))
                 {
-                    //we are in a function at the start
-                    //get the number of uses (call base)
-                    //duplicate every entry in result where the function id is -1 with the new id, these are the block in the current function that haven't been mapped
-                    //then push back into the result each calling block and remove the prior not incorrect blocks
-                    //this is order dependent, unlike the rest of the code
-                    vector<CallBase *> calls;
-                    Function *F = base.Block->getParent();
-                    for (auto user : F->users())
+                    Function *F = cb->getCalledFunction();
+                    if (F != nullptr && !F->empty())
                     {
-                        if (auto *cb = dyn_cast<CallBase>(user))
+                        BasicBlock *entry = &F->getEntryBlock();
+                        auto entryId = GetBlockID(entry);
+                        if (validBlocks.find(entryId) != validBlocks.end())
                         {
-                            auto parId = GetBlockID(cb->getParent());
-                            if (validBlocks.find(parId) != validBlocks.end())
+                            auto candidate = BlockSigniture(entry, getFunctionId(cb));
+                            if (find(result.begin(), result.end(), candidate) == result.end())
                             {
-                                calls.push_back(cb);
+                                result.push_back(candidate);
+                                processing.push(candidate);
                             }
                         }
                     }
-                    vector<BlockSigniture> toRemove;
-                    for (auto r : result)
+                }
+                //if it is a return (or exception) we go into the virtual caller
+                else if (isa<ReturnInst>(bi) || isa<ResumeInst>(bi))
+                {
+                    if (base.FunctionID == -1) //we only need to care if it doesn't have a function id, otherwise it is already handeled
                     {
-                        if (r.FunctionID == -1)
+                        //we are in a function at the start
+                        //get the number of uses (call base)
+                        //duplicate every entry in result where the function id is -1 with the new id, these are the block in the current function that haven't been mapped
+                        //then push back into the result each calling block and remove the prior not incorrect blocks
+                        //this is order dependent, unlike the rest of the code
+                        vector<CallBase *> calls;
+                        Function *F = base.Block->getParent();
+                        for (auto user : F->users())
                         {
-                            for (auto call : calls)
+                            if (auto *cb = dyn_cast<CallBase>(user))
                             {
-                                if (call->getFunction() == r.Block->getParent())
+                                auto parId = GetBlockID(cb->getParent());
+                                if (validBlocks.find(parId) != validBlocks.end())
                                 {
-                                    auto fId = getFunctionId(call);
-                                    auto newR = BlockSigniture(r.Block, fId);
-                                    result.push_back(newR);
+                                    calls.push_back(cb);
                                 }
                             }
-                            toRemove.push_back(r);
                         }
-                    }
-                    for (auto r : toRemove)
-                    {
-                        result.erase(remove(result.begin(), result.end(), r), result.end());
-                    }
-                    //now that we repaired the result retroactively, we can recurse once for each caller
-                    //we don't know if this needs a function id, so we just pass -1 for the time being
-                    //worst case this is going to chain and operate again above to repair
-                    for (auto call : calls)
-                    {
-                        auto parent = call->getParent();
-                        auto candidate = BlockSigniture(parent);
-                        //we will check for the id here, but I'd be shocked if it was already added
-                        //better to be safe though
-                        if (find(result.begin(), result.end(), candidate) == result.end())
+                        vector<BlockSigniture> toRemove;
+                        for (auto r : result)
                         {
-                            result.push_back(candidate);
-                            GetReachable(candidate, result, validBlocks);
+                            if (r.FunctionID == -1)
+                            {
+                                for (auto call : calls)
+                                {
+                                    if (call->getFunction() == r.Block->getParent())
+                                    {
+                                        auto fId = getFunctionId(call);
+                                        auto newR = BlockSigniture(r.Block, fId);
+                                        result.push_back(newR);
+                                    }
+                                }
+                                toRemove.push_back(r);
+                            }
+                        }
+                        for (auto r : toRemove)
+                        {
+                            result.erase(remove(result.begin(), result.end(), r), result.end());
+                        }
+                        //now that we repaired the result retroactively, we can recurse once for each caller
+                        //we don't know if this needs a function id, so we just pass -1 for the time being
+                        //worst case this is going to chain and operate again above to repair
+                        for (auto call : calls)
+                        {
+                            auto parent = call->getParent();
+                            auto candidate = BlockSigniture(parent);
+                            //we will check for the id here, but I'd be shocked if it was already added
+                            //better to be safe though
+                            if (find(result.begin(), result.end(), candidate) == result.end())
+                            {
+                                result.push_back(candidate);
+                                processing.push(candidate);
+                            }
                         }
                     }
                 }
