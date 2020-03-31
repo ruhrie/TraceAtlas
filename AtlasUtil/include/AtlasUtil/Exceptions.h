@@ -3,13 +3,13 @@
 #include <sstream>
 #include <string>
 
-class TikException : public std::exception
+class AtlasException : public std::exception
 {
 protected:
     std::string msg;
 
 public:
-    TikException(const std::string &arg, const char *file, int line)
+    AtlasException(const std::string &arg, const char *file, int line)
     {
         std::ostringstream o;
         o << file << ":" << line << ": " << arg;
@@ -22,4 +22,4 @@ public:
     }
 };
 
-#define TikException(arg) TikException(arg, __FILE__, __LINE__);
+#define AtlasException(arg) AtlasException(arg, __FILE__, __LINE__);

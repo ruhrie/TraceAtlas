@@ -1,5 +1,6 @@
 #include "TypeFour.h"
 #include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
 #include "cartographer.h"
 #include <indicators/progress_bar.hpp>
@@ -28,9 +29,26 @@ namespace TypeFour
             Block = block;
             FunctionID = function;
         }
-        bool operator==(const BlockSigniture &lhs) //needed for searching
+        bool operator==(const BlockSigniture &lhs) const //needed for searching
         {
             return Block == lhs.Block && FunctionID == lhs.FunctionID;
+        }
+        bool operator<(const BlockSigniture &lhs) const
+        {
+            bool result;
+            if (Block < lhs.Block)
+            {
+                result = true;
+            }
+            else if (Block > lhs.Block)
+            {
+                result = false;
+            }
+            else
+            {
+                result = FunctionID < lhs.FunctionID;
+            }
+            return result;
         }
     };
 
@@ -258,6 +276,99 @@ namespace TypeFour
         return checked;
     }
 
+    //this was taken from tik. It should probably be moved to libtik once it is made
+    set<BasicBlock *> GetEntrances(set<BasicBlock *> &blocks)
+    {
+        set<BasicBlock *> Entrances;
+        for (auto block : blocks)
+        {
+            Function *F = block->getParent();
+            BasicBlock *par = &F->getEntryBlock();
+            //we first check if the block is an entry block, if it is the only way it could be an entry is through a function call
+            if (block == par)
+            {
+                bool exte = false;
+                bool inte = false;
+                for (auto user : F->users())
+                {
+                    if (auto cb = dyn_cast<CallBase>(user))
+                    {
+                        BasicBlock *parent = cb->getParent(); //the parent of the function call
+                        if (blocks.find(parent) == blocks.end())
+                        {
+                            exte = true;
+                        }
+                        else
+                        {
+                            inte = true;
+                        }
+                    }
+                }
+                if (exte && !inte)
+                {
+                    //exclusively external so this is an entrance
+                    Entrances.insert(block);
+                }
+                else if (exte && inte)
+                {
+                    //both external and internal, so maybe an entrance
+                    //ignore for the moment, worst case we will have no entrances
+                    //throw AtlasException("Mixed function uses, not implemented");
+                }
+                else if (!exte && inte)
+                {
+                    //only internal, so ignore
+                }
+                else
+                {
+                    //neither internal or external, throw error
+                    throw AtlasException("Function with no internal or external uses");
+                }
+            }
+            else
+            {
+                //this isn't an entry block, therefore we apply the new algorithm
+                bool ent = false;
+                queue<BasicBlock *> workingSet;
+                set<BasicBlock *> visitedBlocks;
+                workingSet.push(block);
+                visitedBlocks.insert(block);
+                while (!workingSet.empty())
+                {
+                    BasicBlock *current = workingSet.back();
+                    workingSet.pop();
+                    if (current == par)
+                    {
+                        //this is the entry block. We know that there is a valid path through the computation to here
+                        //that doesn't somehow originate in the kernel
+                        //this is guaranteed by the prior type 2 detector in cartographer
+                        ent = true;
+                        break;
+                    }
+                    for (BasicBlock *pred : predecessors(current))
+                    {
+                        //we now add every predecessor to the working set as long as
+                        //1. we haven't visited it before
+                        //2. it is not inside the kernel
+                        //we are trying to find the entrance to the function because it is was indicates a true entrance
+                        if (visitedBlocks.find(pred) == visitedBlocks.end() && blocks.find(pred) == blocks.end())
+                        {
+                            visitedBlocks.insert(pred);
+                            workingSet.push(pred);
+                        }
+                    }
+                }
+                if (ent)
+                {
+                    //this is assumed to be a true entrance
+                    //if false it has no path that doesn't pass through the prior kernel
+                    Entrances.insert(block);
+                }
+            }
+        }
+        return Entrances;
+    }
+
     set<set<int64_t>> Process(const set<set<int64_t>> &type3Kernels)
     {
         indicators::ProgressBar bar;
@@ -276,25 +387,28 @@ namespace TypeFour
         for (const auto &kernel : type3Kernels)
         {
             set<int64_t> blocks;
-            map<int64_t, set<BasicBlock *>> reachableMap;
             for (auto block : kernel)
             {
                 //we need to see if this block can ever reach itself
                 BasicBlock *base = blockMap[block];
-                auto reachable = GetReachable(base, kernel);
-                if (reachable.find(base) != reachable.end())
+                vector<BlockSigniture> sigReachable;
+                GetReachable(BlockSigniture(base), sigReachable, kernel);
+                for (auto reach : sigReachable)
                 {
-                    blocks.insert(block);
+                    if (reach.Block == base)
+                    {
+                        blocks.insert(block);
+                        break;
+                    }
                 }
-                reachableMap[block] = reachable;
             }
             //blocks is now a set, but it may be disjoint, so we need to check that now
+            /*
             map<int64_t, set<BasicBlock *>> reachableBlockSets;
             for (auto block : blocks)
             {
-                reachableBlockSets[block] = GetReachable(blockMap[block], blocks);
-                //vector<BlockSigniture> a; //results are stored here
-                //GetReachable(BlockSigniture(blockMap[block]), a, blocks);
+                auto base = blockMap[block];
+                reachableBlockSets[block] = GetReachable(base, blocks);
             }
             set<set<int64_t>> subSets;
             for (auto block : blocks)
@@ -310,10 +424,34 @@ namespace TypeFour
                 }
                 subSets.insert(sub);
             }
+            */
+
+            set<BasicBlock *> blockSet;
+            for (auto block : blocks)
+            {
+                blockSet.insert(blockMap[block]);
+            }
+
+            set<BasicBlock *> entrances = GetEntrances(blockSet);
+
+            for (auto ent : entrances)
+            {
+                set<BlockSigniture> sigSet;
+                vector<BlockSigniture> a;
+                GetReachable(BlockSigniture(ent), a, blocks);
+                set<int64_t> b;
+                for (auto as : a)
+                {
+                    b.insert(GetBlockID(as.Block));
+                }
+                result.insert(b);
+            }
+
+            /*
             for (const auto &subSet : subSets)
             {
                 result.insert(subSet);
-            }
+            }*/
             status++;
             float percent = float(status) / float(total) * 100;
             bar.set_postfix_text("Kernel " + to_string(status) + "/" + to_string(total));
