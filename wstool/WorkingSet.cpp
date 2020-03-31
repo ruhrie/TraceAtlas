@@ -70,23 +70,22 @@ namespace WorkingSet
 
     void Process(string &key, string &value)
     {
-        if (key == "LoadAddress" || key == "StoreAddress")
+        int64_t addrIndex = stol(value, 0, 0);
+        string address = value;
+        if ((deAlias.count(addrIndex) != 0) && (key == "LoadAddress"))
         {
-            long int addrIndex = stol(value, 0, 0);
-            string address = value;
-            if ((deAlias.count(addrIndex) != 0) && (key == "LoadAddress"))
-            {
-                livingLoad(address, timing);
-            }
-            else if (key == "LoadAddress")
-            {
-                firstStore(address, timing, -1);
-            }
-            else if (key == "StoreAddress")
-            {
-                firstStore(address, timing, 1);
-            }
+            livingLoad(address, timing);
             timing++;
         }
+        else if (key == "LoadAddress")
+        {
+            firstStore(address, timing, -1);
+            timing++;
+        }
+        else if (key == "StoreAddress")
+        {
+            firstStore(address, timing, 1);
+            timing++;
+        }        
     }
 } // namespace WorkingSet
