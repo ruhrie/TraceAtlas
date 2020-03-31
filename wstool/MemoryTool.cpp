@@ -36,10 +36,17 @@ int main(int argc, char **argv)
     cl::ParseCommandLineOptions(argc, argv);
     ProcessTrace(inputTrace, &WorkingSet::Process, "working set analysis", false);
 
+    int64_t internalSampleTime = 10000;
+    if(internalSampleTime> WorkingSet::timing)
+    {
+        internalSampleTime = WorkingSet::timing;
+    }
     vector<string> InputkeyVector; // InputkeyVector is a vector which stores keys of input virtual address map
     vector<string> InternelkeyVector;// InputkeyVector is a vector which stores keys of internal virtual address map
+    vector<string> InternelSampleKeyVector;
     map<string, vector<int64_t>> InputVirAddr;
     map<string, vector<int64_t>> InternelVirAddr;
+    map<string, vector<int64_t>> InternelSampleVirAddr;
 
     // devide the virtual address map into two, one is internal map whose start time is bigger than 1
     // another is input map whose start time is -1
@@ -49,6 +56,11 @@ int main(int argc, char **argv)
         {
             InternelkeyVector.push_back(it->first);
             InternelVirAddr.insert(pair<string, vector<int64_t>>(it->first, it->second));
+            if ((it->second)[1] < internalSampleTime)
+            {
+                InternelSampleKeyVector.push_back(it->first);
+                InternelSampleVirAddr.insert(pair<string, vector<int64_t>>(it->first, it->second)); 
+            }
         }
         else
         {
@@ -62,6 +74,10 @@ int main(int argc, char **argv)
         std::sort(InternelkeyVector.begin(), InternelkeyVector.end(), sortKeyInternel);
         // for the input map, sort the key vector according to the first load time 
         std::sort(InputkeyVector.begin(), InputkeyVector.end(), sortKeyInput);
+    }
+    else
+    {
+        std::sort(InternelSampleKeyVector.begin(), InternelSampleKeyVector.end(), sortKeyInternel);
     }
     
     uint64_t alivenumber = WorkingSet::inputSize;
@@ -169,29 +185,54 @@ int main(int argc, char **argv)
     }
     else
     {
-        uint64_t InternelSize = 0;
         for (vector<string>::iterator itv = InternelkeyVector.begin(); itv != InternelkeyVector.end(); ++itv)
         {
             string key = *itv;
             if (InternelVirAddr[key].size() < 3)
             {
-                if(std::find(outputList.begin(), outputList.end(), key) == outputList.end())
-                {
-                    maxOutput++; 
-                }
-            }
-            else
-            {
-                InternelSize =uint64_t( InternelVirAddr[key][InputVirAddr[key].size() - 1] - InternelVirAddr[key][1]);
-            }
-            if (InternelSize > maxinternal)
-            {
-                maxinternal = InternelSize;
+                maxOutput++; 
             }
         }
-        maxInput = alivenumber;
-    }
+        for (int64_t time = 0; time < internalSampleTime; time++)
+        {
+            vector<string> timeline;
+            for (vector<string>::iterator itv = InternelSampleKeyVector.begin(); itv != InternelSampleKeyVector.end(); ++itv)
+            {
+                string key = *itv;
+                if (InternelSampleVirAddr[key].size() > 0)
+                {
 
+                    if (InternelSampleVirAddr[key][1] > time)
+                    {
+                        break;
+                    }
+                    if (InternelSampleVirAddr[key].size() > 2)
+                    {
+                        if (InternelSampleVirAddr[key][1] <= time && InternelSampleVirAddr[key][InternelSampleVirAddr[key].size() - 1] > time)
+                        {
+                            timeline.push_back(key);
+                        }
+                        else if (time > InternelSampleVirAddr[key][InternelSampleVirAddr[key].size() - 1])
+                        {
+                            InternelSampleVirAddr.erase(key);
+                            InternelSampleKeyVector.erase(itv);
+                        }
+                    }
+                    else
+                    {
+                        InternelSampleVirAddr.erase(key);
+                        InternelSampleKeyVector.erase(itv);
+                    }
+                }
+            }
+            if (maxinternal < timeline.size())
+            {
+                maxinternal = timeline.size();
+            }
+        }                
+    }
+    //maxinternal = *max_element(internalWSForMax.begin(),internalWSForMax.end());
+    maxInput = alivenumber;
     printf("maxInput: %lu \n maxinternal: %lu \n maxOutput: %lu \n", maxInput, maxinternal, maxOutput);
 
     if (writeAll)
