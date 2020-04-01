@@ -20,13 +20,18 @@ endfunction()
 
 set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld-9")
 
-option(ENABLE_LINTER "Run linter" OFF)
-if(${ENABLE_LINTER})
+option(ENABLE_LINTER_ERROR "Run linter with errors" OFF)
+if(${ENABLE_LINTER_ERROR})
     set(CMAKE_CXX_CLANG_TIDY 
         clang-tidy-9;
         --warnings-as-errors=*;
         --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type;
-        --format-style=file;
+        )
+    add_compile_options(-Werror)
+else()
+    set(CMAKE_CXX_CLANG_TIDY 
+        clang-tidy-9;
+        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type;
         )
 endif()
 
@@ -81,9 +86,9 @@ foreach (SOURCE_FILE ${ALL_SOURCE_FILES})
 endforeach ()
 
 add_custom_target(
-        format
-        COMMAND /usr/bin/clang-format-9
-        -style=file
-        -i
-        ${ALL_SOURCE_FILES}
+    format
+    COMMAND /usr/bin/clang-format-9
+    -style=file
+    -i
+    ${ALL_SOURCE_FILES}
 )
