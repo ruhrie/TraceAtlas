@@ -1,6 +1,6 @@
-#include "WorkingSet.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Traces.h"
+#include "WorkingSet.h"
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
