@@ -70,8 +70,12 @@ namespace WorkingSet
 
     void Process(string &key, string &value)
     {
-        int64_t addrIndex = stol(value, nullptr, 0);
+        int64_t addrIndex;        
         string &address = value;
+        if ((key == "StoreAddress") || (key == "LoadAddress"))
+        {
+            addrIndex = stol(value, nullptr, 0);
+        }
         if ((deAlias.count(addrIndex) != 0) && (key == "LoadAddress"))
         {
             livingLoad(address, timing);
