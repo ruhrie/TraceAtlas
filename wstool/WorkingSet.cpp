@@ -8,9 +8,9 @@ namespace WorkingSet
     map<int64_t, string> deAlias;
     map<string, vector<int64_t>> virAddr;
     uint64_t inputSize;
-    void firstStore(string addr, int64_t t, int op)
+    void firstStore(string &addr, int64_t t, int op)
     {
-        int64_t addrIndex = stol(addr, 0, 0);
+        int64_t addrIndex = stol(addr, nullptr, 0);
         string VirAddrIndex;
         stringstream ss;
         if (op > 0)
@@ -61,17 +61,17 @@ namespace WorkingSet
         }
     }
 
-    void livingLoad(string addr, int64_t t)
+    void livingLoad(string &addr, int64_t t)
     {
 
-        int64_t addrIndex = stol(addr, 0, 0);
+        int64_t addrIndex = stol(addr, nullptr, 0);
         virAddr[deAlias[addrIndex]].push_back(t);
     }
 
     void Process(string &key, string &value)
     {
-        int64_t addrIndex = stol(value, 0, 0);
-        string address = value;
+        int64_t addrIndex = stol(value, nullptr, 0);
+        string &address = value;
         if ((deAlias.count(addrIndex) != 0) && (key == "LoadAddress"))
         {
             livingLoad(address, timing);
