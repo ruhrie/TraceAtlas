@@ -66,12 +66,12 @@ namespace TypeFour
     void GetReachable(const BlockSigniture &base2, vector<BlockSigniture> &result, const set<int64_t> &validBlocks)
     {
         //so we will start by adding every successor, they are in the same function so they have the same function id
-        queue<BlockSigniture> processing;
-        processing.push(base2);
+        vector<BlockSigniture> processing;
+        processing.push_back(base2);
         while (!processing.empty())
         {
-            BlockSigniture base = processing.front();
-            processing.pop();
+            BlockSigniture base = processing.back();
+            processing.pop_back();
             for (auto suc : successors(base.Block))
             {
                 int64_t id = GetBlockID(suc);
@@ -81,7 +81,7 @@ namespace TypeFour
                     if (find(result.begin(), result.end(), candidate) == result.end())
                     {
                         result.push_back(candidate);
-                        processing.push(candidate);
+                        processing.push_back(candidate);
                     }
                 }
             }
@@ -102,7 +102,7 @@ namespace TypeFour
                             if (find(result.begin(), result.end(), candidate) == result.end())
                             {
                                 result.push_back(candidate);
-                                processing.push(candidate);
+                                processing.push_back(candidate);
                             }
                         }
                     }
@@ -150,6 +150,7 @@ namespace TypeFour
                         for (auto r : toRemove)
                         {
                             result.erase(remove(result.begin(), result.end(), r), result.end());
+                            processing.erase(remove(processing.begin(), processing.end(), r), processing.end());
                         }
                         //now that we repaired the result retroactively, we can recurse once for each caller
                         //we don't know if this needs a function id, so we just pass -1 for the time being
@@ -163,7 +164,7 @@ namespace TypeFour
                             if (find(result.begin(), result.end(), candidate) == result.end())
                             {
                                 result.push_back(candidate);
-                                processing.push(candidate);
+                                processing.push_back(candidate);
                             }
                         }
                     }
