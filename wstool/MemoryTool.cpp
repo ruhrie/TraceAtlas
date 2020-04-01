@@ -1,6 +1,6 @@
+#include "WorkingSet.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Traces.h"
-#include "WorkingSet.h"
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
@@ -18,12 +18,12 @@ using namespace llvm;
 
 llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
 
-bool sortKeyInput(string xin, string yin)
+bool sortKeyInput(string &xin, string &yin)
 {
     return WorkingSet::virAddr[xin][2] < WorkingSet::virAddr[yin][2];
 }
 
-bool sortKeyInternel(string xin, string yin)
+bool sortKeyInternel(string &xin, string &yin)
 {
     return WorkingSet::virAddr[xin][1] < WorkingSet::virAddr[yin][1];
 }
@@ -51,22 +51,23 @@ int main(int argc, char **argv)
 
     // devide the virtual address map into two, one is internal map whose start time is bigger than 1
     // another is input map whose start time is -1
-    for (map<string, vector<int64_t>>::iterator it = WorkingSet::virAddr.begin(); it != WorkingSet::virAddr.end(); ++it)
+    //for (map<string, vector<int64_t>>::iterator it = WorkingSet::virAddr.begin(); it != WorkingSet::virAddr.end(); ++it)
+    for (auto &it : WorkingSet::virAddr)
     {
-        if ((it->second)[1] > 0)
+        if ((it.second)[1] > 0)
         {
-            InternelkeyVector.push_back(it->first);
-            InternelVirAddr.insert(pair<string, vector<int64_t>>(it->first, it->second));
-            if ((it->second)[1] < internalSampleTime)
+            InternelkeyVector.push_back(it.first);
+            InternelVirAddr.insert(pair<string, vector<int64_t>>(it.first, it.second));
+            if ((it.second)[1] < internalSampleTime)
             {
-                InternelSampleKeyVector.push_back(it->first);
-                InternelSampleVirAddr.insert(pair<string, vector<int64_t>>(it->first, it->second));
+                InternelSampleKeyVector.push_back(it.first);
+                InternelSampleVirAddr.insert(pair<string, vector<int64_t>>(it.first, it.second));
             }
         }
         else
         {
-            InputkeyVector.push_back(it->first);
-            InputVirAddr.insert(pair<string, vector<int64_t>>(it->first, it->second));
+            InputkeyVector.push_back(it.first);
+            InputVirAddr.insert(pair<string, vector<int64_t>>(it.first, it.second));
         }
     }
     if (writeAll)
@@ -96,33 +97,34 @@ int main(int argc, char **argv)
         {
             vector<string> inputList;
             vector<string> timeline;
-            for (vector<string>::iterator itv = InternelkeyVector.begin(); itv != InternelkeyVector.end(); ++itv)
+            //for (vector<string>::iterator itv = InternelkeyVector.begin(); itv != InternelkeyVector.end(); ++itv)
+            for (auto itv = InternelkeyVector.begin(); itv != InternelkeyVector.end();)
             {
-                string key = *itv;
-                if (InternelVirAddr[key].size() > 0)
+                //string key = *itv;
+                if (!InternelVirAddr[*itv].empty())
                 {
 
-                    if (InternelVirAddr[key][1] > time)
+                    if (InternelVirAddr[*itv][1] > time)
                     {
                         break;
                     }
-                    if (InternelVirAddr[key].size() > 2)
+                    if (InternelVirAddr[*itv].size() > 2)
                     {
-                        if (InternelVirAddr[key][1] <= time && InternelVirAddr[key][InternelVirAddr[key].size() - 1] > time)
+                        if (InternelVirAddr[*itv][1] <= time && InternelVirAddr[*itv][InternelVirAddr[*itv].size() - 1] > time)
                         {
-                            timeline.push_back(key);
+                            timeline.push_back(*itv);
                         }
-                        else if (time > InternelVirAddr[key][InternelVirAddr[key].size() - 1])
+                        else if (time > InternelVirAddr[*itv][InternelVirAddr[*itv].size() - 1])
                         {
-                            InternelVirAddr.erase(key);
+                            InternelVirAddr.erase(*itv);
                             InternelkeyVector.erase(itv);
                         }
                     }
-                    else if (std::find(outputList.begin(), outputList.end(), key) == outputList.end())
+                    else if (std::find(outputList.begin(), outputList.end(), *itv) == outputList.end())
                     {
 
-                        outputList.push_back(key);
-                        InternelVirAddr.erase(key);
+                        outputList.push_back(*itv);
+                        InternelVirAddr.erase(*itv);
                         InternelkeyVector.erase(itv);
                     }
                 }
@@ -141,7 +143,7 @@ int main(int argc, char **argv)
                 internalWS.push_back(timeline.size());
             }
             timeline.clear();
-            for (vector<string>::iterator itv = InputkeyVector.begin(); itv != InputkeyVector.end(); ++itv)
+            for (auto itv = InputkeyVector.begin(); itv != InputkeyVector.end(); ++itv)
             {
                 string key = *itv;
                 if (InputkeyVector.size() == 1)
@@ -186,9 +188,8 @@ int main(int argc, char **argv)
     }
     else
     {
-        for (vector<string>::iterator itv = InternelkeyVector.begin(); itv != InternelkeyVector.end(); ++itv)
+        for (auto &key : InternelkeyVector)
         {
-            string key = *itv;
             if (InternelVirAddr[key].size() < 3)
             {
                 maxOutput++;
@@ -197,10 +198,10 @@ int main(int argc, char **argv)
         for (int64_t time = 0; time < internalSampleTime; time++)
         {
             vector<string> timeline;
-            for (vector<string>::iterator itv = InternelSampleKeyVector.begin(); itv != InternelSampleKeyVector.end(); ++itv)
+            for (auto itv = InternelSampleKeyVector.begin(); itv != InternelSampleKeyVector.end(); ++itv)
             {
                 string key = *itv;
-                if (InternelSampleVirAddr[key].size() > 0)
+                if (!InternelSampleVirAddr[key].empty())
                 {
 
                     if (InternelSampleVirAddr[key][1] > time)
@@ -239,19 +240,19 @@ int main(int argc, char **argv)
     {
         ofstream f;
         f.open("./inputWorkingSet.txt");
-        for (uint64_t j = 0; j < inputWS.size(); j++)
+        for (uint64_t j : inputWS)
         {
             f << inputWS[j] << endl;
         }
         f.close();
         f.open("./outputWorkingSet.txt");
-        for (uint64_t j = 0; j < outputWS.size(); j++)
+        for (uint64_t j : outputWS)
         {
             f << outputWS[j] << endl;
         }
         f.close();
         f.open("./internalWorkingSet.txt");
-        for (uint64_t j = 0; j < internalWS.size(); j++)
+        for (uint64_t j : internalWS)
         {
             f << internalWS[j] << endl;
         }
