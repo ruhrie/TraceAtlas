@@ -23,8 +23,8 @@ namespace DashTracer
     {
         bool TraceIO::runOnModule(Module &M)
         {
-            appendToGlobalCtors(M, openFunc, 0);
-            appendToGlobalDtors(M, closeFunc, 0);
+            appendToGlobalCtors(M, openFunc, 65535);
+            appendToGlobalDtors(M, closeFunc, 65535);
             return true;
         }
 

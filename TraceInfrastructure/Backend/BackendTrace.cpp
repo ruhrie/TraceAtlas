@@ -2,7 +2,10 @@
 #include <array>
 #include <cstdlib>
 #include <cstring>
+#include <pthread.h>
 #include <zlib.h>
+
+using namespace std;
 
 FILE *myfile;
 
@@ -19,15 +22,38 @@ unsigned int bufferIndex = 0;
 std::array<uint8_t, BUFSIZE> tempBuffer;
 std::array<uint8_t, BUFSIZE> storeBuffer;
 
+pthread_t workerThread;
+pthread_mutex_t mutex;
+pthread_cond_t cond;
+bool shouldExit = false;
+
+void *Worker(void *param)
+{
+    while (true)
+    {
+        pthread_mutex_lock(&mutex);
+        BufferData();
+        pthread_cond_broadcast(&cond);
+        pthread_mutex_unlock(&mutex);
+        if (shouldExit)
+        {
+            break;
+        }
+    }
+    return nullptr;
+}
+
 void WriteStream(char *input)
 {
     size_t size = strlen(input);
     if (bufferIndex + size >= BUFSIZE)
     {
-        BufferData();
+        pthread_cond_wait(&cond, &mutex);
     }
+    pthread_mutex_lock(&mutex);
     memcpy(storeBuffer.begin() + bufferIndex, input, size);
     bufferIndex += size;
+    pthread_mutex_unlock(&mutex);
 }
 
 ///Modified from https://stackoverflow.com/questions/4538586/how-to-compress-a-buffer-with-zlib
@@ -105,11 +131,14 @@ extern "C"
             TraceFilename = "raw.trc";
         }
         myfile = fopen(TraceFilename, "wb");
+        pthread_create(&workerThread, nullptr, Worker, nullptr);
         WriteStream("TraceVersion:3\n");
     }
 
     void CloseFile()
     {
+        shouldExit = true;
+        pthread_join(workerThread, nullptr);
         strm_DashTracer.next_in = storeBuffer.begin();
         strm_DashTracer.avail_in = bufferIndex;
         strm_DashTracer.next_out = tempBuffer.begin();
