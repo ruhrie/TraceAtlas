@@ -21,6 +21,7 @@ char *TraceFilename;
 unsigned int bufferIndex = 0;
 std::array<uint8_t, BUFSIZE> tempBuffer;
 std::array<uint8_t, BUFSIZE> storeBuffer;
+std::array<uint8_t, BUFSIZE> intBuffer;
 
 pthread_t workerThread;
 pthread_mutex_t mutex;
@@ -31,10 +32,33 @@ void *Worker(void *param)
 {
     while (true)
     {
-        pthread_mutex_lock(&mutex);
-        BufferData();
-        pthread_cond_broadcast(&cond);
-        pthread_mutex_unlock(&mutex);
+        if (bufferIndex != 0)
+        {
+            pthread_mutex_lock(&mutex);
+            int length = bufferIndex;
+            std::swap(intBuffer, storeBuffer);
+            bufferIndex = 0;
+            pthread_cond_broadcast(&cond);
+            pthread_mutex_unlock(&mutex);
+            strm_DashTracer.next_in = intBuffer.begin();
+            strm_DashTracer.avail_in = length;
+            strm_DashTracer.next_out = tempBuffer.begin();
+            strm_DashTracer.avail_out = BUFSIZE;
+            while (strm_DashTracer.avail_in != 0)
+            {
+                deflate(&strm_DashTracer, Z_NO_FLUSH);
+
+                if (strm_DashTracer.avail_out == 0)
+                {
+                    fwrite(tempBuffer.data(), sizeof(uint8_t), BUFSIZE - strm_DashTracer.avail_out, myfile);
+                    strm_DashTracer.next_out = tempBuffer.begin();
+                    strm_DashTracer.avail_out = BUFSIZE;
+                }
+            }
+            fwrite(tempBuffer.data(), sizeof(uint8_t), BUFSIZE - strm_DashTracer.avail_out, myfile);
+            strm_DashTracer.next_out = tempBuffer.begin();
+            strm_DashTracer.avail_out = BUFSIZE;
+        }
         if (shouldExit)
         {
             break;
@@ -48,7 +72,8 @@ void WriteStream(char *input)
     size_t size = strlen(input);
     if (bufferIndex + size >= BUFSIZE)
     {
-        pthread_cond_wait(&cond, &mutex);
+        while(bufferIndex != 0)
+        {}
     }
     pthread_mutex_lock(&mutex);
     memcpy(storeBuffer.begin() + bufferIndex, input, size);
