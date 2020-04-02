@@ -112,6 +112,6 @@ private:
     void InlineFunctions(std::set<int64_t> &blocks);
     void RemapExports();
     void RemapOperand(llvm::Operator *op);
-
+llvm::Operator* CloneOperand(llvm::Value* inputOp);
     std::map<llvm::BasicBlock *, llvm::BasicBlock *> ExitBlockMap;
 };

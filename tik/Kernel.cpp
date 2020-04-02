@@ -329,6 +329,77 @@ void Kernel::RemapOperand(llvm::Operator* op)
     }
 }
 */
+/*
+llvm::Operator* Kernel::CloneOperand(llvm::Value* inputOp)
+{
+    if (auto op = dyn_cast<Operator>(inputOp)) // if this inst arg is an operand (like a GEP)
+    {
+        for (unsigned int operand = 0; operand < op->getNumOperands(); operand++)
+        {
+            if (auto glob = dyn_cast<GlobalVariable>(op->getOperand(operand))) // if this arg is global
+            {
+                if (auto con = dyn_cast<Constant>(glob)) // if this is a constant
+                {
+                    if (auto gepInst = dyn_cast<GetElementPtrInst>(inputOp)) // if this operator is a GEP
+                    {
+                        IRBuilder OpBuilder(gepInst);
+                        vector<Value*> idxList;
+                        for (auto idx = gepInst->idx_begin(); idx != gepInst->idx_end(); idx++)
+                        {
+                            auto indexValue = cast<Value>(idx);
+                            idxList.push_back(indexValue);
+                        }
+                        ArrayRef idxArray = ArrayRef(idxList);
+                        Value* ptr;
+                        if (Value* gepPtr = VMap[gepInst->getPointerOperand()])
+                        {
+                            ptr = gepPtr;
+                        }
+                        else
+                        {
+                            ptr = gepInst->getPointerOperand();
+                        }
+                        Value* newGep = OpBuilder.CreateGEP(gepInst->getResultElementType(), ptr, idxArray, gepInst->getName());
+                        PrintVal(newGep);
+                    }
+                    // we need to replace the entire GEP with a remapped constant
+                    
+                    llvm::Constant* remapped = cast<Constant>(VMap[cast<llvm::Value>(con)]);
+                    // construct the new GEP
+                    llvm::GEPOperator* = cast<llvm::GEPOperator>(llvm::GetElementPtrInst::Create(op->getType(), op->getOperand()))
+                    // replace the original operator in the instruction with the new one
+                    
+                    //VMap[cast<Value>(op)] = cast<Value>(newOp);
+                }
+            }
+            else if (auto newOp = dyn_cast<Operator>(op->getOperand(operand)))
+            {
+                // recurse and do something with the new op...
+            }
+        }
+    }
+    
+    // right now we only handle GEP Operators here
+    if (auto gep = dyn_cast<llvm::GetElementPtrInst>(op))
+    {
+        auto retType = gep->getType();
+        auto ptr = gep->getPointerOperand();
+        unsigned int idx = gep->getPointerOperandIndex();
+        // TODO: construct ArrayRef of constant indexes...
+        if (gep->isInBounds())
+        {
+            newGep = llvm::GetElementPtrInst::CreateInBounds(ptr, idxList, gep->getName(), gep->getParent());
+        }
+        else
+        {
+            newGep = llvm::GetElementPtrInst::Create(retType, ptr, idxList, gep->getName(), gep->getParent());
+        }
+        return cast<llvm::Operator>(newGep);
+    }
+    //return cast<Operator>(newGep);
+    return nullptr;
+}
+*/
 void Kernel::Remap()
 {
     for (auto &BB : *KernelFunction)
@@ -336,10 +407,62 @@ void Kernel::Remap()
         for (BasicBlock::iterator BI = BB.begin(), BE = BB.end(); BI != BE; ++BI)
         {
             auto *inst = cast<Instruction>(BI);
-            /*if (llvm::Operator* op = dyn_cast<Operator>(inst))
+            for (unsigned int arg = 0; arg < inst->getNumOperands(); arg++)
             {
-                RemapOperand(op);
-            }*/
+                Value *inputOp = inst->getOperand(arg);
+                if (auto op = dyn_cast<Operator>(inputOp)) // if this inst arg is an operand (like a GEP)
+                {
+                    for (unsigned int operand = 0; operand < op->getNumOperands(); operand++)
+                    {
+                        if (auto glob = dyn_cast<GlobalVariable>(op->getOperand(operand))) // if this arg is global
+                        {
+                            PrintVal(glob);
+                            //PrintVal(glob->getParent());
+                            if (auto con = dyn_cast<Constant>(glob)) // if this is a constant
+                            {
+                                PrintVal(inputOp);
+                                if (auto gepInst = dyn_cast<GEPOperator>(inputOp))
+                                {
+                                    IRBuilder OpBuilder(inst);
+                                    vector<Value *> idxList;
+                                    for (auto idx = gepInst->idx_begin(); idx != gepInst->idx_end(); idx++)
+                                    {
+                                        auto indexValue = cast<Value>(idx);
+                                        PrintVal(indexValue);
+                                        idxList.push_back(indexValue);
+                                    }
+                                    //ArrayRef idxArray = ArrayRef(idxList);
+                                    Value *ptr;
+                                    if (Value *gepPtr = VMap[gepInst->getPointerOperand()])
+                                    {
+                                        ptr = gepPtr;
+                                    }
+                                    else
+                                    {
+                                        ptr = gepInst->getPointerOperand();
+                                    }
+                                    Value *newGep = OpBuilder.CreateGEP(ptr, idxList, gepInst->getName());
+                                    PrintVal(newGep);
+
+                                    // we need to replace the entire GEP with a remapped constant
+                                    /*
+                                    llvm::Constant* remapped = cast<Constant>(VMap[cast<llvm::Value>(con)]);
+                                    // construct the new GEP
+                                    llvm::GEPOperator* = cast<llvm::GEPOperator>(llvm::GetElementPtrInst::Create(op->getType(), op->getOperand()))
+                                    // replace the original operator in the instruction with the new one
+                                    */
+                                    VMap[inputOp] = cast<Value>(newGep);
+                                }
+                            }
+                        }
+                        else if (auto newOp = dyn_cast<Operator>(op->getOperand(operand)))
+                        {
+                            // recurse and do something with the new op...
+                        }
+                    }
+                }
+                //CloneOperand(inst->getOperand(arg));
+            }
             RemapInstruction(inst, VMap, llvm::RF_None);
         }
     }
