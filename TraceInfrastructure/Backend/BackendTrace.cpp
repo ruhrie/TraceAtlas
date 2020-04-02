@@ -18,65 +18,18 @@ char *TraceFilename;
 /// The maximum ammount of bytes to store in a buffer before flushing it.
 /// </summary>
 #define BUFSIZE 128 * 1024
-atomic_uint bufferIndex = 0;
+uint32_t bufferIndex = 0;
 std::array<uint8_t, BUFSIZE> tempBuffer;
 std::array<uint8_t, BUFSIZE> storeBuffer;
 std::array<uint8_t, BUFSIZE> intBuffer;
 
-pthread_t workerThread;
-atomic_bool shouldExit = false;
-
-atomic_bool swapping = false;
-
-void *Worker(void *param)
-{
-    while (true)
-    {
-        if (bufferIndex != 0)
-        {
-            swapping = true;
-            int length = bufferIndex;
-            std::swap(intBuffer, storeBuffer);
-            bufferIndex = 0;
-            swapping = false;
-            strm_DashTracer.next_in = intBuffer.begin();
-            strm_DashTracer.avail_in = length;
-            strm_DashTracer.next_out = tempBuffer.begin();
-            strm_DashTracer.avail_out = BUFSIZE;
-            while (strm_DashTracer.avail_in != 0)
-            {
-                deflate(&strm_DashTracer, Z_NO_FLUSH);
-
-                if (strm_DashTracer.avail_out == 0)
-                {
-                    fwrite(tempBuffer.data(), sizeof(uint8_t), BUFSIZE - strm_DashTracer.avail_out, myfile);
-                    strm_DashTracer.next_out = tempBuffer.begin();
-                    strm_DashTracer.avail_out = BUFSIZE;
-                }
-            }
-            fwrite(tempBuffer.data(), sizeof(uint8_t), BUFSIZE - strm_DashTracer.avail_out, myfile);
-            strm_DashTracer.next_out = tempBuffer.begin();
-            strm_DashTracer.avail_out = BUFSIZE;
-        }
-        if (shouldExit)
-        {
-            break;
-        }
-    }
-    return nullptr;
-}
 
 void WriteStream(char *input)
 {
     size_t size = strlen(input);
     if (bufferIndex + size >= BUFSIZE)
     {
-        while (bufferIndex != 0)
-        {
-        }
-    }
-    while (swapping)
-    {
+        BufferData();
     }
 
     memcpy(storeBuffer.begin() + bufferIndex, input, size);
@@ -158,14 +111,11 @@ extern "C"
             TraceFilename = "raw.trc";
         }
         myfile = fopen(TraceFilename, "wb");
-        pthread_create(&workerThread, nullptr, Worker, nullptr);
         WriteStream("TraceVersion:3\n");
     }
 
     void CloseFile()
     {
-        shouldExit = true;
-        pthread_join(workerThread, nullptr);
         strm_DashTracer.next_in = storeBuffer.begin();
         strm_DashTracer.avail_in = bufferIndex;
         strm_DashTracer.next_out = tempBuffer.begin();
