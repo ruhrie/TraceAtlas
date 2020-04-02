@@ -3,8 +3,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <zlib.h>
-
 using namespace std;
 
 FILE *myfile;
@@ -18,15 +18,15 @@ char *TraceFilename;
 /// The maximum ammount of bytes to store in a buffer before flushing it.
 /// </summary>
 #define BUFSIZE 128 * 1024
-unsigned int bufferIndex = 0;
+atomic_uint bufferIndex = 0;
 std::array<uint8_t, BUFSIZE> tempBuffer;
 std::array<uint8_t, BUFSIZE> storeBuffer;
 std::array<uint8_t, BUFSIZE> intBuffer;
 
 pthread_t workerThread;
-pthread_mutex_t mutex;
-pthread_cond_t cond;
-bool shouldExit = false;
+atomic_bool shouldExit = false;
+
+atomic_bool swapping = false;
 
 void *Worker(void *param)
 {
@@ -34,12 +34,11 @@ void *Worker(void *param)
     {
         if (bufferIndex != 0)
         {
-            pthread_mutex_lock(&mutex);
+            swapping = true;
             int length = bufferIndex;
             std::swap(intBuffer, storeBuffer);
             bufferIndex = 0;
-            pthread_cond_broadcast(&cond);
-            pthread_mutex_unlock(&mutex);
+            swapping = false;
             strm_DashTracer.next_in = intBuffer.begin();
             strm_DashTracer.avail_in = length;
             strm_DashTracer.next_out = tempBuffer.begin();
@@ -72,13 +71,16 @@ void WriteStream(char *input)
     size_t size = strlen(input);
     if (bufferIndex + size >= BUFSIZE)
     {
-        while(bufferIndex != 0)
-        {}
+        while (bufferIndex != 0)
+        {
+        }
     }
-    pthread_mutex_lock(&mutex);
+    while (swapping)
+    {
+    }
+
     memcpy(storeBuffer.begin() + bufferIndex, input, size);
     bufferIndex += size;
-    pthread_mutex_unlock(&mutex);
 }
 
 ///Modified from https://stackoverflow.com/questions/4538586/how-to-compress-a-buffer-with-zlib
