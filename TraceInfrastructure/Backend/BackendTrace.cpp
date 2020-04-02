@@ -2,15 +2,16 @@
 #include <array>
 #include <cstdlib>
 #include <cstring>
-#include <pthread.h>
-#include <stdatomic.h>
+#include <iostream>
+#include <map>
+#include <thread>
 #include <zlib.h>
-using namespace std;
+thread_local FILE *myfile;
 
-FILE *myfile;
+std::map<std::thread::id, bool> initializedMap;
 
 //trace functions
-z_stream strm_DashTracer;
+thread_local z_stream strm_DashTracer;
 
 int TraceCompressionLevel;
 char *TraceFilename;
@@ -18,26 +19,52 @@ char *TraceFilename;
 /// The maximum ammount of bytes to store in a buffer before flushing it.
 /// </summary>
 #define BUFSIZE 128 * 1024
-uint32_t bufferIndex = 0;
-std::array<uint8_t, BUFSIZE> tempBuffer;
-std::array<uint8_t, BUFSIZE> storeBuffer;
-std::array<uint8_t, BUFSIZE> intBuffer;
+#define THREAD_MAX 128
+thread_local uint32_t bufferIndex = 0;
 
+static int nameIndex = 0;
 
-void WriteStream(char *input)
+//std::map<std::thread::id, std::array<uint8_t, BUFSIZE>> tempBuffer;
+//std::map<std::thread::id, std::array<uint8_t, BUFSIZE>> storeBuffer;
+
+thread_local std::array<uint8_t, BUFSIZE> storeBuffer;
+thread_local std::array<uint8_t, BUFSIZE> tempBuffer;
+
+void OpenFile(std::thread::id id)
 {
-    size_t size = strlen(input);
-    if (bufferIndex + size >= BUFSIZE)
+    char *tcl = getenv("TRACE_COMPRESSION");
+    if (tcl != nullptr)
     {
-        BufferData();
+        int l = atoi(tcl);
+        TraceCompressionLevel = l;
     }
-
-    memcpy(storeBuffer.begin() + bufferIndex, input, size);
-    bufferIndex += size;
+    else
+    {
+        TraceCompressionLevel = 5;
+    }
+    strm_DashTracer.zalloc = Z_NULL;
+    strm_DashTracer.zfree = Z_NULL;
+    strm_DashTracer.opaque = Z_NULL;
+    deflateInit(&strm_DashTracer, TraceCompressionLevel);
+    char *tfn = getenv("TRACE_NAME");
+    if (tfn != nullptr)
+    {
+        TraceFilename = tfn;
+    }
+    else
+    {
+        TraceFilename = "raw.trc";
+    }
+    char finalName[128];
+    sprintf(finalName, "%s.%d", TraceFilename, nameIndex++);
+    myfile = fopen(finalName, "wb");
+    WriteStream("TraceVersion:3\n");
 }
 
+bool d = false;
+
 ///Modified from https://stackoverflow.com/questions/4538586/how-to-compress-a-buffer-with-zlib
-void BufferData()
+void BufferData(std::thread::id id)
 {
     strm_DashTracer.next_in = storeBuffer.begin();
     strm_DashTracer.avail_in = bufferIndex;
@@ -58,6 +85,25 @@ void BufferData()
     strm_DashTracer.next_out = tempBuffer.begin();
     strm_DashTracer.avail_out = BUFSIZE;
     bufferIndex = 0;
+}
+
+void WriteStream(char *input)
+{
+    size_t size = strlen(input);
+    auto threadId = std::this_thread::get_id();
+
+    if (!initializedMap[threadId])
+    {
+        initializedMap[threadId] = true;
+        OpenFile(threadId);
+    }
+    if (bufferIndex + size >= BUFSIZE)
+    {
+        BufferData(threadId);
+    }
+
+    memcpy(storeBuffer.begin() + bufferIndex, input, size);
+    bufferIndex += size;
 }
 
 extern "C"
@@ -85,45 +131,22 @@ extern "C"
         WriteStream(fin);
     }
 
-    void OpenFile()
-    {
-        char *tcl = getenv("TRACE_COMPRESSION");
-        if (tcl != nullptr)
-        {
-            int l = atoi(tcl);
-            TraceCompressionLevel = l;
-        }
-        else
-        {
-            TraceCompressionLevel = 5;
-        }
-        strm_DashTracer.zalloc = Z_NULL;
-        strm_DashTracer.zfree = Z_NULL;
-        strm_DashTracer.opaque = Z_NULL;
-        deflateInit(&strm_DashTracer, TraceCompressionLevel);
-        char *tfn = getenv("TRACE_NAME");
-        if (tfn != nullptr)
-        {
-            TraceFilename = tfn;
-        }
-        else
-        {
-            TraceFilename = "raw.trc";
-        }
-        myfile = fopen(TraceFilename, "wb");
-        WriteStream("TraceVersion:3\n");
-    }
-
     void CloseFile()
     {
-        strm_DashTracer.next_in = storeBuffer.begin();
-        strm_DashTracer.avail_in = bufferIndex;
-        strm_DashTracer.next_out = tempBuffer.begin();
-        strm_DashTracer.avail_out = BUFSIZE;
-        deflate(&strm_DashTracer, Z_FINISH);
-        fwrite(tempBuffer.data(), sizeof(uint8_t), BUFSIZE - strm_DashTracer.avail_out, myfile);
+        d = true;
+        for (auto &[id, init] : initializedMap)
+        {
+            BufferData(id);
+            strm_DashTracer.next_in = storeBuffer.begin();
+            strm_DashTracer.avail_in = bufferIndex;
+            strm_DashTracer.next_out = tempBuffer.begin();
+            strm_DashTracer.avail_out = BUFSIZE;
+            deflate(&strm_DashTracer, Z_FINISH);
+            fwrite(tempBuffer.data(), sizeof(uint8_t), BUFSIZE - strm_DashTracer.avail_out, myfile);
 
-        deflateEnd(&strm_DashTracer);
+            deflateEnd(&strm_DashTracer);
+        }
+
         //fclose(myfile); //breaks occasionally for some reason. Likely a glibc error.
     }
 

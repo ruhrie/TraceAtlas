@@ -8,10 +8,6 @@
 /// <param name="input">The string to be written</param>
 void WriteStream(char *input);
 
-/// <summary>
-/// Compresses the trace buffer and writes it to the destination file.
-/// </summary>
-void BufferData();
 #ifdef __cplusplus
 extern "C"
 {
@@ -34,13 +30,6 @@ extern "C"
     /// <param name="func">The function GUID.</param>
     /// <param name="address">A byte array representing a system pointer.</param>
     void WriteAddress(char *inst, int line, int block, uint64_t func, char *address);
-
-    /// <summary>
-    /// Opens the trace file for writing and initializes the compression stream.
-    /// </summary>
-    /// <param name="fileName">The string to be written</param>
-    /// <param name="compressionLevel">The zlib compression level to be used.</param>
-    void OpenFile();
 
     /// <summary>
     /// Flushes the compression stream and closes the trace file.
