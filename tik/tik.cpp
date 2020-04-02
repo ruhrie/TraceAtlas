@@ -1,7 +1,7 @@
 #include "tik/tik.h"
 #include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
-#include "tik/Exceptions.h"
 #include "tik/TikHeader.h"
 #include "tik/Util.h"
 #include <fstream>

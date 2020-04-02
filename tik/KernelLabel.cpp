@@ -1,5 +1,5 @@
+#include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
-#include "tik/Exceptions.h"
 #include "tik/Kernel.h"
 #include "tik/LoopGrammars.h"
 #include <iostream>
@@ -12,7 +12,7 @@ void Kernel::GetKernelLabels()
     //LoopGrammar lg = LoopGrammar::None;
     if (Conditional.size() != 1)
     {
-        throw TikException("Expected a single conditoinal");
+        throw AtlasException("Expected a single conditoinal");
     }
     for (auto cond : Conditional)
     {
@@ -30,7 +30,7 @@ void Kernel::GetKernelLabels()
         }
         else
         {
-            throw TikException("Unrecognized conditional terminator");
+            throw AtlasException("Unrecognized conditional terminator");
         }
 
         if (auto *cmp = dyn_cast<ICmpInst>(condition))
@@ -61,7 +61,7 @@ void Kernel::GetKernelLabels()
                 }
                 else
                 {
-                    throw TikException("Expected a load for non constant value");
+                    throw AtlasException("Expected a load for non constant value");
                 }
                 //now we check what the non constant value is
                 //lg = LoopGrammar::Fixed;
@@ -76,7 +76,7 @@ void Kernel::GetKernelLabels()
             //if this is a load to a value we don't write, it is external. Otherwise it is internal
             //not implemented right now
             //lg = LoopGrammar::Internal;
-            throw TikException("Unrecognized condition parameter");
+            throw AtlasException("Unrecognized condition parameter");
         }
     }
 

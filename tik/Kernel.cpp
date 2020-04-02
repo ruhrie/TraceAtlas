@@ -1,7 +1,7 @@
 #include "tik/Kernel.h"
 #include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
-#include "tik/Exceptions.h"
 #include "tik/InlineStruct.h"
 #include "tik/Metadata.h"
 #include "tik/TikHeader.h"
@@ -55,7 +55,7 @@ Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
     }
     if (reservedNames.find(Name) != reservedNames.end())
     {
-        throw TikException("Kernel Error: Kernel names must be unique!");
+        throw AtlasException("Kernel Error: Kernel names must be unique!");
     }
     reservedNames.insert(Name);
 
@@ -88,11 +88,11 @@ Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
                 {
                     if (cb->getCalledFunction() == f)
                     {
-                        throw TikException("Tik Error: Recursion is unimplemented")
+                        throw AtlasException("Tik Error: Recursion is unimplemented")
                     }
                     if (isa<InvokeInst>(cb))
                     {
-                        throw TikException("Invoke Inst is unsupported")
+                        throw AtlasException("Invoke Inst is unsupported")
                     }
                 }
             }
@@ -178,7 +178,7 @@ Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
         //and set a flag that we succeeded
         Valid = true;
     }
-    catch (TikException &e)
+    catch (AtlasException &e)
     {
         spdlog::error(e.what());
         Cleanup();
@@ -188,7 +188,7 @@ Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
     {
         //GetKernelLabels();
     }
-    catch (TikException &e)
+    catch (AtlasException &e)
     {
         spdlog::warn("Failed to annotate Loop/Memory grammars");
         spdlog::debug(e.what());
@@ -230,7 +230,7 @@ void Kernel::ExportFunctionSignatures()
                 Function *f = callBase->getCalledFunction();
                 if (f == nullptr)
                 {
-                    throw TikException("Null function call (indirect call)");
+                    throw AtlasException("Null function call (indirect call)");
                 }
 
                 auto *funcDec = cast<Function>(TikModule->getOrInsertFunction(callBase->getCalledFunction()->getName(), callBase->getCalledFunction()->getFunctionType()).getCallee());
@@ -252,7 +252,7 @@ void Kernel::UpdateMemory()
         {
             if (GlobalMap[VMap[KernelImports[i]]] == nullptr)
             {
-                throw TikException("Tik Error: External Value not found in GlobalMap.");
+                throw AtlasException("Tik Error: External Value not found in GlobalMap.");
             }
             coveredGlobals.insert(GlobalMap[VMap[KernelImports[i]]]);
             auto b = initBuilder.CreateStore(KernelFunction->arg_begin() + i + 1, GlobalMap[VMap[KernelImports[i]]]);
@@ -275,7 +275,7 @@ void Kernel::UpdateMemory()
                     {
                         if (isa<InvokeInst>(inst))
                         {
-                            throw TikException("Invoke is unsupported");
+                            throw AtlasException("Invoke is unsupported");
                         }
                         IRBuilder<> builder(inst->getNextNode());
                         Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
@@ -536,7 +536,7 @@ void Kernel::RemapNestedKernels()
                         }
                         else
                         {
-                            throw TikException("Tik Error: Unexpected value passed to function");
+                            throw AtlasException("Tik Error: Unexpected value passed to function");
                         }
                     }
                 }
@@ -568,7 +568,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
 
     if (headFunctions.size() != 1)
     {
-        throw TikException("Entrances not on same level");
+        throw AtlasException("Entrances not on same level");
     }
 
     set<BasicBlock *> handledExits;
@@ -639,7 +639,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
 
                                 if (nExits.size() != 1)
                                 {
-                                    throw TikException("Expected exactly one exit fron nested kernel");
+                                    throw AtlasException("Expected exactly one exit fron nested kernel");
                                 }
                                 tar = *nExits.begin();
                                 BasicBlock *newBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
@@ -786,7 +786,7 @@ void Kernel::GetExternalValues(set<BasicBlock *> &blocks)
                 }
                 else
                 {
-                    throw TikException("Non-instruction user detected");
+                    throw AtlasException("Non-instruction user detected");
                 }
             }
         }
@@ -849,7 +849,7 @@ vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blo
             bool valid1 = find(blocks.begin(), blocks.end(), suc1) != blocks.end();
             if (!(valid0 || valid1))
             {
-                throw TikException("Tik Error: Branch instruction with no valid successors reached");
+                throw AtlasException("Tik Error: Branch instruction with no valid successors reached");
             }
             Value *c0 = nullptr;
             Value *c1 = nullptr;
@@ -890,11 +890,11 @@ vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blo
     }
     else
     {
-        throw TikException("Tik Error: Not Implemented");
+        throw AtlasException("Tik Error: Not Implemented");
     }
     if (result.empty())
     {
-        throw TikException("Tik Error: Return instruction tree must have at least one result");
+        throw AtlasException("Tik Error: Return instruction tree must have at least one result");
     }
     return result;
 }
@@ -1013,7 +1013,7 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
             {
                 //both external and internal, so maybe an entrance
                 //ignore for the moment, worst case we will have no entrances
-                //throw TikException("Mixed function uses, not implemented");
+                //throw AtlasException("Mixed function uses, not implemented");
             }
             else if (!exte && inte)
             {
@@ -1022,7 +1022,7 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
             else
             {
                 //neither internal or external, throw error
-                throw TikException("Function with no internal or external uses");
+                throw AtlasException("Function with no internal or external uses");
             }
         }
         else
@@ -1068,7 +1068,7 @@ void Kernel::GetEntrances(set<BasicBlock *> &blocks)
     }
     if (Entrances.empty())
     {
-        throw TikException("Kernel Exception: tik requires a body entrance");
+        throw AtlasException("Kernel Exception: tik requires a body entrance");
     }
 }
 
@@ -1083,7 +1083,7 @@ void Kernel::SanityChecks()
         {
             if (BB != Init)
             {
-                throw TikException("Tik Sanity Failure: No predecessors");
+                throw AtlasException("Tik Sanity Failure: No predecessors");
             }
         }
     }
@@ -1129,13 +1129,13 @@ void Kernel::GetExits(set<BasicBlock *> &blocks)
     }
     if (exitId == 0)
     {
-        throw TikException("Tik Error: tik found no kernel exits")
+        throw AtlasException("Tik Error: tik found no kernel exits")
     }
     if (exitId != 1)
     {
         //removing this is exposing an llvm bug: corrupted double-linked list
         //we just won't support it for the moment
-        //throw TikException("Tik Error: tik only supports single exit kernels")
+        //throw AtlasException("Tik Error: tik only supports single exit kernels")
     }
 }
 
@@ -1165,7 +1165,7 @@ std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStruct
     {
         headerString = getCType(KernelFunction->getReturnType(), AllStructures) + " ";
     }
-    catch (TikException &e)
+    catch (AtlasException &e)
     {
         spdlog::error(e.what());
         headerString = "TypeNotSupported ";
@@ -1185,7 +1185,7 @@ std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStruct
         {
             type = getCType(ai->getType(), AllStructures);
         }
-        catch (TikException &e)
+        catch (AtlasException &e)
         {
             spdlog::error(e.what());
             type = "TypeNotSupported";
@@ -1396,7 +1396,7 @@ void Kernel::CopyOperand(llvm::User *inst)
         }
         else if (auto *gv = dyn_cast<GlobalValue>(v))
         {
-            throw TikException("Tik Error: Non variable global reference");
+            throw AtlasException("Tik Error: Non variable global reference");
         }
         else if (auto *con = dyn_cast<Constant>(v))
         {
@@ -1413,9 +1413,10 @@ void Kernel::InlineFunctions(set<int64_t> &blocks)
     while (change)
     {
         change = false;
-        for (auto &fi : *KernelFunction)
+        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
         {
-            for (auto bi = fi.begin(); bi != fi.end(); bi++)
+            auto baseBlock = cast<BasicBlock>(fi);
+            for (auto bi = fi->begin(); bi != fi->end(); bi++)
             {
                 if (auto *ci = dyn_cast<CallInst>(bi))
                 {
@@ -1423,8 +1424,10 @@ void Kernel::InlineFunctions(set<int64_t> &blocks)
                     {
                         continue;
                     }
+                    auto id = GetBlockID(baseBlock);
                     auto info = InlineFunctionInfo();
                     auto r = InlineFunction(ci, info);
+                    SetBlockID(baseBlock, id);
                     if (r)
                     {
                         change = true;

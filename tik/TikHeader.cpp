@@ -1,6 +1,6 @@
 #include "tik/TikHeader.h"
+#include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
-#include "tik/Exceptions.h"
 #include "tik/Kernel.h"
 #include <cstring>
 #include <iostream>
@@ -135,7 +135,7 @@ std::string GetTikStructures(const std::vector<Kernel *> &kernels, std::set<llvm
             {
                 varDec = getCType(structure->getElementType(i), AllStructures);
             }
-            catch (TikException &e)
+            catch (AtlasException &e)
             {
                 spdlog::error(e.what());
                 varDec = "TypeNotSupported";
@@ -206,7 +206,7 @@ std::string getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStr
     {
         return getCType(elem, AllStructures);
     }
-    catch (TikException &e)
+    catch (AtlasException &e)
     {
         spdlog::error(e.what());
         return "TypeNotSupported";
@@ -308,7 +308,7 @@ std::string getCVectorType(llvm::Type *elem, std::set<llvm::StructType *> &AllSt
         return "__m512i";
     }
 
-    throw TikException("Vector type bitwidth not supported.");
+    throw AtlasException("Vector type bitwidth not supported.");
     return "VectorSizeNotSupported";
 }
 
@@ -340,15 +340,15 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
     }
     if (param->isPPC_FP128Ty())
     {
-        throw TikException("PPC_FP128Ty is not supported.")
+        throw AtlasException("PPC_FP128Ty is not supported.")
     }
     if (param->isFloatingPointTy())
     {
-        throw TikException("This floating point type is not supported.")
+        throw AtlasException("This floating point type is not supported.")
     }
     if (param->isX86_MMXTy())
     {
-        throw TikException("This MMX type is not supported.")
+        throw AtlasException("This MMX type is not supported.")
     }
     if (param->isFPOrFPVectorTy())
     {
@@ -399,7 +399,7 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
             std::string structName = (*structureArg)->getName();
             return "struct " + structName;
         }
-        throw TikException("Could not find structure argument in AllStructures vector.");
+        throw AtlasException("Could not find structure argument in AllStructures vector.");
     }
     if (param->isFunctionTy())
     {
@@ -419,5 +419,5 @@ std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructu
         return type;
     }
 
-    throw TikException("Unrecognized argument type is not supported for header generation.");
+    throw AtlasException("Unrecognized argument type is not supported for header generation.");
 }

@@ -27,6 +27,7 @@ if(${ENABLE_LINTER_ERROR})
         --warnings-as-errors=*;
         --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type;
         )
+    add_compile_options(-Werror)
 else()
     set(CMAKE_CXX_CLANG_TIDY 
         clang-tidy-9;
@@ -84,9 +85,9 @@ foreach (SOURCE_FILE ${ALL_SOURCE_FILES})
 endforeach ()
 
 add_custom_target(
-        format
-        COMMAND /usr/bin/clang-format-9
-        -style=file
-        -i
-        ${ALL_SOURCE_FILES}
+    format
+    COMMAND /usr/bin/clang-format-9
+    -style=file
+    -i
+    ${ALL_SOURCE_FILES}
 )
