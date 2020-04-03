@@ -2,16 +2,15 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/// <summary>
-/// Writes the input string to the trace buffer.
-/// </summary>
-/// <param name="input">The string to be written</param>
-void WriteStream(char *input);
-
 #ifdef __cplusplus
 extern "C"
 {
 #endif
+    /// <summary>
+    /// Writes the input string to the trace buffer.
+    /// </summary>
+    /// <param name="input">The string to be written</param>
+    void WriteStream(char *input);
     /// <summary>
     /// Writes the input instruction and line, block, and function UIDs to the trace buffer.
     /// </summary>
