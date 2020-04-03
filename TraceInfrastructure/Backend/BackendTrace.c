@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <zlib.h>
 
 #define THREAD_MAX 127
@@ -146,13 +147,19 @@ void CloseFile()
 void LoadDump(void *address)
 {
     char fin[128];
-    sprintf(fin, "LoadAddress:%#lX\n", (uint64_t)address);
+    struct timespec tr;
+    clock_gettime(CLOCK_MONOTONIC, &tr);
+    uint64_t t = tr.tv_sec * 1000000000 + tr.tv_nsec;
+    sprintf(fin, "LoadAddress:%#lX:%#lX\n", (uint64_t)address, t);
     WriteStream(fin);
 }
 void DumpLoadAddrValue(void *MemValue, int size)
 {
     char fin[128];
-    sprintf(fin, "LoadAddress:%#lX\n", (uint64_t)MemValue);
+    struct timespec tr;
+    clock_gettime(CLOCK_MONOTONIC, &tr);
+    uint64_t t = tr.tv_sec * 1000000000 + tr.tv_nsec;
+    sprintf(fin, "LoadAddress:%#lX:%#lX\n", (uint64_t)MemValue, t);
     WriteStream(fin);
     uint8_t *bitwisePrint = (uint8_t *)MemValue;
     sprintf(fin, "size:%d, LoadMemValue:", size);
@@ -168,14 +175,20 @@ void DumpLoadAddrValue(void *MemValue, int size)
 void StoreDump(void *address)
 {
     char fin[128];
-    sprintf(fin, "StoreAddress:%#lX\n", (uint64_t)address);
+    struct timespec tr;
+    clock_gettime(CLOCK_MONOTONIC, &tr);
+    uint64_t t = tr.tv_sec * 1000000000 + tr.tv_nsec;
+    sprintf(fin, "StoreAddress:%#lX:%#lX\n", (uint64_t)address, t);
     WriteStream(fin);
 }
 
 void DumpStoreAddrValue(void *MemValue, int size)
 {
     char fin[128];
-    sprintf(fin, "StoreAddress:%#lX\n", (uint64_t)MemValue);
+    struct timespec tr;
+    clock_gettime(CLOCK_MONOTONIC, &tr);
+    uint64_t t = tr.tv_sec * 1000000000 + tr.tv_nsec;
+    sprintf(fin, "StoreAddress:%#lX:%#lX\n", (uint64_t)MemValue, t);
     WriteStream(fin);
     uint8_t *bitwisePrint = (uint8_t *)MemValue;
     sprintf(fin, "size:%d, StoreMemValue:", size);
