@@ -151,6 +151,6 @@ static void ProcessTraces(const std::vector<std::string> &TraceFiles, const std:
     {
         ProcessTrace(trace, LogicFunction, barPrefix, noBar);
         reset();
-        spdlog::info("Completed trace {d} of {d}", i++, TraceFiles.size());
+        spdlog::info("Completed trace {:d} of {:d}", ++i, TraceFiles.size());
     }
 }
