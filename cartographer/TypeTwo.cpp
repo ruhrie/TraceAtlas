@@ -58,6 +58,20 @@ namespace TypeTwo
             a++;
         }
     }
+    void Reset()
+    {
+        openBlocks.clear();
+        for (uint32_t i = 0; i < blockCount; i++)
+        {
+            kernelMap[i] = set<int>();
+            openCount[i] = 0;
+        }
+        for (uint32_t i = 0; i < kernels.size(); i++)
+        {
+            blocks[i] = set<int64_t>();
+            kernelStarts[i] = -1;
+        }
+    }
     void Process(std::string &key, std::string &value)
     {
         if (key == "BBEnter")

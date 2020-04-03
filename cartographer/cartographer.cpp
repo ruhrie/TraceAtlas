@@ -132,12 +132,12 @@ int main(int argc, char **argv)
         }
 
         TypeTwo::Setup(M, type1Kernels);
-        ProcessTrace(inputTraces[0], &TypeTwo::Process, "Detecting type 2 kernels", noBar);
+        ProcessTraces(inputTraces, &TypeTwo::Process, &TypeTwo::Reset, "Detecting type 2 kernels", noBar);
         auto type2Kernels = TypeTwo::Get();
         spdlog::info("Detected " + to_string(type2Kernels.size()) + " type 2 kernels");
 
         TypeTwo::Setup(M, type2Kernels);
-        ProcessTrace(inputTraces[0], &TypeTwo::Process, "Detecting type 2.5 kernels", noBar);
+        ProcessTraces(inputTraces, &TypeTwo::Process, &TypeTwo::Reset, "Detecting type 2.5 kernels", noBar);
         auto type25Kernels = TypeTwo::Get();
         spdlog::info("Detected " + to_string(type25Kernels.size()) + " type 2.5 kernels");
 
