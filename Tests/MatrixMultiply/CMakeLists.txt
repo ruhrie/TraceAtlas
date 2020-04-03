@@ -9,7 +9,7 @@ set_tests_properties(matmul_trace PROPERTIES
     FIXTURES_SETUP matmul_trace_fixture
     )
 
-add_test(NAME matmul_cartographer COMMAND cartographer -i ${CMAKE_CURRENT_BINARY_DIR}/raw.trc -b $<TARGET_FILE:matmul> -k ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -p ${CMAKE_CURRENT_BINARY_DIR}/pig.json)
+add_test(NAME matmul_cartographer COMMAND cartographer ${CMAKE_CURRENT_BINARY_DIR}/raw.trc.0 -b $<TARGET_FILE:matmul> -k ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -p ${CMAKE_CURRENT_BINARY_DIR}/pig.json)
 set_tests_properties(matmul_cartographer PROPERTIES 
     DEPENDS matmul_trace
     FIXTURES_REQUIRED matmul_trace_fixture

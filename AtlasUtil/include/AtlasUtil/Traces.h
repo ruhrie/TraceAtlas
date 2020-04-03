@@ -5,6 +5,7 @@
 #include <spdlog/spdlog.h>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <zlib.h>
 
 #define BLOCK_SIZE 4096
@@ -140,4 +141,16 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
     inflateEnd(&strm);
     inputTrace.close();
     std::cout << "\e[?25h";
+}
+
+static void ProcessTraces(const std::vector<std::string> &TraceFiles, const std::function<void(std::string &, std::string &)> &LogicFunction, const std::function<void()> &reset, const std::string &barPrefix = "", bool noBar = false)
+{
+    //this will be synchronous at first, until vcpkg updates indicators
+    int i = 0;
+    for (const std::string &trace : TraceFiles)
+    {
+        ProcessTrace(trace, LogicFunction, barPrefix, noBar);
+        reset();
+        spdlog::info("Completed trace {d} of {d}", i++, TraceFiles.size());
+    }
 }

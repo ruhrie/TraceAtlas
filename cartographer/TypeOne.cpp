@@ -1,5 +1,6 @@
 #include "cartographer.h"
 #include <algorithm>
+#include <atomic>
 #include <map>
 #include <queue>
 #include <set>
@@ -10,7 +11,7 @@ using namespace std;
 namespace TypeOne
 {
     std::map<int64_t, std::map<int64_t, uint64_t>> blockMap;
-    std::map<int64_t, uint64_t> blockCount;
+    std::map<int64_t, atomic<uint64_t>> blockCount;
     std::deque<int64_t> priorBlocks;
     uint32_t radius = 5;
     void Process(std::string &key, std::string &value)
@@ -134,5 +135,10 @@ namespace TypeOne
             result.insert(it);
         }
         return result;
+    }
+
+    void Reset()
+    {
+        priorBlocks.clear();
     }
 } // namespace TypeOne
