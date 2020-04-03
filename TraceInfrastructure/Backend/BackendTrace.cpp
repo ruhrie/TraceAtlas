@@ -1,17 +1,18 @@
 #include "Backend/BackendTrace.h"
-#include <array>
-#include <cstdlib>
-#include <cstring>
-#include <iostream>
-#include <map>
-#include <thread>
+#include <stdatomic.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <zlib.h>
-thread_local FILE *myfile;
 
-std::map<std::thread::id, bool> initializedMap;
+#define THREAD_MAX 127
+
+//std::array<FILE *, THREAD_MAX> myfiles;
+FILE *myfiles[THREAD_MAX];
 
 //trace functions
-thread_local z_stream strm_DashTracer;
+//std::array<z_stream, THREAD_MAX> strm_DashTracers;
+z_stream strm_DashTracers[THREAD_MAX];
 
 int TraceCompressionLevel;
 char *TraceFilename;
@@ -19,18 +20,21 @@ char *TraceFilename;
 /// The maximum ammount of bytes to store in a buffer before flushing it.
 /// </summary>
 #define BUFSIZE 128 * 1024
-#define THREAD_MAX 128
-thread_local uint32_t bufferIndex = 0;
 
-static int nameIndex = 0;
+uint32_t bufferIndeces[THREAD_MAX];
 
-//std::map<std::thread::id, std::array<uint8_t, BUFSIZE>> tempBuffer;
-//std::map<std::thread::id, std::array<uint8_t, BUFSIZE>> storeBuffer;
+atomic_char nameIndex = 0;
 
-thread_local std::array<uint8_t, BUFSIZE> storeBuffer;
-thread_local std::array<uint8_t, BUFSIZE> tempBuffer;
+//std::array<std::array<uint8_t, BUFSIZE>, THREAD_MAX> storeBuffers;
+uint8_t storeBuffers[THREAD_MAX][BUFSIZE];
+//std::array<std::array<uint8_t, BUFSIZE>, THREAD_MAX> tempBuffers;
+uint8_t tempBuffers[THREAD_MAX][BUFSIZE];
 
-void OpenFile(std::thread::id id)
+thread_local uint64_t bid = 0;
+
+thread_local int8_t threadId = -1;
+
+void OpenFile()
 {
     char *tcl = getenv("TRACE_COMPRESSION");
     if (tcl != nullptr)
@@ -42,10 +46,10 @@ void OpenFile(std::thread::id id)
     {
         TraceCompressionLevel = 5;
     }
-    strm_DashTracer.zalloc = Z_NULL;
-    strm_DashTracer.zfree = Z_NULL;
-    strm_DashTracer.opaque = Z_NULL;
-    deflateInit(&strm_DashTracer, TraceCompressionLevel);
+    strm_DashTracers[threadId].zalloc = Z_NULL;
+    strm_DashTracers[threadId].zfree = Z_NULL;
+    strm_DashTracers[threadId].opaque = Z_NULL;
+    deflateInit(&strm_DashTracers[threadId], TraceCompressionLevel);
     char *tfn = getenv("TRACE_NAME");
     if (tfn != nullptr)
     {
@@ -56,54 +60,50 @@ void OpenFile(std::thread::id id)
         TraceFilename = "raw.trc";
     }
     char finalName[128];
-    sprintf(finalName, "%s.%d", TraceFilename, nameIndex++);
-    myfile = fopen(finalName, "wb");
+    sprintf(finalName, "%s.%d", TraceFilename, threadId);
+    myfiles[threadId] = fopen(finalName, "wb");
     WriteStream("TraceVersion:3\n");
 }
 
-bool d = false;
-
 ///Modified from https://stackoverflow.com/questions/4538586/how-to-compress-a-buffer-with-zlib
-void BufferData(std::thread::id id)
+void BufferData(int8_t index = threadId)
 {
-    strm_DashTracer.next_in = storeBuffer.begin();
-    strm_DashTracer.avail_in = bufferIndex;
-    strm_DashTracer.next_out = tempBuffer.begin();
-    strm_DashTracer.avail_out = BUFSIZE;
-    while (strm_DashTracer.avail_in != 0)
+    strm_DashTracers[index].next_in = storeBuffers[index];
+    strm_DashTracers[index].avail_in = bufferIndeces[index];
+    strm_DashTracers[index].next_out = tempBuffers[index];
+    strm_DashTracers[index].avail_out = BUFSIZE;
+    while (strm_DashTracers[index].avail_in != 0)
     {
-        deflate(&strm_DashTracer, Z_NO_FLUSH);
+        deflate(&strm_DashTracers[index], Z_NO_FLUSH);
 
-        if (strm_DashTracer.avail_out == 0)
+        if (strm_DashTracers[index].avail_out == 0)
         {
-            fwrite(tempBuffer.data(), sizeof(uint8_t), BUFSIZE - strm_DashTracer.avail_out, myfile);
-            strm_DashTracer.next_out = tempBuffer.begin();
-            strm_DashTracer.avail_out = BUFSIZE;
+            fwrite(tempBuffers[index], sizeof(uint8_t), BUFSIZE - strm_DashTracers[index].avail_out, myfiles[index]);
+            strm_DashTracers[index].next_out = tempBuffers[index];
+            strm_DashTracers[index].avail_out = BUFSIZE;
         }
     }
-    fwrite(tempBuffer.data(), sizeof(uint8_t), BUFSIZE - strm_DashTracer.avail_out, myfile);
-    strm_DashTracer.next_out = tempBuffer.begin();
-    strm_DashTracer.avail_out = BUFSIZE;
-    bufferIndex = 0;
+    fwrite(tempBuffers[index], sizeof(uint8_t), BUFSIZE - strm_DashTracers[index].avail_out, myfiles[index]);
+    strm_DashTracers[index].next_out = tempBuffers[index];
+    strm_DashTracers[index].avail_out = BUFSIZE;
+    bufferIndeces[index] = 0;
 }
 
 void WriteStream(char *input)
 {
     size_t size = strlen(input);
-    auto threadId = std::this_thread::get_id();
-
-    if (!initializedMap[threadId])
+    if (threadId == -1)
     {
-        initializedMap[threadId] = true;
-        OpenFile(threadId);
+        threadId = nameIndex++;
+        OpenFile();
     }
-    if (bufferIndex + size >= BUFSIZE)
+    if (bufferIndeces[threadId] + size >= BUFSIZE)
     {
-        BufferData(threadId);
+        BufferData();
     }
 
-    memcpy(storeBuffer.begin() + bufferIndex, input, size);
-    bufferIndex += size;
+    memcpy(storeBuffers[threadId] + bufferIndeces[threadId], input, size);
+    bufferIndeces[threadId] += size;
 }
 
 extern "C"
@@ -133,21 +133,18 @@ extern "C"
 
     void CloseFile()
     {
-        d = true;
-        for (auto &[id, init] : initializedMap)
+        for (int i = 0; i < nameIndex; i++)
         {
-            BufferData(id);
-            strm_DashTracer.next_in = storeBuffer.begin();
-            strm_DashTracer.avail_in = bufferIndex;
-            strm_DashTracer.next_out = tempBuffer.begin();
-            strm_DashTracer.avail_out = BUFSIZE;
-            deflate(&strm_DashTracer, Z_FINISH);
-            fwrite(tempBuffer.data(), sizeof(uint8_t), BUFSIZE - strm_DashTracer.avail_out, myfile);
-
-            deflateEnd(&strm_DashTracer);
+            BufferData(i);
+            strm_DashTracers[i].next_in = storeBuffers[i];
+            strm_DashTracers[i].avail_in = bufferIndeces[i];
+            strm_DashTracers[i].next_out = tempBuffers[i];
+            strm_DashTracers[i].avail_out = BUFSIZE;
+            deflate(&strm_DashTracers[i], Z_FINISH);
+            fwrite(tempBuffers[i], sizeof(uint8_t), BUFSIZE - strm_DashTracers[i].avail_out, myfiles[i]);
+            deflateEnd(&strm_DashTracers[i]);
+            fclose(myfiles[i]);
         }
-
-        //fclose(myfile); //breaks occasionally for some reason. Likely a glibc error.
     }
 
     void LoadDump(void *address)
