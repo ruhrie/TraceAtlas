@@ -400,6 +400,58 @@ llvm::Operator* Kernel::CloneOperand(llvm::Value* inputOp)
     return nullptr;
 }
 */
+void Kernel::RemapOperands(Operator* op, Instruction* inst)
+{
+    for (unsigned int operand = 0; operand < op->getNumOperands(); operand++)
+    {
+        if (auto glob = dyn_cast<GlobalVariable>(op->getOperand(operand))) // if this arg is global
+        {
+            //PrintVal(glob);
+            /*if (VMap[cast<Value>(glob)])
+            {
+                //CopyGlobals(glob->get);
+                for (int i = 0; i < glob->getNumUses(); i++)
+                {
+                    CopyGlobals(glob->getOperandUse());
+                }
+            }*/
+            if (auto con = dyn_cast<Constant>(glob)) // if this is a constant
+            {
+                //PrintVal(op);
+                if (auto gepInst = dyn_cast<GEPOperator>(op))
+                {
+                    IRBuilder OpBuilder(inst);
+                    vector<Value *> idxList;
+                    for (auto idx = gepInst->idx_begin(); idx != gepInst->idx_end(); idx++)
+                    {
+                        auto indexValue = cast<Value>(idx);
+                        //PrintVal(indexValue);
+                        idxList.push_back(indexValue);
+                    }
+                    //ArrayRef idxArray = ArrayRef(idxList);
+                    Value *ptr;
+                    if (Value *gepPtr = VMap[gepInst->getPointerOperand()])
+                    {
+                        PrintVal(gepPtr);
+                        ptr = gepPtr;
+                    }
+                    else
+                    {
+                        ptr = gepInst->getPointerOperand();
+                    }
+                    Value *newGep = OpBuilder.CreateGEP(ptr, idxList, gepInst->getName());
+                    //PrintVal(newGep);
+
+                    VMap[cast<Value>(op)] = cast<Value>(newGep);
+                }
+            }
+        }
+        else if (auto newOp = dyn_cast<Operator>(op->getOperand(operand)))
+        {
+            RemapOperands(newOp, inst);
+        }
+    }
+}
 void Kernel::Remap()
 {
     for (auto &BB : *KernelFunction)
@@ -410,58 +462,10 @@ void Kernel::Remap()
             for (unsigned int arg = 0; arg < inst->getNumOperands(); arg++)
             {
                 Value *inputOp = inst->getOperand(arg);
-                if (auto op = dyn_cast<Operator>(inputOp)) // if this inst arg is an operand (like a GEP)
+                if (auto op = dyn_cast<Operator>(inputOp)) 
                 {
-                    for (unsigned int operand = 0; operand < op->getNumOperands(); operand++)
-                    {
-                        if (auto glob = dyn_cast<GlobalVariable>(op->getOperand(operand))) // if this arg is global
-                        {
-                            PrintVal(glob);
-                            //PrintVal(glob->getParent());
-                            if (auto con = dyn_cast<Constant>(glob)) // if this is a constant
-                            {
-                                PrintVal(inputOp);
-                                if (auto gepInst = dyn_cast<GEPOperator>(inputOp))
-                                {
-                                    IRBuilder OpBuilder(inst);
-                                    vector<Value *> idxList;
-                                    for (auto idx = gepInst->idx_begin(); idx != gepInst->idx_end(); idx++)
-                                    {
-                                        auto indexValue = cast<Value>(idx);
-                                        PrintVal(indexValue);
-                                        idxList.push_back(indexValue);
-                                    }
-                                    //ArrayRef idxArray = ArrayRef(idxList);
-                                    Value *ptr;
-                                    if (Value *gepPtr = VMap[gepInst->getPointerOperand()])
-                                    {
-                                        ptr = gepPtr;
-                                    }
-                                    else
-                                    {
-                                        ptr = gepInst->getPointerOperand();
-                                    }
-                                    Value *newGep = OpBuilder.CreateGEP(ptr, idxList, gepInst->getName());
-                                    PrintVal(newGep);
-
-                                    // we need to replace the entire GEP with a remapped constant
-                                    /*
-                                    llvm::Constant* remapped = cast<Constant>(VMap[cast<llvm::Value>(con)]);
-                                    // construct the new GEP
-                                    llvm::GEPOperator* = cast<llvm::GEPOperator>(llvm::GetElementPtrInst::Create(op->getType(), op->getOperand()))
-                                    // replace the original operator in the instruction with the new one
-                                    */
-                                    VMap[inputOp] = cast<Value>(newGep);
-                                }
-                            }
-                        }
-                        else if (auto newOp = dyn_cast<Operator>(op->getOperand(operand)))
-                        {
-                            // recurse and do something with the new op...
-                        }
-                    }
+                    RemapOperands(op, inst);
                 }
-                //CloneOperand(inst->getOperand(arg));
             }
             RemapInstruction(inst, VMap, llvm::RF_None);
         }
@@ -1216,6 +1220,7 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
         // if we are a global, copy it
         if (auto *gv = dyn_cast<GlobalVariable>(i))
         {
+            PrintVal(gv);
             Module *m = gv->getParent();
             if (m != TikModule)
             {
@@ -1265,7 +1270,9 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
                         newGlobal->setComdat(DC);
                     }
                     globalDeclaractionMap[gv] = newGlobal;
+                    PrintVal(newGlobal);
                     VMap[gv] = newGlobal;
+                    //gv->removeFromParent();
                     for (auto user : gv->users())
                     {
                         if (auto *inst = dyn_cast<llvm::Instruction>(user))
@@ -1284,16 +1291,17 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
         {
             CopyOperand(gop);
         }
+        else if (llvm::BitCastOperator* op = dyn_cast<llvm::BitCastOperator>(i))
+        {
+            CopyOperand(op);
+            //std::cout << "This is a bitcast operator." << std::endl;
+        }
         /*// if we are anything else, we don't know what to do
         else if (GlobalValue *gv = dyn_cast<GlobalValue>(i))
         {
             spdlog::warn("Non variable global reference"); //basically this is a band aid. Needs some more help
         }
-        else if (llvm::BitCastOperator* op = dyn_cast<llvm::BitCastOperator>(i))
-        {
-            CopyOperand(op);
-            std::cout << "This is a bitcast operator." << std::endl;
-        }
+        
         else if (llvm::PtrToIntOperator* op = dyn_cast<llvm::PtrToIntOperator>(i))
         {
             std::cout << "This is a PtrToInt operator." << std::endl;
@@ -1317,6 +1325,8 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
         }*/
         else if (isa<Operator>(i))
         {
+            llvm::Value* test = cast<Value>(i);
+            PrintVal(test);
             spdlog::warn("Function argument operand type not supported for global copying."); //basically this is a band aid. Needs some more help
         }
     }
@@ -1329,6 +1339,7 @@ void Kernel::CopyOperand(llvm::User *inst)
         Value *v = inst->getOperand(j);
         if (auto *gv = dyn_cast<GlobalVariable>(v))
         {
+            PrintVal(gv);
             Module *m = gv->getParent();
             if (m != TikModule)
             {
@@ -1336,7 +1347,7 @@ void Kernel::CopyOperand(llvm::User *inst)
                 if (globalDeclaractionMap.find(gv) == globalDeclaractionMap.end())
                 {
                     // iterate through all internal operators of this global
-                    PrintVal(gv);
+                    //PrintVal(gv);
                     if (gv->hasInitializer())
                     {
                         llvm::Constant *value = gv->getInitializer();
@@ -1380,7 +1391,14 @@ void Kernel::CopyOperand(llvm::User *inst)
                         newGlobal->setComdat(DC);
                     }
                     globalDeclaractionMap[gv] = newGlobal;
+                    PrintVal(newGlobal);
                     VMap[gv] = newGlobal;
+                    if ( (gv->getNumUses() != 0) && (gv->getParent() != TikModule) )
+                    {
+                        PrintVal(gv);
+                        //gv->removeFromParent();
+                    }
+                    //gv->removeFromParent();
                     for (auto user : gv->users())
                     {
                         if (auto *inst = dyn_cast<llvm::Instruction>(user))

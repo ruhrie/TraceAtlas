@@ -29,10 +29,10 @@ if(${ENABLE_LINTER_ERROR})
         )
     add_compile_options(-Werror)
 else()
-    set(CMAKE_CXX_CLANG_TIDY 
-        clang-tidy-9;
-        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type;
-        )
+#    set(CMAKE_CXX_CLANG_TIDY 
+#        clang-tidy-9;
+#        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type;
+#        )
 endif()
 
 add_subdirectory("AtlasUtil")
