@@ -432,7 +432,7 @@ void Kernel::RemapOperands(Operator* op, Instruction* inst)
                     Value *ptr;
                     if (Value *gepPtr = VMap[gepInst->getPointerOperand()])
                     {
-                        PrintVal(gepPtr);
+                        //PrintVal(gepPtr);
                         ptr = gepPtr;
                     }
                     else
@@ -446,9 +446,22 @@ void Kernel::RemapOperands(Operator* op, Instruction* inst)
                 }
             }
         }
+        else if (auto newGlob = dyn_cast<GlobalVariable>(op->getOperand(operand)))
+        {
+            PrintVal(newGlob);
+            CopyOperand(newGlob);
+        }
         else if (auto newOp = dyn_cast<Operator>(op->getOperand(operand)))
         {
-            RemapOperands(newOp, inst);
+            //PrintVal(newOp);
+            if (auto newInst = dyn_cast<Instruction>(op))
+            {
+                RemapOperands(newOp, newInst);
+            }
+            else
+            {
+                RemapOperands(newOp, inst);
+            }
         }
     }
 }
@@ -1220,7 +1233,7 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
         // if we are a global, copy it
         if (auto *gv = dyn_cast<GlobalVariable>(i))
         {
-            PrintVal(gv);
+            //PrintVal(gv);
             Module *m = gv->getParent();
             if (m != TikModule)
             {
@@ -1270,7 +1283,7 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
                         newGlobal->setComdat(DC);
                     }
                     globalDeclaractionMap[gv] = newGlobal;
-                    PrintVal(newGlobal);
+                    //PrintVal(newGlobal);
                     VMap[gv] = newGlobal;
                     //gv->removeFromParent();
                     for (auto user : gv->users())
@@ -1296,6 +1309,15 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
             CopyOperand(op);
             //std::cout << "This is a bitcast operator." << std::endl;
         }
+        else if (llvm::FPMathOperator* op = dyn_cast<llvm::FPMathOperator>(i))
+        {
+            CopyOperand(op);
+            std::cout << "This is an FPMath operator." << std::endl;
+        }
+        else if (llvm::LoadInst* load = dyn_cast<LoadInst>(i))
+        {
+            CopyOperand(load);
+        }
         /*// if we are anything else, we don't know what to do
         else if (GlobalValue *gv = dyn_cast<GlobalValue>(i))
         {
@@ -1310,11 +1332,7 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
         {
             std::cout << "This is a Zext operator." << std::endl;
         }
-        else if (llvm::FPMathOperator* op = dyn_cast<llvm::FPMathOperator>(i))
-        {
-            CopyOperand(op);
-            std::cout << "This is an FPMath operator." << std::endl;
-        }
+
         else if (llvm::OverflowingBinaryOperator* op = dyn_cast<llvm::OverflowingBinaryOperator>(i))
         {
             std::cout << "This is an OF binary operator." << std::endl;
@@ -1325,8 +1343,8 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
         }*/
         else if (isa<Operator>(i))
         {
-            llvm::Value* test = cast<Value>(i);
-            PrintVal(test);
+            //llvm::Value* test = cast<Value>(i);
+            //PrintVal(test);
             spdlog::warn("Function argument operand type not supported for global copying."); //basically this is a band aid. Needs some more help
         }
     }
@@ -1337,9 +1355,10 @@ void Kernel::CopyOperand(llvm::User *inst)
     for (uint32_t j = 0; j < inst->getNumOperands(); j++)
     {
         Value *v = inst->getOperand(j);
+        //PrintVal(v);
         if (auto *gv = dyn_cast<GlobalVariable>(v))
         {
-            PrintVal(gv);
+            //PrintVal(gv);
             Module *m = gv->getParent();
             if (m != TikModule)
             {
@@ -1353,6 +1372,7 @@ void Kernel::CopyOperand(llvm::User *inst)
                         llvm::Constant *value = gv->getInitializer();
                         for (uint32_t iter = 0; iter < value->getNumOperands(); iter++)
                         {
+                            PrintVal(value);
                             auto *internal = cast<llvm::User>(value->getOperand(iter));
                             CopyOperand(internal);
                         }
@@ -1395,7 +1415,7 @@ void Kernel::CopyOperand(llvm::User *inst)
                     VMap[gv] = newGlobal;
                     if ( (gv->getNumUses() != 0) && (gv->getParent() != TikModule) )
                     {
-                        PrintVal(gv);
+                        //PrintVal(gv);
                         //gv->removeFromParent();
                     }
                     //gv->removeFromParent();
@@ -1409,18 +1429,89 @@ void Kernel::CopyOperand(llvm::User *inst)
                             }
                         }
                     }
+                    // check for arguments within the global variable
+                    for (unsigned int i = 0; i < newGlobal->getNumOperands(); i++)
+                    {
+                        PrintVal(newGlobal->getOperand(i));
+                        if (auto newOp = dyn_cast<GlobalVariable>(newGlobal->getOperand(i)))
+                        {
+                            PrintVal(newOp);
+                            CopyOperand(newOp);
+                        }
+                        /*else if (auto newOp = dyn_cast<GlobalValue>(newGlobal->getOperand(i)))
+                        {
+                            PrintVal(newOp);
+                            CopyOperand(newOp);
+                        }*/
+                        else if (auto newOp = dyn_cast<Constant>(newGlobal->getOperand(i)))
+                        {
+                            PrintVal(newOp);
+                            CopyOperand(newOp);
+                        }
+                    }
                 }
             }
         }
         else if (auto *gv = dyn_cast<GlobalValue>(v))
         {
+            PrintVal(gv);
             throw AtlasException("Tik Error: Non variable global reference");
         }
         else if (auto *con = dyn_cast<Constant>(v))
         {
+            for (unsigned int i = 0; i < con->getNumOperands(); i++)
+            {
+                PrintVal(con->getOperand(i));
+                if (auto glob = dyn_cast<GlobalVariable>(con->getOperand(i)))
+                {
+                    CopyOperand(glob);
+                }
+                else if (auto func = dyn_cast<Function>(con->getOperand(i)))
+                {
+                    CopyOperand(func);
+                }
+            }
+        }
+        else if (auto func = dyn_cast<Function>(v))
+        {
+            auto m = func->getParent();
+            if (m != TikModule)
+            {
+                auto *funcDec = cast<Function>(TikModule->getOrInsertFunction(func->getName(), func->getFunctionType()).getCallee());
+                funcDec->setAttributes(func->getAttributes());
+                //callBase->setCalledFunction(funcDec);
+                VMap[v] = funcDec;
+                for (unsigned int i = 0; i < funcDec->getNumUses(); i++)
+                {
+                    if (auto callInst = dyn_cast<CallInst>(func->getOperandUse(i)))
+                    {
+                        CopyArgument(callInst);
+                    }
+                    //CopyArgument(funcDec->getOperandUse(i));
+                }
+            }
         }
         else
         {
+        }
+    }
+    if (auto func = dyn_cast<Function>(inst))
+    {
+        auto m = func->getParent();
+        if (m != TikModule)
+        {
+            auto *funcDec = cast<Function>(TikModule->getOrInsertFunction(func->getName(), func->getFunctionType()).getCallee());
+            funcDec->setAttributes(func->getAttributes());
+            //callBase->setCalledFunction(funcDec);
+            VMap[cast<Value>(inst)] = funcDec;
+            for (unsigned int i = 0; i < funcDec->getNumUses(); i++)
+            {
+                if (auto callInst = dyn_cast<CallInst>(func->getOperandUse(i)))
+                {
+                    CopyArgument(callInst);
+                }
+                //CopyArgument(funcDec->getOperandUse(i));
+            }
         }
     }
 }
