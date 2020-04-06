@@ -31,7 +31,7 @@ using namespace std;
 static int KernelUID = 0;
 
 set<string> reservedNames;
-std::map<llvm::GlobalVariable *, llvm::GlobalVariable *> globalDeclaractionMap;
+std::map<llvm::GlobalVariable *, llvm::GlobalVariable *> globalDeclarationMap;
 
 Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
 {
@@ -1156,24 +1156,6 @@ void Kernel::GetExits(set<BasicBlock *> &blocks)
     }
 }
 
-void Kernel::CopyGlobals()
-{
-    for (auto &fi : *KernelFunction)
-    {
-        for (auto bi = fi.begin(); bi != fi.end(); bi++)
-        {
-            auto *inst = cast<Instruction>(bi);
-            if (auto *cv = dyn_cast<CallBase>(inst))
-            {
-                CopyArgument(cv);
-            }
-            else
-            {
-                CopyOperand(inst);
-            }
-        }
-    }
-}
 
 std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures)
 {
@@ -1224,6 +1206,25 @@ std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStruct
     }
     headerString += ");\n";
     return headerString;
+}
+
+void Kernel::CopyGlobals()
+{
+    for (auto &fi : *KernelFunction)
+    {
+        for (auto bi = fi.begin(); bi != fi.end(); bi++)
+        {
+            auto *inst = cast<Instruction>(bi);
+            if (auto *cv = dyn_cast<CallBase>(inst))
+            {
+                CopyArgument(cv);
+            }
+            else
+            {
+                CopyOperand(inst);
+            }
+        }
+    }
 }
 
 void Kernel::CopyArgument(llvm::CallBase *Call)
@@ -1282,7 +1283,7 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
                         DC->setSelectionKind(SC->getSelectionKind());
                         newGlobal->setComdat(DC);
                     }
-                    globalDeclaractionMap[gv] = newGlobal;
+                    globalDeclarationMap[gv] = newGlobal;
                     //PrintVal(newGlobal);
                     VMap[gv] = newGlobal;
                     //gv->removeFromParent();
@@ -1352,18 +1353,172 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
 
 void Kernel::CopyOperand(llvm::User *inst)
 {
+    if (auto func = dyn_cast<Function>(inst))
+    {
+        auto m = func->getParent();
+        if (m != TikModule)
+        {
+            auto *funcDec = cast<Function>(TikModule->getOrInsertFunction(func->getName(), func->getFunctionType()).getCallee());
+            funcDec->setAttributes(func->getAttributes());
+            //callBase->setCalledFunction(funcDec);
+            VMap[cast<Value>(func)] = funcDec;
+            //func->replaceAllUsesWith(cast<Value>(funcDec));
+            for (auto arg = funcDec->arg_begin(); arg < funcDec->arg_end(); arg++)
+            {
+                Value* argVal = cast<Value>(arg);
+                if (auto Use = dyn_cast<User>(argVal))
+                {
+                    CopyOperand(Use);
+                }
+            }
+        }
+    }
+    else if (auto *gv = dyn_cast<GlobalVariable>(inst))
+    {
+        //PrintVal(gv);
+        Module *m = gv->getParent();
+        if (m != TikModule)
+        {
+            //its the wrong module
+            if (globalDeclarationMap.find(gv) == globalDeclarationMap.end())
+            {
+                // iterate through all internal operators of this global
+                //PrintVal(gv);
+                if (gv->hasInitializer())
+                {
+                    llvm::Constant *value = gv->getInitializer();
+                    for (uint32_t iter = 0; iter < value->getNumOperands(); iter++)
+                    {
+                        PrintVal(value);
+                        auto *internal = cast<llvm::User>(value->getOperand(iter));
+                        CopyOperand(internal);
+                    }
+                }
+                //and not already in the vmap
+
+                //for some reason if we don't do this first the verifier fails
+                //we do absolutely nothing with it and it doesn't even end up in our output
+                //its technically a memory leak, but its an acceptable sacrifice
+                auto *newVar = new GlobalVariable(
+                    gv->getValueType(),
+                    gv->isConstant(), gv->getLinkage(), nullptr, "",
+                    gv->getThreadLocalMode(),
+                    gv->getType()->getAddressSpace());
+                newVar->copyAttributesFrom(gv);
+                //end of the sacrifice
+                auto newGlobal = cast<GlobalVariable>(TikModule->getOrInsertGlobal(gv->getName(), gv->getType()->getPointerElementType()));
+                newGlobal->setConstant(gv->isConstant());
+                newGlobal->setLinkage(gv->getLinkage());
+                newGlobal->setThreadLocalMode(gv->getThreadLocalMode());
+                newGlobal->copyAttributesFrom(gv);
+                if (gv->hasInitializer())
+                {
+                    newGlobal->setInitializer(MapValue(gv->getInitializer(), VMap));
+                }
+                SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
+                gv->getAllMetadata(MDs);
+                for (auto MD : MDs)
+                {
+                    newGlobal->addMetadata(MD.first, *MapMetadata(MD.second, VMap, RF_MoveDistinctMDs));
+                }
+                if (Comdat *SC = gv->getComdat())
+                {
+                    Comdat *DC = newGlobal->getParent()->getOrInsertComdat(SC->getName());
+                    DC->setSelectionKind(SC->getSelectionKind());
+                    newGlobal->setComdat(DC);
+                }
+                globalDeclarationMap[gv] = newGlobal;
+                PrintVal(newGlobal);
+                VMap[gv] = newGlobal;
+                if ( (gv->getNumUses() != 0) && (gv->getParent() != TikModule) )
+                {
+                    //PrintVal(gv);
+                    //gv->removeFromParent();
+                }
+                //gv->removeFromParent();
+                for (auto user : gv->users())
+                {
+                    if (auto *newInst = dyn_cast<llvm::Instruction>(user))
+                    {
+                        if (newInst->getModule() == TikModule)
+                        {
+                            user->replaceUsesOfWith(gv, newGlobal);
+                        }
+                    }
+                }
+                // check for arguments within the global variable
+                for (unsigned int i = 0; i < newGlobal->getNumOperands(); i++)
+                {
+                    PrintVal(newGlobal->getOperand(i));
+                    if (auto newOp = dyn_cast<GlobalVariable>(newGlobal->getOperand(i)))
+                    {
+                        PrintVal(newOp);
+                        CopyOperand(newOp);
+                    }
+                    /*else if (auto newOp = dyn_cast<GlobalValue>(newGlobal->getOperand(i)))
+                    {
+                        PrintVal(newOp);
+                        CopyOperand(newOp);
+                    }*/
+                    else if (auto newOp = dyn_cast<Constant>(newGlobal->getOperand(i)))
+                    {
+                        PrintVal(newOp);
+                        CopyOperand(newOp);
+                    }
+                }
+            }
+        }
+    }
     for (uint32_t j = 0; j < inst->getNumOperands(); j++)
     {
         Value *v = inst->getOperand(j);
         //PrintVal(v);
+        if (VMap.find(v) == VMap.end())
+        {
+            bool nothing = true;
+            // copy the constant
+        }
         if (auto *gv = dyn_cast<GlobalVariable>(v))
+        {
+            PrintVal(gv);
+            CopyOperand(gv);
+        }
+        else if (auto *con = dyn_cast<Constant>(v))
+        {
+            for (unsigned int i = 0; i < con->getNumOperands(); i++)
+            {
+                PrintVal(con->getOperand(i));
+                if (auto glob = dyn_cast<GlobalVariable>(con->getOperand(i)))
+                {
+                    CopyOperand(glob);
+                }
+                else if (auto func = dyn_cast<Function>(con->getOperand(i)))
+                {
+                    CopyOperand(func);
+                }
+            }
+        }
+        else if (auto newOp = dyn_cast<GetElementPtrInst>(v))
+        {
+            //PrintVal(newOp);
+            CopyOperand(newOp);
+        }
+        else if (auto newOp = dyn_cast<Operator>(v))
+        {
+            //PrintVal(newOp);
+            CopyOperand(newOp);
+        }
+        else
+        {
+        }
+        /*if (auto *gv = dyn_cast<GlobalVariable>(v))
         {
             //PrintVal(gv);
             Module *m = gv->getParent();
             if (m != TikModule)
             {
                 //its the wrong module
-                if (globalDeclaractionMap.find(gv) == globalDeclaractionMap.end())
+                if (globalDeclarationMap.find(gv) == globalDeclarationMap.end())
                 {
                     // iterate through all internal operators of this global
                     //PrintVal(gv);
@@ -1410,7 +1565,7 @@ void Kernel::CopyOperand(llvm::User *inst)
                         DC->setSelectionKind(SC->getSelectionKind());
                         newGlobal->setComdat(DC);
                     }
-                    globalDeclaractionMap[gv] = newGlobal;
+                    globalDeclarationMap[gv] = newGlobal;
                     PrintVal(newGlobal);
                     VMap[gv] = newGlobal;
                     if ( (gv->getNumUses() != 0) && (gv->getParent() != TikModule) )
@@ -1438,11 +1593,11 @@ void Kernel::CopyOperand(llvm::User *inst)
                             PrintVal(newOp);
                             CopyOperand(newOp);
                         }
-                        /*else if (auto newOp = dyn_cast<GlobalValue>(newGlobal->getOperand(i)))
+                        else if (auto newOp = dyn_cast<GlobalValue>(newGlobal->getOperand(i)))
                         {
                             PrintVal(newOp);
                             CopyOperand(newOp);
-                        }*/
+                        }
                         else if (auto newOp = dyn_cast<Constant>(newGlobal->getOperand(i)))
                         {
                             PrintVal(newOp);
@@ -1472,48 +1627,21 @@ void Kernel::CopyOperand(llvm::User *inst)
                 }
             }
         }
-        else if (auto func = dyn_cast<Function>(v))
+        else if (auto newOp = dyn_cast<GetElementPtrInst>(v))
         {
-            auto m = func->getParent();
-            if (m != TikModule)
-            {
-                auto *funcDec = cast<Function>(TikModule->getOrInsertFunction(func->getName(), func->getFunctionType()).getCallee());
-                funcDec->setAttributes(func->getAttributes());
-                //callBase->setCalledFunction(funcDec);
-                VMap[v] = funcDec;
-                for (unsigned int i = 0; i < funcDec->getNumUses(); i++)
-                {
-                    if (auto callInst = dyn_cast<CallInst>(func->getOperandUse(i)))
-                    {
-                        CopyArgument(callInst);
-                    }
-                    //CopyArgument(funcDec->getOperandUse(i));
-                }
-            }
+            //PrintVal(newOp);
+            CopyOperand(newOp);
+        }
+        else if (auto newOp = dyn_cast<Operator>(v))
+        {
+            //PrintVal(newOp);
+            CopyOperand(newOp);
         }
         else
         {
-        }
+        }*/
     }
-    if (auto func = dyn_cast<Function>(inst))
-    {
-        auto m = func->getParent();
-        if (m != TikModule)
-        {
-            auto *funcDec = cast<Function>(TikModule->getOrInsertFunction(func->getName(), func->getFunctionType()).getCallee());
-            funcDec->setAttributes(func->getAttributes());
-            //callBase->setCalledFunction(funcDec);
-            VMap[cast<Value>(inst)] = funcDec;
-            for (unsigned int i = 0; i < funcDec->getNumUses(); i++)
-            {
-                if (auto callInst = dyn_cast<CallInst>(func->getOperandUse(i)))
-                {
-                    CopyArgument(callInst);
-                }
-                //CopyArgument(funcDec->getOperandUse(i));
-            }
-        }
-    }
+
 }
 
 void Kernel::InlineFunctions(set<int64_t> &blocks)
