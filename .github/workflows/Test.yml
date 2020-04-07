@@ -71,7 +71,7 @@ jobs:
           path: ${{github.workspace}}/vcpkg/
           key: ${{ hashFiles( env.vcpkgResponseFile ) }}
       - name: Run vcpkg
-        uses: lukka/run-vcpkg@v0
+        uses: lukka/run-vcpkg@v1
         id: runvcpkg
         with:
           vcpkgArguments: '@${{ env.vcpkgResponseFile }}'
@@ -81,7 +81,7 @@ jobs:
           CC: clang-9
           CXX: clang++-9
           LDFLAGS: -fuse-ld=lld-9
-        uses: lukka/run-cmake@v0
+        uses: lukka/run-cmake@v1
         id: runcmake
         with:
           cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
