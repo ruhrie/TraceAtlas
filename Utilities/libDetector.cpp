@@ -24,25 +24,13 @@ int main(int argc, char *argv[])
     inputJson >> j;
     inputJson.close();
 
-    map<string, vector<int>> kernels;
+    map<string, vector<int64_t>> kernels;
 
-    for (auto &[key, value] : j.items())
+    for (auto &[k, l] : j["Kernels"].items())
     {
-        string index = key;
-
-        nlohmann::json kernel;
-
-        if (!value[0].empty() && value[0].is_array())
-        {
-            //embedded layout
-            kernel = value[0];
-        }
-        else
-        {
-            kernel = value;
-        }
-
-        kernels[index] = kernel.get<vector<int>>();
+        string index = k;
+        nlohmann::json kernel = l["Blocks"];
+        kernels[index] = kernel.get<vector<int64_t>>();
     }
 
     //load the llvm file
