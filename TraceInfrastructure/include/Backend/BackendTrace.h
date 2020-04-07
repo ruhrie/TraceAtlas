@@ -9,7 +9,7 @@ extern "C"
     /// <summary>
     /// Compresses the trace buffer and writes it to the destination file.
     /// </summary>
-    void BufferData();
+    void BufferData(int8_t index);
 
     /// <summary>
     /// Opens the trace file for writing and initializes the compression stream.
