@@ -220,52 +220,101 @@ namespace TypeFour
 
     bool IsSelfReachable(BasicBlock *base, set<int64_t> validBlocks)
     {
-        set<BasicBlock *> result;
-        result.insert(base);
-        queue<BasicBlock *> processing;
-        processing.push(base);
-        while (!processing.empty())
+        bool foundSelf = false;
+        queue<BasicBlock *> toProcess;
+        set<BasicBlock *> checked;
+        toProcess.push(base);
+        checked.insert(base);
+        while (!toProcess.empty())
         {
-            BasicBlock *cur = processing.front();
-            processing.pop();
-            for (auto suc : successors(cur))
+            BasicBlock *bb = toProcess.front();
+            toProcess.pop();
+            for (auto suc : successors(bb))
             {
-                auto id = GetBlockID(suc);
-                if (validBlocks.find(id) != validBlocks.end() && result.find(suc) == result.end())
+                if (suc == base)
                 {
-                    result.insert(suc);
-                    processing.push(suc);
+                    foundSelf = true;
+                }
+                if (checked.find(suc) == checked.end())
+                {
+                    int64_t id = GetBlockID(suc);
+                    if (validBlocks.find(id) != validBlocks.end())
+                    {
+                        checked.insert(suc);
+                        toProcess.push(suc);
+                    }
                 }
             }
-            for (auto bi = cur->begin(); bi != cur->end(); bi++)
+            //we now check if there is a function call, and if so add the entry
+            for (auto bi = bb->begin(); bi != bb->end(); bi++)
             {
                 if (auto ci = dyn_cast<CallBase>(bi))
                 {
-                    Function *F = ci->getCalledFunction();
-                    if (F != nullptr && !F->empty())
+                    Function *f = ci->getCalledFunction();
+                    if (f != nullptr && !f->empty())
                     {
-                        BasicBlock *b = &F->getEntryBlock();
-                        auto id = GetBlockID(b);
-                        if (validBlocks.find(id) != validBlocks.end() && result.find(b) == result.end())
+                        BasicBlock *entry = &f->getEntryBlock();
+                        if (entry == base)
                         {
-                            result.insert(b);
-                            processing.push(b);
+                            foundSelf = true;
+                        }
+                        if (checked.find(entry) == checked.end())
+                        {
+                            int64_t id = GetBlockID(entry);
+                            if (validBlocks.find(id) != validBlocks.end())
+                            {
+                                checked.insert(entry);
+                                toProcess.push(entry);
+                            }
                         }
                     }
                 }
-                else if (auto ri = dyn_cast<ReturnInst>(bi))
+            }
+            //finally check the terminator and add the call points
+            Instruction *I = bb->getTerminator();
+            if (auto ri = dyn_cast<ReturnInst>(I))
+            {
+                Function *f = bb->getParent();
+                for (auto use : f->users())
                 {
-                    Function *F = cur->getParent();
-                    for (auto user : F->users())
+                    if (auto cb = dyn_cast<CallBase>(use))
                     {
-                        if (auto cb = dyn_cast<CallBase>(user))
+                        BasicBlock *entry = cb->getParent();
+                        if (entry == base)
                         {
-                            BasicBlock *b = cb->getParent();
-                            auto id = GetBlockID(b);
-                            if (validBlocks.find(id) != validBlocks.end() && result.find(b) == result.end())
+                            foundSelf = true;
+                        }
+                        if (checked.find(entry) == checked.end())
+                        {
+                            int64_t id = GetBlockID(entry);
+                            if (validBlocks.find(id) != validBlocks.end())
                             {
-                                result.insert(b);
-                                processing.push(b);
+                                checked.insert(entry);
+                                toProcess.push(entry);
+                            }
+                        }
+                    }
+                }
+            }
+            else if (auto ri = dyn_cast<ResumeInst>(I))
+            {
+                Function *f = bb->getParent();
+                for (auto use : f->users())
+                {
+                    if (auto cb = dyn_cast<CallBase>(use))
+                    {
+                        BasicBlock *entry = cb->getParent();
+                        if (entry == base)
+                        {
+                            foundSelf = true;
+                        }
+                        if (checked.find(entry) == checked.end())
+                        {
+                            int64_t id = GetBlockID(entry);
+                            if (validBlocks.find(id) != validBlocks.end())
+                            {
+                                checked.insert(entry);
+                                toProcess.push(entry);
                             }
                         }
                     }
@@ -273,7 +322,7 @@ namespace TypeFour
             }
         }
 
-        return result.find(base) != result.end();
+        return foundSelf;
     }
 
     set<set<int64_t>> Process(const set<set<int64_t>> &type3Kernels)
@@ -298,7 +347,7 @@ namespace TypeFour
             {
                 //we need to see if this block can ever reach itself
                 BasicBlock *base = blockMap[block];
-                if (IsSelfReachable(base, blocks))
+                if (IsSelfReachable(base, kernel))
                 {
                     blocks.insert(block);
                 }
