@@ -1296,11 +1296,6 @@ void Kernel::CopyOperand(llvm::User *inst)
                 }
                 globalDeclarationMap[gv] = newGlobal;
                 VMap[gv] = newGlobal;
-                if ((gv->getNumUses() != 0) && (gv->getParent() != TikModule))
-                {
-                    //gv->removeFromParent();
-                }
-                //gv->removeFromParent();
                 for (auto user : gv->users())
                 {
                     if (auto *newInst = dyn_cast<llvm::Instruction>(user))
