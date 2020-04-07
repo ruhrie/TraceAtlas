@@ -7,6 +7,17 @@ extern "C"
 {
 #endif
     /// <summary>
+    /// Compresses the trace buffer and writes it to the destination file.
+    /// </summary>
+    void BufferData();
+
+    /// <summary>
+    /// Opens the trace file for writing and initializes the compression stream.
+    /// </summary>
+    /// <param name="fileName">The string to be written</param>
+    /// <param name="compressionLevel">The zlib compression level to be used.</param>
+    void OpenFile();
+    /// <summary>
     /// Writes the input string to the trace buffer.
     /// </summary>
     /// <param name="input">The string to be written</param>

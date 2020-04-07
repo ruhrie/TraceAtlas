@@ -1290,9 +1290,10 @@ void Kernel::InlineFunctions(set<int64_t> &blocks)
     while (change)
     {
         change = false;
-        for (auto &fi : *KernelFunction)
+        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
         {
-            for (auto bi = fi.begin(); bi != fi.end(); bi++)
+            auto baseBlock = cast<BasicBlock>(fi);
+            for (auto bi = fi->begin(); bi != fi->end(); bi++)
             {
                 if (auto *ci = dyn_cast<CallInst>(bi))
                 {
@@ -1300,8 +1301,10 @@ void Kernel::InlineFunctions(set<int64_t> &blocks)
                     {
                         continue;
                     }
+                    auto id = GetBlockID(baseBlock);
                     auto info = InlineFunctionInfo();
                     auto r = InlineFunction(ci, info);
+                    SetBlockID(baseBlock, id);
                     if (r)
                     {
                         change = true;

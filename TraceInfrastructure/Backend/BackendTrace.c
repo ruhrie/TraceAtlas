@@ -153,7 +153,7 @@ void LoadDump(void *address)
     sprintf(fin, "LoadAddress:%#lX:%#lX\n", (uint64_t)address, t);
     WriteStream(fin);
 }
-void DumpLoadAddrValue(void *MemValue, int size)
+void DumpLoadValue(void *MemValue, int size)
 {
     char fin[128];
     struct timespec tr;
@@ -162,11 +162,18 @@ void DumpLoadAddrValue(void *MemValue, int size)
     sprintf(fin, "LoadAddress:%#lX:%#lX\n", (uint64_t)MemValue, t);
     WriteStream(fin);
     uint8_t *bitwisePrint = (uint8_t *)MemValue;
-    sprintf(fin, "size:%d, LoadMemValue:", size);
+    sprintf(fin, "LoadValue:");
     WriteStream(fin);
     for (int i = 0; i < size; i++)
     {
-        sprintf(fin, "%u ", bitwisePrint[i]);
+        if (i == 0)
+        {
+            sprintf(fin, "0X%02X", bitwisePrint[i]);
+        }
+        else
+        {
+            sprintf(fin, "%02X", bitwisePrint[i]);
+        }
         WriteStream(fin);
     }
     sprintf(fin, "\n");
@@ -182,7 +189,7 @@ void StoreDump(void *address)
     WriteStream(fin);
 }
 
-void DumpStoreAddrValue(void *MemValue, int size)
+void DumpStoreValue(void *MemValue, int size)
 {
     char fin[128];
     struct timespec tr;
@@ -191,11 +198,18 @@ void DumpStoreAddrValue(void *MemValue, int size)
     sprintf(fin, "StoreAddress:%#lX:%#lX\n", (uint64_t)MemValue, t);
     WriteStream(fin);
     uint8_t *bitwisePrint = (uint8_t *)MemValue;
-    sprintf(fin, "size:%d, StoreMemValue:", size);
+    sprintf(fin, "StoreValue:");
     WriteStream(fin);
     for (int i = 0; i < size; i++)
     {
-        sprintf(fin, "%u ", bitwisePrint[i]);
+        if (i == 0)
+        {
+            sprintf(fin, "0X%02X", bitwisePrint[i]);
+        }
+        else
+        {
+            sprintf(fin, "%02X", bitwisePrint[i]);
+        }
         WriteStream(fin);
     }
     sprintf(fin, "\n");
