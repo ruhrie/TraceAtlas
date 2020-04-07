@@ -36,7 +36,7 @@ int main(int argc, char **argv)
     cl::ParseCommandLineOptions(argc, argv);
     ProcessTrace(inputTrace, &WorkingSet::Process, "working set analysis", false);
 
-    int64_t internalSampleTime = 10000;
+    int64_t internalSampleTime = 50000;
     if (internalSampleTime > WorkingSet::timing)
     {
         internalSampleTime = WorkingSet::timing;
@@ -198,14 +198,16 @@ int main(int argc, char **argv)
         for (int64_t time = 0; time < internalSampleTime; time++)
         {
             vector<string> timeline;
-            for (auto itv = InternelSampleKeyVector.begin(); itv != InternelSampleKeyVector.end(); ++itv)
+            for (auto itv = InternelSampleKeyVector.begin(); itv != InternelSampleKeyVector.end()-1;)
             {
                 string key = *itv;
+
                 if (!InternelSampleVirAddr[key].empty())
                 {
 
                     if (InternelSampleVirAddr[key][1] > time)
                     {
+                        itv++;
                         break;
                     }
                     if (InternelSampleVirAddr[key].size() > 2)
@@ -213,18 +215,27 @@ int main(int argc, char **argv)
                         if (InternelSampleVirAddr[key][1] <= time && InternelSampleVirAddr[key][InternelSampleVirAddr[key].size() - 1] > time)
                         {
                             timeline.push_back(key);
+                            itv++;
                         }
                         else if (time > InternelSampleVirAddr[key][InternelSampleVirAddr[key].size() - 1])
                         {
                             InternelSampleVirAddr.erase(key);
-                            InternelSampleKeyVector.erase(itv);
+                            itv = InternelSampleKeyVector.erase(itv);
+                        }
+                        else
+                        {
+                            itv++;
                         }
                     }
                     else
-                    {
+                    {                        
                         InternelSampleVirAddr.erase(key);
-                        InternelSampleKeyVector.erase(itv);
+                        itv = InternelSampleKeyVector.erase(itv);
                     }
+                }
+                else
+                {
+                     ++itv;
                 }
             }
             if (maxinternal < timeline.size())
