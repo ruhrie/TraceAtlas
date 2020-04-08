@@ -1,14 +1,19 @@
 #include "AtlasUtil/Traces.h"
 #include <algorithm>
 #include <fstream>
+#include <future>
 #include <indicators/progress_bar.hpp>
 #include <llvm/Support/CommandLine.h>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <nlohmann/json.hpp>
+#include <queue>
 #include <set>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
 #include <sstream>
+#include <thread>
 #include <vector>
 #include <zlib.h>
 using namespace llvm;
@@ -16,16 +21,16 @@ using namespace std;
 
 #define BLOCK_SIZE 4096
 
-cl::opt<std::string> InputFilename("t", cl::desc("Specify input trace"), cl::value_desc("trace filename"), cl::Required);
+llvm::cl::list<string> inputTraces(llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filenames"), cl::Positional);
 cl::opt<std::string> OutputFilename("o", cl::desc("Specify output json"), cl::value_desc("output filename"), cl::Required);
 cl::opt<std::string> KernelFilename("k", cl::desc("Specify kernel json"), cl::value_desc("kernel filename"), cl::Required);
 llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::value_desc("No progress bar"));
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
-static int UID = 0;
+atomic<int> UID = 0;
 
 string currentKernel = "-1";
-int currentUid = -1;
+thread_local int currentUid = -1;
 
 //maps
 map<uint64_t, int> writeMap;
@@ -33,6 +38,9 @@ map<int, string> kernelIdMap;
 map<string, set<int>> kernelMap;
 map<string, set<string>> parentMap;
 map<int, set<int>> consumerMap;
+
+priority_queue<int> pQueue;
+map<thread::id, mutex> mutexMap;
 
 void Process(string &key, string &value)
 {
@@ -62,6 +70,8 @@ void Process(string &key, string &value)
     }
     else if (key == "LoadAddress")
     {
+        auto id = this_thread::get_id();
+        mutexMap[id].lock();
         uint64_t address = stoul(value, nullptr, 0);
         int prodUid = writeMap[address];
         if (prodUid != -1 && prodUid != currentUid)
@@ -71,6 +81,8 @@ void Process(string &key, string &value)
     }
     else if (key == "StoreAddress")
     {
+        auto id = this_thread::get_id();
+        mutexMap[id].lock();
         uint64_t address = stoul(value, nullptr, 0);
         writeMap[address] = currentUid;
     }
@@ -168,7 +180,21 @@ int main(int argc, char **argv)
         }
     }
 
-    ProcessTrace(InputFilename, Process, "Generating DAG", noBar);
+    //this is the real logic
+    vector<shared_ptr<thread>> threads;
+    for (auto &tr : inputTraces)
+    {
+        auto t = std::make_shared<thread>(ProcessTrace, tr, Process, "Generating Dag", true);
+        auto id = t->get_id();
+        mutexMap[id].lock();
+        threads.push_back(t);
+    }
+    for (auto &t : threads)
+    {
+        t->join();
+    }
+
+    //ProcessTrace(InputFilename, Process, "Generating DAG", noBar);
 
     nlohmann::json jOut;
     jOut["KernelInstanceMap"] = kernelIdMap;
