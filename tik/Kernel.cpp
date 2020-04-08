@@ -297,44 +297,62 @@ void Kernel::RemapOperands(Operator *op, Instruction *inst)
     {
         if (auto gepInst = dyn_cast<GEPOperator>(op))
         {
-            IRBuilder OpBuilder(inst);
-            vector<Value *> idxList;
-            for (auto idx = gepInst->idx_begin(); idx != gepInst->idx_end(); idx++)
+            if (remappedOperandSet.find(gepInst) == remappedOperandSet.end())
             {
-                auto indexValue = cast<Value>(idx);
-                idxList.push_back(indexValue);
+                IRBuilder OpBuilder(inst);
+                vector<Value *> idxList;
+                for (auto idx = gepInst->idx_begin(); idx != gepInst->idx_end(); idx++)
+                {
+                    auto indexValue = cast<Value>(idx);
+                    idxList.push_back(indexValue);
+                }
+                Value *ptr;
+                if (auto gepPtr = dyn_cast<GlobalVariable>(gepInst->getPointerOperand()))
+                {
+                    if (gepPtr->getParent() != TikModule)
+                    {
+                        if (globalDeclarationMap.find(gepPtr) == globalDeclarationMap.end())
+                        {
+                            CopyOperand(gepInst);
+                            ptr = globalDeclarationMap[gepPtr];
+                        }
+                        else
+                        {
+                            ptr = globalDeclarationMap[gepPtr];
+                        }
+                    }
+                    else
+                    {
+                        ptr = gepInst->getPointerOperand();
+                    }
+                }
+                else
+                {
+                    ptr = gepInst->getPointerOperand();
+                }
+                Value *newGep = OpBuilder.CreateGEP(ptr, idxList, gepInst->getName());
+                VMap[cast<Value>(op)] = cast<Value>(newGep);
             }
-            Value *ptr;
-            Value *gepPtr = VMap[gepInst->getPointerOperand()];
-            if (gepPtr != nullptr)
-            {
-                ptr = gepPtr;
-            }
-            else
-            {
-                ptr = gepInst->getPointerOperand();
-            }
-            Value *newGep = OpBuilder.CreateGEP(ptr, idxList, gepInst->getName());
-
-            VMap[cast<Value>(op)] = cast<Value>(newGep);
         }
     }
     for (unsigned int operand = 0; operand < op->getNumOperands(); operand++)
     {
+        Instruction *newInst = inst;
+        if (auto test = dyn_cast<Instruction>(op))
+        {
+            newInst = test;
+        }
         if (auto newGlob = dyn_cast<GlobalVariable>(op->getOperand(operand)))
         {
             CopyOperand(newGlob);
         }
         else if (auto newOp = dyn_cast<Operator>(op->getOperand(operand)))
         {
-            /*if (auto newInst = dyn_cast<Instruction>(op))
+            if (remappedOperandSet.find(newOp) == remappedOperandSet.end())
             {
+
                 RemapOperands(newOp, newInst);
             }
-            else
-            {
-                RemapOperands(newOp, inst);
-            }*/
         }
     }
 }
@@ -354,6 +372,7 @@ void Kernel::Remap()
                     RemapOperands(op, inst);
                 }
             }
+
             RemapInstruction(inst, VMap, llvm::RF_None);
         }
     }
