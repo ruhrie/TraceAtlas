@@ -331,14 +331,14 @@ void Kernel::RemapOperands(Operator *op, Instruction *inst)
                 {
                     ptr = gepPtr;
                 }
+                // finally, construct the new GEP and remap its old value
+                Value *newGep = Builder.CreateGEP(ptr, idxList, gepInst->getName());
+                VMap[cast<Value>(op)] = cast<Value>(newGep);
             }
+            // we don't see a global here so don't replace the GEPOperator
             else
             {
-                ptr = gepInst->getPointerOperand();
             }
-            // finally, construct the new GEP and remap its old value
-            Value *newGep = Builder.CreateGEP(ptr, idxList, gepInst->getName());
-            VMap[cast<Value>(op)] = cast<Value>(newGep);
         }
         else if (auto loadInst = dyn_cast<LoadInst>(op))
         {
@@ -367,14 +367,13 @@ void Kernel::RemapOperands(Operator *op, Instruction *inst)
                 {
                     ptr = loadPtr;
                 }
+                Value *newLoad = Builder.CreateLoad(ptr, loadInst->getName());
+                VMap[cast<Value>(op)] = cast<Value>(newLoad);
             }
+            // we don't see a global here so don't replace the loadInst
             else
             {
-                ptr = loadInst->getPointerOperand();
             }
-            // finally, construct the new load and remap its old value
-            Value *newLoad = Builder.CreateLoad(ptr, loadInst->getName());
-            VMap[cast<Value>(op)] = cast<Value>(newLoad);
         }
     }
     for (unsigned int operand = 0; operand < op->getNumOperands(); operand++)
@@ -422,14 +421,6 @@ void Kernel::Remap()
 
 void Kernel::RemapNestedKernels()
 {
-    // look through the body for pointer references
-    // every time we see a global reference who is not written to in MemRead, not stored to in Init, store to it in body
-
-    // every time we use a global pointer in the body that is not in MemWrite, store to it
-
-    // loop->body or loop->exit (conditional)
-    // body->loop (unconditional)
-
     // Now find all calls to the embedded kernel functions in the body, if any, and change their arguments to the new ones
     std::map<Argument *, Value *> embeddedCallArgs;
     for (auto &bf : *KernelFunction)
