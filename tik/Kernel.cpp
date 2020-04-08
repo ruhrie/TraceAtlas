@@ -350,7 +350,7 @@ void Kernel::RemapOperands(Operator *op, Instruction *inst)
         {
             if (remappedOperandSet.find(newOp) == remappedOperandSet.end())
             {
-
+                remappedOperandSet.insert(newOp);
                 RemapOperands(newOp, newInst);
             }
         }
@@ -1250,7 +1250,6 @@ void Kernel::CopyOperand(llvm::User *inst)
         {
             auto *funcDec = cast<Function>(TikModule->getOrInsertFunction(func->getName(), func->getFunctionType()).getCallee());
             funcDec->setAttributes(func->getAttributes());
-            //callBase->setCalledFunction(funcDec);
             VMap[cast<Value>(func)] = funcDec;
             for (auto arg = funcDec->arg_begin(); arg < funcDec->arg_end(); arg++)
             {
@@ -1376,122 +1375,6 @@ void Kernel::CopyOperand(llvm::User *inst)
         else
         {
         }
-        /*if (auto *gv = dyn_cast<GlobalVariable>(v))
-        {
-            Module *m = gv->getParent();
-            if (m != TikModule)
-            {
-                //its the wrong module
-                if (globalDeclarationMap.find(gv) == globalDeclarationMap.end())
-                {
-                    // iterate through all internal operators of this global
-                    if (gv->hasInitializer())
-                    {
-                        llvm::Constant *value = gv->getInitializer();
-                        for (uint32_t iter = 0; iter < value->getNumOperands(); iter++)
-                        {
-                            auto *internal = cast<llvm::User>(value->getOperand(iter));
-                            CopyOperand(internal);
-                        }
-                    }
-                    //and not already in the vmap
-
-                    //for some reason if we don't do this first the verifier fails
-                    //we do absolutely nothing with it and it doesn't even end up in our output
-                    //its technically a memory leak, but its an acceptable sacrifice
-                    auto *newVar = new GlobalVariable(
-                        gv->getValueType(),
-                        gv->isConstant(), gv->getLinkage(), nullptr, "",
-                        gv->getThreadLocalMode(),
-                        gv->getType()->getAddressSpace());
-                    newVar->copyAttributesFrom(gv);
-                    //end of the sacrifice
-                    auto newGlobal = cast<GlobalVariable>(TikModule->getOrInsertGlobal(gv->getName(), gv->getType()->getPointerElementType()));
-                    newGlobal->setConstant(gv->isConstant());
-                    newGlobal->setLinkage(gv->getLinkage());
-                    newGlobal->setThreadLocalMode(gv->getThreadLocalMode());
-                    newGlobal->copyAttributesFrom(gv);
-                    if (gv->hasInitializer())
-                    {
-                        newGlobal->setInitializer(MapValue(gv->getInitializer(), VMap));
-                    }
-                    SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
-                    gv->getAllMetadata(MDs);
-                    for (auto MD : MDs)
-                    {
-                        newGlobal->addMetadata(MD.first, *MapMetadata(MD.second, VMap, RF_MoveDistinctMDs));
-                    }
-                    if (Comdat *SC = gv->getComdat())
-                    {
-                        Comdat *DC = newGlobal->getParent()->getOrInsertComdat(SC->getName());
-                        DC->setSelectionKind(SC->getSelectionKind());
-                        newGlobal->setComdat(DC);
-                    }
-                    globalDeclarationMap[gv] = newGlobal;
-                    VMap[gv] = newGlobal;
-                    if ( (gv->getNumUses() != 0) && (gv->getParent() != TikModule) )
-                    {
-                        //gv->removeFromParent();
-                    }
-                    //gv->removeFromParent();
-                    for (auto user : gv->users())
-                    {
-                        if (auto *inst = dyn_cast<llvm::Instruction>(user))
-                        {
-                            if (inst->getModule() == TikModule)
-                            {
-                                user->replaceUsesOfWith(gv, newGlobal);
-                            }
-                        }
-                    }
-                    // check for arguments within the global variable
-                    for (unsigned int i = 0; i < newGlobal->getNumOperands(); i++)
-                    {
-                        if (auto newOp = dyn_cast<GlobalVariable>(newGlobal->getOperand(i)))
-                        {
-                            CopyOperand(newOp);
-                        }
-                        else if (auto newOp = dyn_cast<GlobalValue>(newGlobal->getOperand(i)))
-                        {
-                            CopyOperand(newOp);
-                        }
-                        else if (auto newOp = dyn_cast<Constant>(newGlobal->getOperand(i)))
-                        {
-                            CopyOperand(newOp);
-                        }
-                    }
-                }
-            }
-        }
-        else if (auto *gv = dyn_cast<GlobalValue>(v))
-        {
-            throw AtlasException("Tik Error: Non variable global reference");
-        }
-        else if (auto *con = dyn_cast<Constant>(v))
-        {
-            for (unsigned int i = 0; i < con->getNumOperands(); i++)
-            {
-                if (auto glob = dyn_cast<GlobalVariable>(con->getOperand(i)))
-                {
-                    CopyOperand(glob);
-                }
-                else if (auto func = dyn_cast<Function>(con->getOperand(i)))
-                {
-                    CopyOperand(func);
-                }
-            }
-        }
-        else if (auto newOp = dyn_cast<GetElementPtrInst>(v))
-        {
-            CopyOperand(newOp);
-        }
-        else if (auto newOp = dyn_cast<Operator>(v))
-        {
-            CopyOperand(newOp);
-        }
-        else
-        {
-        }*/
     }
 }
 
