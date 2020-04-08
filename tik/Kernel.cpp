@@ -31,7 +31,7 @@ using namespace std;
 static int KernelUID = 0;
 
 set<string> reservedNames;
-std::map<llvm::GlobalVariable *, llvm::GlobalVariable *> globalDeclarationMap;
+std::set<GlobalVariable *> globalDeclarationSet;
 std::set<Value *> remappedOperandSet;
 Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
 {
@@ -293,46 +293,88 @@ void Kernel::UpdateMemory()
 
 void Kernel::RemapOperands(Operator *op, Instruction *inst)
 {
-    if (auto con = dyn_cast<Constant>(op)) // if this is a constant
+    if (remappedOperandSet.find(op) == remappedOperandSet.end())
     {
-        if (auto gepInst = dyn_cast<GEPOperator>(op))
+        IRBuilder Builder(inst);
+        // if its a gep or load we need to make a new one (because gep and load args can't be changed after construction)
+        if (auto gepInst = dyn_cast<GEPOperator>(op)) 
         {
-            if (remappedOperandSet.find(gepInst) == remappedOperandSet.end())
+            // duplicate the indexes of the GEP
+            vector<Value *> idxList;
+            for (auto idx = gepInst->idx_begin(); idx != gepInst->idx_end(); idx++)
             {
-                IRBuilder OpBuilder(inst);
-                vector<Value *> idxList;
-                for (auto idx = gepInst->idx_begin(); idx != gepInst->idx_end(); idx++)
+                auto indexValue = cast<Value>(idx);
+                idxList.push_back(indexValue);
+            }
+            // find out what our pointer needs to be
+            Value *ptr;
+            if (auto gepPtr = dyn_cast<GlobalVariable>(gepInst->getPointerOperand()))
+            {
+                if (gepPtr->getParent() != TikModule)
                 {
-                    auto indexValue = cast<Value>(idx);
-                    idxList.push_back(indexValue);
-                }
-                Value *ptr;
-                if (auto gepPtr = dyn_cast<GlobalVariable>(gepInst->getPointerOperand()))
-                {
-                    if (gepPtr->getParent() != TikModule)
+                    if (globalDeclarationSet.find(gepPtr) == globalDeclarationSet.end())
                     {
-                        if (globalDeclarationMap.find(gepPtr) == globalDeclarationMap.end())
+                        CopyOperand(gepInst);
+                        ptr = VMap[gepPtr];
+                        // sanity check
+                        if (ptr == nullptr)
                         {
-                            CopyOperand(gepInst);
-                            ptr = globalDeclarationMap[gepPtr];
-                        }
-                        else
-                        {
-                            ptr = globalDeclarationMap[gepPtr];
+                            throw "The global copying logic isn't working...";
                         }
                     }
                     else
                     {
-                        ptr = gepInst->getPointerOperand();
+                        ptr = gepPtr;
                     }
                 }
                 else
                 {
-                    ptr = gepInst->getPointerOperand();
+                    ptr = gepPtr;
                 }
-                Value *newGep = OpBuilder.CreateGEP(ptr, idxList, gepInst->getName());
-                VMap[cast<Value>(op)] = cast<Value>(newGep);
             }
+            else
+            {
+                ptr = gepInst->getPointerOperand();
+            }
+            // finally, construct the new GEP and remap its old value
+            Value *newGep = Builder.CreateGEP(ptr, idxList, gepInst->getName());
+            VMap[cast<Value>(op)] = cast<Value>(newGep);
+        }
+        else if (auto loadInst = dyn_cast<LoadInst>(op))
+        {
+            // find out what our pointer needs to be
+            Value *ptr;
+            if (auto loadPtr = dyn_cast<GlobalVariable>(loadInst->getPointerOperand()))
+            {
+                if (loadPtr->getParent() != TikModule)
+                {
+                    if (globalDeclarationSet.find(loadPtr) == globalDeclarationSet.end())
+                    {
+                        CopyOperand(loadInst);
+                        ptr = VMap[loadPtr];
+                        // sanity check
+                        if (ptr == nullptr)
+                        {
+                            throw "The global copying logic isn't working...";
+                        }
+                    }
+                    else
+                    {
+                        ptr = loadPtr;
+                    }
+                }
+                else
+                {
+                    ptr = loadPtr;
+                }
+            }
+            else
+            {
+                ptr = loadInst->getPointerOperand();
+            }
+            // finally, construct the new load and remap its old value
+            Value *newLoad = Builder.CreateLoad(ptr, loadInst->getName());
+            VMap[cast<Value>(op)] = cast<Value>(newLoad);
         }
     }
     for (unsigned int operand = 0; operand < op->getNumOperands(); operand++)
@@ -1174,7 +1216,7 @@ void Kernel::CopyArgument(llvm::CallBase *Call)
                         DC->setSelectionKind(SC->getSelectionKind());
                         newGlobal->setComdat(DC);
                     }
-                    globalDeclarationMap[gv] = newGlobal;
+                    globalDeclarationSet.insert(newGlobal);
                     VMap[gv] = newGlobal;
                     //gv->removeFromParent();
                     for (auto user : gv->users())
@@ -1267,7 +1309,7 @@ void Kernel::CopyOperand(llvm::User *inst)
         if (m != TikModule)
         {
             //its the wrong module
-            if (globalDeclarationMap.find(gv) == globalDeclarationMap.end())
+            if (globalDeclarationSet.find(gv) == globalDeclarationSet.end())
             {
                 // iterate through all internal operators of this global
                 if (gv->hasInitializer())
@@ -1312,7 +1354,7 @@ void Kernel::CopyOperand(llvm::User *inst)
                     DC->setSelectionKind(SC->getSelectionKind());
                     newGlobal->setComdat(DC);
                 }
-                globalDeclarationMap[gv] = newGlobal;
+                globalDeclarationSet.insert(newGlobal);
                 VMap[gv] = newGlobal;
                 for (auto user : gv->users())
                 {
