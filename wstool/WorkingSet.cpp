@@ -12,13 +12,13 @@ namespace WorkingSet
     map<string, vector<int64_t>> virAddr;
     uint64_t inputSize;
 
-    // FirstStore is called when we know that the address appears for the first time, then: 
-    // 1.Update Alias table with the live addresses 
+    // FirstStore is called when we know that the address appears for the first time, then:
+    // 1.Update Alias table with the live addresses
     // 2.Construct the virtual address dictionary of the live addresses
 
-    // Here “op” is a flag to indicate that the address is known to birth 
-    // because of a load instruction or Store instruction  
- 
+    // Here “op” is a flag to indicate that the address is known to birth
+    // because of a load instruction or Store instruction
+
     void firstStore(string &addr, int64_t t, int op)
     {
         int64_t addrIndex = stol(addr, nullptr, 0);
@@ -26,7 +26,7 @@ namespace WorkingSet
         stringstream ss;
         if (op > 0)
         {
-            // Virtual address map: contains the time on the liveness of an address 
+            // Virtual address map: contains the time on the liveness of an address
             // virAddr[address + '@' + t0] = [addr, t0, t1, t2,…,tn]
             // t0: the time when the first store appears, it’s the time the address begins
             // t1, t2, …, tn: the time when the load instruction appears to load from this address
@@ -89,7 +89,7 @@ namespace WorkingSet
 
     void Process(string &key, string &value)
     {
-        int64_t addrIndex;        
+        int64_t addrIndex;
         string &address = value;
         if ((key == "StoreAddress") || (key == "LoadAddress"))
         {

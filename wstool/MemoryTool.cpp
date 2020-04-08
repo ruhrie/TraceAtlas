@@ -30,16 +30,13 @@ bool sortKeyInternel(string &xin, string &yin)
 
 int main(int argc, char **argv)
 {
-    // writeAll is a flag to indicate if working set size should be monitored for every cycle 
+    // writeAll is a flag to indicate if working set size for every moment should be monitored
     // or we only need to know the maximum working set size.
     bool writeAll = false;
     cl::ParseCommandLineOptions(argc, argv);
     ProcessTrace(inputTrace, &WorkingSet::Process, "working set analysis", false);
 
-    // Internal sample: only run to get the internal working set size in a time range like 50000-100000. 
-    // Because internal working set seems to be always cyclic, 
-    // we can sample this to prediction the maximum internal working set.   
-    int64_t internalSampleTime = 50000;
+    int64_t internalSampleTime = 10000;
     if (internalSampleTime > WorkingSet::timing)
     {
         internalSampleTime = WorkingSet::timing;
@@ -54,6 +51,7 @@ int main(int argc, char **argv)
 
     // devide the virtual address map into two, one is internal map whose start time is bigger than 1
     // another is input map whose start time is -1
+    //for (map<string, vector<int64_t>>::iterator it = WorkingSet::virAddr.begin(); it != WorkingSet::virAddr.end(); ++it)
     for (auto &it : WorkingSet::virAddr)
     {
         if ((it.second)[1] > 0)
@@ -93,9 +91,6 @@ int main(int argc, char **argv)
     uint64_t maxinternal = 0;
     vector<string> outputList;
 
-
-    // Make a cycle of time and virtual address map,
-    // then get the working set size for every time point
     if (writeAll)
     {
         for (int64_t time = 0; time < WorkingSet::timing; time++)
@@ -203,16 +198,14 @@ int main(int argc, char **argv)
         for (int64_t time = 0; time < internalSampleTime; time++)
         {
             vector<string> timeline;
-            for (auto itv = InternelSampleKeyVector.begin(); itv != InternelSampleKeyVector.end()-1;)
+            for (auto itv = InternelSampleKeyVector.begin(); itv != InternelSampleKeyVector.end(); ++itv)
             {
                 string key = *itv;
-
                 if (!InternelSampleVirAddr[key].empty())
                 {
 
                     if (InternelSampleVirAddr[key][1] > time)
                     {
-                        itv++;
                         break;
                     }
                     if (InternelSampleVirAddr[key].size() > 2)
@@ -220,27 +213,18 @@ int main(int argc, char **argv)
                         if (InternelSampleVirAddr[key][1] <= time && InternelSampleVirAddr[key][InternelSampleVirAddr[key].size() - 1] > time)
                         {
                             timeline.push_back(key);
-                            itv++;
                         }
                         else if (time > InternelSampleVirAddr[key][InternelSampleVirAddr[key].size() - 1])
                         {
                             InternelSampleVirAddr.erase(key);
-                            itv = InternelSampleKeyVector.erase(itv);
-                        }
-                        else
-                        {
-                            itv++;
+                            InternelSampleKeyVector.erase(itv);
                         }
                     }
                     else
-                    {                        
+                    {
                         InternelSampleVirAddr.erase(key);
-                        itv = InternelSampleKeyVector.erase(itv);
+                        InternelSampleKeyVector.erase(itv);
                     }
-                }
-                else
-                {
-                     ++itv;
                 }
             }
             if (maxinternal < timeline.size())
