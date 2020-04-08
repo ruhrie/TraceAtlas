@@ -107,7 +107,6 @@ private:
     void PatchPhis();
 
     void GetKernelLabels();
-    void CopyArgument(llvm::CallBase *Call);
     void CopyOperand(llvm::User *inst);
     void InlineFunctions(std::set<int64_t> &blocks);
     void RemapExports();
