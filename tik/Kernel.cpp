@@ -438,14 +438,6 @@ void Kernel::RemapNestedKernels()
         {
             if (auto *callInst = dyn_cast<CallInst>(i))
             {
-                Function *funcCal = callInst->getCalledFunction();
-                llvm::Function *funcName = TikModule->getFunction(funcCal->getName());
-                if (funcName == nullptr)
-                {
-                    // we have a non-kernel function call
-                }
-                //else if (funcName != MemoryRead && funcName != MemoryWrite) // must be a kernel function call
-                //{
                 auto calledFunc = callInst->getCalledFunction();
                 auto subK = KfMap[calledFunc];
                 if (subK != nullptr)
@@ -482,17 +474,12 @@ void Kernel::RemapNestedKernels()
                             auto asdf = embeddedCallArgs[arg];
                             callInst->setArgOperand(k, asdf);
                         }
-                        else if (auto *c = dyn_cast<Constant>(op))
-                        {
-                            //we don't have to do anything so ignore
-                        }
                         else
                         {
                             throw AtlasException("Tik Error: Unexpected value passed to function");
                         }
                     }
                 }
-                //}
             }
         }
     }
@@ -1151,134 +1138,18 @@ void Kernel::CopyGlobals()
             auto *inst = cast<Instruction>(bi);
             if (auto *cv = dyn_cast<CallBase>(inst))
             {
-                CopyArgument(cv);
+                for (auto i = cv->arg_begin(); i < cv->arg_end(); i++)
+                {
+                    if (auto user = dyn_cast<User>(i))
+                    {
+                        CopyOperand(user);
+                    }
+                }
             }
             else
             {
                 CopyOperand(inst);
             }
-        }
-    }
-}
-
-void Kernel::CopyArgument(llvm::CallBase *Call)
-{
-    for (auto i = Call->arg_begin(); i < Call->arg_end(); i++)
-    {
-        // if we are a global, copy it
-        if (auto *gv = dyn_cast<GlobalVariable>(i))
-        {
-            Module *m = gv->getParent();
-            if (m != TikModule)
-            {
-                //its the wrong module
-                if (gv->getParent() != TikModule)
-                {
-                    if (gv->hasInitializer())
-                    {
-                        llvm::Constant *value = gv->getInitializer();
-                        for (uint32_t iter = 0; iter < value->getNumOperands(); iter++)
-                        {
-                            auto *internal = cast<llvm::User>(value->getOperand(iter));
-                            CopyOperand(internal);
-                        }
-                    }
-                    //and not already in the vmap
-
-                    //for some reason if we don't do this first the verifier fails
-                    //we do absolutely nothing with it and it doesn't even end up in our output
-                    //its technically a memory leak, but its an acceptable sacrifice
-                    auto *newVar = new GlobalVariable(
-                        gv->getValueType(),
-                        gv->isConstant(), gv->getLinkage(), nullptr, "",
-                        gv->getThreadLocalMode(),
-                        gv->getType()->getAddressSpace());
-                    newVar->copyAttributesFrom(gv);
-                    //end of the sacrifice
-                    auto newGlobal = cast<GlobalVariable>(TikModule->getOrInsertGlobal(gv->getName(), gv->getType()->getPointerElementType()));
-                    newGlobal->setConstant(gv->isConstant());
-                    newGlobal->setLinkage(gv->getLinkage());
-                    newGlobal->setThreadLocalMode(gv->getThreadLocalMode());
-                    newGlobal->copyAttributesFrom(gv);
-                    if (gv->hasInitializer())
-                    {
-                        newGlobal->setInitializer(MapValue(gv->getInitializer(), VMap));
-                    }
-                    SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
-                    gv->getAllMetadata(MDs);
-                    for (auto MD : MDs)
-                    {
-                        newGlobal->addMetadata(MD.first, *MapMetadata(MD.second, VMap, RF_MoveDistinctMDs));
-                    }
-                    if (Comdat *SC = gv->getComdat())
-                    {
-                        Comdat *DC = newGlobal->getParent()->getOrInsertComdat(SC->getName());
-                        DC->setSelectionKind(SC->getSelectionKind());
-                        newGlobal->setComdat(DC);
-                    }
-                    globalDeclarationSet.insert(newGlobal);
-                    VMap[gv] = newGlobal;
-                    //gv->removeFromParent();
-                    for (auto user : gv->users())
-                    {
-                        if (auto *inst = dyn_cast<llvm::Instruction>(user))
-                        {
-                            if (inst->getModule() == TikModule)
-                            {
-                                user->replaceUsesOfWith(gv, newGlobal);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        // if we have a GEP as a function arg, get its pointer arg
-        else if (auto *gop = dyn_cast<llvm::GEPOperator>(i))
-        {
-            RemapOperands(gop, cast<Instruction>(Call));
-        }
-        else if (auto op = dyn_cast<llvm::BitCastOperator>(i))
-        {
-            CopyOperand(op);
-        }
-        else if (auto op = dyn_cast<llvm::FPMathOperator>(i))
-        {
-            CopyOperand(op);
-        }
-        else if (auto load = dyn_cast<LoadInst>(i))
-        {
-            CopyOperand(load);
-        }
-        else if (auto cons = dyn_cast<Constant>(i))
-        {
-            CopyOperand(cons);
-        }
-        /*// if we are anything else, we don't know what to do
-        else if (GlobalValue *gv = dyn_cast<GlobalValue>(i))
-        {
-            spdlog::warn("Non variable global reference"); //basically this is a band aid. Needs some more help
-        }
-        
-        else if (llvm::PtrToIntOperator* op = dyn_cast<llvm::PtrToIntOperator>(i))
-        {
-            std::cout << "This is a PtrToInt operator." << std::endl;
-        }
-        else if (llvm::ZExtOperator* op = dyn_cast<llvm::ZExtOperator>(i))
-        {
-            std::cout << "This is a Zext operator." << std::endl;
-        }
-        else if (llvm::OverflowingBinaryOperator* op = dyn_cast<llvm::OverflowingBinaryOperator>(i))
-        {
-            std::cout << "This is an OF binary operator." << std::endl;
-        }
-        else if (llvm::PossiblyExactOperator* op = dyn_cast<llvm::PossiblyExactOperator>(i))
-        {
-            std::cout << "This is a possibly exact operator." << std::endl;
-        }*/
-        else if (isa<Operator>(i))
-        {
-            //llvm::Value* test = cast<Value>(i);
-            spdlog::warn("Function argument operand type not supported for global copying."); //basically this is a band aid. Needs some more help
         }
     }
 }
@@ -1383,39 +1254,13 @@ void Kernel::CopyOperand(llvm::User *inst)
     }
     for (uint32_t j = 0; j < inst->getNumOperands(); j++)
     {
-        Value *v = inst->getOperand(j);
-        if (auto *gv = dyn_cast<GlobalVariable>(v))
-        {
-            CopyOperand(gv);
-        }
-        else if (auto *con = dyn_cast<Constant>(v))
-        {
-            for (unsigned int i = 0; i < con->getNumOperands(); i++)
-            {
-                if (auto glob = dyn_cast<GlobalVariable>(con->getOperand(i)))
-                {
-                    CopyOperand(glob);
-                }
-                else if (auto func = dyn_cast<Function>(con->getOperand(i)))
-                {
-                    CopyOperand(func);
-                }
-            }
-        }
-        else if (auto newOp = dyn_cast<GetElementPtrInst>(v))
+        if (auto newOp = dyn_cast<GlobalVariable>(inst->getOperand(j)))
         {
             CopyOperand(newOp);
         }
-        else if (auto newOp = dyn_cast<Operator>(v))
+        else if (auto newFunc = dyn_cast<Function>(inst->getOperand(j)))
         {
-            if (remappedOperandSet.find(newOp) == remappedOperandSet.end())
-            {
-                remappedOperandSet.insert(newOp);
-                CopyOperand(newOp);
-            }
-        }
-        else
-        {
+            CopyOperand(newFunc);
         }
     }
 }
