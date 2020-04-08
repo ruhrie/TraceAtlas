@@ -297,7 +297,7 @@ void Kernel::RemapOperands(Operator *op, Instruction *inst)
     {
         IRBuilder Builder(inst);
         // if its a gep or load we need to make a new one (because gep and load args can't be changed after construction)
-        if (auto gepInst = dyn_cast<GEPOperator>(op)) 
+        if (auto gepInst = dyn_cast<GEPOperator>(op))
         {
             // duplicate the indexes of the GEP
             vector<Value *> idxList;
