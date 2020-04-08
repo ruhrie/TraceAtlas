@@ -319,7 +319,7 @@ void Kernel::RemapOperands(Operator *op, Instruction *inst)
                         // sanity check
                         if (ptr == nullptr)
                         {
-                            throw "The global copying logic isn't working...";
+                            throw AtlasException("Declared global not mapped");
                         }
                     }
                     else
@@ -355,7 +355,7 @@ void Kernel::RemapOperands(Operator *op, Instruction *inst)
                         // sanity check
                         if (ptr == nullptr)
                         {
-                            throw "The global copying logic isn't working...";
+                            throw AtlasException("Declared global not mapped");
                         }
                     }
                     else
