@@ -66,56 +66,6 @@ namespace TypeFour
                     }
                 }
             }
-            //finally check the terminator and add the call points
-            Instruction *I = bb->getTerminator();
-            if (auto ri = dyn_cast<ReturnInst>(I))
-            {
-                Function *f = bb->getParent();
-                for (auto use : f->users())
-                {
-                    if (auto cb = dyn_cast<CallBase>(use))
-                    {
-                        BasicBlock *entry = cb->getParent();
-                        if (entry == base)
-                        {
-                            foundSelf = true;
-                        }
-                        if (checked.find(entry) == checked.end())
-                        {
-                            int64_t id = GetBlockID(entry);
-                            if (validBlocks.find(id) != validBlocks.end())
-                            {
-                                checked.insert(entry);
-                                toProcess.push(entry);
-                            }
-                        }
-                    }
-                }
-            }
-            else if (auto ri = dyn_cast<ResumeInst>(I))
-            {
-                Function *f = bb->getParent();
-                for (auto use : f->users())
-                {
-                    if (auto cb = dyn_cast<CallBase>(use))
-                    {
-                        BasicBlock *entry = cb->getParent();
-                        if (entry == base)
-                        {
-                            foundSelf = true;
-                        }
-                        if (checked.find(entry) == checked.end())
-                        {
-                            int64_t id = GetBlockID(entry);
-                            if (validBlocks.find(id) != validBlocks.end())
-                            {
-                                checked.insert(entry);
-                                toProcess.push(entry);
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         if (!foundSelf)
