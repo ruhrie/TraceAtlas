@@ -101,7 +101,7 @@ Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
         //SplitBlocks(blocks);
 
         GetEntrances(blocks);
-        //GetExits(blocks);
+        GetExits(blocks);
         GetExternalValues(blocks);
 
         //we now have all the information we need
@@ -463,7 +463,15 @@ void Kernel::BuildInit()
     uint64_t i = 0;
     for (auto ent : Entrances)
     {
-        initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[ent]));
+        int64_t id = GetBlockID(ent);
+        if (KernelMap.find(id) == KernelMap.end())
+        {
+            initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[ent]));
+        }
+        else
+        {
+            throw AtlasException("Unimplemented");
+        }
         i++;
     }
 }
@@ -710,8 +718,10 @@ void Kernel::BuildExit()
     int i = 0;
     for (auto pred : predecessors(Exit))
     {
-        ExitMap[pred] = i++;
+        ExitMap[pred] = i;
+        i++;
     }
+
     auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), (uint32_t)ExitMap.size());
     for (auto pair : ExitMap)
     {
@@ -1012,9 +1022,9 @@ void Kernel::GetExits(set<BasicBlock *> &blocks)
             {
                 if (coveredExits.find(suc) == coveredExits.end())
                 {
-                    ExitTarget[exitId] = suc;
+                    ExitTarget[exitId++] = suc;
                     coveredExits.insert(suc);
-                    ExitMap[block] = exitId++;
+                    //ExitMap[block] = exitId++;
                 }
             }
         }
@@ -1029,9 +1039,9 @@ void Kernel::GetExits(set<BasicBlock *> &blocks)
                 {
                     if (coveredExits.find(v->getParent()) == coveredExits.end())
                     {
-                        ExitTarget[exitId] = v->getParent();
+                        ExitTarget[exitId++] = v->getParent();
                         coveredExits.insert(v->getParent());
-                        ExitMap[block] = exitId++;
+                        //ExitMap[block] = exitId++;
                     }
                 }
             }
