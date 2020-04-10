@@ -23,7 +23,8 @@ void ProcessArrayArgument(std::string &type, const std::string &argname)
         ast++;
     }
     std::size_t whiteSpacePosition;
-    // if we have a structure, find the first [] and insert the name before it
+    // if we have a structure as the element type, find the first [] and insert the name before it
+    // struct tikStruct2 []
     if (type.find("struct") != std::string::npos)
     {
         whiteSpacePosition = type.find('[') - 1;
@@ -33,9 +34,17 @@ void ProcessArrayArgument(std::string &type, const std::string &argname)
         whiteSpacePosition = type.find(' ');
     }
     type.insert(whiteSpacePosition + 1, argname);
-    for (int j = 0; j < ast; j++)
+    // struct tikStruct2 argname[]
+    if (ast > 0)
     {
-        type.insert(whiteSpacePosition, "*");
+        std::size_t argNameStart = whiteSpacePosition+1;
+        for (int j = 0; j < ast; j++)
+        {
+            type.insert(argNameStart, "*");
+        }
+        type.insert(argNameStart, "(");
+        whiteSpacePosition = type.find('[');
+        type.insert(whiteSpacePosition, ")");
     }
 }
 
@@ -179,7 +188,7 @@ std::string getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStr
         {
             whiteSpacePosition = type.size() - 1;
         }
-        // else set the insert position to the end
+        // else set the insert position to the first whitespace
         else
         {
             whiteSpacePosition = type.find(' ');
@@ -201,7 +210,6 @@ std::string getCArrayType(llvm::Type *elem, std::set<llvm::StructType *> &AllStr
         return arrayDec;
     }
     // else return the type we have
-
     try
     {
         return getCType(elem, AllStructures);
