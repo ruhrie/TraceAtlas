@@ -37,7 +37,7 @@ void ProcessArrayArgument(std::string &type, const std::string &argname)
     // struct tikStruct2 argname[]
     if (ast > 0)
     {
-        std::size_t argNameStart = whiteSpacePosition+1;
+        std::size_t argNameStart = whiteSpacePosition + 1;
         for (int j = 0; j < ast; j++)
         {
             type.insert(argNameStart, "*");
