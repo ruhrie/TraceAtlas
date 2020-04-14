@@ -383,16 +383,20 @@ void Kernel::RemapOperands(Operator *op, Instruction *inst)
         {
             newInst = test;
         }
-        if (auto newGlob = dyn_cast<GlobalVariable>(op->getOperand(operand)))
+        auto opi = op->getOperand(operand);
+        if (opi != nullptr)
         {
-            CopyOperand(newGlob);
-        }
-        else if (auto newOp = dyn_cast<Operator>(op->getOperand(operand)))
-        {
-            if (remappedOperandSet.find(newOp) == remappedOperandSet.end())
+            if (auto newGlob = dyn_cast<GlobalVariable>(opi))
             {
-                remappedOperandSet.insert(newOp);
-                RemapOperands(newOp, newInst);
+                CopyOperand(newGlob);
+            }
+            else if (auto newOp = dyn_cast<Operator>(opi))
+            {
+                if (remappedOperandSet.find(newOp) == remappedOperandSet.end())
+                {
+                    remappedOperandSet.insert(newOp);
+                    RemapOperands(newOp, newInst);
+                }
             }
         }
     }
@@ -484,7 +488,7 @@ void Kernel::BuildInit()
     for (auto ent : Entrances)
     {
         int64_t id = GetBlockID(ent);
-        if (KernelMap.find(id) == KernelMap.end())
+        if (KernelMap.find(id) == KernelMap.end() && VMap[ent] != nullptr)
         {
             initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[ent]));
         }
