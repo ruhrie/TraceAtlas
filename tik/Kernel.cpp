@@ -57,7 +57,7 @@ Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
     {
         throw AtlasException("Kernel Error: Kernel names must be unique!");
     }
-    cout << Name << "\n";
+    spdlog::debug("Started converting kernel {0}", Name);
     reservedNames.insert(Name);
 
     set<BasicBlock *> blocks;
