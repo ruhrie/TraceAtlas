@@ -57,6 +57,7 @@ Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
     {
         throw AtlasException("Kernel Error: Kernel names must be unique!");
     }
+    spdlog::debug("Started converting kernel {0}", Name);
     reservedNames.insert(Name);
 
     set<BasicBlock *> blocks;
@@ -101,7 +102,7 @@ Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
         //SplitBlocks(blocks);
 
         GetEntrances(blocks);
-        //GetExits(blocks);
+        GetExits(blocks);
         GetExternalValues(blocks);
 
         //we now have all the information we need
@@ -291,7 +292,7 @@ void Kernel::UpdateMemory()
     }
 }
 
-void Kernel::RemapOperands(Operator *op, Instruction *inst)
+void Kernel::RemapOperands(User *op, Instruction *inst)
 {
     if (remappedOperandSet.find(op) == remappedOperandSet.end())
     {
@@ -383,16 +384,20 @@ void Kernel::RemapOperands(Operator *op, Instruction *inst)
         {
             newInst = test;
         }
-        if (auto newGlob = dyn_cast<GlobalVariable>(op->getOperand(operand)))
+        auto opi = op->getOperand(operand);
+        if (opi != nullptr)
         {
-            CopyOperand(newGlob);
-        }
-        else if (auto newOp = dyn_cast<Operator>(op->getOperand(operand)))
-        {
-            if (remappedOperandSet.find(newOp) == remappedOperandSet.end())
+            if (auto newGlob = dyn_cast<GlobalVariable>(opi))
             {
-                remappedOperandSet.insert(newOp);
-                RemapOperands(newOp, newInst);
+                CopyOperand(newGlob);
+            }
+            else if (auto newOp = dyn_cast<Operator>(opi))
+            {
+                if (remappedOperandSet.find(newOp) == remappedOperandSet.end())
+                {
+                    remappedOperandSet.insert(newOp);
+                    RemapOperands(newOp, newInst);
+                }
             }
         }
     }
@@ -400,11 +405,12 @@ void Kernel::RemapOperands(Operator *op, Instruction *inst)
 
 void Kernel::Remap()
 {
-    for (auto &BB : *KernelFunction)
+    for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
     {
-        for (BasicBlock::iterator BI = BB.begin(), BE = BB.end(); BI != BE; ++BI)
+        auto BB = cast<BasicBlock>(fi);
+        for (BasicBlock::iterator bi = BB->begin(); bi != BB->end(); bi++)
         {
-            auto *inst = cast<Instruction>(BI);
+            auto *inst = cast<Instruction>(bi);
             for (unsigned int arg = 0; arg < inst->getNumOperands(); arg++)
             {
                 Value *inputOp = inst->getOperand(arg);
@@ -483,7 +489,15 @@ void Kernel::BuildInit()
     uint64_t i = 0;
     for (auto ent : Entrances)
     {
-        initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[ent]));
+        int64_t id = GetBlockID(ent);
+        if (KernelMap.find(id) == KernelMap.end() && VMap[ent] != nullptr)
+        {
+            initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[ent]));
+        }
+        else
+        {
+            throw AtlasException("Unimplemented");
+        }
         i++;
     }
 }
@@ -730,8 +744,10 @@ void Kernel::BuildExit()
     int i = 0;
     for (auto pred : predecessors(Exit))
     {
-        ExitMap[pred] = i++;
+        ExitMap[pred] = i;
+        i++;
     }
+
     auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), (uint32_t)ExitMap.size());
     for (auto pair : ExitMap)
     {
@@ -1032,9 +1048,9 @@ void Kernel::GetExits(set<BasicBlock *> &blocks)
             {
                 if (coveredExits.find(suc) == coveredExits.end())
                 {
-                    ExitTarget[exitId] = suc;
+                    ExitTarget[exitId++] = suc;
                     coveredExits.insert(suc);
-                    ExitMap[block] = exitId++;
+                    //ExitMap[block] = exitId++;
                 }
             }
         }
@@ -1049,9 +1065,9 @@ void Kernel::GetExits(set<BasicBlock *> &blocks)
                 {
                     if (coveredExits.find(v->getParent()) == coveredExits.end())
                     {
-                        ExitTarget[exitId] = v->getParent();
+                        ExitTarget[exitId++] = v->getParent();
                         coveredExits.insert(v->getParent());
-                        ExitMap[block] = exitId++;
+                        //ExitMap[block] = exitId++;
                     }
                 }
             }
@@ -1265,6 +1281,11 @@ void Kernel::InlineFunctions(set<int64_t> &blocks)
         for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
         {
             auto baseBlock = cast<BasicBlock>(fi);
+            auto id = GetBlockID(baseBlock);
+            if(blocks.find(id) == blocks.end())
+            {
+                continue;
+            }
             for (auto bi = fi->begin(); bi != fi->end(); bi++)
             {
                 if (auto *ci = dyn_cast<CallInst>(bi))
@@ -1332,10 +1353,14 @@ void Kernel::InlineFunctions(set<int64_t> &blocks)
             bToRemove.push_back(block);
         }
     }
+    /*
     for (auto block : bToRemove)
     {
-        block->eraseFromParent();
+        //this breaks hard for some reason
+        //not really necessary fortunately
+        //block->eraseFromParent();
     }
+    */
 }
 
 void Kernel::RemapExports()

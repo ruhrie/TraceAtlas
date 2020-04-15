@@ -127,7 +127,7 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
             if (iPercent > previousCount + 5)
             {
                 previousCount = ((iPercent / 5) + 1) * 5;
-                spdlog::info("Completed block {0:d} of {1:d}", index, blocks);
+                //spdlog::info("Completed block {0:d} of {1:d}", index, blocks);
             }
         }
     }
