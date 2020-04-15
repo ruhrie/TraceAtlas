@@ -34,11 +34,11 @@ namespace WorkingSet
             virAddrLine[1] = t;
 
             internalVirAddr[internalMapSize] = virAddrLine;
-            //the coming address is not in the map  
+            //the coming address is not in the map
             if (deAliasInternal.count(addrIndex) == 0)
             {
                 deAliasInternal[addrIndex] = internalMapSize;
-            }//the coming address in the map is not bigger than 3, indicates only store instruction 
+            } //the coming address in the map is not bigger than 3, indicates only store instruction
             //has came but no load instructions
             else if (internalVirAddr[deAliasInternal[addrIndex]].size() < 3)
             {
@@ -81,7 +81,7 @@ namespace WorkingSet
 
         int64_t addrIndex = stol(addr, nullptr, 0);
         // if the coming address is an input address or an internal address
-        if(deAliasInternal.count(addrIndex) != 0)
+        if (deAliasInternal.count(addrIndex) != 0)
         {
             internalVirAddr[deAliasInternal[addrIndex]].push_back(t);
         }
@@ -89,7 +89,6 @@ namespace WorkingSet
         {
             inputVirAddr[deAliasInput[addrIndex]].push_back(t);
         }
-        
     }
 
     void Process(string &key, string &value)
@@ -101,7 +100,7 @@ namespace WorkingSet
             addrIndex = stol(value, nullptr, 0);
         }
         // a load instruction with addresses already in our virtual address map.
-        if ((deAliasInternal.count(addrIndex) != 0||deAliasInput.count(addrIndex) != 0) && (key == "LoadAddress"))
+        if ((deAliasInternal.count(addrIndex) != 0 || deAliasInput.count(addrIndex) != 0) && (key == "LoadAddress"))
         {
             livingLoad(address, timing);
             timing++;

@@ -19,14 +19,13 @@ using namespace WorkingSet;
 llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
 
 int main(int argc, char **argv)
-{ 
+{
     bool writeAll = false;
     cl::ParseCommandLineOptions(argc, argv);
     ProcessTrace(inputTrace, &WorkingSet::Process, "working set analysis", false);
 
-
     //Internal sample: only run at a time range of 50000-100000 but not the total time
-    //Because internal working set seems to be always cyclic, 
+    //Because internal working set seems to be always cyclic,
     //we can sample this to predict the maximum internal working set
     int64_t internalSampleTime = 30000;
     if (internalSampleTime > WorkingSet::timing)
@@ -45,13 +44,13 @@ int main(int argc, char **argv)
     uint64_t maxinternal = 0;
     vector<int64_t> outputList;
 
-    //use a vector to store the keys of the virtual address maps, because we need to 
+    //use a vector to store the keys of the virtual address maps, because we need to
     //dynamically erase elements from the map and break the loop in some situation to speed up
-    for (int64_t i = 0;i <internalMapSize; i++)
+    for (int64_t i = 0; i < internalMapSize; i++)
     {
         internalKeyVector.push_back(i);
     }
-    for (int64_t i = 0;i <inputMapSize; i++)
+    for (int64_t i = 0; i < inputMapSize; i++)
     {
         inputKeyVector.push_back(i);
     }
@@ -66,7 +65,7 @@ int main(int argc, char **argv)
             vector<int64_t> timeline;
             //internal virtual address iteration for each time
             for (auto it = internalKeyVector.begin(); it != internalKeyVector.end();)
-            {               
+            {
                 if (!internalVirAddr[*it].empty())
                 {
                     //the birth time of addresses in map is late than time now, break the loop
@@ -74,14 +73,14 @@ int main(int argc, char **argv)
                     {
                         break;
                     }
-                    //if the size of the address in the map is bigger than 2, it's not an output address 
+                    //if the size of the address in the map is bigger than 2, it's not an output address
                     if (internalVirAddr[*it].size() > 2)
                     {
                         //  begin < t < end, it is a living internal address
                         if (internalVirAddr[*it][1] <= time && internalVirAddr[*it][internalVirAddr[*it].size() - 1] > time)
                         {
                             timeline.push_back(*it);
-                             it++;
+                            it++;
                         }
                         //  t > end, it is a ended internal address, erasing this from the map to speed up
                         else if (time > internalVirAddr[*it][internalVirAddr[*it].size() - 1])
@@ -91,10 +90,10 @@ int main(int argc, char **argv)
                         }
                         else
                         {
-                             it++;
+                            it++;
                         }
                     }
-                    // if the address is not in the output list, then push it into the list and erase it from the map to speed up 
+                    // if the address is not in the output list, then push it into the list and erase it from the map to speed up
                     else if (std::find(outputList.begin(), outputList.end(), *it) == outputList.end())
                     {
 
@@ -113,7 +112,7 @@ int main(int argc, char **argv)
                 }
             }
             // count the maximum size for output and internal working set
-            if (maxOutput <  outputList.size())
+            if (maxOutput < outputList.size())
             {
                 maxOutput = outputList.size();
             }
@@ -150,7 +149,7 @@ int main(int argc, char **argv)
                 else
                 {
                     it++;
-                }                
+                }
             }
             alivenumber = alivenumber - inputList.size();
 
@@ -172,7 +171,7 @@ int main(int argc, char **argv)
     {
         for (auto &key : internalKeyVector)
         {
-            //if the size of the address in the map is smaller than 3, it's an output address 
+            //if the size of the address in the map is smaller than 3, it's an output address
             if (internalVirAddr[key].size() < 3)
             {
                 maxOutput++;
@@ -185,7 +184,7 @@ int main(int argc, char **argv)
             vector<int64_t> timeline;
             //internal virtual address iteration for each time
             for (auto it = internalKeyVector.begin(); it != internalKeyVector.end();)
-            {               
+            {
                 if (!internalVirAddr[*it].empty())
                 {
                     //the birth time of addresses in map is late than time now, break the loop
@@ -200,7 +199,7 @@ int main(int argc, char **argv)
                         if (internalVirAddr[*it][1] <= time && internalVirAddr[*it][internalVirAddr[*it].size() - 1] > time)
                         {
                             timeline.push_back(*it);
-                             it++;
+                            it++;
                         }
                         //  t > end, it is a ended internal address, erasing this from the map to speed up
                         else if (time > internalVirAddr[*it][internalVirAddr[*it].size() - 1])
@@ -210,10 +209,10 @@ int main(int argc, char **argv)
                         }
                         else
                         {
-                             it++;
+                            it++;
                         }
                     }
-                    // if the address is not in the output list, then push it into the list and erase it from the map to speed up 
+                    // if the address is not in the output list, then push it into the list and erase it from the map to speed up
                     else if (std::find(outputList.begin(), outputList.end(), *it) == outputList.end())
                     {
                         outputList.push_back(*it);
