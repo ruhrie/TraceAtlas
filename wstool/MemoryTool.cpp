@@ -15,18 +15,8 @@
 
 using namespace std;
 using namespace llvm;
-
+using namespace WorkingSet;
 llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
-
-bool sortKeyInput(string &xin, string &yin)
-{
-    return WorkingSet::virAddr[xin][2] < WorkingSet::virAddr[yin][2];
-}
-
-bool sortKeyInternel(string &xin, string &yin)
-{
-    return WorkingSet::virAddr[xin][1] < WorkingSet::virAddr[yin][1];
-}
 
 int main(int argc, char **argv)
 {
@@ -36,100 +26,81 @@ int main(int argc, char **argv)
     cl::ParseCommandLineOptions(argc, argv);
     ProcessTrace(inputTrace, &WorkingSet::Process, "working set analysis", false);
 
-    int64_t internalSampleTime = 10000;
+    int64_t internalSampleTime = 100000;
     if (internalSampleTime > WorkingSet::timing)
     {
         internalSampleTime = WorkingSet::timing;
     }
-    vector<string> InputkeyVector;    // InputkeyVector is a vector which stores keys of input virtual address map
-    vector<string> InternelkeyVector; // InternelkeyVector is a vector which stores keys of internal virtual address map
-    // InternelkeyVector is a vector which stores keys of a part of internal virtual address map
-    vector<string> InternelSampleKeyVector;
-    map<string, vector<int64_t>> InputVirAddr;
-    map<string, vector<int64_t>> InternelVirAddr;
-    map<string, vector<int64_t>> InternelSampleVirAddr;
 
-    // devide the virtual address map into two, one is internal map whose start time is bigger than 1
-    // another is input map whose start time is -1
-    //for (map<string, vector<int64_t>>::iterator it = WorkingSet::virAddr.begin(); it != WorkingSet::virAddr.end(); ++it)
-    for (auto &it : WorkingSet::virAddr)
-    {
-        if ((it.second)[1] > 0)
-        {
-            InternelkeyVector.push_back(it.first);
-            InternelVirAddr.insert(pair<string, vector<int64_t>>(it.first, it.second));
-            if ((it.second)[1] < internalSampleTime)
-            {
-                InternelSampleKeyVector.push_back(it.first);
-                InternelSampleVirAddr.insert(pair<string, vector<int64_t>>(it.first, it.second));
-            }
-        }
-        else
-        {
-            InputkeyVector.push_back(it.first);
-            InputVirAddr.insert(pair<string, vector<int64_t>>(it.first, it.second));
-        }
-    }
-    if (writeAll)
-    {
-        // for the internal map, sort the key vector according to the start time
-        std::sort(InternelkeyVector.begin(), InternelkeyVector.end(), sortKeyInternel);
-        // for the input map, sort the key vector according to the first load time
-        std::sort(InputkeyVector.begin(), InputkeyVector.end(), sortKeyInput);
-    }
-    else
-    {
-        std::sort(InternelSampleKeyVector.begin(), InternelSampleKeyVector.end(), sortKeyInternel);
-    }
-
-    uint64_t alivenumber = WorkingSet::inputSize;
+    auto alivenumber = uint64_t(WorkingSet::inputMapSize);
     vector<uint64_t> outputWS;
     vector<uint64_t> inputWS;
     vector<uint64_t> internalWS;
+    vector<int64_t> inputKeyVector;
+    vector<int64_t> internalKeyVector;
     uint64_t maxInput = 0;
     uint64_t maxOutput = 0;
     uint64_t maxinternal = 0;
-    vector<string> outputList;
+    vector<int64_t> outputList;
+    for (int64_t i = 0;i <internalMapSize; i++)
+    {
+        internalKeyVector.push_back(i);
+    }
+    for (int64_t i = 0;i <inputMapSize; i++)
+    {
+        inputKeyVector.push_back(i);
+    }
 
     if (writeAll)
     {
         for (int64_t time = 0; time < WorkingSet::timing; time++)
         {
-            vector<string> inputList;
-            vector<string> timeline;
-            //for (vector<string>::iterator itv = InternelkeyVector.begin(); itv != InternelkeyVector.end(); ++itv)
-            for (auto itv = InternelkeyVector.begin(); itv != InternelkeyVector.end();)
-            {
-                //string key = *itv;
-                if (!InternelVirAddr[*itv].empty())
+            vector<int64_t> inputList;
+            vector<int64_t> timeline;
+            for (auto it = internalKeyVector.begin(); it != internalKeyVector.end();)
+            {               
+                if (!internalVirAddr[*it].empty())
                 {
 
-                    if (InternelVirAddr[*itv][1] > time)
+                    if (internalVirAddr[*it][1] > time)
                     {
                         break;
                     }
-                    if (InternelVirAddr[*itv].size() > 2)
+                    if (internalVirAddr[*it].size() > 2)
                     {
-                        if (InternelVirAddr[*itv][1] <= time && InternelVirAddr[*itv][InternelVirAddr[*itv].size() - 1] > time)
+                        if (internalVirAddr[*it][1] <= time && internalVirAddr[*it][internalVirAddr[*it].size() - 1] > time)
                         {
-                            timeline.push_back(*itv);
+                            timeline.push_back(*it);
+                             it++;
                         }
-                        else if (time > InternelVirAddr[*itv][InternelVirAddr[*itv].size() - 1])
+                        else if (time > internalVirAddr[*it][internalVirAddr[*it].size() - 1])
                         {
-                            InternelVirAddr.erase(*itv);
-                            InternelkeyVector.erase(itv);
+                            internalVirAddr.erase(*it);
+                            it = internalKeyVector.erase(it);
+                        }
+                        else
+                        {
+                             it++;
                         }
                     }
-                    else if (std::find(outputList.begin(), outputList.end(), *itv) == outputList.end())
+                    else if (std::find(outputList.begin(), outputList.end(), *it) == outputList.end())
                     {
 
-                        outputList.push_back(*itv);
-                        InternelVirAddr.erase(*itv);
-                        InternelkeyVector.erase(itv);
+                        outputList.push_back(*it);
+                        internalVirAddr.erase(*it);
+                        it = internalKeyVector.erase(it);
+                    }
+                    else
+                    {
+                        it++;
                     }
                 }
+                else
+                {
+                    it++;
+                }
             }
-            if (maxOutput < outputList.size())
+            if (maxOutput <  outputList.size())
             {
                 maxOutput = outputList.size();
             }
@@ -137,48 +108,40 @@ int main(int argc, char **argv)
             {
                 maxinternal = timeline.size();
             }
-            if (writeAll)
-            {
-                outputWS.push_back(outputList.size());
-                internalWS.push_back(timeline.size());
-            }
+            outputWS.push_back(outputList.size());
+            internalWS.push_back(timeline.size());
             timeline.clear();
-            for (auto itv = InputkeyVector.begin(); itv != InputkeyVector.end(); ++itv)
+            for (auto it = inputKeyVector.begin(); it != inputKeyVector.end();)
             {
-                string key = *itv;
-                if (InputkeyVector.size() == 1)
+                if (!inputVirAddr[*it].empty())
                 {
-                    inputList.push_back(key);
-                    break;
-                }
-
-                if (InputVirAddr.count(key) > 0)
-                {
-                    if (InputVirAddr[key].size() > 2)
+                    if (inputVirAddr[*it][2] > time)
                     {
-                        if (InputVirAddr[key][2] > time)
-                        {
-                            break;
-                        }
+                        break;
                     }
-
-                    if (time > InputVirAddr[key][InputVirAddr[key].size() - 1])
+                    if (time > inputVirAddr[*it][inputVirAddr[*it].size() - 1])
                     {
-                        inputList.push_back(key);
-                        InputVirAddr.erase(key);
-                        InputkeyVector.erase(itv);
+                        inputList.push_back(*it);
+                        inputVirAddr.erase(*it);
+                        it = inputKeyVector.erase(it);
+                    }
+                    else
+                    {
+                        it++;
                     }
                 }
+                else
+                {
+                    it++;
+                }                
             }
             alivenumber = alivenumber - inputList.size();
+
             if (maxInput < alivenumber)
             {
                 maxInput = alivenumber;
             }
-            if (writeAll)
-            {
-                inputWS.push_back(alivenumber);
-            }
+            inputWS.push_back(alivenumber);
             if (time % 1000 == 0)
             {
                 float ProcessRatio = (float)time / WorkingSet::timing;
@@ -188,52 +151,75 @@ int main(int argc, char **argv)
     }
     else
     {
-        for (auto &key : InternelkeyVector)
+        for (auto &key : internalKeyVector)
         {
-            if (InternelVirAddr[key].size() < 3)
+            if (internalVirAddr[key].size() < 3)
             {
                 maxOutput++;
             }
         }
         for (int64_t time = 0; time < internalSampleTime; time++)
         {
-            vector<string> timeline;
-            for (auto itv = InternelSampleKeyVector.begin(); itv != InternelSampleKeyVector.end(); ++itv)
-            {
-                string key = *itv;
-                if (!InternelSampleVirAddr[key].empty())
+            vector<int64_t> inputList;
+            vector<int64_t> timeline;
+            for (auto it = internalKeyVector.begin(); it != internalKeyVector.end();)
+            {               
+                if (!internalVirAddr[*it].empty())
                 {
 
-                    if (InternelSampleVirAddr[key][1] > time)
+                    if (internalVirAddr[*it][1] > time)
                     {
                         break;
                     }
-                    if (InternelSampleVirAddr[key].size() > 2)
+                    if (internalVirAddr[*it].size() > 2)
                     {
-                        if (InternelSampleVirAddr[key][1] <= time && InternelSampleVirAddr[key][InternelSampleVirAddr[key].size() - 1] > time)
+                        if (internalVirAddr[*it][1] <= time && internalVirAddr[*it][internalVirAddr[*it].size() - 1] > time)
                         {
-                            timeline.push_back(key);
+                            timeline.push_back(*it);
+                             it++;
                         }
-                        else if (time > InternelSampleVirAddr[key][InternelSampleVirAddr[key].size() - 1])
+                        else if (time > internalVirAddr[*it][internalVirAddr[*it].size() - 1])
                         {
-                            InternelSampleVirAddr.erase(key);
-                            InternelSampleKeyVector.erase(itv);
+                            cout << "size VirAddr:" << internalVirAddr.size()<<endl;
+                            cout << "size KeyVector:" << internalKeyVector.size()<<endl;
+                            internalVirAddr.erase(*it);
+                            it = internalKeyVector.erase(it);
                         }
+                        else
+                        {
+                             it++;
+                        }
+                    }
+                    else if (std::find(outputList.begin(), outputList.end(), *it) == outputList.end())
+                    {
+
+                        outputList.push_back(*it);
+                        internalVirAddr.erase(*it);
+                        it = internalKeyVector.erase(it);
                     }
                     else
                     {
-                        InternelSampleVirAddr.erase(key);
-                        InternelSampleKeyVector.erase(itv);
+                        it++;
                     }
+                }
+                else
+                {
+                    it++;
                 }
             }
             if (maxinternal < timeline.size())
             {
                 maxinternal = timeline.size();
             }
+            timeline.clear();
+            if (time % 1000 == 0)
+            {
+                float ProcessRatio = (float)time / WorkingSet::timing;
+                printf("process time :%ld, %ld, %.5f \n", time, WorkingSet::timing, ProcessRatio);
+            }
         }
+        maxInput = alivenumber;
     }
-    maxInput = alivenumber;
     printf("maxInput: %lu \n maxinternal: %lu \n maxOutput: %lu \n", maxInput, maxinternal, maxOutput);
 
     if (writeAll)
@@ -242,19 +228,19 @@ int main(int argc, char **argv)
         f.open("./inputWorkingSet.txt");
         for (uint64_t j : inputWS)
         {
-            f << inputWS[j] << endl;
+            f << j << endl;
         }
         f.close();
         f.open("./outputWorkingSet.txt");
         for (uint64_t j : outputWS)
         {
-            f << outputWS[j] << endl;
+            f << j << endl;
         }
         f.close();
         f.open("./internalWorkingSet.txt");
         for (uint64_t j : internalWS)
         {
-            f << internalWS[j] << endl;
+            f << j << endl;
         }
         f.close();
     }
