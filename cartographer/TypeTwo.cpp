@@ -18,7 +18,7 @@ namespace TypeTwo
     set<int64_t> *blocks = nullptr;
 
     bool blocksLabeled = false;
-    string currentKernel;
+    set<string> currentKernel;
     std::set<std::set<int64_t>> kernels;
     void Setup(llvm::Module *bitcode, std::set<std::set<int64_t>> k)
     {
@@ -72,7 +72,10 @@ namespace TypeTwo
             }
             if (!blocksLabeled && !currentKernel.empty())
             {
-                blockLabelMap[block].insert(currentKernel);
+                for (const auto &k : currentKernel)
+                {
+                    blockLabelMap[block].insert(k);
+                }
             }
 
             for (auto open : openBlocks)
@@ -109,11 +112,11 @@ namespace TypeTwo
         }
         else if (key == "KernelEnter")
         {
-            currentKernel = value;
+            currentKernel.insert(value);
         }
         else if (key == "KernelExit")
         {
-            currentKernel.clear();
+            currentKernel.erase(value);
         }
     }
 

@@ -462,7 +462,7 @@ void Kernel::RemapNestedKernels()
                         }
                     }
                     auto limit = callInst->getNumArgOperands();
-                    for (uint32_t k = 0; k < limit; k++)
+                    for (uint32_t k = 1; k < limit; k++)
                     {
                         Value *op = callInst->getArgOperand(k);
                         if (auto *arg = dyn_cast<Argument>(op))
