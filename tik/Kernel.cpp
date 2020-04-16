@@ -1282,7 +1282,7 @@ void Kernel::InlineFunctions(set<int64_t> &blocks)
         {
             auto baseBlock = cast<BasicBlock>(fi);
             auto id = GetBlockID(baseBlock);
-            if(blocks.find(id) == blocks.end())
+            if (blocks.find(id) == blocks.end())
             {
                 continue;
             }
