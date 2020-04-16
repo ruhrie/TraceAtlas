@@ -20,6 +20,4 @@ extern llvm::Module *TikModule;
 /// to get the object in which that embedded function belongs.
 extern std::map<llvm::Function *, Kernel *> KfMap;
 
-extern std::set<int64_t> ValidBlocks;
-
-void CleanModule(llvm::Module *M);
+//extern std::set<int64_t> ValidBlocks;

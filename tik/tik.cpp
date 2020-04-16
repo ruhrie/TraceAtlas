@@ -24,6 +24,8 @@
 #include <spdlog/spdlog.h>
 #include <string>
 
+void CleanModule(llvm::Module *M);
+
 using namespace std;
 using namespace llvm;
 
@@ -33,9 +35,6 @@ enum Filetype
     DPDA
 };
 
-llvm::Module *TikModule;
-std::map<int64_t, Kernel *> KernelMap;
-std::map<llvm::Function *, Kernel *> KfMap;
 set<int64_t> ValidBlocks;
 cl::opt<string> JsonFile("j", cl::desc("Specify input json filename"), cl::value_desc("json filename"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"));
