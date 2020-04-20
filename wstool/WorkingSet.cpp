@@ -11,21 +11,21 @@ namespace WorkingSet
     // DeAlias[addr] = key of Virtual address map
     map<int64_t, int64_t> deAliasInternal;
     map<int64_t, int64_t> deAliasInput;
+    // Virtual address map: contains the time on the liveness of an address
+    // Input and internal are seperated here, because it will be good for map erase and early termination while calculating ws size 
     map<int64_t, vector<int64_t>> internalVirAddr;
     map<int64_t, vector<int64_t>> inputVirAddr;
 
     // FirstStore is called when we know that the address appears for the first time, then:
     // 1.Update Alias table with the live addresses
     // 2.Construct the virtual address dictionary of the live addresses
-
+    // Here “op” is a flag to indicate that if the address first appears from a load or a store
     void firstStore(string &addr, int64_t t, int op)
     {
         int64_t addrIndex = stol(addr, nullptr, 0);
-        // Here “op” is a flag to indicate that the address is known to birth
-        // because of a load instruction or Store instruction
+        // birth from a store inst
         if (op > 0)
-        {
-            // Virtual address map: contains the time on the liveness of an address
+        {            
             // virAddr[order from 0 to total address number] = [addr, t0, t1, t2,…,tn]
             // t0: the time when the first store appears, it’s the time the address begins
             // t1, t2, …, tn: the time when the load instruction appears to load from this address
@@ -50,14 +50,19 @@ namespace WorkingSet
             {
                 deAliasInternal[addrIndex] = internalMapSize;
             }
-            internalMapSize++;
+            // we need to increase this size even if the address is duplicate, because the birth time is different which
+            // indicates two life periods of this addr
+            internalMapSize++; 
         }
+        // birth from a load inst
         else
         {
+            //the coming address is not in the map
             if (deAliasInput.count(addrIndex) == 0)
             {
                 vector<int64_t> virAddrLine(3);
                 virAddrLine[0] = addrIndex;
+                //the birth time is "-1"
                 virAddrLine[1] = -1;
                 virAddrLine[2] = t;
 
@@ -80,11 +85,12 @@ namespace WorkingSet
     {
 
         int64_t addrIndex = stol(addr, nullptr, 0);
-        // if the coming address is an input address or an internal address
+        //the coming address is an internal address
         if (deAliasInternal.count(addrIndex) != 0)
         {
             internalVirAddr[deAliasInternal[addrIndex]].push_back(t);
         }
+        //an input address
         else
         {
             inputVirAddr[deAliasInput[addrIndex]].push_back(t);
@@ -99,7 +105,7 @@ namespace WorkingSet
         {
             addrIndex = stol(value, nullptr, 0);
         }
-        // a load instruction with addresses already in our virtual address map.
+        // a load instruction with addresses already in our two virtual address maps.
         if ((deAliasInternal.count(addrIndex) != 0 || deAliasInput.count(addrIndex) != 0) && (key == "LoadAddress"))
         {
             livingLoad(address, timing);

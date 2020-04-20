@@ -34,15 +34,20 @@ int main(int argc, char **argv)
     }
 
     auto alivenumber = uint64_t(WorkingSet::inputMapSize);
-    vector<uint64_t> outputWS;
+    // vector outputWS, inputWS, internalWS are used to store work set sizes at each time
+    vector<uint64_t> outputWS; 
     vector<uint64_t> inputWS;
     vector<uint64_t> internalWS;
-    vector<int64_t> inputKeyVector;
+
+    // the key vectors are used to do fast searching operation to the map
+     vector<int64_t> inputKeyVector;
     vector<int64_t> internalKeyVector;
+
+    //used to store max size of input output internal ws
     uint64_t maxInput = 0;
     uint64_t maxOutput = 0;
     uint64_t maxinternal = 0;
-    vector<int64_t> outputList;
+   
 
     //use a vector to store the keys of the virtual address maps, because we need to
     //dynamically erase elements from the map and break the loop in some situation to speed up
@@ -54,6 +59,9 @@ int main(int argc, char **argv)
     {
         inputKeyVector.push_back(i);
     }
+
+    // a dynamic vector to store output address at each time
+     vector<int64_t> outputList;
     // writeAll is a flag to indicate if working set size for every moment should be monitored
     // or we only need to know the maximum working set size.
     if (writeAll)
