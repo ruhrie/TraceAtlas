@@ -610,6 +610,9 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
         {
             auto cb = CloneBasicBlock(block, VMap, "", KernelFunction);
             VMap[block] = cb;
+            // add medadata to this block to remember what its original predecessor was, for swapping later
+            MDNode* oldID = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), block->getName()));
+            cast<Instruction>(cb->getFirstInsertionPt())->setMetadata("oldName", oldID);
             if (Conditional.find(block) != Conditional.end())
             {
                 Conditional.erase(block);
