@@ -1,14 +1,14 @@
 #include "tik/KernelConstruction.h"
+#include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
-#include <queue>
+#include "tik/Metadata.h"
+#include "tik/tik.h"
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/IRBuilder.h>
-#include "tik/tik.h"
-#include "AtlasUtil/Annotate.h"
 #include <llvm/Transforms/Utils/Cloning.h>
+#include <queue>
 #include <spdlog/spdlog.h>
-#include "tik/Metadata.h"
 
 using namespace std;
 using namespace llvm;
@@ -16,7 +16,7 @@ using namespace llvm;
 std::set<GlobalVariable *> globalDeclarationSet;
 std::set<Value *> remappedOperandSet;
 
-void GetEntrances(set<BasicBlock *> &blocks, set<llvm::BasicBlock *>& Entrances)
+void GetEntrances(set<BasicBlock *> &blocks, set<llvm::BasicBlock *> &Entrances)
 {
     for (auto block : blocks)
     {
@@ -110,7 +110,7 @@ void GetEntrances(set<BasicBlock *> &blocks, set<llvm::BasicBlock *>& Entrances)
     }
 }
 
-void GetExits(set<BasicBlock *> &blocks, std::map<int, llvm::BasicBlock *>& ExitTarget)
+void GetExits(set<BasicBlock *> &blocks, std::map<int, llvm::BasicBlock *> &ExitTarget)
 {
     int exitId = 0;
     // search for exit basic blocks
@@ -160,7 +160,7 @@ void GetExits(set<BasicBlock *> &blocks, std::map<int, llvm::BasicBlock *>& Exit
     }
 }
 
-std::vector<llvm::Value *> GetExternalValues(set<BasicBlock *> &blocks, llvm::ValueToValueMapTy& VMap, std::vector<llvm::Value* >& KernelImports)
+std::vector<llvm::Value *> GetExternalValues(set<BasicBlock *> &blocks, llvm::ValueToValueMapTy &VMap, std::vector<llvm::Value *> &KernelImports)
 {
     std::vector<llvm::Value *> KernelExports;
     for (auto bb : blocks)
@@ -242,13 +242,13 @@ std::vector<llvm::Value *> GetExternalValues(set<BasicBlock *> &blocks, llvm::Va
     return KernelExports;
 }
 
-void BuildKernel(Function* KernelFunction, set<BasicBlock *> &blocks, set<llvm::BasicBlock *>& Conditional, set<BasicBlock*>& Entrances, BasicBlock* Exception, llvm::BasicBlock* Exit, std::map<llvm::BasicBlock *, int>& ExitMap, llvm::ValueToValueMapTy& VMap, llvm::BasicBlock* Init)
+void BuildKernel(Function *KernelFunction, set<BasicBlock *> &blocks, set<llvm::BasicBlock *> &Conditional, set<BasicBlock *> &Entrances, BasicBlock *Exception, llvm::BasicBlock *Exit, std::map<llvm::BasicBlock *, int> &ExitMap, llvm::ValueToValueMapTy &VMap, llvm::BasicBlock *Init)
 {
     set<Function *> headFunctions;
     for (auto ent : Entrances)
     {
         //MDNode* oldID = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(ent->getParent()->getParent()->getContext()), ent->getValueID())));
-        MDNode* oldID = MDNode::get(TikModule->getContext(), MDString::get(ent->getParent()->getParent()->getContext(), ent->getName()));// ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(ent->getParent()->getParent()->getContext()), ent->getValueID())));
+        MDNode *oldID = MDNode::get(TikModule->getContext(), MDString::get(ent->getParent()->getParent()->getContext(), ent->getName())); // ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(ent->getParent()->getParent()->getContext()), ent->getValueID())));
         cast<Instruction>(ent->getFirstInsertionPt())->setMetadata("oldName", oldID);
         headFunctions.insert(ent->getParent());
     }
@@ -403,7 +403,7 @@ void BuildKernel(Function* KernelFunction, set<BasicBlock *> &blocks, set<llvm::
     }
 }
 
-void ApplyMetadata(Function* KernelFunction, set<llvm::BasicBlock *>& Conditional, string& Name, std::map<llvm::Value *, llvm::GlobalObject *>& GlobalMap)
+void ApplyMetadata(Function *KernelFunction, set<llvm::BasicBlock *> &Conditional, string &Name, std::map<llvm::Value *, llvm::GlobalObject *> &GlobalMap)
 {
     //first we will clean the current instructions
     for (auto &fi : *KernelFunction)
@@ -451,8 +451,7 @@ void ApplyMetadata(Function* KernelFunction, set<llvm::BasicBlock *>& Conditiona
     }
 }
 
-
-void CopyOperand(llvm::User *inst, llvm::ValueToValueMapTy& VMap)
+void CopyOperand(llvm::User *inst, llvm::ValueToValueMapTy &VMap)
 {
     if (auto func = dyn_cast<Function>(inst))
     {
@@ -540,7 +539,7 @@ void CopyOperand(llvm::User *inst, llvm::ValueToValueMapTy& VMap)
                 {
                     if (auto newOp = dyn_cast<GlobalVariable>(newGlobal->getOperand(i)))
                     {
-                        CopyOperand(newOp,VMap);
+                        CopyOperand(newOp, VMap);
                     }
                     else if (auto newOp = dyn_cast<Constant>(newGlobal->getOperand(i)))
                     {
@@ -563,9 +562,7 @@ void CopyOperand(llvm::User *inst, llvm::ValueToValueMapTy& VMap)
     }
 }
 
-
-
-void RemapOperands(User *op, Instruction *inst, llvm::ValueToValueMapTy& VMap)
+void RemapOperands(User *op, Instruction *inst, llvm::ValueToValueMapTy &VMap)
 {
     if (remappedOperandSet.find(op) == remappedOperandSet.end())
     {
@@ -676,7 +673,7 @@ void RemapOperands(User *op, Instruction *inst, llvm::ValueToValueMapTy& VMap)
     }
 }
 
-void Remap(ValueToValueMapTy& VMap, Function* KernelFunction)
+void Remap(ValueToValueMapTy &VMap, Function *KernelFunction)
 {
     for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
     {
@@ -697,7 +694,7 @@ void Remap(ValueToValueMapTy& VMap, Function* KernelFunction)
     }
 }
 
-void InlineFunctions(llvm::Function* KernelFunction, std::set<int64_t> &blocks, llvm::BasicBlock* Init, llvm::BasicBlock* Exception, llvm::BasicBlock* Exit)
+void InlineFunctions(llvm::Function *KernelFunction, std::set<int64_t> &blocks, llvm::BasicBlock *Init, llvm::BasicBlock *Exception, llvm::BasicBlock *Exit)
 {
     bool change = true;
     while (change)
@@ -788,7 +785,7 @@ void InlineFunctions(llvm::Function* KernelFunction, std::set<int64_t> &blocks, 
     */
 }
 
-void CopyGlobals(Function* KernelFunction, llvm::ValueToValueMapTy& VMap)
+void CopyGlobals(Function *KernelFunction, llvm::ValueToValueMapTy &VMap)
 {
     for (auto &fi : *KernelFunction)
     {
@@ -813,7 +810,7 @@ void CopyGlobals(Function* KernelFunction, llvm::ValueToValueMapTy& VMap)
     }
 }
 
-void Repipe(Function* KernelFunction, llvm::BasicBlock* Exit, std::map<llvm::BasicBlock *, llvm::BasicBlock *> ExitBlockMap)
+void Repipe(Function *KernelFunction, llvm::BasicBlock *Exit, std::map<llvm::BasicBlock *, llvm::BasicBlock *> ExitBlockMap)
 {
     //remap the conditional to the exit
     for (auto ki = KernelFunction->begin(); ki != KernelFunction->end(); ki++)
@@ -844,7 +841,7 @@ void Repipe(Function* KernelFunction, llvm::BasicBlock* Exit, std::map<llvm::Bas
     }
 }
 
-void ExportFunctionSignatures(Function* KernelFunction)
+void ExportFunctionSignatures(Function *KernelFunction)
 {
     for (auto &bi : *KernelFunction)
     {
@@ -866,7 +863,7 @@ void ExportFunctionSignatures(Function* KernelFunction)
     }
 }
 
-void BuildInit(llvm::Function* KernelFunction, llvm::ValueToValueMapTy& VMap, llvm::BasicBlock* Init, llvm::BasicBlock* Exception, std::set<llvm::BasicBlock*>& Entrances)
+void BuildInit(llvm::Function *KernelFunction, llvm::ValueToValueMapTy &VMap, llvm::BasicBlock *Init, llvm::BasicBlock *Exception, std::set<llvm::BasicBlock *> &Entrances)
 {
     IRBuilder<> initBuilder(Init);
     auto initSwitch = initBuilder.CreateSwitch(KernelFunction->arg_begin(), Exception, (uint32_t)Entrances.size());
@@ -886,7 +883,7 @@ void BuildInit(llvm::Function* KernelFunction, llvm::ValueToValueMapTy& VMap, ll
     }
 }
 
-void BuildExit(llvm::ValueToValueMapTy& VMap, llvm::BasicBlock* Exit, llvm::BasicBlock* Exception, std::map<llvm::BasicBlock *, int>& ExitMap)
+void BuildExit(llvm::ValueToValueMapTy &VMap, llvm::BasicBlock *Exit, llvm::BasicBlock *Exception, std::map<llvm::BasicBlock *, int> &ExitMap)
 {
     PrintVal(Exit, false); //another sacrifice
     IRBuilder<> exitBuilder(Exit);
@@ -918,7 +915,7 @@ void BuildExit(llvm::ValueToValueMapTy& VMap, llvm::BasicBlock* Exit, llvm::Basi
     exceptionBuilder.CreateRet(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)-2));
 }
 
-void RemapNestedKernels(llvm::Function* KernelFunction, std::map<llvm::Argument *, llvm::Value *>& ArgumentMap)
+void RemapNestedKernels(llvm::Function *KernelFunction, std::map<llvm::Argument *, llvm::Value *> &ArgumentMap)
 {
     // Now find all calls to the embedded kernel functions in the body, if any, and change their arguments to the new ones
     std::map<Argument *, Value *> embeddedCallArgs;
@@ -975,9 +972,7 @@ void RemapNestedKernels(llvm::Function* KernelFunction, std::map<llvm::Argument 
     }
 }
 
-
-
-void RemapExports(llvm::Function* KernelFunction, llvm::ValueToValueMapTy& VMap, llvm::BasicBlock* Init, std::vector<llvm::Value *>& KernelExports) 
+void RemapExports(llvm::Function *KernelFunction, llvm::ValueToValueMapTy &VMap, llvm::BasicBlock *Init, std::vector<llvm::Value *> &KernelExports)
 {
     map<Value *, AllocaInst *> exportMap;
     for (auto ex : KernelExports)
@@ -1070,7 +1065,7 @@ void RemapExports(llvm::Function* KernelFunction, llvm::ValueToValueMapTy& VMap,
     }
 }
 
-void PatchPhis(llvm::Function* KernelFunction)
+void PatchPhis(llvm::Function *KernelFunction)
 {
     for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
     {

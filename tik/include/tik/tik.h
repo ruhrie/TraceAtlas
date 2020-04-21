@@ -5,8 +5,6 @@
 #include <map>
 #include <set>
 
-
-
 /// Global pointer to the module of tik representations.
 extern llvm::Module *TikModule;
 

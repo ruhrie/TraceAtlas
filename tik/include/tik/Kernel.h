@@ -64,7 +64,6 @@ private:
     ///
     ///
 
-
     std::vector<llvm::Value *> KernelExports;
     std::vector<InlineStruct> InlinedFunctions;
 
@@ -101,7 +100,6 @@ private:
 
     //void ApplyMetadata();
 
-
     //void BuildKernel(std::set<llvm::BasicBlock *> &blocks);
     //void BuildInit();
     //void BuildExit();
@@ -113,7 +111,7 @@ private:
 
     //void CopyGlobals();
 
-//    void PatchPhis();
+    //    void PatchPhis();
 
     //void GetKernelLabels();
     //void CopyOperand(llvm::User *inst);

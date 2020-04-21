@@ -1,9 +1,9 @@
 #include "tik/Kernel.h"
-#include "tik/KernelConstruction.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
 #include "tik/InlineStruct.h"
+#include "tik/KernelConstruction.h"
 #include "tik/Metadata.h"
 #include "tik/TikHeader.h"
 #include "tik/Util.h"
@@ -224,7 +224,6 @@ void Kernel::Cleanup()
 
 Kernel::~Kernel() = default;
 
-
 /*
 void Kernel::UpdateMemory()
 {
@@ -275,9 +274,6 @@ void Kernel::UpdateMemory()
     }
 }
 */
-
-
-
 
 //if the result is one entry long it is a value. Otherwise its a list of instructions
 vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blocks)
@@ -354,7 +350,6 @@ vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blo
     }
     return result;
 }
-
 
 std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures)
 {
