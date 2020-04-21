@@ -4,6 +4,7 @@
 #include "AtlasUtil/Print.h"
 #include "tik/TikHeader.h"
 #include "tik/Util.h"
+#include "tik/KernelConstruction.h"
 #include <fstream>
 #include <iostream>
 #include <llvm/Bitcode/BitcodeReader.h>

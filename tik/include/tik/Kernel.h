@@ -16,9 +16,14 @@ public:
     ~Kernel();
     std::string GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures);
     std::string Name;
-    std::set<llvm::BasicBlock *> Conditional;
+    //std::set<llvm::BasicBlock *> Conditional;
+
+    /// @brief  Must be a member because we may dereference it from the KernelMap when building a kernel
     std::set<llvm::BasicBlock *> Entrances;
+
+    /// @brief  Must be a member because we may dereference it when building a kernel with an embedded call
     std::map<int, llvm::BasicBlock *> ExitTarget;
+
     //std::set<llvm::BasicBlock *> Body;
     //std::set<llvm::BasicBlock *> Termination;
     llvm::BasicBlock *Init = nullptr;
@@ -28,12 +33,19 @@ public:
     //llvm::Function *MemoryWrite = NULL;
     llvm::Function *KernelFunction = nullptr;
     bool Valid = false;
+    /// @brief  Vector containing all instructions that don't have their parent in the basic blocks of the tik representation.
+    ///         These instructions become the input arguments to the Kernel function.
+    ///         This must be kept within the class because we need it when exporting external values in a kernel with a subkernel
+    std::vector<llvm::Value *> KernelImports;
+    std::map<llvm::BasicBlock *, int> ExitMap;
 
 private:
     void Cleanup();
-    void GetEntrances(std::set<llvm::BasicBlock *> &blocks);
-    void GetExits(std::set<llvm::BasicBlock *> &blocks);
-    std::map<llvm::BasicBlock *, int> ExitMap;
+    //void GetEntrances(std::set<llvm::BasicBlock *> &blocks);
+    //void GetExits(std::set<llvm::BasicBlock *> &blocks);
+
+    ///@brief   Must be a member because we may dereference it when building a kernel with an embedded call
+    std::map<llvm::BasicBlock *, llvm::BasicBlock *> ExitBlockMap;
     std::map<int, llvm::GlobalValue *> LoadMap;
     std::map<int, llvm::GlobalValue *> StoreMap;
     /// @brief  Maps old instructions to new instructions.
@@ -46,16 +58,15 @@ private:
     ///
     /// The unaltered bitcode contains locally scoped variables that are used both in the Kernel function and the memory functions.
     /// This structure maps those local pointers to global pointers.
-    std::map<llvm::Value *, llvm::GlobalObject *> GlobalMap;
+    //std::map<llvm::Value *, llvm::GlobalObject *> GlobalMap;
 
     ///
     ///
     std::map<llvm::Argument *, llvm::Value *> ArgumentMap;
 
-    /// @brief  Vector containing all instructions that don't have their parent in the basic blocks of the tik representation.
-    ///         These instructions become the input arguments to the Kernel function.
-    std::vector<llvm::Value *> KernelImports;
+
     std::vector<llvm::Value *> KernelExports;
+    std::vector<InlineStruct> InlinedFunctions;
 
     /// @brief   Function for remapping instructions based on VMap.
     ///          This is done before morphing KernelFunction into a new function with inputs.
@@ -65,7 +76,7 @@ private:
     ///
     /// The parent block of each instruction in Kernel::Body is checked for its membership in the tik representation.
     /// If it is not found, that instruction is added to Kernel::Init
-    void GetExternalValues(std::set<llvm::BasicBlock *> &blocks);
+    //void GetExternalValues(std::set<llvm::BasicBlock *> &blocks);
 
     /// @brief  Defines Kernel::MemoryRead and Kernel::MemoryWrite.
     ///         Defines GlobalMap.
@@ -88,11 +99,10 @@ private:
 
     llvm::BasicBlock *getPathMerge(llvm::BasicBlock *start);
 
-    void ApplyMetadata();
+    //void ApplyMetadata();
 
-    std::vector<InlineStruct> InlinedFunctions;
 
-    void BuildKernel(std::set<llvm::BasicBlock *> &blocks);
+    //void BuildKernel(std::set<llvm::BasicBlock *> &blocks);
     void BuildInit();
     void BuildExit();
 
@@ -106,10 +116,9 @@ private:
 
     void PatchPhis();
 
-    void GetKernelLabels();
+    //void GetKernelLabels();
     void CopyOperand(llvm::User *inst);
     void InlineFunctions(std::set<int64_t> &blocks);
     void RemapExports();
     void RemapOperands(llvm::User *op, llvm::Instruction *inst);
-    std::map<llvm::BasicBlock *, llvm::BasicBlock *> ExitBlockMap;
 };
