@@ -242,7 +242,7 @@ std::vector<llvm::Value *> GetExternalValues(set<BasicBlock *> &blocks, llvm::Va
     return KernelExports;
 }
 
-void BuildKernel(Function* KernelFunction, set<BasicBlock *> &blocks, set<llvm::BasicBlock *>& Conditional, set<BasicBlock*>& Entrances, BasicBlock* Exception, llvm::BasicBlock* Exit, std::map<llvm::BasicBlock *, int>& ExitMap, llvm::ValueToValueMapTy VMap, llvm::BasicBlock* Init)
+void BuildKernel(Function* KernelFunction, set<BasicBlock *> &blocks, set<llvm::BasicBlock *>& Conditional, set<BasicBlock*>& Entrances, BasicBlock* Exception, llvm::BasicBlock* Exit, std::map<llvm::BasicBlock *, int>& ExitMap, llvm::ValueToValueMapTy& VMap, llvm::BasicBlock* Init)
 {
     set<Function *> headFunctions;
     for (auto ent : Entrances)
