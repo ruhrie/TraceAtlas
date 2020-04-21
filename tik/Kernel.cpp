@@ -445,9 +445,18 @@ void Kernel::RemapNestedKernels()
                         {
                             for (BasicBlock::iterator j = b.begin(), BE2 = b.end(); j != BE2; ++j)
                             {
-                                if (subK->ArgumentMap[sarg] == cast<Instruction>(j))
+                                auto inst = cast<Instruction>(j);
+                                auto subArg = subK->ArgumentMap[sarg];
+                                if (subArg != nullptr)
                                 {
-                                    embeddedCallArgs[sarg] = cast<Instruction>(j);
+                                    if (subK->ArgumentMap[sarg] == inst)
+                                    {
+                                        embeddedCallArgs[sarg] = inst;
+                                    }
+                                    else if (VMap[subK->ArgumentMap[sarg]] == inst)
+                                    {
+                                        embeddedCallArgs[sarg] = inst;
+                                    }
                                 }
                             }
                         }
@@ -460,6 +469,10 @@ void Kernel::RemapNestedKernels()
                             {
                                 embeddedCallArgs[sarg] = arg;
                             }
+                            else if (VMap[subK->ArgumentMap[sarg]] == ArgumentMap[arg])
+                            {
+                                embeddedCallArgs[sarg] = arg;
+                            }
                         }
                     }
                     auto limit = callInst->getNumArgOperands();
@@ -468,6 +481,11 @@ void Kernel::RemapNestedKernels()
                         Value *op = callInst->getArgOperand(k);
                         if (auto *arg = dyn_cast<Argument>(op))
                         {
+                            if (embeddedCallArgs.find(arg) == embeddedCallArgs.end())
+                            {
+                                throw AtlasException("Failed to find nested argument");
+                            }
+
                             auto asdf = embeddedCallArgs[arg];
                             callInst->setArgOperand(k, asdf);
                         }
@@ -550,6 +568,7 @@ void Kernel::BuildKernel(set<BasicBlock *> &blocks)
                     IRBuilder<> intBuilder(intermediateBlock);
                     auto cc = intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
                     MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(TikModule->getContext()), 1)));
+                    SetBlockID(intermediateBlock, -2);
                     cc->setMetadata("KernelCall", tikNode);
                     auto sw = intBuilder.CreateSwitch(cc, Exception, (uint32_t)nestedKernel->ExitTarget.size());
                     for (auto pair : nestedKernel->ExitTarget)
@@ -1282,7 +1301,7 @@ void Kernel::InlineFunctions(set<int64_t> &blocks)
         {
             auto baseBlock = cast<BasicBlock>(fi);
             auto id = GetBlockID(baseBlock);
-            if(blocks.find(id) == blocks.end())
+            if (blocks.find(id) == blocks.end())
             {
                 continue;
             }
@@ -1337,7 +1356,7 @@ void Kernel::InlineFunctions(set<int64_t> &blocks)
     {
         auto *block = cast<BasicBlock>(fi);
         int64_t id = GetBlockID(block);
-        if (blocks.find(id) == blocks.end() && block != Exit && block != Init && block != Exception)
+        if (blocks.find(id) == blocks.end() && block != Exit && block != Init && block != Exception && id != -2)
         {
             for (auto user : block->users())
             {
