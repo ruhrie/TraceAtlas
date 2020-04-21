@@ -38,6 +38,7 @@ public:
     ///         This must be kept within the class because we need it when exporting external values in a kernel with a subkernel
     std::vector<llvm::Value *> KernelImports;
     std::map<llvm::BasicBlock *, int> ExitMap;
+    std::map<llvm::Argument *, llvm::Value *> ArgumentMap;
 
 private:
     void Cleanup();
@@ -52,7 +53,7 @@ private:
     ///
     /// Special LLVM map containing old instructions (from the original bitcode) as keys and new instructions as values.
     /// The kernel function's values will be remapped according to this data structure at the end of the Kernel class.
-    llvm::ValueToValueMapTy VMap;
+    //llvm::ValueToValueMapTy VMap;
 
     /// @brief  Map containing old load and store instructions as keys and new global pointers as values.
     ///
@@ -62,7 +63,6 @@ private:
 
     ///
     ///
-    std::map<llvm::Argument *, llvm::Value *> ArgumentMap;
 
 
     std::vector<llvm::Value *> KernelExports;
@@ -70,7 +70,7 @@ private:
 
     /// @brief   Function for remapping instructions based on VMap.
     ///          This is done before morphing KernelFunction into a new function with inputs.
-    void Remap();
+    //void Remap();
 
     /// @brief  Find all instructions not initialized in the kernel representation.
     ///
@@ -93,7 +93,7 @@ private:
     /// This function replaces Kernel::KernelFunction with a new function that has the input args discovered by Kernel::getInitInsts.
     /// Then it assigns these input args to the appropriate global pointers.
     /// Finally, it remaps the new function, and the tik representation is done.
-    void RemapNestedKernels();
+    //void RemapNestedKernels();
 
     std::vector<llvm::Value *> BuildReturnTree(llvm::BasicBlock *bb, std::vector<llvm::BasicBlock *> blocks);
 
@@ -103,22 +103,20 @@ private:
 
 
     //void BuildKernel(std::set<llvm::BasicBlock *> &blocks);
-    void BuildInit();
-    void BuildExit();
+    //void BuildInit();
+    //void BuildExit();
 
     void UpdateMemory();
 
-    void Repipe();
-    void ExportFunctionSignatures();
+    //void ExportFunctionSignatures();
     void SanityChecks();
 
-    void CopyGlobals();
+    //void CopyGlobals();
 
-    void PatchPhis();
+//    void PatchPhis();
 
     //void GetKernelLabels();
-    void CopyOperand(llvm::User *inst);
-    void InlineFunctions(std::set<int64_t> &blocks);
-    void RemapExports();
-    void RemapOperands(llvm::User *op, llvm::Instruction *inst);
+    //void CopyOperand(llvm::User *inst);
+    //void InlineFunctions(std::set<int64_t> &blocks);
+    //void RemapExports();
 };
