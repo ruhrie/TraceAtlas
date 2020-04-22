@@ -104,11 +104,9 @@ Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
         std::map<llvm::Value *, llvm::GlobalObject *> GlobalMap;
         GetEntrances(blocks, Entrances);
         GetExits(blocks, ExitTarget);
-        //std::vector<llvm::Value* > KernelImports;
         std::vector<llvm::Value *> KernelExports = GetExternalValues(blocks, VMap, KernelImports);
 
         //we now have all the information we need
-
         //start by making the correct function
         std::vector<llvm::Type *> inputArgs;
         inputArgs.push_back(Type::getInt8Ty(TikModule->getContext()));
@@ -161,11 +159,6 @@ Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
 
         // replace external function calls with tik declarations
         ExportFunctionSignatures(KernelFunction);
-
-        //handle the memory operations
-        //GetMemoryFunctions();
-
-        //UpdateMemory();
 
         BuildInit(KernelFunction, VMap, Init, Exception, Entrances);
 
@@ -223,133 +216,6 @@ void Kernel::Cleanup()
 }
 
 Kernel::~Kernel() = default;
-
-/*
-void Kernel::UpdateMemory()
-{
-    std::set<llvm::Value *> coveredGlobals;
-    std::set<llvm::StoreInst *> newStores;
-    IRBuilder<> initBuilder(Init);
-    for (uint64_t i = 0; i < KernelImports.size(); i++)
-    {
-        if (GlobalMap.find(VMap[KernelImports[i]]) != GlobalMap.end())
-        {
-            if (GlobalMap[VMap[KernelImports[i]]] == nullptr)
-            {
-                throw AtlasException("Tik Error: External Value not found in GlobalMap.");
-            }
-            coveredGlobals.insert(GlobalMap[VMap[KernelImports[i]]]);
-            auto b = initBuilder.CreateStore(KernelFunction->arg_begin() + i + 1, GlobalMap[VMap[KernelImports[i]]]);
-            MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Store))));
-            b->setMetadata("TikSynthetic", tikNode);
-            newStores.insert(b);
-        }
-    }
-
-    for (auto &bb : *KernelFunction)
-    {
-        for (BasicBlock::iterator BI = bb.begin(), BE = bb.end(); BI != BE; ++BI)
-        {
-            auto *inst = cast<Instruction>(BI);
-            for (auto pair : GlobalMap)
-            {
-                if (pair.first == inst)
-                {
-                    if (coveredGlobals.find(pair.second) == coveredGlobals.end())
-                    {
-                        if (isa<InvokeInst>(inst))
-                        {
-                            throw AtlasException("Invoke is unsupported");
-                        }
-                        IRBuilder<> builder(inst->getNextNode());
-                        Constant *constant = ConstantInt::get(Type::getInt32Ty(TikModule->getContext()), 0);
-                        auto a = builder.CreateGEP(inst->getType(), pair.second, constant);
-                        auto b = builder.CreateStore(inst, a);
-                        MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikSynthetic::Store))));
-                        b->setMetadata("TikSynthetic", tikNode);
-                    }
-                }
-            }
-        }
-    }
-}
-*/
-
-//if the result is one entry long it is a value. Otherwise its a list of instructions
-vector<Value *> Kernel::BuildReturnTree(BasicBlock *bb, vector<BasicBlock *> blocks)
-{
-    vector<Value *> result;
-    Instruction *term = bb->getTerminator();
-    if (auto *retInst = dyn_cast<ReturnInst>(term))
-    {
-        //so the block is a return, just return the value
-        result.push_back(retInst->getReturnValue());
-    }
-    else if (auto *brInst = dyn_cast<BranchInst>(term))
-    {
-        //we have a branch, if it is unconditional recurse on the target
-        //otherwise recurse on all targets and build a select between the results
-        //we assume the last entry in the vector is the result to be selected, so be careful on the order of insertion
-        if (brInst->isConditional())
-        {
-            //we have a conditional so select between return vals
-            //still need to check if successors are valid though
-            Value *cond = brInst->getCondition();
-            auto suc0 = brInst->getSuccessor(0);
-            auto suc1 = brInst->getSuccessor(1);
-            bool valid0 = find(blocks.begin(), blocks.end(), suc0) != blocks.end();
-            bool valid1 = find(blocks.begin(), blocks.end(), suc1) != blocks.end();
-            if (!(valid0 || valid1))
-            {
-                throw AtlasException("Tik Error: Branch instruction with no valid successors reached");
-            }
-            Value *c0 = nullptr;
-            Value *c1 = nullptr;
-            if (valid0) //if path 0 is valid we examine it
-            {
-                auto sub0 = BuildReturnTree(suc0, blocks);
-                if (sub0.size() != 1)
-                {
-                    //we can just copy them
-                    //otherwise this is a single value and should just be referenced
-                    result.insert(result.end(), sub0.begin(), sub0.end());
-                }
-                c0 = sub0.back();
-            }
-            if (valid1) //if path 1 is valid we examine it
-            {
-                auto sub1 = BuildReturnTree(brInst->getSuccessor(1), blocks);
-                if (sub1.size() != 1)
-                {
-                    //we can just copy them
-                    //otherwise this is a single value and should just be referenced
-                    result.insert(result.end(), sub1.begin(), sub1.end());
-                }
-                c1 = sub1.back();
-            }
-            if (valid0 && valid1) //if they are both valid we need to select between them
-            {
-                SelectInst *sInst = SelectInst::Create(cond, c0, c1);
-                result.push_back(sInst);
-            }
-        }
-        else
-        {
-            //we are not conditional so just recursef
-            auto sub = BuildReturnTree(brInst->getSuccessor(0), blocks);
-            result.insert(result.end(), sub.begin(), sub.end());
-        }
-    }
-    else
-    {
-        throw AtlasException("Tik Error: Not Implemented");
-    }
-    if (result.empty())
-    {
-        throw AtlasException("Tik Error: Return instruction tree must have at least one result");
-    }
-    return result;
-}
 
 std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures)
 {
