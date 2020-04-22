@@ -29,8 +29,8 @@ int main(int argc, char **argv)
     uint64_t maxOutput = 0;
     uint64_t maxinternal = 0;
     //using this set of output addresses in case of duplicated
-    set <int64_t> outputSet;
-    // struct of internal working set 
+    set<int64_t> outputSet;
+    // struct of internal working set
     for (auto it : internalAddressLivingVec)
     {
         //if the deathTime is 3, it's an output address
@@ -42,7 +42,7 @@ int main(int argc, char **argv)
     }
     //time iteration
     for (int64_t time = 0; time < timing; time++)
-    { 
+    {
         set<int64_t> aliveInternalAddress;
         // for erasing
         set<int> eraseSet;
@@ -84,7 +84,7 @@ int main(int argc, char **argv)
             // for temporal debug
             printf("process time :%ld, %ld, %.5f \n", time, WorkingSet::timing, ProcessRatio);
         }
-//        timeline.clear();
+        //        timeline.clear();
     }
     maxInput = inputMapSize;
     printf("maxInput: %lu \n maxinternal: %lu \n maxOutput: %lu \n", maxInput, maxinternal, maxOutput);
