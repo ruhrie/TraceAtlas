@@ -171,7 +171,7 @@ Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
 
         BuildExit(VMap, Exit, Exception, ExitMap);
 
-        RemapNestedKernels(KernelFunction, ArgumentMap);
+        RemapNestedKernels(KernelFunction, VMap, ArgumentMap);
 
         RemapExports(KernelFunction, VMap, Init, KernelExports);
 

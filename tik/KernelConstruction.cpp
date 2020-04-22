@@ -293,6 +293,7 @@ void BuildKernel(Function *KernelFunction, set<BasicBlock *> &blocks, set<llvm::
                     IRBuilder<> intBuilder(intermediateBlock);
                     auto cc = intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
                     MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(TikModule->getContext()), 1)));
+                    SetBlockID(intermediateBlock, -2);
                     cc->setMetadata("KernelCall", tikNode);
                     auto sw = intBuilder.CreateSwitch(cc, Exception, (uint32_t)nestedKernel->ExitTarget.size());
                     for (auto pair : nestedKernel->ExitTarget)
@@ -759,7 +760,7 @@ void InlineFunctions(llvm::Function *KernelFunction, std::set<int64_t> &blocks, 
     {
         auto *block = cast<BasicBlock>(fi);
         int64_t id = GetBlockID(block);
-        if (blocks.find(id) == blocks.end() && block != Exit && block != Init && block != Exception)
+        if (blocks.find(id) == blocks.end() && block != Exit && block != Init && block != Exception && id != -2)
         {
             for (auto user : block->users())
             {
@@ -915,7 +916,7 @@ void BuildExit(llvm::ValueToValueMapTy &VMap, llvm::BasicBlock *Exit, llvm::Basi
     exceptionBuilder.CreateRet(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)-2));
 }
 
-void RemapNestedKernels(llvm::Function *KernelFunction, std::map<llvm::Argument *, llvm::Value *> &ArgumentMap)
+void RemapNestedKernels(llvm::Function *KernelFunction, llvm::ValueToValueMapTy &VMap, std::map<llvm::Argument *, llvm::Value *> &ArgumentMap)
 {
     // Now find all calls to the embedded kernel functions in the body, if any, and change their arguments to the new ones
     std::map<Argument *, Value *> embeddedCallArgs;
@@ -935,9 +936,18 @@ void RemapNestedKernels(llvm::Function *KernelFunction, std::map<llvm::Argument 
                         {
                             for (BasicBlock::iterator j = b.begin(), BE2 = b.end(); j != BE2; ++j)
                             {
-                                if (subK->ArgumentMap[sarg] == cast<Instruction>(j))
+                                auto inst = cast<Instruction>(j);
+                                auto subArg = subK->ArgumentMap[sarg];
+                                if (subArg != nullptr)
                                 {
-                                    embeddedCallArgs[sarg] = cast<Instruction>(j);
+                                    if (subK->ArgumentMap[sarg] == inst)
+                                    {
+                                        embeddedCallArgs[sarg] = inst;
+                                    }
+                                    else if (VMap[subK->ArgumentMap[sarg]] == inst)
+                                    {
+                                        embeddedCallArgs[sarg] = inst;
+                                    }
                                 }
                             }
                         }
@@ -950,6 +960,10 @@ void RemapNestedKernels(llvm::Function *KernelFunction, std::map<llvm::Argument 
                             {
                                 embeddedCallArgs[sarg] = arg;
                             }
+                            else if (VMap[subK->ArgumentMap[sarg]] == ArgumentMap[arg])
+                            {
+                                embeddedCallArgs[sarg] = arg;
+                            }
                         }
                     }
                     auto limit = callInst->getNumArgOperands();
@@ -958,6 +972,10 @@ void RemapNestedKernels(llvm::Function *KernelFunction, std::map<llvm::Argument 
                         Value *op = callInst->getArgOperand(k);
                         if (auto *arg = dyn_cast<Argument>(op))
                         {
+                            if (embeddedCallArgs.find(arg) == embeddedCallArgs.end())
+                            {
+                                throw AtlasException("Failed to find nested argument");
+                            }
                             auto asdf = embeddedCallArgs[arg];
                             callInst->setArgOperand(k, asdf);
                         }

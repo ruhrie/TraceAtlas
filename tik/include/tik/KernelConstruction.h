@@ -46,7 +46,7 @@ void BuildInit(llvm::Function *KernelFunction, llvm::ValueToValueMapTy &VMap, ll
 
 void BuildExit(llvm::ValueToValueMapTy &VMap, llvm::BasicBlock *Exit, llvm::BasicBlock *Exception, std::map<llvm::BasicBlock *, int> &ExitMap);
 
-void RemapNestedKernels(llvm::Function *KernelFunction, std::map<llvm::Argument *, llvm::Value *> &ArgumentMap);
+void RemapNestedKernels(llvm::Function *KernelFunction, llvm::ValueToValueMapTy &VMap, std::map<llvm::Argument *, llvm::Value *> &ArgumentMap);
 
 void RemapExports(llvm::Function *KernelFunction, llvm::ValueToValueMapTy &VMap, llvm::BasicBlock *Init, std::vector<llvm::Value *> &KernelExports);
 
