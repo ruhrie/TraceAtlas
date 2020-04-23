@@ -1,15 +1,18 @@
 #pragma once
-enum class TikMetadata : int
+namespace TraceAtlas::tik
 {
-    Conditional,
-    Body,
-    Terminus
-};
+    enum class TikMetadata : int
+    {
+        Conditional,
+        Body,
+        Terminus
+    };
 
-enum class TikSynthetic : int
-{
-    None,
-    Store,
-    Load,
-    Cast
-};
+    enum class TikSynthetic : int
+    {
+        None,
+        Store,
+        Load,
+        Cast
+    };
+} // namespace TraceAtlas::tik

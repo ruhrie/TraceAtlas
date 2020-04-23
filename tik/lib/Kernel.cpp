@@ -2,8 +2,8 @@
 #include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
 #include "tik/CartographerKernel.h"
-#include "tik/Metadata.h"
 #include "tik/Header.h"
+#include "tik/Metadata.h"
 #include "tik/Util.h"
 #include "tik/libtik.h"
 #include <algorithm>
@@ -27,107 +27,110 @@
 using namespace llvm;
 using namespace std;
 
-int KernelUID = 0;
-
-set<string> reservedNames;
-
-Kernel::~Kernel() = default;
-
-std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures)
+namespace TraceAtlas::tik
 {
-    std::string headerString;
-    try
+    int KernelUID = 0;
+
+    set<string> reservedNames;
+
+    Kernel::~Kernel() = default;
+
+    std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures)
     {
-        headerString = getCType(KernelFunction->getReturnType(), AllStructures) + " ";
-    }
-    catch (AtlasException &e)
-    {
-        spdlog::error(e.what());
-        headerString = "TypeNotSupported ";
-    }
-    headerString += KernelFunction->getName();
-    headerString += "(";
-    int i = 0;
-    for (auto ai = KernelFunction->arg_begin(); ai < KernelFunction->arg_end(); ai++)
-    {
-        std::string type;
-        std::string argname = "arg" + std::to_string(i);
-        if (i > 0)
-        {
-            headerString += ", ";
-        }
+        std::string headerString;
         try
         {
-            type = getCType(ai->getType(), AllStructures);
+            headerString = getCType(KernelFunction->getReturnType(), AllStructures) + " ";
         }
         catch (AtlasException &e)
         {
             spdlog::error(e.what());
-            type = "TypeNotSupported";
+            headerString = "TypeNotSupported ";
         }
-        if (type.find('!') != std::string::npos)
+        headerString += KernelFunction->getName();
+        headerString += "(";
+        int i = 0;
+        for (auto ai = KernelFunction->arg_begin(); ai < KernelFunction->arg_end(); ai++)
         {
-            ProcessArrayArgument(type, argname);
-        }
-        else if (type.find('@') != std::string::npos)
-        {
-            ProcessFunctionArgument(type, argname);
-        }
-        else
-        {
-            type += " " + argname;
-        }
-        headerString += type;
-        i++;
-    }
-    headerString += ");\n";
-    return headerString;
-}
-
-void Kernel::ApplyMetadata(std::map<llvm::Value *, llvm::GlobalObject *> &GlobalMap)
-{
-    //first we will clean the current instructions
-    for (auto &fi : *KernelFunction)
-    {
-        for (auto bi = fi.begin(); bi != fi.end(); bi++)
-        {
-            auto inst = cast<Instruction>(bi);
-            inst->setMetadata("dbg", nullptr);
-        }
-    }
-
-    //second remove all debug intrinsics
-    vector<Instruction *> toRemove;
-    for (auto &fi : *KernelFunction)
-    {
-        for (auto bi = fi.begin(); bi != fi.end(); bi++)
-        {
-            if (auto di = dyn_cast<DbgInfoIntrinsic>(bi))
+            std::string type;
+            std::string argname = "arg" + std::to_string(i);
+            if (i > 0)
             {
-                toRemove.push_back(di);
+                headerString += ", ";
             }
-            auto inst = cast<Instruction>(bi);
-            inst->setMetadata("dbg", nullptr);
+            try
+            {
+                type = getCType(ai->getType(), AllStructures);
+            }
+            catch (AtlasException &e)
+            {
+                spdlog::error(e.what());
+                type = "TypeNotSupported";
+            }
+            if (type.find('!') != std::string::npos)
+            {
+                ProcessArrayArgument(type, argname);
+            }
+            else if (type.find('@') != std::string::npos)
+            {
+                ProcessFunctionArgument(type, argname);
+            }
+            else
+            {
+                type += " " + argname;
+            }
+            headerString += type;
+            i++;
+        }
+        headerString += ");\n";
+        return headerString;
+    }
+
+    void Kernel::ApplyMetadata(std::map<llvm::Value *, llvm::GlobalObject *> &GlobalMap)
+    {
+        //first we will clean the current instructions
+        for (auto &fi : *KernelFunction)
+        {
+            for (auto bi = fi.begin(); bi != fi.end(); bi++)
+            {
+                auto inst = cast<Instruction>(bi);
+                inst->setMetadata("dbg", nullptr);
+            }
+        }
+
+        //second remove all debug intrinsics
+        vector<Instruction *> toRemove;
+        for (auto &fi : *KernelFunction)
+        {
+            for (auto bi = fi.begin(); bi != fi.end(); bi++)
+            {
+                if (auto di = dyn_cast<DbgInfoIntrinsic>(bi))
+                {
+                    toRemove.push_back(di);
+                }
+                auto inst = cast<Instruction>(bi);
+                inst->setMetadata("dbg", nullptr);
+            }
+        }
+        for (auto r : toRemove)
+        {
+            r->eraseFromParent();
+        }
+
+        //annotate the kernel functions
+        MDNode *kernelNode = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), Name));
+        KernelFunction->setMetadata("KernelName", kernelNode);
+        for (auto global : GlobalMap)
+        {
+            global.second->setMetadata("KernelName", kernelNode);
+        }
+        //annotate the conditional, has to happen after body since conditional is a part of the body
+        MDNode *condNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::Conditional))));
+        for (auto cond : Conditional)
+        {
+            cast<Instruction>(cond->getFirstInsertionPt())->setMetadata("TikMetadata", condNode);
         }
     }
-    for (auto r : toRemove)
-    {
-        r->eraseFromParent();
-    }
 
-    //annotate the kernel functions
-    MDNode *kernelNode = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), Name));
-    KernelFunction->setMetadata("KernelName", kernelNode);
-    for (auto global : GlobalMap)
-    {
-        global.second->setMetadata("KernelName", kernelNode);
-    }
-    //annotate the conditional, has to happen after body since conditional is a part of the body
-    MDNode *condNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::Conditional))));
-    for (auto cond : Conditional)
-    {
-        cast<Instruction>(cond->getFirstInsertionPt())->setMetadata("TikMetadata", condNode);
-    }
-}
-
-Kernel::Kernel() = default;
+    Kernel::Kernel() = default;
+} // namespace TraceAtlas::tik

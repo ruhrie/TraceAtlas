@@ -29,6 +29,7 @@ void CleanModule(llvm::Module *M);
 
 using namespace std;
 using namespace llvm;
+using namespace TraceAtlas::tik;
 
 enum Filetype
 {

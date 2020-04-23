@@ -9,9 +9,11 @@
 #include <set>
 #include <string>
 #include <vector>
-
-std::string GetString(llvm::Value *v);
-std::vector<std::string> GetStrings(llvm::BasicBlock *bb);
-std::vector<std::string> GetStrings(std::set<llvm::Instruction *> instructions);
-std::vector<std::string> GetStrings(std::vector<llvm::Instruction *> instructions);
-std::map<std::string, std::vector<std::string>> GetStrings(llvm::Function *f);
+namespace TraceAtlas::tik
+{
+    std::string GetString(llvm::Value *v);
+    std::vector<std::string> GetStrings(llvm::BasicBlock *bb);
+    std::vector<std::string> GetStrings(std::set<llvm::Instruction *> instructions);
+    std::vector<std::string> GetStrings(std::vector<llvm::Instruction *> instructions);
+    std::map<std::string, std::vector<std::string>> GetStrings(llvm::Function *f);
+} // namespace TraceAtlas::tik

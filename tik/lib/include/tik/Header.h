@@ -1,18 +1,20 @@
 #pragma once
 #include "tik/Kernel.h"
+namespace TraceAtlas::tik
+{
+    extern bool VectorsUsed;
 
-extern bool VectorsUsed;
+    void ProcessFunctionArgument(std::string &type, const std::string &argname);
 
-void ProcessFunctionArgument(std::string &type, const std::string &argname);
+    void ProcessArrayArgument(std::string &type, const std::string &argname);
 
-void ProcessArrayArgument(std::string &type, const std::string &argname);
+    void RecurseForStructs(llvm::Type *input, std::set<llvm::StructType *> &AllStructures);
 
-void RecurseForStructs(llvm::Type *input, std::set<llvm::StructType *> &AllStructures);
+    std::string GetTikStructures(const std::vector<std::shared_ptr<Kernel>> &kernels, std::set<llvm::StructType *> &AllStructures);
 
-std::string GetTikStructures(const std::vector<std::shared_ptr<Kernel>> &kernels, std::set<llvm::StructType *> &AllStructures);
+    std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructures);
 
-std::string getCType(llvm::Type *param, std::set<llvm::StructType *> &AllStructures);
+    std::string getCArrayType(llvm::Type *arrayElem, std::set<llvm::StructType *> &AllStructures, uint64_t &size);
 
-std::string getCArrayType(llvm::Type *arrayElem, std::set<llvm::StructType *> &AllStructures, uint64_t &size);
-
-std::string getVectorType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructures);
+    std::string getVectorType(llvm::Type *elem, std::set<llvm::StructType *> &AllStructures);
+} // namespace TraceAtlas::tik
