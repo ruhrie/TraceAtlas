@@ -1,7 +1,7 @@
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
-#include "tik/KernelConstruction.h"
+#include "tik/CartographerKernel.h"
 #include "tik/TikHeader.h"
 #include "tik/Util.h"
 #include "tik/libtik.h"
@@ -200,7 +200,7 @@ int main(int argc, char *argv[])
             if (childParentMapping.find(kernel.first) == childParentMapping.end())
             {
                 //this kernel has no unexplained parents
-                auto *kern = new Kernel(kernel.second, sourceBitcode.get(), kernel.first);
+                auto *kern = new CartographerKernel(kernel.second, sourceBitcode.get(), kernel.first);
                 if (!kern->Valid)
                 {
                     delete kern;

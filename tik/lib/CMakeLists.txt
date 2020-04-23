@@ -1,4 +1,4 @@
-add_library(libtik SHARED Backend.cpp Kernel.cpp KernelConstruction.cpp TikHeader.cpp Util.cpp libtik.cpp KernelLabel.cpp)
+add_library(libtik SHARED Backend.cpp Kernel.cpp TikHeader.cpp Util.cpp libtik.cpp KernelLabel.cpp CartographerKernel.cpp)
 target_link_libraries(libtik PRIVATE ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json spdlog::spdlog spdlog::spdlog_header_only AtlasUtil)
 target_compile_definitions(libtik PRIVATE ${LLVM_DEFINITIONS})
 target_include_directories(libtik SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
