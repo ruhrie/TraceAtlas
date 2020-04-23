@@ -34,11 +34,11 @@ public:
     std::map<llvm::BasicBlock *, int> ExitMap;
     std::map<llvm::Argument *, llvm::Value *> ArgumentMap;
     std::map<llvm::BasicBlock *, llvm::BasicBlock *> ExitBlockMap;
+
 protected:
     Kernel();
     void ApplyMetadata(std::map<llvm::Value *, llvm::GlobalObject *> &GlobalMap);
+
 private:
-    ///@brief   Must be a member because we may dereference it when building a kernel with an embedded call
-    std::map<int, llvm::GlobalValue *> LoadMap;
-    std::map<int, llvm::GlobalValue *> StoreMap;
+    Kernel(const Kernel &) = delete;
 };

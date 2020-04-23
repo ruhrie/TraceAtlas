@@ -2,7 +2,7 @@
 #include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
 #include "tik/CartographerKernel.h"
-#include "tik/TikHeader.h"
+#include "tik/Header.h"
 #include "tik/Util.h"
 #include "tik/libtik.h"
 #include <fstream>
@@ -184,7 +184,7 @@ int main(int argc, char *argv[])
     TikModule->setTargetTriple(sourceBitcode->getTargetTriple());
 
     //we now process all kernels who have no children and then remove them as we go
-    std::vector<Kernel *> results;
+    std::vector<shared_ptr<Kernel>> results;
 
     bool change = true;
     set<vector<int64_t>> failedKernels;
@@ -200,10 +200,9 @@ int main(int argc, char *argv[])
             if (childParentMapping.find(kernel.first) == childParentMapping.end())
             {
                 //this kernel has no unexplained parents
-                auto *kern = new CartographerKernel(kernel.second, sourceBitcode.get(), kernel.first);
+                auto kern = make_shared<CartographerKernel>(kernel.second, sourceBitcode.get(), kernel.first);
                 if (!kern->Valid)
                 {
-                    delete kern;
                     failedKernels.insert(kernel.second);
                     error = true;
                     spdlog::error("Failed to convert kernel: " + kernel.first);
@@ -258,7 +257,7 @@ int main(int argc, char *argv[])
     // insert all structures in the tik module and convert them
     std::set<llvm::StructType *> AllStructures;
     headerFile += GetTikStructures(results, AllStructures);
-    for (auto kernel : results)
+    for (const auto &kernel : results)
     {
         headerFile += "\n" + kernel->GetHeaderDeclaration(AllStructures);
     }

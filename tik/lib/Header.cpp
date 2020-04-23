@@ -1,4 +1,4 @@
-#include "tik/TikHeader.h"
+#include "tik/Header.h"
 #include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
 #include "tik/Kernel.h"
@@ -117,9 +117,9 @@ void RecurseForStructs(llvm::Type *input, std::set<llvm::StructType *> &AllStruc
     }
 }
 
-std::string GetTikStructures(const std::vector<Kernel *> &kernels, std::set<llvm::StructType *> &AllStructures)
+std::string GetTikStructures(const std::vector<std::shared_ptr<Kernel>> &kernels, std::set<llvm::StructType *> &AllStructures)
 {
-    for (auto kernel : kernels)
+    for (const auto &kernel : kernels)
     {
         for (auto ai = kernel->KernelFunction->arg_begin(); ai < kernel->KernelFunction->arg_end(); ai++)
         {

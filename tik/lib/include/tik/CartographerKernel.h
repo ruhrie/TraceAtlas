@@ -10,6 +10,7 @@ public:
     CartographerKernel(std::vector<int64_t> basicBlocks, llvm::Module *M, std::string name = "");
 
 private:
+    CartographerKernel();
     void GetBoundaryValues(std::set<llvm::BasicBlock *> &blocks);
     void BuildKernelFromBlocks(llvm::ValueToValueMapTy &VMap, std::set<llvm::BasicBlock *> &blocks);
     void InlineFunctionsFromBlocks(std::set<int64_t> &blocks);

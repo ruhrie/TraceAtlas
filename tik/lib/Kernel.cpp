@@ -1,9 +1,9 @@
-#include "tik/CartographerKernel.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
+#include "tik/CartographerKernel.h"
 #include "tik/Metadata.h"
-#include "tik/TikHeader.h"
+#include "tik/Header.h"
 #include "tik/Util.h"
 #include "tik/libtik.h"
 #include <algorithm>

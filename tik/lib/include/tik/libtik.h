@@ -3,5 +3,5 @@
 #include <map>
 
 extern llvm::Module *TikModule;
-extern std::map<llvm::Function *, Kernel *> KfMap;
-extern std::map<int64_t, Kernel *> KernelMap;
+extern std::map<llvm::Function *, std::shared_ptr<Kernel>> KfMap;
+extern std::map<int64_t, std::shared_ptr<Kernel>> KernelMap;

@@ -1,7 +1,8 @@
 #include "tik/libtik.h"
 #include "tik/Kernel.h"
 #include <map>
+#include <memory>
 
 llvm::Module *TikModule;
-std::map<int64_t, Kernel *> KernelMap;
-std::map<llvm::Function *, Kernel *> KfMap;
+std::map<int64_t, std::shared_ptr<Kernel>> KernelMap;
+std::map<llvm::Function *, std::shared_ptr<Kernel>> KfMap;
