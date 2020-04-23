@@ -1,10 +1,10 @@
-#include "tik/tik.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
 #include "tik/KernelConstruction.h"
 #include "tik/TikHeader.h"
 #include "tik/Util.h"
+#include "tik/libtik.h"
 #include <fstream>
 #include <iostream>
 #include <llvm/Bitcode/BitcodeReader.h>

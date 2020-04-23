@@ -2,12 +2,11 @@
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
-#include "tik/InlineStruct.h"
 #include "tik/KernelConstruction.h"
 #include "tik/Metadata.h"
 #include "tik/TikHeader.h"
 #include "tik/Util.h"
-#include "tik/tik.h"
+#include "tik/libtik.h"
 #include <algorithm>
 #include <iostream>
 #include <llvm/ADT/SmallVector.h>
@@ -102,9 +101,9 @@ Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
 
         //SplitBlocks(blocks);
         std::map<llvm::Value *, llvm::GlobalObject *> GlobalMap;
-        GetEntrances(blocks, Entrances);
-        GetExits(blocks, ExitTarget);
-        std::vector<llvm::Value *> KernelExports = GetExternalValues(blocks, VMap, KernelImports);
+        GetEntrances(this, blocks);
+        GetExits(this, blocks);
+        GetExternalValues(this, VMap, blocks);
 
         //we now have all the information we need
         //start by making the correct function
@@ -142,36 +141,35 @@ Kernel::Kernel(std::vector<int64_t> basicBlocks, Module *M, string name)
         Exception = BasicBlock::Create(TikModule->getContext(), "Exception", KernelFunction);
 
         //copy the appropriate blocks
-        set<llvm::BasicBlock *> Conditional;
-        BuildKernel(KernelFunction, blocks, Conditional, Entrances, Exception, Exit, ExitMap, VMap, Init);
+        BuildKernel(this, VMap, blocks);
 
-        Remap(VMap, KernelFunction); //we need to remap before inlining
+        Remap(this, VMap); //we need to remap before inlining
 
-        InlineFunctions(KernelFunction, blockSet, Init, Exception, Exit);
+        InlineFunctions(this, blockSet);
 
-        CopyGlobals(KernelFunction, VMap);
+        CopyGlobals(this, VMap);
 
         //remap and repipe
-        Remap(VMap, KernelFunction);
+        Remap(this, VMap);
 
         //might be fused
-        Repipe(KernelFunction, Exit, ExitBlockMap);
+        Repipe(this);
 
         // replace external function calls with tik declarations
-        ExportFunctionSignatures(KernelFunction);
+        ExportFunctionSignatures(this);
 
-        BuildInit(KernelFunction, VMap, Init, Exception, Entrances);
+        BuildInit(this, VMap);
 
-        BuildExit(VMap, Exit, Exception, ExitMap);
+        BuildExit(this, VMap);
 
-        RemapNestedKernels(KernelFunction, VMap, ArgumentMap);
+        RemapNestedKernels(this, VMap);
 
-        RemapExports(KernelFunction, VMap, Init, KernelExports);
+        RemapExports(this, VMap);
 
-        PatchPhis(KernelFunction);
+        PatchPhis(this);
 
         //apply metadata
-        ApplyMetadata(KernelFunction, Conditional, Name, GlobalMap);
+        ApplyMetadata(this, Name, GlobalMap);
 
         //and set a flag that we succeeded
         Valid = true;

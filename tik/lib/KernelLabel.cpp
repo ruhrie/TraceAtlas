@@ -8,14 +8,14 @@
 using namespace llvm;
 using namespace std;
 
-void Kernel::GetKernelLabels()
+void GetKernelLabels(Kernel *kernel)
 {
     //LoopGrammar lg = LoopGrammar::None;
-    if (Conditional.size() != 1)
+    if (kernel->Conditional.size() != 1)
     {
         throw AtlasException("Expected a single conditoinal");
     }
-    for (auto cond : Conditional)
+    for (auto cond : kernel->Conditional)
     {
 
         auto term = cond->getTerminator();
@@ -24,7 +24,7 @@ void Kernel::GetKernelLabels()
         if (auto c = dyn_cast<BranchInst>(term))
         {
             condition = c->getCondition();
-            if (c->getSuccessor(1) == Exit)
+            if (c->getSuccessor(1) == kernel->Exit)
             {
                 //shouldTrue = true;
             }

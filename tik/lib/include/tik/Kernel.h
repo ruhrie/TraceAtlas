@@ -1,5 +1,4 @@
 #pragma once
-#include "tik/InlineStruct.h"
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Operator.h>
@@ -16,7 +15,7 @@ public:
     ~Kernel();
     std::string GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures);
     std::string Name;
-    //std::set<llvm::BasicBlock *> Conditional;
+    std::set<llvm::BasicBlock *> Conditional;
 
     /// @brief  Must be a member because we may dereference it from the KernelMap when building a kernel
     std::set<llvm::BasicBlock *> Entrances;
@@ -37,8 +36,10 @@ public:
     ///         These instructions become the input arguments to the Kernel function.
     ///         This must be kept within the class because we need it when exporting external values in a kernel with a subkernel
     std::vector<llvm::Value *> KernelImports;
+    std::vector<llvm::Value *> KernelExports;
     std::map<llvm::BasicBlock *, int> ExitMap;
     std::map<llvm::Argument *, llvm::Value *> ArgumentMap;
+    std::map<llvm::BasicBlock *, llvm::BasicBlock *> ExitBlockMap;
 
 private:
     void Cleanup();
@@ -46,7 +47,6 @@ private:
     //void GetExits(std::set<llvm::BasicBlock *> &blocks);
 
     ///@brief   Must be a member because we may dereference it when building a kernel with an embedded call
-    std::map<llvm::BasicBlock *, llvm::BasicBlock *> ExitBlockMap;
     std::map<int, llvm::GlobalValue *> LoadMap;
     std::map<int, llvm::GlobalValue *> StoreMap;
     /// @brief  Maps old instructions to new instructions.
@@ -63,9 +63,6 @@ private:
 
     ///
     ///
-
-    std::vector<llvm::Value *> KernelExports;
-    std::vector<InlineStruct> InlinedFunctions;
 
     /// @brief   Function for remapping instructions based on VMap.
     ///          This is done before morphing KernelFunction into a new function with inputs.
