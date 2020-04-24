@@ -444,13 +444,15 @@ namespace TraceAtlas::tik
                 Function *base = block->getParent();
                 for (auto user : base->users())
                 {
-                    auto *v = cast<Instruction>(user);
-                    if (blocks.find(v->getParent()) == blocks.end())
+                    if (auto v = dyn_cast<Instruction>(user))
                     {
-                        if (coveredExits.find(v->getParent()) == coveredExits.end())
+                        if (blocks.find(v->getParent()) == blocks.end())
                         {
-                            ExitTarget[exitId++] = v->getParent();
-                            coveredExits.insert(v->getParent());
+                            if (coveredExits.find(v->getParent()) == coveredExits.end())
+                            {
+                                ExitTarget[exitId++] = v->getParent();
+                                coveredExits.insert(v->getParent());
+                            }
                         }
                     }
                 }
@@ -930,11 +932,15 @@ namespace TraceAtlas::tik
                             {
                                 continue;
                             }
-                            if (arg->getType() != fType->getParamType(i))
+                            auto type = arg->getType();
+                            if (type != fType->getParamType(i))
                             {
-                                IRBuilder<> aBuilder(call);
-                                auto load = aBuilder.CreateLoad(arg);
-                                call->setArgOperand(i, load);
+                                if (type->isPointerTy())
+                                {
+                                    IRBuilder<> aBuilder(call);
+                                    auto load = aBuilder.CreateLoad(arg);
+                                    call->setArgOperand(i, load);
+                                }
                             }
                         }
                     }
