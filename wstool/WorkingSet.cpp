@@ -13,18 +13,19 @@ namespace WorkingSet
     vector<InternaladdressLiving> internalAddressLivingVec;
 
     // key map to speed up the address seaching, because there are many same addresses in the address living vector, we need to locate the latest one.
-    map<int64_t, uint64_t> inputAddressIndexMap;
-    map<int64_t, uint64_t> internalAddressIndexMap;
+    map<uint64_t, uint64_t> inputAddressIndexMap;
+    map<uint64_t, uint64_t> internalAddressIndexMap;
 
     // FirstStore is called when we know that the address appears for the first time, then:
     // 1.Update key map with the live addresses
     // 2.Construct the address structs of birth and death time
     // Here “op” is a flag to indicate that if the address first appears from a load or a store
-    void firstStore(int64_t addrIndex, int64_t t, int op)
+    void firstStore(uint64_t addrIndex, int64_t t, bool fromStore)
     {
         // birth from a store inst
-        if (op > 0)
+        if (fromStore)
         {
+            //structure 赋值 改改
             InternaladdressLiving internalAddress;
             internalAddress.address = addrIndex;
             internalAddress.brithTime = t;
@@ -66,7 +67,7 @@ namespace WorkingSet
     // Update the virtual address map of the live address:
     // The times when load instruction appears are pushed into virtual address map.
 
-    void livingLoad(int64_t addrIndex, int64_t t)
+    void livingLoad(uint64_t addrIndex, int64_t t)
     {
         //the coming address is an internal address
         if (internalAddressIndexMap.find(addrIndex) != internalAddressIndexMap.end())
@@ -83,25 +84,25 @@ namespace WorkingSet
 
     void Process(string &key, string &value)
     {
-        int64_t addressIndex;
+        uint64_t addressIndex;
         if (key == "StoreAddress")
         {
-            addressIndex = stol(value, nullptr, 0);
-            firstStore(addressIndex, timing, 1);
+            addressIndex = stoul(value, nullptr, 0);
+            firstStore(addressIndex, timing, true);
             timing++;
         }
         else if (key == "LoadAddress")
         {
-            timing++;
-            addressIndex = stol(value, nullptr, 0);
+            addressIndex = stoul(value, nullptr, 0);
             if (internalAddressIndexMap.find(addressIndex) != internalAddressIndexMap.end() || inputAddressIndexMap.find(addressIndex) != inputAddressIndexMap.end())
             {
                 livingLoad(addressIndex, timing);
             }
             else
             {
-                firstStore(addressIndex, timing, -1);
+                firstStore(addressIndex, timing, false);
             }
+            timing++;
         }
     }
 } // namespace WorkingSet

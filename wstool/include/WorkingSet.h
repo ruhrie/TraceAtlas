@@ -11,13 +11,13 @@ namespace WorkingSet
 {
     typedef struct InternaladdressLiving
     {
-        int64_t address;
+        uint64_t address;
         int64_t brithTime;
         int64_t deathTime;
     } InternaladdressLiving;
     typedef struct InputaddressLiving
     {
-        int64_t address;
+        uint64_t address;
         int64_t firstLoadTime;
         int64_t deathTime;
     } InputaddressLiving;
