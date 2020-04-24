@@ -1,6 +1,4 @@
 add_executable(1DCondition 1DCondition.c)
-set_target_properties(1DCondition PROPERTIES LINK_FLAGS "-Wl,--plugin-opt=emit-llvm")
-target_compile_options(1DCondition PRIVATE "-flto")
 InjectTracer(1DCondition)
 
 add_test(NAME 1DCondition_Trace COMMAND 1DCondition-trace)

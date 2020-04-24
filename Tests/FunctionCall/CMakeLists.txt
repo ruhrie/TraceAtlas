@@ -1,6 +1,4 @@
 add_executable(FunctionCall FunctionCall.c)
-set_target_properties(FunctionCall PROPERTIES LINK_FLAGS "-Wl,--plugin-opt=emit-llvm")
-target_compile_options(FunctionCall PRIVATE "-flto")
 InjectTracer(FunctionCall)
 
 add_test(NAME FunctionCall_Trace COMMAND FunctionCall-trace)

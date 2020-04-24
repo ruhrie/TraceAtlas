@@ -1,6 +1,4 @@
 add_executable(Threads Threads.c)
-set_target_properties(Threads PROPERTIES LINK_FLAGS "-Wl,--plugin-opt=emit-llvm")
-target_compile_options(Threads PRIVATE "-flto")
 InjectTracer(Threads)
 
 target_link_libraries(Threads-trace PRIVATE "-lpthread")

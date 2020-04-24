@@ -17,10 +17,10 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
     int previousCount = 0;
     if (!noBar)
     {
-        bar.set_prefix_text(barPrefix);
-        bar.show_elapsed_time();
-        bar.show_remaining_time();
-        bar.set_bar_width(50);
+        bar.set_option(indicators::option::PrefixText{barPrefix});
+        bar.set_option(indicators::option::ShowElapsedTime{true});
+        bar.set_option(indicators::option::ShowRemainingTime{true});
+        bar.set_option(indicators::option::BarWidth{50});
     }
 
     std::ifstream inputTrace;
@@ -120,7 +120,7 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
         if (!noBar)
         {
             bar.set_progress(percent);
-            bar.set_postfix_text("Block " + std::to_string(index) + "/" + std::to_string(blocks));
+            bar.set_option(indicators::option::PostfixText{"Block " + std::to_string(index) + "/" + std::to_string(blocks)});
         }
         else
         {
