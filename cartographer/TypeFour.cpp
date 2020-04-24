@@ -280,10 +280,10 @@ namespace TypeFour
         indicators::ProgressBar bar;
         if (!noBar)
         {
-            bar.set_prefix_text("Detecting type 4 kernels");
-            bar.set_bar_width(50);
-            bar.show_elapsed_time();
-            bar.show_remaining_time();
+            bar.set_option(indicators::option::PrefixText{"Detecting type 4 kernels"});
+            bar.set_option(indicators::option::ShowElapsedTime{true});
+            bar.set_option(indicators::option::ShowRemainingTime{true});
+            bar.set_option(indicators::option::BarWidth{50});
         }
 
         uint64_t total = type3Kernels.size();
@@ -326,14 +326,14 @@ namespace TypeFour
             if (!noBar)
             {
                 float percent = float(status) / float(total) * 100;
-                bar.set_postfix_text("Kernel " + to_string(status) + "/" + to_string(total));
+                bar.set_option(indicators::option::PostfixText{"Kernel " + to_string(status) + "/" + to_string(total)});
                 bar.set_progress(percent);
             }
         }
 
         if (!noBar && !bar.is_completed())
         {
-            bar.set_postfix_text("Kernel " + to_string(status) + "/" + to_string(total));
+            bar.set_option(indicators::option::PostfixText{"Kernel " + to_string(status) + "/" + to_string(total)});
             bar.set_progress(100);
             bar.mark_as_completed();
         }

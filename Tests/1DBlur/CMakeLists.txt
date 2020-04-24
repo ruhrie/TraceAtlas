@@ -1,6 +1,4 @@
 add_executable(1DBlur 1DBlur.c)
-set_target_properties(1DBlur PROPERTIES LINK_FLAGS "-Wl,--plugin-opt=emit-llvm")
-target_compile_options(1DBlur PRIVATE "-flto")
 InjectTracer(1DBlur)
 
 add_test(NAME 1DBlur_Trace COMMAND 1DBlur-trace)
