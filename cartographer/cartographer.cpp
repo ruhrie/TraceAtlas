@@ -1,5 +1,6 @@
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Traces.h"
+#include "AtlasUtil/Version.h"
 #include "TypeFour.h"
 #include "TypeOne.h"
 #include "TypeThree.h"
@@ -38,6 +39,7 @@ cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging le
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 int main(int argc, char **argv)
 {
+    cl::SetVersionPrinter(EchoVersion);
     cl::ParseCommandLineOptions(argc, argv);
     noProgressBar = noBar;
 

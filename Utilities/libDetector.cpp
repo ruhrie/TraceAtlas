@@ -1,4 +1,5 @@
 #include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Version.h"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -9,6 +10,7 @@
 #include <nlohmann/json.hpp>
 #include <set>
 #include <string>
+
 using namespace std;
 using namespace llvm;
 
@@ -18,6 +20,7 @@ cl::opt<string> OutputFile("o", cl::desc("Specify output json filename"), cl::va
 
 int main(int argc, char *argv[])
 {
+    cl::SetVersionPrinter(EchoVersion);
     cl::ParseCommandLineOptions(argc, argv);
     ifstream inputJson(JsonFile);
     nlohmann::json j;

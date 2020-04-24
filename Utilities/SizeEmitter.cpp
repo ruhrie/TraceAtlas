@@ -1,3 +1,4 @@
+#include "AtlasUtil/Version.h"
 #include <fstream>
 #include <iostream>
 #include <llvm/IR/DataLayout.h>
@@ -13,6 +14,7 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
+
 using namespace llvm;
 using json = nlohmann::json;
 
@@ -21,6 +23,7 @@ cl::opt<std::string> OutputFilename("o", cl::desc("Specify output filename"), cl
 
 int main(int argc, char **argv)
 {
+    cl::SetVersionPrinter(EchoVersion);
     cl::ParseCommandLineOptions(argc, argv);
     std::map<uint64_t, std::vector<int>> storeSizes;
     std::map<uint64_t, std::vector<int>> loadSizes;

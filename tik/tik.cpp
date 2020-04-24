@@ -1,6 +1,7 @@
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
+#include "AtlasUtil/Version.h"
 #include "tik/CartographerKernel.h"
 #include "tik/Header.h"
 #include "tik/Util.h"
@@ -24,7 +25,6 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
 #include <string>
-
 void CleanModule(llvm::Module *M);
 
 using namespace std;
@@ -54,6 +54,7 @@ cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging le
 int main(int argc, char *argv[])
 {
     bool error = false;
+    cl::SetVersionPrinter(EchoVersion);
     cl::ParseCommandLineOptions(argc, argv);
 
     if (!LogFile.empty())

@@ -1,0 +1,14 @@
+#pragma once
+#include <llvm/Support/CommandLine.h>
+
+#define TraceAtlasVersion "@PROJECT_VERSION@"
+#define CommitId "@COMMIT_ID@"
+
+void EchoVersion(llvm::raw_ostream &shell)
+{
+    shell << "TraceAtlas v" << TraceAtlasVersion;
+#ifdef DEBUG
+    shell << "-" << CommitId;
+#endif
+    shell << "\n";
+}

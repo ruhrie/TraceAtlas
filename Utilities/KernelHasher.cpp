@@ -1,3 +1,4 @@
+#include "AtlasUtil/Version.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instruction.h"
@@ -14,6 +15,7 @@
 #include <nlohmann/json.hpp>
 #include <unordered_map>
 #include <vector>
+
 using namespace llvm;
 using json = nlohmann::json;
 using namespace std;
@@ -34,6 +36,7 @@ string getName()
 
 int main(int argc, char **argv)
 {
+    cl::SetVersionPrinter(EchoVersion);
     cl::ParseCommandLineOptions(argc, argv);
     LLVMContext context;
     SMDiagnostic smerror;

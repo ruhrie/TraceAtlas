@@ -35,6 +35,10 @@ else()
         )
 endif()
 
+if(${CMAKE_BUILD_TYPE} MATCHES Debug)
+    add_compile_definitions(DEBUG)
+endif()
+
 add_subdirectory("AtlasUtil")
 add_subdirectory("cartographer")
 add_subdirectory("TraceInfrastructure")

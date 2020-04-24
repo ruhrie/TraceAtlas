@@ -1,4 +1,5 @@
 #include "AtlasUtil/Traces.h"
+#include "AtlasUtil/Version.h"
 #include <algorithm>
 #include <fstream>
 #include <indicators/progress_bar.hpp>
@@ -11,6 +12,7 @@
 #include <sstream>
 #include <vector>
 #include <zlib.h>
+
 using namespace llvm;
 using namespace std;
 
@@ -78,6 +80,7 @@ void Process(string &key, string &value)
 
 int main(int argc, char **argv)
 {
+    cl::SetVersionPrinter(EchoVersion);
     cl::ParseCommandLineOptions(argc, argv);
 
     if (!LogFile.empty())

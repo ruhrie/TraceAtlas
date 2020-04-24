@@ -11,7 +11,7 @@ add_executable(kernelHasher KernelHasher.cpp)
 
 set_target_properties(kernelHasher PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 target_compile_definitions(kernelHasher PUBLIC ${LLVM_DEFINITIONS})
-target_link_libraries(kernelHasher ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json)
+target_link_libraries(kernelHasher ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
 target_include_directories(kernelHasher PRIVATE ${LLVM_INCLUDE_DIRS})
 
 install(TARGETS kernelHasher RUNTIME DESTINATION bin)
@@ -29,7 +29,7 @@ add_executable(sizeEmitter SizeEmitter.cpp)
 
 set_target_properties(sizeEmitter PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 target_compile_definitions(sizeEmitter PUBLIC ${LLVM_DEFINITIONS})
-target_link_libraries(sizeEmitter ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json)
+target_link_libraries(sizeEmitter ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
 target_include_directories(sizeEmitter PRIVATE ${LLVM_INCLUDE_DIRS})
 
 install(TARGETS sizeEmitter RUNTIME DESTINATION bin)

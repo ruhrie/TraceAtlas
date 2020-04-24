@@ -1,4 +1,5 @@
 #include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Version.h"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -17,6 +18,7 @@ cl::opt<string> InputFile(cl::Positional, cl::Required, cl::desc("<input file>")
 
 int main(int argc, char *argv[])
 {
+    cl::SetVersionPrinter(EchoVersion);
     cl::ParseCommandLineOptions(argc, argv);
     std::cout << InputFile << " " << JsonFile << "\n";
     ifstream inputJson(JsonFile);

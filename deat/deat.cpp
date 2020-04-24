@@ -1,11 +1,11 @@
 #include "AtlasUtil/Traces.h"
+#include "AtlasUtil/Version.h"
 #include <fstream>
 #include <llvm/Support/CommandLine.h>
 #include <nlohmann/json.hpp>
 #include <set>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
-
 using namespace llvm;
 using namespace std;
 
@@ -113,6 +113,7 @@ void Process(string &key, string &value)
 
 int main(int argc, char *argv[])
 {
+    cl::SetVersionPrinter(EchoVersion);
     cl::ParseCommandLineOptions(argc, argv);
 
     if (!LogFile.empty())
