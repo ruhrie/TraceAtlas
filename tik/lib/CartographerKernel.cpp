@@ -543,9 +543,6 @@ namespace TraceAtlas::tik
         set<Function *> headFunctions;
         for (auto ent : Entrances)
         {
-            //MDNode* oldID = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(ent->getParent()->getParent()->getContext()), ent->getValueID())));
-            MDNode *oldID = MDNode::get(TikModule->getContext(), MDString::get(ent->getParent()->getParent()->getContext(), ent->getName())); // ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(ent->getParent()->getParent()->getContext()), ent->getValueID())));
-            cast<Instruction>(ent->getFirstInsertionPt())->setMetadata("oldName", oldID);
             headFunctions.insert(ent->getParent());
         }
 

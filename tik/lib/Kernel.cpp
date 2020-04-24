@@ -120,6 +120,21 @@ namespace TraceAtlas::tik
         //annotate the kernel functions
         MDNode *kernelNode = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), Name));
         KernelFunction->setMetadata("KernelName", kernelNode);
+        vector<MDNode *> ents;
+        int i = 0;
+        for( auto ent : Entrances )
+        {
+            MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)static_cast<int>(GetBlockID(ent)))));
+            KernelFunction->setMetadata("Ent"+to_string(i), newNode);
+            i++;        
+        }
+        i = 0;
+        for( auto &ex : ExitMap )
+        {
+            MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)static_cast<int>(GetBlockID(ex.first)))));
+            KernelFunction->setMetadata("Ex"+to_string(i), newNode);
+            i++;        
+        }
         for (auto global : GlobalMap)
         {
             global.second->setMetadata("KernelName", kernelNode);
