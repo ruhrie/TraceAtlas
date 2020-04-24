@@ -79,7 +79,6 @@ namespace TypeTwo
                 }
             }
 
-
             for (auto open : openBlocks)
             {
                 for (auto ki : kernelMap[open])
