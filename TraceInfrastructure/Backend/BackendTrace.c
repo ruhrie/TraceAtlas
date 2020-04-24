@@ -130,7 +130,7 @@ void WriteAddress(char *inst, int line, int block, uint64_t func, char *address)
 
 void CloseFile()
 {
-    for (int i = 0; i < nameIndex; i++)
+    for (int8_t i = 0; i < nameIndex; i++)
     {
         BufferData(i);
         strm_DashTracers[i].next_in = storeBuffers[i];
@@ -149,8 +149,8 @@ void LoadDump(void *address)
     char fin[128];
     struct timespec tr;
     clock_gettime(CLOCK_MONOTONIC, &tr);
-    uint64_t t = tr.tv_sec * 1000000000 + tr.tv_nsec;
-    sprintf(fin, "LoadAddress:%#lX:%#lX\n", (uint64_t)address, t);
+    int64_t t = tr.tv_sec * 1000000000 + tr.tv_nsec;
+    sprintf(fin, "LoadAddress:%#lX:%#lX\n", (uint64_t)address, (uint64_t)t);
     WriteStream(fin);
 }
 void DumpLoadValue(void *MemValue, int size)
@@ -158,8 +158,8 @@ void DumpLoadValue(void *MemValue, int size)
     char fin[128];
     struct timespec tr;
     clock_gettime(CLOCK_MONOTONIC, &tr);
-    uint64_t t = tr.tv_sec * 1000000000 + tr.tv_nsec;
-    sprintf(fin, "LoadAddress:%#lX:%#lX\n", (uint64_t)MemValue, t);
+    int64_t t = tr.tv_sec * 1000000000 + tr.tv_nsec;
+    sprintf(fin, "LoadAddress:%#lX:%#lX\n", (uint64_t)MemValue, (uint64_t)t);
     WriteStream(fin);
     uint8_t *bitwisePrint = (uint8_t *)MemValue;
     sprintf(fin, "LoadValue:");
@@ -184,8 +184,8 @@ void StoreDump(void *address)
     char fin[128];
     struct timespec tr;
     clock_gettime(CLOCK_MONOTONIC, &tr);
-    uint64_t t = tr.tv_sec * 1000000000 + tr.tv_nsec;
-    sprintf(fin, "StoreAddress:%#lX:%#lX\n", (uint64_t)address, t);
+    int64_t t = tr.tv_sec * 1000000000 + tr.tv_nsec;
+    sprintf(fin, "StoreAddress:%#lX:%#lX\n", (uint64_t)address, (uint64_t)t);
     WriteStream(fin);
 }
 
@@ -194,8 +194,8 @@ void DumpStoreValue(void *MemValue, int size)
     char fin[128];
     struct timespec tr;
     clock_gettime(CLOCK_MONOTONIC, &tr);
-    uint64_t t = tr.tv_sec * 1000000000 + tr.tv_nsec;
-    sprintf(fin, "StoreAddress:%#lX:%#lX\n", (uint64_t)MemValue, t);
+    int64_t t = tr.tv_sec * 1000000000 + tr.tv_nsec;
+    sprintf(fin, "StoreAddress:%#lX:%#lX\n", (uint64_t)MemValue, (uint64_t)t);
     WriteStream(fin);
     uint8_t *bitwisePrint = (uint8_t *)MemValue;
     sprintf(fin, "StoreValue:");
