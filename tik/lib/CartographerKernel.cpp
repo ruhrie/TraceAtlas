@@ -1046,7 +1046,7 @@ namespace TraceAtlas::tik
         for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
         {
             auto b = cast<BasicBlock>(fi);
-            vector<PHINode *> phisToRemove;
+            vector<Instruction *> phisToRemove;
             for (auto &phi : b->phis())
             {
                 vector<BasicBlock *> valuesToRemove;
@@ -1080,6 +1080,32 @@ namespace TraceAtlas::tik
                 if (phi.getNumIncomingValues() == 0)
                 {
                     phisToRemove.push_back(&phi);
+                    for (auto user : phi.users())
+                    {
+                        if (auto br = dyn_cast<BranchInst>(user))
+                        {
+                            if (br->isConditional())
+                            {
+                                auto b0 = br->getSuccessor(0);
+                                auto b1 = br->getSuccessor(1);
+                                if(b0 != b1)
+                                {
+                                    throw AtlasException("Phi successors don't match");
+                                }
+                                IRBuilder<> ib(br);
+                                ib.CreateBr(b0);
+                                phisToRemove.push_back(br);
+                            }
+                            else
+                            {
+                                throw AtlasException("Malformed phi user");
+                            }
+                        }
+                        else
+                        {
+                            throw AtlasException("Unexpected phi user");
+                        }
+                    }
                 }
             }
             for (auto phi : phisToRemove)

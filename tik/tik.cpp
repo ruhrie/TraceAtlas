@@ -279,9 +279,9 @@ int main(int argc, char *argv[])
     std::string str;
     llvm::raw_string_ostream rso(str);
 #ifdef DEBUG
-    bool broken = verifyModule(*TikModule);
-#else
     bool broken = verifyModule(*TikModule, &rso);
+#else
+    bool broken = verifyModule(*TikModule);
 #endif
     if (broken)
     { 
