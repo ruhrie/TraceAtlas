@@ -99,7 +99,7 @@ namespace TraceAtlas::tik
         }
         // kernel signature export
         // -> entrance, exit vectors
-        // convert entrance, exit vectors to block ids
+        // convert entrance, exit vectors to block ids (Done)
         // enumerate them as string metadata using json format
         //second remove all debug intrinsics
         vector<Instruction *> toRemove;
@@ -132,9 +132,9 @@ namespace TraceAtlas::tik
             i++;
         }
         i = 0;
-        for (auto &ex : ExitMap)
+        for (auto &ex : ExitTarget)
         {
-            MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t) static_cast<int>(GetBlockID(ex.first)))));
+            MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t) static_cast<int>(ex.first))));
             KernelFunction->setMetadata("Ex" + to_string(i), newNode);
             i++;
         }

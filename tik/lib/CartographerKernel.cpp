@@ -628,7 +628,7 @@ namespace TraceAtlas::tik
 
                                     if (nExits.size() != 1)
                                     {
-                                        throw AtlasException("Expected exactly one exit fron nested kernel");
+                                        throw AtlasException("Expected exactly one exit from nested kernel");
                                     }
                                     tar = *nExits.begin();
                                     BasicBlock *newBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
