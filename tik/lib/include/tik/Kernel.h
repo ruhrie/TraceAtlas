@@ -22,7 +22,9 @@ namespace TraceAtlas::tik
         std::set<llvm::BasicBlock *> Conditional;
 
         /// @brief  Must be a member because we may dereference it from the KernelMap when building a kernel
-        std::set<llvm::BasicBlock *> Entrances;
+        //std::set<llvm::BasicBlock *> Entrances;
+        std::set<int64_t> Entrances;
+        std::map<int64_t, llvm::BasicBlock *> EntranceMap;
 
         /// @brief  Must be a member because we may dereference it when building a kernel with an embedded call
         std::map<int, llvm::BasicBlock *> ExitTarget;

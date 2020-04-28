@@ -18,11 +18,11 @@ cl::opt<std::string> TraceFilename(cl::Positional, cl::value_desc("Trace filenam
 llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::value_desc("No progress bar"));
 
 map<string, set<int64_t>> kernelMap; //dictionary mapping a name to a set of blocks
-string ck; ///string denoting the currently processing kernel
-map<int64_t, string> UIDMap; //map of a UID to a kernel name
-int64_t uidCounter = 0; //current uid counter. DO NOT TOUCH
-map<uint64_t, int64_t> writeMap; //dictionary mapping an address to the last uid to write to it
-map<int64_t, set<int64_t>> readMap; //dictionary mapping a uid to the uids it read frome
+string ck;                           ///string denoting the currently processing kernel
+map<int64_t, string> UIDMap;         //map of a UID to a kernel name
+int64_t uidCounter = 0;              //current uid counter. DO NOT TOUCH
+map<uint64_t, int64_t> writeMap;     //dictionary mapping an address to the last uid to write to it
+map<int64_t, set<int64_t>> readMap;  //dictionary mapping a uid to the uids it read frome
 
 struct KernelStruct
 {

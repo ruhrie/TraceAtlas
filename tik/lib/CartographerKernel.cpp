@@ -335,6 +335,7 @@ namespace TraceAtlas::tik
     void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks)
     {
         int exitId = 0;
+        set<BasicBlock *> EntranceBlocks;
         set<BasicBlock *> coveredExits;
         for (auto block : blocks)
         {
@@ -366,7 +367,7 @@ namespace TraceAtlas::tik
                 if (exte && !inte)
                 {
                     //exclusively external so this is an entrance
-                    Entrances.insert(block);
+                    EntranceBlocks.insert(block);
                 }
                 else if (exte && inte)
                 {
@@ -421,7 +422,7 @@ namespace TraceAtlas::tik
                 {
                     //this is assumed to be a true entrance
                     //if false it has no path that doesn't pass through the prior kernel
-                    Entrances.insert(block);
+                    EntranceBlocks.insert(block);
                 }
             }
 
@@ -528,13 +529,20 @@ namespace TraceAtlas::tik
                 }
             }
         }
-        if (Entrances.empty())
+        if (EntranceBlocks.empty())
         {
             throw AtlasException("Kernel Exception: tik requires a body entrance");
         }
         if (exitId == 0)
         {
             throw AtlasException("Tik Error: tik found no kernel exits")
+        }
+        // populate Entrance vector and map
+        for (auto entry : EntranceBlocks)
+        {
+            int64_t blockID = GetBlockID(entry);
+            Entrances.insert(blockID);
+            EntranceMap[blockID] = entry;
         }
     }
 
@@ -543,7 +551,7 @@ namespace TraceAtlas::tik
         set<Function *> headFunctions;
         for (auto ent : Entrances)
         {
-            headFunctions.insert(ent->getParent());
+            headFunctions.insert(EntranceMap[ent]->getParent());
         }
 
         if (headFunctions.size() != 1)
@@ -563,7 +571,7 @@ namespace TraceAtlas::tik
             {
                 //this belongs to a subkernel
                 auto nestedKernel = KernelMap[id];
-                if (nestedKernel->Entrances.find(block) != nestedKernel->Entrances.end())
+                if (nestedKernel->Entrances.find(GetBlockID(block)) != nestedKernel->Entrances.end())
                 {
                     //we need to make a unique block for each entrance (there is currently only one)
                     //int i = 0;
@@ -668,7 +676,7 @@ namespace TraceAtlas::tik
                             if (blocks.find(pred) == blocks.end())
                             {
                                 //we have an invalid predecessor, replace with init
-                                if (Entrances.find(block) != Entrances.end())
+                                if (Entrances.find(GetBlockID(block)) != Entrances.end())
                                 {
                                     p->replaceIncomingBlockWith(pred, Init);
                                     rescheduled++;
@@ -987,10 +995,9 @@ namespace TraceAtlas::tik
         uint64_t i = 0;
         for (auto ent : Entrances)
         {
-            int64_t id = GetBlockID(ent);
-            if (KernelMap.find(id) == KernelMap.end() && VMap[ent] != nullptr)
+            if (KernelMap.find(ent) == KernelMap.end() && VMap[EntranceMap[ent]] != nullptr)
             {
-                initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[ent]));
+                initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[EntranceMap[ent]]));
             }
             else
             {

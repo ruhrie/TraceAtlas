@@ -97,7 +97,10 @@ namespace TraceAtlas::tik
                 inst->setMetadata("dbg", nullptr);
             }
         }
-
+        // kernel signature export
+        // -> entrance, exit vectors
+        // convert entrance, exit vectors to block ids
+        // enumerate them as string metadata using json format
         //second remove all debug intrinsics
         vector<Instruction *> toRemove;
         for (auto &fi : *KernelFunction)
@@ -122,18 +125,18 @@ namespace TraceAtlas::tik
         KernelFunction->setMetadata("KernelName", kernelNode);
         vector<MDNode *> ents;
         int i = 0;
-        for( auto ent : Entrances )
+        for (auto ent : Entrances)
         {
-            MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)static_cast<int>(GetBlockID(ent)))));
-            KernelFunction->setMetadata("Ent"+to_string(i), newNode);
-            i++;        
+            MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t) static_cast<int>(ent))));
+            KernelFunction->setMetadata("Ent" + to_string(i), newNode);
+            i++;
         }
         i = 0;
-        for( auto &ex : ExitMap )
+        for (auto &ex : ExitMap)
         {
-            MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)static_cast<int>(GetBlockID(ex.first)))));
-            KernelFunction->setMetadata("Ex"+to_string(i), newNode);
-            i++;        
+            MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t) static_cast<int>(GetBlockID(ex.first)))));
+            KernelFunction->setMetadata("Ex" + to_string(i), newNode);
+            i++;
         }
         for (auto global : GlobalMap)
         {
