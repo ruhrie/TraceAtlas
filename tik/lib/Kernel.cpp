@@ -97,10 +97,6 @@ namespace TraceAtlas::tik
                 inst->setMetadata("dbg", nullptr);
             }
         }
-        // kernel signature export
-        // -> entrance, exit vectors
-        // convert entrance, exit vectors to block ids (Done)
-        // enumerate them as string metadata using json format
         //second remove all debug intrinsics
         vector<Instruction *> toRemove;
         for (auto &fi : *KernelFunction)
@@ -119,11 +115,31 @@ namespace TraceAtlas::tik
         {
             r->eraseFromParent();
         }
-
         //annotate the kernel functions
+        string metadata = "{\n\t\"Entrances\": [";
+        for (auto index : Entrances)
+        {
+            if (index != *(Entrances.begin()))
+            {
+                metadata += ", ";
+            }
+            metadata += to_string(index);
+        }
+        metadata += "],\n\t\"Exits\": [";
+        for (auto index : ExitTarget)
+        {
+            if (index != *(ExitTarget.begin()))
+            {
+                metadata += ", ";
+            }
+            metadata += to_string(index.first);
+        }
+        metadata += "]\n}";
         MDNode *kernelNode = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), Name));
         KernelFunction->setMetadata("KernelName", kernelNode);
-        vector<MDNode *> ents;
+        MDNode *json = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), metadata));
+        KernelFunction->setMetadata("Boundaries", json);
+        /*
         int i = 0;
         for (auto ent : Entrances)
         {
@@ -137,7 +153,7 @@ namespace TraceAtlas::tik
             MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t) static_cast<int>(ex.first))));
             KernelFunction->setMetadata("Ex" + to_string(i), newNode);
             i++;
-        }
+        }*/
         for (auto global : GlobalMap)
         {
             global.second->setMetadata("KernelName", kernelNode);
