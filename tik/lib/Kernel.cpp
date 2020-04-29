@@ -132,7 +132,7 @@ namespace TraceAtlas::tik
             {
                 metadata += ", ";
             }
-            metadata += to_string(index.first);
+            metadata += to_string( GetBlockID(index.second) );
         }
         metadata += "],\n\t\"Arguments\": [";
         for (auto arg = KernelFunction->arg_begin(); arg != KernelFunction->arg_end(); arg++)
@@ -141,8 +141,15 @@ namespace TraceAtlas::tik
             {
                 metadata += ", ";
             }
-            llvm::Value* argVal = cast<Value>(arg);
-            metadata += to_string( GetValueID(argVal) );
+            auto argVal = ArgumentMap[arg];
+            if (argVal != nullptr)
+            {
+                metadata += to_string( GetValueID(argVal) );
+            }
+            else
+            {
+                metadata += to_string(-1);
+            }
         }
         metadata += "]\n}";
         cout << metadata << endl;
