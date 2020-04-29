@@ -134,7 +134,18 @@ namespace TraceAtlas::tik
             }
             metadata += to_string(index.first);
         }
+        metadata += "],\n\t\"Arguments\": [";
+        for (auto arg = KernelFunction->arg_begin(); arg != KernelFunction->arg_end(); arg++)
+        {
+            if (arg != KernelFunction->arg_begin())
+            {
+                metadata += ", ";
+            }
+            llvm::Value* argVal = cast<Value>(arg);
+            metadata += to_string( GetValueID(argVal) );
+        }
         metadata += "]\n}";
+        cout << metadata << endl;
         MDNode *kernelNode = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), Name));
         KernelFunction->setMetadata("KernelName", kernelNode);
         MDNode *json = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), metadata));
