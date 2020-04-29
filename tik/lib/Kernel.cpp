@@ -152,7 +152,6 @@ namespace TraceAtlas::tik
             }
         }
         metadata += "]\n}";
-        cout << metadata << endl;
         MDNode *kernelNode = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), Name));
         KernelFunction->setMetadata("KernelName", kernelNode);
         MDNode *json = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), metadata));

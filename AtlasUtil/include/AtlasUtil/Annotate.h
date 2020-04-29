@@ -1,8 +1,8 @@
 #pragma once
-#include <iostream>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Metadata.h>
 #include <llvm/IR/Module.h>
+
 inline void SetBlockID(llvm::BasicBlock *BB, int64_t i)
 {
     llvm::MDNode *idNode = llvm::MDNode::get(BB->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(BB->getContext()), (uint64_t)i)));
@@ -26,7 +26,6 @@ inline void Annotate(llvm::Function *F, uint64_t &startingIndex, uint64_t &valIn
         startingIndex++;
         for (auto bb = BB->begin(); bb != BB->end(); bb++)
         {
-            std::cout << "setting value id to be " << valIndex << std::endl;
             SetValueID(llvm::cast<llvm::Value>(bb), (int64_t)valIndex);
             valIndex++;
         }
