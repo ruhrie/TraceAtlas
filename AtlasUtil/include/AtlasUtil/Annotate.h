@@ -1,8 +1,8 @@
 #pragma once
+#include <iostream>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Metadata.h>
 #include <llvm/IR/Module.h>
-#include <iostream>
 inline void SetBlockID(llvm::BasicBlock *BB, int64_t i)
 {
     llvm::MDNode *idNode = llvm::MDNode::get(BB->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(BB->getContext()), (uint64_t)i)));
@@ -11,14 +11,14 @@ inline void SetBlockID(llvm::BasicBlock *BB, int64_t i)
 
 inline void SetValueID(llvm::Value *val, int64_t i)
 {
-    if (llvm::Instruction* inst = llvm::dyn_cast<llvm::Instruction>(val))
+    if (llvm::Instruction *inst = llvm::dyn_cast<llvm::Instruction>(val))
     {
         llvm::MDNode *idNode = llvm::MDNode::get(inst->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(inst->getContext()), (uint64_t)i)));
         inst->setMetadata("ValueID", idNode);
     }
 }
 
-inline void Annotate(llvm::Function *F, uint64_t &startingIndex, uint64_t& valIndex)
+inline void Annotate(llvm::Function *F, uint64_t &startingIndex, uint64_t &valIndex)
 {
     for (llvm::Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
     {
@@ -60,7 +60,7 @@ inline int64_t GetBlockID(llvm::BasicBlock *BB)
     return result;
 }
 
-inline int64_t GetValueID(llvm::Value* val)
+inline int64_t GetValueID(llvm::Value *val)
 {
     int64_t result = -1;
     if (llvm::Instruction *first = llvm::dyn_cast<llvm::Instruction>(val))
