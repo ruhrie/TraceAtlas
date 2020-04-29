@@ -15,14 +15,7 @@ namespace WorkingSet
         int64_t brithTime;
         int64_t deathTime;
     } InternaladdressLiving;
-    typedef struct InputaddressLiving
-    {
-        uint64_t address;
-        int64_t firstLoadTime;
-        int64_t deathTime;
-    } InputaddressLiving;
     extern int64_t timing;
-    extern vector<InputaddressLiving> inputAddressLivingVec;
     extern vector<InternaladdressLiving> internalAddressLivingVec;
     extern uint64_t inputMapSize;
     extern uint64_t internalMapSize;

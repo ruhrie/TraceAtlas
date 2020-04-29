@@ -9,11 +9,10 @@ namespace WorkingSet
     uint64_t internalMapSize = 0;
 
     //address living vector: to store the address structs of birth and death time
-    vector<InputaddressLiving> inputAddressLivingVec;
     vector<InternaladdressLiving> internalAddressLivingVec;
 
     // key map to speed up the address seaching, because there are many same addresses in the address living vector, we need to locate the latest one.
-    map<uint64_t, uint64_t> inputAddressIndexMap;
+    set<uint64_t>inputAddressIndexSet;
     map<uint64_t, uint64_t> internalAddressIndexMap;
 
     // FirstStore is called when we know that the address appears for the first time, then:
@@ -25,13 +24,8 @@ namespace WorkingSet
         // birth from a store inst
         if (fromStore)
         {
-            //structure 赋值 改改
-            InternaladdressLiving internalAddress;
-            internalAddress.address = addrIndex;
-            internalAddress.brithTime = t;
             // death time is "-1" indicates only a store instruction with this address curently, no load instruction
-            internalAddress.deathTime = -1;
-
+            InternaladdressLiving internalAddress = {.address=addrIndex ,.brithTime=t, .deathTime=-1};
             // update the death time for two continuous store instructions
             if (internalAddressIndexMap.find(addrIndex) != internalAddressIndexMap.end())
             {
@@ -53,12 +47,7 @@ namespace WorkingSet
         // birth from a load inst
         else
         {
-            inputAddressIndexMap[addrIndex] = inputMapSize;
-            InputaddressLiving inputAddress;
-            inputAddress.address = addrIndex;
-            inputAddress.firstLoadTime = t;
-            inputAddress.deathTime = t;
-            inputAddressLivingVec.push_back(inputAddress);
+            inputAddressIndexSet.insert(addrIndex);
             inputMapSize++;
         }
     }
@@ -80,11 +69,7 @@ namespace WorkingSet
             {
                 internalAddressLivingVec[internalAddressIndexMap[addressIndex]].deathTime = timing;
             }
-            else if (inputAddressIndexMap.find(addressIndex) != inputAddressIndexMap.end())
-            {
-                inputAddressLivingVec[inputAddressIndexMap[addressIndex]].deathTime = timing;
-            }
-            else
+            else if (inputAddressIndexSet.find(addressIndex) == inputAddressIndexSet.end())
             {
                 firstStore(addressIndex, timing, false);
             }
