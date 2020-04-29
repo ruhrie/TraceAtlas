@@ -263,15 +263,24 @@ namespace TraceAtlas::tik
                     auto suc = cTerm->getSuccessor(i);
                     if (suc->getParent() != KernelFunction)
                     {
-                        if (ExitBlockMap.find(suc) == ExitBlockMap.end())
+                        shared_ptr<KernelExit> ex;
+                        for(const auto &exit : Exits)
+                        {
+                            if (exit->Target == suc)
+                            {
+                                ex = exit;
+                                break;
+                            }
+                        }
+                        if(ex->Destination == nullptr)
                         {
                             BasicBlock *tmpExit = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
                             IRBuilder<> exitBuilder(tmpExit);
                             exitBuilder.CreateBr(Exit);
-                            ExitBlockMap[suc] = tmpExit;
+                            ex->Destination = tmpExit;
                         }
 
-                        cTerm->setSuccessor(i, ExitBlockMap[suc]);
+                        cTerm->setSuccessor(i, ex->Destination);
                     }
                 }
             }
@@ -433,7 +442,8 @@ namespace TraceAtlas::tik
                 {
                     if (coveredExits.find(suc) == coveredExits.end())
                     {
-                        ExitTarget[exitId++] = suc;
+                        auto ex = make_shared<KernelExit>(exitId++, suc);
+                        Exits.insert(ex);
                         coveredExits.insert(suc);
                     }
                 }
@@ -450,7 +460,8 @@ namespace TraceAtlas::tik
                         {
                             if (coveredExits.find(v->getParent()) == coveredExits.end())
                             {
-                                ExitTarget[exitId++] = v->getParent();
+                                auto ex = make_shared<KernelExit>(exitId++, v->getParent());
+                                Exits.insert(ex);
                                 coveredExits.insert(v->getParent());
                             }
                         }
@@ -593,22 +604,22 @@ namespace TraceAtlas::tik
                         MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(TikModule->getContext()), 1)));
                         SetBlockID(intermediateBlock, -2);
                         cc->setMetadata("KernelCall", tikNode);
-                        auto sw = intBuilder.CreateSwitch(cc, Exception, (uint32_t)nestedKernel->ExitTarget.size());
-                        for (auto pair : nestedKernel->ExitTarget)
+                        auto sw = intBuilder.CreateSwitch(cc, Exception, (uint32_t)nestedKernel->Exits.size());
+                        for (const auto &exit : nestedKernel->Exits)
                         {
 
-                            if (blocks.find(pair.second) != blocks.end())
+                            if (blocks.find(exit->Target) != blocks.end())
                             {
-                                sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)pair.first), pair.second);
+                                sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->ExitIndex), exit->Target);
                             }
                             else
                             {
-                                if (handledExits.find(pair.second) == handledExits.end())
+                                if (handledExits.find(exit->Target) == handledExits.end())
                                 {
                                     //exits both kernels simultaneously
                                     //we create a temp block and remab the exit so the phi has a value
                                     //then remap in the dictionary for the final mapping
-                                    //note that we do not change the ExitTarget map so we still go to the right place
+                                    //note that we do not change the Exits so we still go to the right place
 
                                     BasicBlock *tar = nullptr;
                                     //we need to find every block in the nested kernel that will branch to this target
@@ -616,7 +627,7 @@ namespace TraceAtlas::tik
                                     set<BasicBlock *> nExits;
                                     for (auto k : nestedKernel->ExitMap)
                                     {
-                                        if (k.second == pair.first)
+                                        if (k.second == exit->ExitIndex)
                                         {
                                             //this is the exit
                                             nExits.insert(k.first);
@@ -631,11 +642,11 @@ namespace TraceAtlas::tik
                                     BasicBlock *newBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
                                     IRBuilder<> newBlockBuilder(newBlock);
                                     newBlockBuilder.CreateBr(Exit);
-                                    sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)pair.first), newBlock);
+                                    sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->ExitIndex), newBlock);
                                     int index = ExitMap[tar];
                                     ExitMap.erase(tar);
                                     ExitMap[newBlock] = index;
-                                    handledExits.insert(pair.second);
+                                    handledExits.insert(exit->Target);
                                 }
                             }
                         }
@@ -1088,7 +1099,7 @@ namespace TraceAtlas::tik
                             {
                                 auto b0 = br->getSuccessor(0);
                                 auto b1 = br->getSuccessor(1);
-                                if(b0 != b1)
+                                if (b0 != b1)
                                 {
                                     throw AtlasException("Phi successors don't match");
                                 }
