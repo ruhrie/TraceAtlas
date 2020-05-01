@@ -1,5 +1,5 @@
 file(GLOB SOURCES "*.cpp")
-add_library(libtik SHARED ${SOURCES})
+add_library(libtik STATIC ${SOURCES})
 target_link_libraries(libtik PRIVATE AtlasUtil)
 target_link_libraries(libtik INTERFACE ${llvm_libs} spdlog::spdlog_header_only)
 target_compile_definitions(libtik PRIVATE ${LLVM_DEFINITIONS})

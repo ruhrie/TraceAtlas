@@ -2,6 +2,7 @@
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
+#include "tik/Util.h"
 #include "tik/libtik.h"
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/IRBuilder.h>
@@ -264,7 +265,7 @@ namespace TraceAtlas::tik
                     if (suc->getParent() != KernelFunction)
                     {
                         shared_ptr<KernelExit> ex;
-                        for(const auto &exit : Exits)
+                        for (const auto &exit : Exits)
                         {
                             if (exit->Target == suc)
                             {
@@ -272,7 +273,7 @@ namespace TraceAtlas::tik
                                 break;
                             }
                         }
-                        if(ex->Destination == nullptr)
+                        if (ex->Destination == nullptr)
                         {
                             BasicBlock *tmpExit = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
                             IRBuilder<> exitBuilder(tmpExit);
@@ -345,95 +346,11 @@ namespace TraceAtlas::tik
     {
         int exitId = 0;
         set<BasicBlock *> coveredExits;
+        //we start with entrances
+        auto ent = GetEntrances(blocks);
+        Entrances.insert(ent.begin(), ent.end());
         for (auto block : blocks)
         {
-            //we start with entrances
-            //formerly GetEntrances
-            //to check for entrances we look at the parent function first
-            Function *F = block->getParent();
-            BasicBlock *par = &F->getEntryBlock();
-            //we first check if the block is an entry block, if it is the only way it could be an entry is through a function call
-            if (block == par)
-            {
-                bool exte = false;
-                bool inte = false;
-                for (auto user : F->users())
-                {
-                    if (auto cb = dyn_cast<CallBase>(user))
-                    {
-                        BasicBlock *parent = cb->getParent(); //the parent of the function call
-                        if (blocks.find(parent) == blocks.end())
-                        {
-                            exte = true;
-                        }
-                        else
-                        {
-                            inte = true;
-                        }
-                    }
-                }
-                if (exte && !inte)
-                {
-                    //exclusively external so this is an entrance
-                    Entrances.insert(block);
-                }
-                else if (exte && inte)
-                {
-                    //both external and internal, so maybe an entrance
-                    //ignore for the moment, worst case we will have no entrances
-                    //throw AtlasException("Mixed function uses, not implemented");
-                }
-                else if (!exte && inte)
-                {
-                    //only internal, so ignore
-                }
-                else
-                {
-                    //neither internal or external, throw error
-                    throw AtlasException("Function with no internal or external uses");
-                }
-            }
-            else
-            {
-                //this isn't an entry block, therefore we apply the new algorithm
-                bool ent = false;
-                queue<BasicBlock *> workingSet;
-                set<BasicBlock *> visitedBlocks;
-                workingSet.push(block);
-                visitedBlocks.insert(block);
-                while (!workingSet.empty())
-                {
-                    BasicBlock *current = workingSet.back();
-                    workingSet.pop();
-                    if (current == par)
-                    {
-                        //this is the entry block. We know that there is a valid path through the computation to here
-                        //that doesn't somehow originate in the kernel
-                        //this is guaranteed by the prior type 2 detector in cartographer
-                        ent = true;
-                        break;
-                    }
-                    for (BasicBlock *pred : predecessors(current))
-                    {
-                        //we now add every predecessor to the working set as long as
-                        //1. we haven't visited it before
-                        //2. it is not inside the kernel
-                        //we are trying to find the entrance to the function because it is was indicates a true entrance
-                        if (visitedBlocks.find(pred) == visitedBlocks.end() && blocks.find(pred) == blocks.end())
-                        {
-                            visitedBlocks.insert(pred);
-                            workingSet.push(pred);
-                        }
-                    }
-                }
-                if (ent)
-                {
-                    //this is assumed to be a true entrance
-                    //if false it has no path that doesn't pass through the prior kernel
-                    Entrances.insert(block);
-                }
-            }
-
             //we now look for exits through the successors and return instructions
             //formerly GetExits
             for (auto suc : successors(block))

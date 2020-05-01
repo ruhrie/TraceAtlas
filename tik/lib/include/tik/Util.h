@@ -16,4 +16,7 @@ namespace TraceAtlas::tik
     std::vector<std::string> GetStrings(std::set<llvm::Instruction *> instructions);
     std::vector<std::string> GetStrings(std::vector<llvm::Instruction *> instructions);
     std::map<std::string, std::vector<std::string>> GetStrings(llvm::Function *f);
+    std::set<llvm::BasicBlock *> GetReachable(llvm::BasicBlock *base, std::set<int64_t> validBlocks);
+    bool IsSelfReachable(llvm::BasicBlock *base, std::set<int64_t> validBlocks);
+    std::set<llvm::BasicBlock *> GetEntrances(std::set<llvm::BasicBlock *> &blocks);
 } // namespace TraceAtlas::tik
