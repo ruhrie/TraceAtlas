@@ -12,7 +12,7 @@ namespace WorkingSet
     vector<InternaladdressLiving> internalAddressLivingVec;
 
     // key map to speed up the address seaching, because there are many same addresses in the address living vector, we need to locate the latest one.
-    set<uint64_t>inputAddressIndexSet;
+    set<uint64_t> inputAddressIndexSet;
     map<uint64_t, uint64_t> internalAddressIndexMap;
 
     // FirstStore is called when we know that the address appears for the first time, then:
@@ -25,7 +25,7 @@ namespace WorkingSet
         if (fromStore)
         {
             // death time is "-1" indicates only a store instruction with this address curently, no load instruction
-            InternaladdressLiving internalAddress = {.address=addrIndex ,.brithTime=t, .deathTime=-1};
+            InternaladdressLiving internalAddress = {.address = addrIndex, .brithTime = t, .deathTime = -1};
             // update the death time for two continuous store instructions
             if (internalAddressIndexMap.find(addrIndex) != internalAddressIndexMap.end())
             {
