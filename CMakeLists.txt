@@ -59,6 +59,24 @@ function(InjectTracer tar)
     target_link_libraries(${tar}-trace PRIVATE AtlasBackend)
 endfunction()
 
+function(InjectMemoryTracer tarMem)
+    add_custom_command(OUTPUT optMem.bc
+        COMMAND ${tarMem}-trace
+        COMMAND cartographer -i ${CMAKE_CURRENT_BINARY_DIR}/raw.trc -b $<TARGET_FILE:${tarMem}> -k ${CMAKE_CURRENT_BINARY_DIR}/kernel.json
+        COMMAND opt-9 -load $<TARGET_FILE:AtlasPasses> -EncodedTraceMemory $<TARGET_FILE:${tarMem}> -o optMem.bc -k ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -ki 0 -always-inline 
+        DEPENDS $<TARGET_FILE:${tarMem}>
+    )
+    set_source_files_properties(
+        optMem.bc
+        PROPERTIES
+        EXTERNAL_OBJECT true
+        GENERATED true
+    )
+    add_executable(${tarMem}-memory-trace optMem.bc)
+    set_target_properties(${tarMem}-memory-trace PROPERTIES LINKER_LANGUAGE CXX)
+    target_link_libraries(${tarMem}-memory-trace PRIVATE AtlasBackend)
+endfunction()
+
 option(ENABLE_TESTING "Build tests" ON)
 option(ENABLE_TESTING_LONG "Build tests long" OFF)
 if(${ENABLE_TESTING})
