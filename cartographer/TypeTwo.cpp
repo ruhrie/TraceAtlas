@@ -1,6 +1,6 @@
 #include "TypeTwo.h"
-#include "cartographer.h"
 #include "AtlasUtil/Exceptions.h"
+#include "cartographer.h"
 #include <set>
 #include <string>
 
@@ -117,7 +117,7 @@ namespace TypeTwo
         }
         else if (key == "KernelExit")
         {
-            if(currentKernel.back() != value)
+            if (currentKernel.back() != value)
             {
                 throw AtlasException("Kernel Entrance/Exit not Matched");
             }

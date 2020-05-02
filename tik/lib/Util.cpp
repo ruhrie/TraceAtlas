@@ -224,9 +224,9 @@ namespace TraceAtlas::tik
         return Entrances;
     }
 
-    bool IsSelfReachable(BasicBlock *base, set<int64_t> validBlocks)
+    bool IsReachable(BasicBlock *base, BasicBlock *target, const set<int64_t> &validBlocks)
     {
-        bool foundSelf = false;
+        bool foundTarget = false;
         queue<BasicBlock *> toProcess;
         set<BasicBlock *> checked;
         toProcess.push(base);
@@ -237,9 +237,9 @@ namespace TraceAtlas::tik
             toProcess.pop();
             for (auto suc : successors(bb))
             {
-                if (suc == base)
+                if (suc == target)
                 {
-                    foundSelf = true;
+                    foundTarget = true;
                 }
                 if (checked.find(suc) == checked.end())
                 {
@@ -260,9 +260,9 @@ namespace TraceAtlas::tik
                     if (f != nullptr && !f->empty())
                     {
                         BasicBlock *entry = &f->getEntryBlock();
-                        if (entry == base)
+                        if (entry == target)
                         {
-                            foundSelf = true;
+                            foundTarget = true;
                         }
                         if (checked.find(entry) == checked.end())
                         {
@@ -286,9 +286,9 @@ namespace TraceAtlas::tik
                     if (auto cb = dyn_cast<CallBase>(use))
                     {
                         BasicBlock *entry = cb->getParent();
-                        if (entry == base)
+                        if (entry == target)
                         {
-                            foundSelf = true;
+                            foundTarget = true;
                         }
                         if (checked.find(entry) == checked.end())
                         {
@@ -310,9 +310,9 @@ namespace TraceAtlas::tik
                     if (auto cb = dyn_cast<CallBase>(use))
                     {
                         BasicBlock *entry = cb->getParent();
-                        if (entry == base)
+                        if (entry == target)
                         {
-                            foundSelf = true;
+                            foundTarget = true;
                         }
                         if (checked.find(entry) == checked.end())
                         {
@@ -328,6 +328,83 @@ namespace TraceAtlas::tik
             }
         }
 
-        return foundSelf;
+        return foundTarget;
+    }
+
+    bool IsSelfReachable(BasicBlock *base, const set<int64_t> &validBlocks)
+    {
+        return IsReachable(base, base, validBlocks);
+    }
+
+    set<BasicBlock *> GetExits(set<BasicBlock *> blocks)
+    {
+        set<BasicBlock *> Exits;
+        for (auto block : blocks)
+        {
+            for (auto suc : successors(block))
+            {
+                if (blocks.find(suc) == blocks.end())
+                {
+                    Exits.insert(suc);
+                }
+            }
+            auto term = block->getTerminator();
+            if (auto retInst = dyn_cast<ReturnInst>(term))
+            {
+                Function *base = block->getParent();
+                for (auto user : base->users())
+                {
+                    if (auto v = dyn_cast<Instruction>(user))
+                    {
+                        auto parentBlock = v->getParent();
+                        if (blocks.find(parentBlock) == blocks.end())
+                        {
+                            Exits.insert(parentBlock);
+                        }
+                    }
+                }
+            }
+        }
+        return Exits;
+    }
+    set<BasicBlock *> GetConditionals(const set<BasicBlock *> &blocks, const set<int64_t> &validBlocks)
+    {
+        set<BasicBlock *> result;
+        //a conditional is defined by a successor that cannot reach the conditional again
+        for (auto block : blocks)
+        {
+            for (auto suc : successors(block))
+            {
+                if (!IsReachable(suc, block, validBlocks))
+                {
+                    result.insert(block);
+                }
+                else if (validBlocks.find(GetBlockID(suc)) == validBlocks.end())
+                {
+                    result.insert(block);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    bool HasEpilogue(const set<BasicBlock *> &blocks, const set<int64_t> &validBlocks)
+    {
+        auto conds = GetConditionals(blocks, validBlocks);
+        for (auto cond : conds)
+        {
+            for (auto suc : successors(cond))
+            {
+                if (validBlocks.find(GetBlockID(suc)) != validBlocks.end())
+                {
+                    if (!IsReachable(suc, cond, validBlocks))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 } // namespace TraceAtlas::tik

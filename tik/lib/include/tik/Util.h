@@ -17,6 +17,10 @@ namespace TraceAtlas::tik
     std::vector<std::string> GetStrings(std::vector<llvm::Instruction *> instructions);
     std::map<std::string, std::vector<std::string>> GetStrings(llvm::Function *f);
     std::set<llvm::BasicBlock *> GetReachable(llvm::BasicBlock *base, std::set<int64_t> validBlocks);
-    bool IsSelfReachable(llvm::BasicBlock *base, std::set<int64_t> validBlocks);
+    bool IsSelfReachable(llvm::BasicBlock *base, const std::set<int64_t> &validBlocks);
+    bool IsReachable(llvm::BasicBlock *base, llvm::BasicBlock *target, const std::set<int64_t> &validBlocks);
     std::set<llvm::BasicBlock *> GetEntrances(std::set<llvm::BasicBlock *> &blocks);
+    std::set<llvm::BasicBlock *> GetExits(std::set<llvm::BasicBlock *> blocks);
+    std::set<llvm::BasicBlock *> GetConditionals(const std::set<llvm::BasicBlock *> &blocks, const std::set<int64_t> &validBlocks);
+    bool HasEpilogue(const std::set<llvm::BasicBlock *> &blocks, const std::set<int64_t> &validBlocks);
 } // namespace TraceAtlas::tik

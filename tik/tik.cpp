@@ -284,7 +284,7 @@ int main(int argc, char *argv[])
     bool broken = verifyModule(*TikModule);
 #endif
     if (broken)
-    { 
+    {
 #ifdef DEBUG
         auto err = rso.str();
         spdlog::critical("Tik Module Corrupted: " + err);
