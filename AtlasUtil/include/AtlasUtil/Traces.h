@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <fstream>
 #include <functional>
 #include <indicators/progress_bar.hpp>
@@ -10,7 +11,7 @@
 
 #define BLOCK_SIZE 4096
 
-static void ProcessTrace(const std::string &TraceFile, const std::function<void(std::vector<std::string> &)> &LogicFunction, const std::string &barPrefix = "", bool noBar = false)
+static void ProcessTrace(const std::string &TraceFile, const std::function<void(std::vector<std::string> &)> &LogicFunction, const std::string &barPrefix = "", bool noBar = false, std::atomic<int> *completeCounter = nullptr)
 {
     std::cout << "\e[?25l";
     indicators::ProgressBar bar;
@@ -146,6 +147,10 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
     inflateEnd(&strm);
     inputTrace.close();
     std::cout << "\e[?25h";
+    if (completeCounter)
+    {
+        (*completeCounter) += 1;
+    }
 }
 
 static void ProcessTraces(const std::vector<std::string> &TraceFiles, const std::function<void(std::vector<std::string> &)> &LogicFunction, const std::function<void()> &reset, const std::string &barPrefix = "", bool noBar = false)

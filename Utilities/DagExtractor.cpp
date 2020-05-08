@@ -38,19 +38,26 @@ map<int, string> kernelIdMap;
 map<string, set<int>> kernelMap;
 map<string, set<string>> parentMap;
 map<int, set<int>> consumerMap;
-map<thread::id, shared_ptr<mutex>> mutexMap;
+map<thread::id, int> holdMap;
 uint64_t currentTime = 0;
 
 atomic<int> workingThreads = 0;
 
+atomic<int> finishedThreads = 0;
+
+void Complete()
+{
+    finishedThreads++;
+}
+
 struct MemoryStruct
 {
     uint64_t time = 0;
-    shared_ptr<mutex> m;
-    MemoryStruct(uint64_t t, shared_ptr<mutex> mutex)
+    int m;
+    MemoryStruct(uint64_t t, int i)
     {
         time = t;
-        m = move(mutex);
+        m = i;
     }
 
     bool operator<(const MemoryStruct &b) const
@@ -60,6 +67,7 @@ struct MemoryStruct
 };
 
 priority_queue<MemoryStruct> workingQueue;
+int currentHold = 0;
 
 void Process(vector<string> &values)
 {
@@ -95,18 +103,27 @@ void Process(vector<string> &values)
     {
         uint64_t address = stoul(value, nullptr, 0);
         uint64_t time = stoul(values[2], nullptr, 0);
-        workingQueue.push(MemoryStruct(time, mutexMap[id]));
-        mutexMap[id]->lock();
+        workingQueue.push(MemoryStruct(time, holdMap[id]));
+        while (currentHold != holdMap[id])
+        {
+        }
         int prodUid = writeMap[address];
         if (prodUid != -1 && prodUid != currentUid)
         {
             consumerMap[currentUid].insert(prodUid);
         }
+        currentHold = 0;
     }
     else if (key == "StoreAddress")
     {
         uint64_t address = stoul(value, nullptr, 0);
+        uint64_t time = stoul(values[2], nullptr, 0);
+        workingQueue.push(MemoryStruct(time, holdMap[id]));
+        while (currentHold != holdMap[id])
+        {
+        }
         writeMap[address] = currentUid;
+        currentHold = 0;
     }
 }
 
@@ -204,27 +221,46 @@ int main(int argc, char **argv)
 
     //this is the real logic
     vector<shared_ptr<thread>> threads;
+    atomic<int> *completeThreads = new atomic<int>(0);
+    int i = 0;
     for (auto &tr : inputTraces)
     {
-        auto t = std::make_shared<thread>(ProcessTrace, tr, Process, "Generating Dag", true);
+        auto t = std::make_shared<thread>(ProcessTrace, tr, Process, "Generating Dag", true, completeThreads);
         auto id = t->get_id();
-        mutexMap[id] = make_shared<mutex>();
-        mutexMap[id]->lock();
+        holdMap[id] = ++i;
         threads.push_back(t);
     }
     sleep(1);
-    while(true)
+    int waitIndex = 0;
+    while (true)
     {
-        auto top = workingQueue.top();
-        top.m->unlock();
-        cout << "a\n";
+        if (workingQueue.empty())
+        {
+            if(*completeThreads != i)
+            {
+                continue;
+            }
+            else
+            {
+                break;
+            }
+        }
+        else
+        {
+            auto top = workingQueue.top();
+            currentHold = top.m;
+            while (currentHold != 0)
+            {
+            }
+            workingQueue.pop();
+        }
     }
     for (auto &t : threads)
     {
         t->join();
     }
 
-    //ProcessTrace(InputFilename, Process, "Generating DAG", noBar);
+    delete completeThreads;
 
     nlohmann::json jOut;
     jOut["KernelInstanceMap"] = kernelIdMap;
