@@ -32,8 +32,10 @@ map<string, map<uint64_t, int64_t>> writeMap;
 map<string, map<int, set<int>>> consumerMap;
 
 int64_t block;
-void Process(string &key, string &value)
+void Process(vector<string> &values)
 {
+    string key = values[0];
+    string value = values[1];
     if (key == "BBEnter")
     {
         block = stol(value, nullptr, 0);

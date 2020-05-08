@@ -30,7 +30,7 @@ cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("l
 atomic<int> UID = 0;
 
 string currentKernel = "-1";
-thread_local int currentUid = -1;
+int currentUid = -1;
 
 //maps
 map<uint64_t, int> writeMap;
@@ -38,12 +38,35 @@ map<int, string> kernelIdMap;
 map<string, set<int>> kernelMap;
 map<string, set<string>> parentMap;
 map<int, set<int>> consumerMap;
+map<thread::id, shared_ptr<mutex>> mutexMap;
+uint64_t currentTime = 0;
 
-priority_queue<int> pQueue;
-map<thread::id, mutex> mutexMap;
+atomic<int> workingThreads = 0;
 
-void Process(string &key, string &value)
+struct MemoryStruct
 {
+    uint64_t time = 0;
+    shared_ptr<mutex> m;
+    MemoryStruct(uint64_t t, shared_ptr<mutex> mutex)
+    {
+        time = t;
+        m = move(mutex);
+    }
+
+    bool operator<(const MemoryStruct &b) const
+    {
+        return time > b.time;
+    }
+};
+
+priority_queue<MemoryStruct> workingQueue;
+
+void Process(vector<string> &values)
+{
+    string key = values[0];
+    string value = values[1];
+    auto id = this_thread::get_id();
+
     if (key == "BBEnter")
     {
         int block = stoi(value, nullptr, 0);
@@ -70,9 +93,10 @@ void Process(string &key, string &value)
     }
     else if (key == "LoadAddress")
     {
-        auto id = this_thread::get_id();
-        mutexMap[id].lock();
         uint64_t address = stoul(value, nullptr, 0);
+        uint64_t time = stoul(values[2], nullptr, 0);
+        workingQueue.push(MemoryStruct(time, mutexMap[id]));
+        mutexMap[id]->lock();
         int prodUid = writeMap[address];
         if (prodUid != -1 && prodUid != currentUid)
         {
@@ -81,8 +105,6 @@ void Process(string &key, string &value)
     }
     else if (key == "StoreAddress")
     {
-        auto id = this_thread::get_id();
-        mutexMap[id].lock();
         uint64_t address = stoul(value, nullptr, 0);
         writeMap[address] = currentUid;
     }
@@ -186,8 +208,16 @@ int main(int argc, char **argv)
     {
         auto t = std::make_shared<thread>(ProcessTrace, tr, Process, "Generating Dag", true);
         auto id = t->get_id();
-        mutexMap[id].lock();
+        mutexMap[id] = make_shared<mutex>();
+        mutexMap[id]->lock();
         threads.push_back(t);
+    }
+    sleep(1);
+    while(true)
+    {
+        auto top = workingQueue.top();
+        top.m->unlock();
+        cout << "a\n";
     }
     for (auto &t : threads)
     {

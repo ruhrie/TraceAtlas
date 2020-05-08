@@ -6,6 +6,7 @@
 #include <set>
 #include <string>
 
+#include <spdlog/spdlog.h>
 using namespace std;
 
 namespace TypeOne
@@ -14,11 +15,11 @@ namespace TypeOne
     std::map<int64_t, atomic<uint64_t>> blockCount;
     std::deque<int64_t> priorBlocks;
     uint32_t radius = 5;
-    void Process(std::string &key, std::string &value)
+    void Process(std::vector<std::string> &values)
     {
-        if (key == "BBEnter")
+        if (values[0] == "BBEnter")
         {
-            long int block = stoi(value, nullptr, 0);
+            long int block = stoi(values[1], nullptr, 0);
             blockCount[block] += 1;
             priorBlocks.push_back(block);
 

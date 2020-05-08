@@ -10,7 +10,7 @@
 
 #define BLOCK_SIZE 4096
 
-static void ProcessTrace(const std::string &TraceFile, const std::function<void(std::string &, std::string &)> &LogicFunction, const std::string &barPrefix = "", bool noBar = false)
+static void ProcessTrace(const std::string &TraceFile, const std::function<void(std::vector<std::string> &)> &LogicFunction, const std::string &barPrefix = "", bool noBar = false)
 {
     std::cout << "\e[?25l";
     indicators::ProgressBar bar;
@@ -83,11 +83,16 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
                 }
                 // split it by the colon between the instruction and value
                 std::stringstream itstream(segment);
+                std::vector<std::string> lineValues;
                 std::string key;
                 std::string value;
                 std::string error;
-                std::getline(itstream, key, ':');
-                std::getline(itstream, value, ':');
+                std::string val;
+                while (itstream.good())
+                {
+                    getline(itstream, val, ':');
+                    lineValues.push_back(val);
+                }
                 bool fin = false;
                 if (!std::getline(stringStream, segment, '\n'))
                 {
@@ -102,7 +107,7 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
                 }
 
                 //process the line here
-                LogicFunction(key, value);
+                LogicFunction(lineValues);
                 if (fin)
                 {
                     break;
@@ -143,7 +148,7 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
     std::cout << "\e[?25h";
 }
 
-static void ProcessTraces(const std::vector<std::string> &TraceFiles, const std::function<void(std::string &, std::string &)> &LogicFunction, const std::function<void()> &reset, const std::string &barPrefix = "", bool noBar = false)
+static void ProcessTraces(const std::vector<std::string> &TraceFiles, const std::function<void(std::vector<std::string> &)> &LogicFunction, const std::function<void()> &reset, const std::string &barPrefix = "", bool noBar = false)
 {
     //this will be synchronous at first, until vcpkg updates indicators
     int i = 0;

@@ -9,5 +9,5 @@ set_tests_properties(1DCondition_cartographer PROPERTIES DEPENDS 1DCondition_Tra
 add_test(NAME 1DCondition_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:1DCondition>)
 set_tests_properties(1DCondition_tik PROPERTIES DEPENDS 1DCondition_cartographer)
 
-add_test(NAME 1DCondition_dag COMMAND dagExtractor -t ${CMAKE_CURRENT_BINARY_DIR}/raw.trc -o ${CMAKE_CURRENT_BINARY_DIR}/dag.json -k ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
+add_test(NAME 1DCondition_dag COMMAND dagExtractor ${CMAKE_CURRENT_BINARY_DIR}/raw.trc.0 -o ${CMAKE_CURRENT_BINARY_DIR}/dag.json -k ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
 set_tests_properties(1DCondition_dag PROPERTIES DEPENDS 1DCondition_cartographer)
