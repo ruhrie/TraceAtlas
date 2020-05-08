@@ -7,13 +7,15 @@ namespace WorkingSet
     int64_t timing = 0;
     uint64_t inputMapSize = 0;
     uint64_t internalMapSize = 0;
-
+    uint64_t maxInternalSize = 0;
+    uint64_t maxOutputSize = 0;
     //address living vector: to store the address structs of birth and death time
     vector<InternaladdressLiving> internalAddressLivingVec;
-
+    map<uint64_t, uint64_t> internalAddressIndexMap;
     // key map to speed up the address seaching, because there are many same addresses in the address living vector, we need to locate the latest one.
     set<uint64_t> inputAddressIndexSet;
-    map<uint64_t, uint64_t> internalAddressIndexMap;
+    set<uint64_t> outputSet; //using this set of output addresses in case of duplicated
+    
 
     // FirstStore is called when we know that the address appears for the first time, then:
     // 1.Update key map with the live addresses
@@ -21,28 +23,30 @@ namespace WorkingSet
     // Here “fromStore” is a flag to indicate that if the address first appears from a load or a store
     void firstStore(uint64_t addrIndex, int64_t t, bool fromStore)
     {
-        // birth from a store inst
+                // birth from a store inst
         if (fromStore)
         {
-            // death time is "-1" indicates only a store instruction with this address curently, no load instruction
             InternaladdressLiving internalAddress = {.address = addrIndex, .brithTime = t, .deathTime = -1};
-            // update the death time for two continuous store instructions
-            if (internalAddressIndexMap.find(addrIndex) != internalAddressIndexMap.end())
+            if (internalAddressIndexMap.find(addrIndex) == internalAddressIndexMap.end())
             {
-                if (internalAddressLivingVec[internalAddressIndexMap[addrIndex]].deathTime == -1)
-                {
+                //update the map and the vector
+                internalAddressIndexMap[addrIndex] = internalMapSize;
+                internalAddressLivingVec.push_back(internalAddress);
 
-                    internalAddressLivingVec[internalAddressIndexMap[addrIndex]].deathTime = t - 1;
+                // we need to increase this size even if the address is duplicate, because the birth time is different which
+                // indicates two life periods of this addr
+                internalMapSize++;
+            }
+            else
+            {
+                if (internalAddressLivingVec[internalAddressIndexMap[addrIndex]].deathTime != -1)
+                {
+                    internalAddressIndexMap[addrIndex] = internalMapSize;
+                    internalAddressLivingVec.push_back(internalAddress);
+                    internalMapSize++;
                 }
             }
-
-            //update the map and the vector
-            internalAddressIndexMap[addrIndex] = internalMapSize;
-            internalAddressLivingVec.push_back(internalAddress);
-
-            // we need to increase this size even if the address is duplicate, because the birth time is different which
-            // indicates two life periods of this addr
-            internalMapSize++;
+            
         }
         // birth from a load inst
         else
@@ -54,6 +58,7 @@ namespace WorkingSet
     void Process(string &key, string &value)
     {
         uint64_t addressIndex;
+        int64_t intervalDistance = 1000;
         if (key == "StoreAddress")
         {
             addressIndex = stoul(value, nullptr, 0);
@@ -75,5 +80,42 @@ namespace WorkingSet
             }
             timing++;
         }
+        if (timing % intervalDistance == 0)
+        {           
+            set<int64_t> endTimeSet;
+            uint64_t tempSize=0;
+            if (!internalAddressLivingVec.empty())
+            {               
+                for (auto it : internalAddressLivingVec)
+                {
+                    //if the deathTime is "-1", it's an output address
+                    if (it.deathTime == -1 && outputSet.find(it.address) == outputSet.end())
+                    {
+                        outputSet.insert(it.address);
+                    }        
+                    if (it.deathTime > 0)
+                    {
+                        endTimeSet.insert(it.deathTime);
+                        if (it.brithTime > *(endTimeSet.begin()))
+                        {
+                            endTimeSet.erase(endTimeSet.begin());
+                        }
+                        if (endTimeSet.size() > tempSize)
+                        {
+                            tempSize = endTimeSet.size();
+                        }
+                    }                    
+                }
+                if(tempSize > maxInternalSize)
+                {
+                    maxInternalSize = tempSize;
+                }
+            }
+            
+            internalAddressLivingVec.clear();
+            internalAddressIndexMap.clear();
+            internalMapSize = 0;
+        }
+    maxOutputSize = outputSet.size();
     }
 } // namespace WorkingSet
