@@ -72,7 +72,7 @@ namespace TypeTwo
             kernelStarts[i] = -1;
         }
     }
-    void Process(std::vector< std::string> &values)
+    void Process(std::vector<std::string> &values)
     {
         string key = values[0];
         string value = values[1];

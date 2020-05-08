@@ -39,16 +39,6 @@ map<string, set<int>> kernelMap;
 map<string, set<string>> parentMap;
 map<int, set<int>> consumerMap;
 map<thread::id, int> holdMap;
-uint64_t currentTime = 0;
-
-atomic<int> workingThreads = 0;
-
-atomic<int> finishedThreads = 0;
-
-void Complete()
-{
-    finishedThreads++;
-}
 
 struct MemoryStruct
 {
@@ -221,7 +211,7 @@ int main(int argc, char **argv)
 
     //this is the real logic
     vector<shared_ptr<thread>> threads;
-    atomic<int> *completeThreads = new atomic<int>(0);
+    auto completeThreads = new atomic<int>(0);
     int i = 0;
     for (auto &tr : inputTraces)
     {
@@ -234,18 +224,7 @@ int main(int argc, char **argv)
     int waitIndex = 0;
     while (true)
     {
-        if (workingQueue.empty())
-        {
-            if(*completeThreads != i)
-            {
-                continue;
-            }
-            else
-            {
-                break;
-            }
-        }
-        else
+        if (!workingQueue.empty())
         {
             auto top = workingQueue.top();
             currentHold = top.m;
@@ -253,6 +232,14 @@ int main(int argc, char **argv)
             {
             }
             workingQueue.pop();
+        }
+        else
+        {
+            if (*completeThreads != i)
+            {
+                continue;
+            }
+            break;
         }
     }
     for (auto &t : threads)
