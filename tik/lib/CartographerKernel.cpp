@@ -332,14 +332,15 @@ namespace TraceAtlas::tik
         }
     }
 
-    CartographerKernel::CartographerKernel(Function *kernelFunc, Module *tikBitcode)
+    CartographerKernel::CartographerKernel(Function* kernFunc)
     {
+        KernelFunction = kernFunc; 
         Name = KernelFunction->getName();
-        KernelFunction = kernelFunc;
         // get the metadata and parse it into entrance, exit, values
         //     turn metadata into string
         //     parse json and populate Entrances, Exits,
-        MDNode *meta = kernelFunc->getMetadata("Boundaries");
+        MDNode *meta = KernelFunction->getMetadata("Boundaries");
+        
     }
 
     void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks)

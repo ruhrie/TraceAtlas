@@ -1,4 +1,5 @@
 #include "tikSwap/tikSwap.h"
+#include "AtlasUtil/Exceptions.h"
 #include <iostream>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
@@ -10,6 +11,7 @@
 using namespace std;
 //using namespace Kernel;
 using namespace llvm;
+using namespace TraceAtlas::tik;
 
 cl::opt<string> InputFile("t", cl::Required, cl::desc("<input tik bitcode>"), cl::init("tik.bc"));
 cl::opt<string> OriginalBitcode("b", cl::Required, cl::desc("<input original bitcode>"), cl::init("a.bc"));
@@ -18,7 +20,6 @@ cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_d
 int main(int argc, char *argv[])
 {
     cl::ParseCommandLineOptions(argc, argv);
-
     //load the original bitcode
     LLVMContext OContext;
     SMDiagnostic Osmerror;
@@ -74,5 +75,30 @@ int main(int argc, char *argv[])
         cout << funcName << endl;
     }
 
+    // grab all kernel functions in the tik bitcode and construct objects from them
+    vector<Function*> kernFuncs;
+    if (Function* newFunc = tikModule->getFunction("K0"))
+    {
+        int i = 0;
+        while( newFunc )
+        {
+            i++;
+            kernFuncs.push_back(newFunc);
+            newFunc = tikModule->getFunction("K"+to_string(i));
+        }
+    }
+    else
+    {
+        throw AtlasException("The input tik module has no functions in it.");
+    }
+    vector<CartographerKernel*> kernels;
+    for (auto func : kernFuncs)
+    {
+        CartographerKernel* kern = new CartographerKernel(func);
+        if (kern->Valid)
+        {
+            kernels.push_back(kern);
+        }
+    }
     return 0;
 }
