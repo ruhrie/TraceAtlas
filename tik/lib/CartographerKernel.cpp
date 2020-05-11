@@ -334,13 +334,22 @@ namespace TraceAtlas::tik
 
     CartographerKernel::CartographerKernel(Function* kernFunc)
     {
-        KernelFunction = kernFunc; 
+        KernelFunction = kernFunc;
         Name = KernelFunction->getName();
         // get the metadata and parse it into entrance, exit, values
         //     turn metadata into string
         //     parse json and populate Entrances, Exits,
         MDNode *meta = KernelFunction->getMetadata("Boundaries");
-        
+        std::string metaString;
+        if( auto mstring = dyn_cast<MDString>(meta) )
+        {
+            metaString = mstring->getString();
+        }
+        else
+        {
+            AtlasException("Could not convert metadata into string.");
+        }
+        std::cout << "metadata string is " << metaString << std::endl;
     }
 
     void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks)

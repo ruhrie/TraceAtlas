@@ -41,12 +41,12 @@ int main(int argc, char *argv[])
         spdlog::critical("Failed to open source bitcode: " + OriginalBitcode);
         return EXIT_FAILURE;
     }
-    Module *base = sourceBitcode.get();
+    /*Module *base = sourceBitcode.get();
     for (auto &func : *base)
     {
         string funcName = func.getName();
         cout << funcName << endl;
-    }
+    }*/
     // load the tik IR
     LLVMContext tikContext;
     SMDiagnostic tikSmerror;
@@ -69,32 +69,20 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
     Module *tikModule = tikBitcode.get();
+    // grab all kernel functions in the tik bitcode and construct objects from them
+    vector<Function*> kernelFuncs;
     for (auto &func : *tikModule)
     {
         string funcName = func.getName();
-        cout << funcName << endl;
-    }
-
-    // grab all kernel functions in the tik bitcode and construct objects from them
-    vector<Function*> kernFuncs;
-    if (Function* newFunc = tikModule->getFunction("K0"))
-    {
-        int i = 0;
-        while( newFunc )
+        if (funcName == "K"+to_string(kernelFuncs.size()))
         {
-            i++;
-            kernFuncs.push_back(newFunc);
-            newFunc = tikModule->getFunction("K"+to_string(i));
+            kernelFuncs.push_back(tikModule->getFunction(funcName));
         }
     }
-    else
-    {
-        throw AtlasException("The input tik module has no functions in it.");
-    }
     vector<CartographerKernel*> kernels;
-    for (auto func : kernFuncs)
+    for (auto func : kernelFuncs)
     {
-        CartographerKernel* kern = new CartographerKernel(func);
+        auto kern = new CartographerKernel(func);
         if (kern->Valid)
         {
             kernels.push_back(kern);
