@@ -100,7 +100,7 @@ int main(int argc, char *argv[])
         resultMap[kernel.first]["Conditionals"] = ex.size();
 
         bool hasEpilogue = TraceAtlas::tik::HasEpilogue(llvmBlocks, kernel.second);
-        if(hasEpilogue)
+        if (hasEpilogue)
         {
             resultMap[kernel.first]["Epilogue"] = 1;
         }
