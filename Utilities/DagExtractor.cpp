@@ -29,8 +29,8 @@ cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging le
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 atomic<int> UID = 0;
 
-string currentKernel = "-1";
-int currentUid = -1;
+thread_local string currentKernel = "-1";
+thread_local int currentUid = -1;
 
 //maps
 map<uint64_t, int> writeMap;
@@ -38,13 +38,13 @@ map<int, string> kernelIdMap;
 map<string, set<int>> kernelMap;
 map<string, set<string>> parentMap;
 map<int, set<int>> consumerMap;
-map<thread::id, int> holdMap;
+map<thread::id, mutex> mutexMap;
 
 struct MemoryStruct
 {
     uint64_t time = 0;
-    int m;
-    MemoryStruct(uint64_t t, int i)
+    mutex *m;
+    MemoryStruct(uint64_t t, mutex *i)
     {
         time = t;
         m = i;
@@ -58,6 +58,8 @@ struct MemoryStruct
 
 priority_queue<MemoryStruct> workingQueue;
 int currentHold = 0;
+mutex masterMutex;
+mutex queueMutex;
 
 void Process(vector<string> &values)
 {
@@ -84,8 +86,8 @@ void Process(vector<string> &values)
             currentKernel = innerKernel;
             if (innerKernel != "-1")
             {
-                currentUid = UID;
-                kernelIdMap[UID++] = currentKernel;
+                currentUid = UID++;
+                kernelIdMap[currentUid] = currentKernel;
             }
         }
     }
@@ -93,27 +95,29 @@ void Process(vector<string> &values)
     {
         uint64_t address = stoul(value, nullptr, 0);
         uint64_t time = stoul(values[2], nullptr, 0);
-        workingQueue.push(MemoryStruct(time, holdMap[id]));
-        while (currentHold != holdMap[id])
-        {
-        }
+        auto m = &mutexMap[id];
+        queueMutex.lock();
+        workingQueue.push(MemoryStruct(time, m));
+        queueMutex.unlock();
+        m->lock();
         int prodUid = writeMap[address];
         if (prodUid != -1 && prodUid != currentUid)
         {
             consumerMap[currentUid].insert(prodUid);
         }
-        currentHold = 0;
+        masterMutex.unlock();
     }
     else if (key == "StoreAddress")
     {
         uint64_t address = stoul(value, nullptr, 0);
         uint64_t time = stoul(values[2], nullptr, 0);
-        workingQueue.push(MemoryStruct(time, holdMap[id]));
-        while (currentHold != holdMap[id])
-        {
-        }
+        auto m = &mutexMap[id];
+        queueMutex.lock();
+        workingQueue.push(MemoryStruct(time, m));
+        queueMutex.unlock();
+        m->lock();
         writeMap[address] = currentUid;
-        currentHold = 0;
+        masterMutex.unlock();
     }
 }
 
@@ -217,25 +221,24 @@ int main(int argc, char **argv)
     {
         auto t = std::make_shared<thread>(ProcessTrace, tr, Process, "Generating Dag", true, completeThreads);
         auto id = t->get_id();
-        holdMap[id] = ++i;
+        mutexMap[id].lock();
         threads.push_back(t);
     }
     sleep(1);
-    int waitIndex = 0;
     while (true)
     {
         if (!workingQueue.empty())
         {
+            masterMutex.lock();
+            queueMutex.lock();
             auto top = workingQueue.top();
-            currentHold = top.m;
-            while (currentHold != 0)
-            {
-            }
+            top.m->unlock();
             workingQueue.pop();
+            queueMutex.unlock();
         }
         else
         {
-            if (*completeThreads != i)
+            if (*completeThreads != inputTraces.size())
             {
                 continue;
             }
