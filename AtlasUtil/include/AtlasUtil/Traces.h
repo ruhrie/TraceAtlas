@@ -2,7 +2,6 @@
 #include <atomic>
 #include <fstream>
 #include <functional>
-#include <indicators/progress_bar.hpp>
 #include <spdlog/spdlog.h>
 #include <sstream>
 #include <string>
@@ -11,19 +10,8 @@
 
 #define BLOCK_SIZE 4096
 
-static void ProcessTrace(const std::string &TraceFile, const std::function<void(std::vector<std::string> &)> &LogicFunction, const std::string &barPrefix = "", bool noBar = false, std::atomic<int> *completeCounter = nullptr)
+static void ProcessTrace(const std::string &TraceFile, const std::function<void(std::vector<std::string> &)> &LogicFunction, std::atomic<int> *completeCounter = nullptr)
 {
-    std::cout << "\e[?25l";
-    indicators::ProgressBar bar;
-    int previousCount = 0;
-    if (!noBar)
-    {
-        bar.set_option(indicators::option::PrefixText{barPrefix});
-        bar.set_option(indicators::option::ShowElapsedTime{true});
-        bar.set_option(indicators::option::ShowRemainingTime{true});
-        bar.set_option(indicators::option::BarWidth{50});
-    }
-
     std::ifstream inputTrace;
     char dataArray[BLOCK_SIZE];
     char decompressedArray[BLOCK_SIZE];
@@ -122,45 +110,36 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
         {
             notDone = false;
         }
-        float percent = (float)index / (float)blocks * 100.0f;
-        if (!noBar)
-        {
-            bar.set_progress(percent);
-            bar.set_option(indicators::option::PostfixText{"Block " + std::to_string(index) + "/" + std::to_string(blocks)});
-        }
-        else
-        {
-            int iPercent = (int)percent;
-            if (iPercent > previousCount + 5)
-            {
-                previousCount = ((iPercent / 5) + 1) * 5;
-                //spdlog::info("Completed block {0:d} of {1:d}", index, blocks);
-            }
-        }
-    }
-
-    if (!noBar && !bar.is_completed())
-    {
-        bar.mark_as_completed();
     }
 
     inflateEnd(&strm);
     inputTrace.close();
-    std::cout << "\e[?25h";
     if (completeCounter)
     {
         (*completeCounter) += 1;
     }
 }
 
-static void ProcessTraces(const std::vector<std::string> &TraceFiles, const std::function<void(std::vector<std::string> &)> &LogicFunction, const std::function<void()> &reset, const std::string &barPrefix = "", bool noBar = false)
+static void ProcessTraces(const std::vector<std::string> &TraceFiles, const std::function<void(std::vector<std::string> &)> &LogicFunction, std::function<void()> *setup = nullptr, std::function<void()> *reset = nullptr)
 {
-    //this will be synchronous at first, until vcpkg updates indicators
-    int i = 0;
+    std::vector<std::thread> threads;
     for (const std::string &trace : TraceFiles)
     {
-        ProcessTrace(trace, LogicFunction, barPrefix, noBar);
-        reset();
-        spdlog::info("Completed trace {:d} of {:d}", ++i, TraceFiles.size());
+        std::thread t([&] {
+            if (setup != nullptr)
+            {
+                (*setup)();
+            }
+            ProcessTrace(trace, LogicFunction, nullptr);
+            if (reset != nullptr)
+            {
+                (*reset)();
+            }
+        });
+        threads.push_back(move(t));
+    }
+    for (auto &t : threads)
+    {
+        t.join();
     }
 }

@@ -25,6 +25,7 @@ bool blocksLabeled = false;
 map<int64_t, set<string>> blockLabelMap;
 map<int64_t, BasicBlock *> blockMap;
 set<int64_t> ValidBlocks;
+llvm::Module *bitcode;
 
 llvm::cl::list<string> inputTraces(llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filenames"), cl::Positional);
 llvm::cl::opt<float> threshold("t", cl::desc("The threshold of block grouping required to complete a kernel."), llvm::cl::value_desc("float"), llvm::cl::init(0.9));
@@ -116,10 +117,12 @@ int main(int argc, char **argv)
         }
     }
 
+    bitcode = M;
+
     try
     {
         spdlog::info("Started analysis");
-        ProcessTraces(inputTraces, &TypeOne::Process, &TypeOne::Reset, "Detecting type 1 kernels", noBar);
+        ProcessTraces(inputTraces, &TypeOne::Process, nullptr, nullptr);
         auto type1Kernels = TypeOne::Get();
         spdlog::info("Detected " + to_string(type1Kernels.size()) + " type 1 kernels");
 
@@ -130,14 +133,15 @@ int main(int argc, char **argv)
                 ValidBlocks.insert(block);
             }
         }
-
-        TypeTwo::Setup(M, type1Kernels);
-        ProcessTraces(inputTraces, &TypeTwo::Process, &TypeTwo::Reset, "Detecting type 2 kernels", noBar);
+        TypeTwo::kernels = type1Kernels;
+        std::function<void()> type2Setup = &TypeTwo::Setup;
+        std::function<void()> type2Reset = &TypeTwo::Reset;
+        ProcessTraces(inputTraces, &TypeTwo::Process, &type2Setup, &type2Reset);
         auto type2Kernels = TypeTwo::Get();
         spdlog::info("Detected " + to_string(type2Kernels.size()) + " type 2 kernels");
 
-        TypeTwo::Setup(M, type2Kernels);
-        ProcessTraces(inputTraces, &TypeTwo::Process, &TypeTwo::Reset, "Detecting type 2.5 kernels", noBar);
+        TypeTwo::kernels = type2Kernels;
+        ProcessTraces(inputTraces, &TypeTwo::Process, &type2Setup, &type2Reset);
         auto type25Kernels = TypeTwo::Get();
         spdlog::info("Detected " + to_string(type25Kernels.size()) + " type 2.5 kernels");
 

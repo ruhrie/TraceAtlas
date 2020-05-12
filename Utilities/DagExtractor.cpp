@@ -219,7 +219,7 @@ int main(int argc, char **argv)
     int i = 0;
     for (auto &tr : inputTraces)
     {
-        auto t = std::make_shared<thread>(ProcessTrace, tr, Process, "Generating Dag", true, completeThreads);
+        auto t = std::make_shared<thread>(ProcessTrace, tr, Process, completeThreads);
         auto id = t->get_id();
         mutexMap[id].lock();
         threads.push_back(t);

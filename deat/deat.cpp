@@ -173,7 +173,7 @@ int main(int argc, char *argv[])
 
     ck = "-1";
     kernelQueue.push(UIDStruct(ck));
-    ProcessTrace(TraceFilename, Process, "Generating DAG", noBar);
+    ProcessTrace(TraceFilename, Process);
 
     return 0;
 }
