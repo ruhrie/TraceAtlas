@@ -41,12 +41,6 @@ int main(int argc, char *argv[])
         spdlog::critical("Failed to open source bitcode: " + OriginalBitcode);
         return EXIT_FAILURE;
     }
-    /*Module *base = sourceBitcode.get();
-    for (auto &func : *base)
-    {
-        string funcName = func.getName();
-        cout << funcName << endl;
-    }*/
     // load the tik IR
     LLVMContext tikContext;
     SMDiagnostic tikSmerror;
@@ -87,6 +81,11 @@ int main(int argc, char *argv[])
         {
             kernels.push_back(kern);
         }
+    }
+
+    // swap in kernel functions to original bitcode
+    for (auto kernel : kernels)
+    {
     }
     return 0;
 }

@@ -354,17 +354,17 @@ namespace TraceAtlas::tik
         }
         nlohmann::json js = nlohmann::json::parse(metaString);
 
-        for (auto i : js["Entrances"])
+        for (auto &i : js["Entrances"])
         {
             Entrances.insert((int64_t)i);
         }
-        // initialize Init, Exit, Exception, KernelImports, KernelExports
         std::set<BasicBlock*> blocks;
         for (auto BB = KernelFunction->begin(); BB != KernelFunction->end(); BB++)
         {
             BasicBlock* block = cast<BasicBlock>(BB);
             blocks.insert(block);
         }
+        // initialize Init, Exit, Exception, KernelImports, KernelExports
         for (auto block : blocks)
         {
             // initialize EntranceMap
