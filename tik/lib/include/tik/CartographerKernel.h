@@ -10,7 +10,7 @@ namespace TraceAtlas::tik
     {
     public:
         CartographerKernel(std::vector<int64_t> basicBlocks, llvm::Module *M, std::string name = "");
-        CartographerKernel(llvm::Function* kernFunc);
+        CartographerKernel(llvm::Function *kernFunc);
 
     private:
         CartographerKernel();

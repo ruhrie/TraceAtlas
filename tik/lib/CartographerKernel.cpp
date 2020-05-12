@@ -7,6 +7,7 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/Transforms/Utils/Cloning.h>
+#include <nlohmann/json.hpp>
 #include <queue>
 #include <spdlog/spdlog.h>
 
@@ -332,7 +333,7 @@ namespace TraceAtlas::tik
         }
     }
 
-    CartographerKernel::CartographerKernel(Function* kernFunc)
+    CartographerKernel::CartographerKernel(Function *kernFunc)
     {
         KernelFunction = kernFunc;
         Name = KernelFunction->getName();
@@ -341,15 +342,15 @@ namespace TraceAtlas::tik
         //     parse json and populate Entrances, Exits,
         MDNode *meta = KernelFunction->getMetadata("Boundaries");
         std::string metaString;
-        if( auto mstring = dyn_cast<MDString>(meta->getOperand(0)) )
+        if (auto mstring = dyn_cast<MDString>(meta->getOperand(0)))
         {
             metaString = mstring->getString();
-            std::cout << "metadata string is " << metaString << std::endl;
         }
         else
         {
             AtlasException("Could not convert metadata into string.");
         }
+        nlohmann::json j = nlohmann::json::parse(metaString);
     }
 
     void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks)

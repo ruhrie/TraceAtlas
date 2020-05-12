@@ -70,16 +70,16 @@ int main(int argc, char *argv[])
     }
     Module *tikModule = tikBitcode.get();
     // grab all kernel functions in the tik bitcode and construct objects from them
-    vector<Function*> kernelFuncs;
+    vector<Function *> kernelFuncs;
     for (auto &func : *tikModule)
     {
         string funcName = func.getName();
-        if (funcName == "K"+to_string(kernelFuncs.size()))
+        if (funcName == "K" + to_string(kernelFuncs.size()))
         {
             kernelFuncs.push_back(tikModule->getFunction(funcName));
         }
     }
-    vector<CartographerKernel*> kernels;
+    vector<CartographerKernel *> kernels;
     for (auto func : kernelFuncs)
     {
         auto kern = new CartographerKernel(func);
