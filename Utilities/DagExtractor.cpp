@@ -258,5 +258,7 @@ int main(int argc, char **argv)
     file << jOut;
     file.close();
 
+    spdlog::info("Successfully extracted DAG");
+
     return 0;
 }

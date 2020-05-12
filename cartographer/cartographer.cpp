@@ -197,6 +197,96 @@ int main(int argc, char **argv)
             }
         }
         outputJson["ValidBlocks"] = ValidBlocks;
+        //temp stuff
+        //outputJson["BlockCounts"] = TypeOne::blockCount;
+        {
+            map<string, uint64_t> t;
+            for (const auto &a : TypeOne::blockCount)
+            {
+                t[to_string(a.first)] = a.second;
+            }
+            outputJson["BlockCounts"] = t;
+        }
+
+        //type 1
+        {
+            map<string, set<int64_t>> t;
+            int j = 0;
+            for (const auto &set : type1Kernels)
+            {
+                if (!set.empty())
+                {
+                    t[to_string(j++)] = set;
+                }
+            }
+            outputJson["TypeOne"] = t;
+        }
+        //type 2
+        {
+            map<string, set<int64_t>> t;
+            int j = 0;
+            for (const auto &set : type2Kernels)
+            {
+                if (!set.empty())
+                {
+                    t[to_string(j++)] = set;
+                }
+            }
+            outputJson["TypeTwo"] = t;
+        }
+        //type 2.5
+        {
+            map<string, set<int64_t>> t;
+            int j = 0;
+            for (const auto &set : type25Kernels)
+            {
+                if (!set.empty())
+                {
+                    t[to_string(j++)] = set;
+                }
+            }
+            outputJson["TypeTwoFive"] = t;
+        }
+        //type 3
+        {
+            map<string, set<int64_t>> t;
+            int j = 0;
+            for (const auto &set : type3Kernels)
+            {
+                if (!set.empty())
+                {
+                    t[to_string(j++)] = set;
+                }
+            }
+            outputJson["TypeThree"] = t;
+        }
+        //type 4
+        {
+            map<string, set<int64_t>> t;
+            int j = 0;
+            for (const auto &set : type4Kernels)
+            {
+                if (!set.empty())
+                {
+                    t[to_string(j++)] = set;
+                }
+            }
+            outputJson["TypeFour"] = t;
+        }
+        //type 3.5
+        {
+            map<string, set<int64_t>> t;
+            int j = 0;
+            for (const auto &set : type35Kernels)
+            {
+                if (!set.empty())
+                {
+                    t[to_string(j++)] = set;
+                }
+            }
+            outputJson["TypeThreeFive"] = t;
+        }
+        //end of temp stucc
         ofstream oStream(kernelFile);
         oStream << outputJson;
         oStream.close();
