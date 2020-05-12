@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
-project(TraceAtlas VERSION 0.2.2)
+project(TraceAtlas VERSION 0.3.0)
 
 SET(CMAKE_CXX_STANDARD 20)
 SET(CMAKE_C_STANDARD 11)
