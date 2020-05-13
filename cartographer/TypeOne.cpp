@@ -9,15 +9,15 @@ using namespace std;
 
 namespace TypeOne
 {
-    std::map<int, std::map<int, uint64_t>> blockMap;
-    std::map<int, uint64_t> blockCount;
-    std::deque<int> priorBlocks;
-    int radius = 5;
+    std::map<int64_t, std::map<int64_t, uint64_t>> blockMap;
+    std::map<int64_t, uint64_t> blockCount;
+    std::deque<int64_t> priorBlocks;
+    uint32_t radius = 5;
     void Process(std::string &key, std::string &value)
     {
         if (key == "BBEnter")
         {
-            long int block = stoi(value, 0, 0);
+            long int block = stoi(value, nullptr, 0);
             blockCount[block] += 1;
             priorBlocks.push_back(block);
 
@@ -35,9 +35,9 @@ namespace TypeOne
         }
     }
 
-    std::set<std::set<int>> Get()
+    std::set<std::set<int64_t>> Get()
     {
-        std::map<int, std::vector<std::pair<int, float>>> fBlockMap;
+        std::map<int64_t, std::vector<std::pair<int64_t, float>>> fBlockMap;
         for (auto &key : blockMap)
         {
             uint64_t total = 0;
@@ -48,39 +48,39 @@ namespace TypeOne
             for (auto &sub : key.second)
             {
                 float val = (float)sub.second / (float)total;
-                fBlockMap[key.first].push_back(std::pair<int, float>(sub.first, val));
+                fBlockMap[key.first].push_back(std::pair<int64_t, float>(sub.first, val));
             }
         }
 
-        std::set<int> covered;
-        std::vector<std::set<int>> kernels;
+        std::set<int64_t> covered;
+        std::vector<std::set<int64_t>> kernels;
 
-        std::vector<std::pair<int, int>> blockPairs;
-        for (auto iter = blockCount.begin(); iter != blockCount.end(); iter++)
+        std::vector<std::pair<int64_t, int64_t>> blockPairs;
+        blockPairs.reserve(blockCount.size());
+        for (auto &iter : blockCount)
         {
-            blockPairs.push_back(*iter);
+            blockPairs.emplace_back(iter);
         }
 
-        std::sort(blockPairs.begin(), blockPairs.end(), [=](std::pair<int, int> &a, std::pair<int, int> &b) {
+        std::sort(blockPairs.begin(), blockPairs.end(), [=](std::pair<int64_t, int64_t> &a, std::pair<int64_t, int64_t> &b) {
+            bool result;
             if (a.second > b.second)
             {
-                return true;
+                result = true;
             }
-            else if (a.second == b.second)
+            else if (a.second == b.second && a.first < b.first)
             {
-                if (a.first < b.first)
-                {
-                    return true;
-                }
-                else
-                {
-                    return false;
-                }
+                result = true;
+            }
+            else if (a.second == b.second && a.first >= b.first)
+            {
+                result = false;
             }
             else
             {
-                return false;
+                result = false;
             }
+            return result;
         });
         for (auto &it : blockPairs)
         {
@@ -89,32 +89,31 @@ namespace TypeOne
                 if (covered.find(it.first) == covered.end())
                 {
                     float sum = 0.0;
-                    vector<pair<int, float>> values = fBlockMap[it.first];
-                    std::sort(values.begin(), values.end(), [=](std::pair<int, float> &a, std::pair<int, float> &b) {
+                    vector<pair<int64_t, float>> values = fBlockMap[it.first];
+                    std::sort(values.begin(), values.end(), [=](std::pair<int64_t, float> &a, std::pair<int64_t, float> &b) {
+                        bool result;
                         if (a.second > b.second)
                         {
-                            return true;
+                            result = true;
                         }
-                        else if (a.second == b.second)
+                        else if (a.second == b.second && a.first < b.first)
                         {
-                            if (a.first < b.first)
-                            {
-                                return true;
-                            }
-                            else
-                            {
-                                return false;
-                            }
+                            result = true;
+                        }
+                        else if (a.second == b.second && a.first >= b.first)
+                        {
+                            result = false;
                         }
                         else
                         {
-                            return false;
+                            result = false;
                         }
+                        return result;
                     });
-                    std::set<int> kernel;
+                    std::set<int64_t> kernel;
                     while (sum < threshold)
                     {
-                        std::pair<int, float> entry = values[0];
+                        std::pair<int64_t, float> entry = values[0];
                         covered.insert(entry.first);
                         std::remove(values.begin(), values.end(), entry);
                         sum += entry.second;
@@ -129,7 +128,7 @@ namespace TypeOne
             }
         }
 
-        std::set<std::set<int>> result;
+        std::set<std::set<int64_t>> result;
         for (auto &it : kernels)
         {
             result.insert(it);

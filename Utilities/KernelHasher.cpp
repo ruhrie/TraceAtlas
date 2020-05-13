@@ -42,11 +42,11 @@ int main(int argc, char **argv)
 
     map<int, BasicBlock *> blockMap;
 
-    for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
+    for (auto &F : *M)
     {
-        for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
+        for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
         {
-            BasicBlock *b = cast<BasicBlock>(BB);
+            auto *b = cast<BasicBlock>(BB);
             blockMap[UID++] = b;
         }
     }
@@ -67,12 +67,12 @@ int main(int argc, char **argv)
         {
             BasicBlock *toConvert = blockMap[block];
             valueId = 0;
-            string blockStr = "";
+            string blockStr;
             vector<Value *> namedVals;
             for (BasicBlock::iterator BI = toConvert->begin(), BE = toConvert->end(); BI != BE; ++BI)
             {
-                Instruction *inst = cast<Instruction>(BI);
-                int ops = inst->getNumOperands();
+                auto *inst = cast<Instruction>(BI);
+                uint32_t ops = inst->getNumOperands();
                 for (int i = 0; i < ops; i++)
                 {
                     Value *op = inst->getOperand(i);
@@ -100,8 +100,8 @@ int main(int argc, char **argv)
 
         std::sort(blockStrings.begin(), blockStrings.begin());
 
-        string toHash = "";
-        for (auto str : blockStrings)
+        string toHash;
+        for (const auto &str : blockStrings)
         {
             toHash += str + "\n";
         }
@@ -111,7 +111,7 @@ int main(int argc, char **argv)
     }
 
     json j_map(outputMap);
-    if (OutputFilename != "")
+    if (!OutputFilename.empty())
     {
         std::ofstream file;
         file.open(OutputFilename);

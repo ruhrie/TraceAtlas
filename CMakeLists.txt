@@ -12,21 +12,33 @@ llvm_map_components_to_libnames(llvm_libs  support core irreader bitreader bitwr
 find_package(ZLIB REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED) #nlohmann_json
 find_package(spdlog CONFIG REQUIRED) #spdlog
-find_package(indica CONFIG REQUIRED) #indicators
+find_package(indicators CONFIG REQUIRED) #indicators
 
-function(MakeIR target)
-    set_target_properties(LINK_OPTIONS "-Wl,--plugin-opt=emit-llvm")
-endfunction()
-
-set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld-9")
+option(ENABLE_LINTER_ERROR "Run linter with errors" OFF)
+if(${ENABLE_LINTER_ERROR})
+    set(CMAKE_CXX_CLANG_TIDY 
+        clang-tidy-9;
+        --warnings-as-errors=*;
+        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type;
+        )
+    add_compile_options(-Werror)
+else()
+    set(CMAKE_CXX_CLANG_TIDY 
+        clang-tidy-9;
+        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type;
+        )
+endif()
 
 add_subdirectory("AtlasUtil")
 add_subdirectory("cartographer")
 add_subdirectory("TraceInfrastructure")
 add_subdirectory("tik")
+add_subdirectory("deat")
 add_subdirectory("Utilities")
 
 function(InjectTracer tar)
+    set_target_properties(${tar} PROPERTIES LINK_OPTIONS "-Wl,--plugin-opt=emit-llvm")
+    target_compile_options(${tar} PRIVATE "-flto")
     add_custom_command(OUTPUT opt.bc
         COMMAND opt-9 -load $<TARGET_FILE:AtlasPasses> -EncodedTrace $<TARGET_FILE:${tar}> -o opt.bc
         DEPENDS $<TARGET_FILE:${tar}>
@@ -55,3 +67,23 @@ if(DOXYGEN_FOUND)
     configure_file(Doxyfile ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
     add_custom_target(doc COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile)
 endif(DOXYGEN_FOUND)
+
+#stollen from https://github.com/ttroy50/cmake-examples/blob/master/04-static-analysis/clang-format/cmake/modules/clang-format.cmake
+set(CLANG_FORMAT_EXCLUDE_PATTERNS "build" "vcpkg")
+file(GLOB_RECURSE ALL_SOURCE_FILES *.cpp *.h *.c)
+foreach (SOURCE_FILE ${ALL_SOURCE_FILES})
+    foreach (EXCLUDE_PATTERN ${CLANG_FORMAT_EXCLUDE_PATTERNS})
+        string(FIND ${SOURCE_FILE} ${EXCLUDE_PATTERN} PROJECT_TRDPARTY_DIR_FOUND)
+        if (NOT ${PROJECT_TRDPARTY_DIR_FOUND} EQUAL -1)
+            list(REMOVE_ITEM ALL_SOURCE_FILES ${SOURCE_FILE})
+        endif ()
+    endforeach()
+endforeach ()
+
+add_custom_target(
+    format
+    COMMAND /usr/bin/clang-format-9
+    -style=file
+    -i
+    ${ALL_SOURCE_FILES}
+)

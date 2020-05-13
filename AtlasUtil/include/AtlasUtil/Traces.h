@@ -9,16 +9,17 @@
 
 #define BLOCK_SIZE 4096
 
-static void ProcessTrace(std::string TraceFile, std::function<void(std::string &, std::string &)> LogicFunction, std::string barPrefix = "", bool noBar = false)
+static void ProcessTrace(const std::string &TraceFile, const std::function<void(std::string &, std::string &)> &LogicFunction, const std::string &barPrefix = "", bool noBar = false)
 {
+    std::cout << "\e[?25l";
     indicators::ProgressBar bar;
     int previousCount = 0;
     if (!noBar)
     {
-        bar.set_prefix_text(barPrefix);
-        bar.show_elapsed_time();
-        bar.show_remaining_time();
-        bar.set_bar_width(50);
+        bar.set_option(indicators::option::PrefixText{barPrefix});
+        bar.set_option(indicators::option::ShowElapsedTime{true});
+        bar.set_option(indicators::option::ShowRemainingTime{true});
+        bar.set_option(indicators::option::BarWidth{50});
     }
 
     std::ifstream inputTrace;
@@ -41,20 +42,20 @@ static void ProcessTrace(std::string TraceFile, std::function<void(std::string &
 
     //get the file size
     inputTrace.seekg(0, std::ios_base::end);
-    uint64_t size = inputTrace.tellg();
+    int64_t size = inputTrace.tellg();
     inputTrace.seekg(0, std::ios_base::beg);
-    int blocks = size / BLOCK_SIZE + 1;
+    int64_t blocks = size / BLOCK_SIZE + 1;
 
     bool notDone = true;
     bool seenFirst;
-    std::string priorLine = "";
+    std::string priorLine;
 
     while (notDone)
     {
         // read a block size of the trace
         inputTrace.readsome(dataArray, BLOCK_SIZE);
-        strm.next_in = (Bytef *)dataArray;   // input data to z_lib for decompression
-        strm.avail_in = inputTrace.gcount(); // remaining characters in the compressed inputTrace
+        strm.next_in = (Bytef *)dataArray;             // input data to z_lib for decompression
+        strm.avail_in = (uint32_t)inputTrace.gcount(); // remaining characters in the compressed inputTrace
         while (strm.avail_in != 0)
         {
             // decompress our data
@@ -76,7 +77,7 @@ static void ProcessTrace(std::string TraceFile, std::function<void(std::string &
             {
                 if (!seenFirst)
                 {
-                    segment = priorLine + segment;
+                    segment = priorLine.append(segment);
                     seenFirst = true;
                 }
                 // split it by the colon between the instruction and value
@@ -118,7 +119,7 @@ static void ProcessTrace(std::string TraceFile, std::function<void(std::string &
         if (!noBar)
         {
             bar.set_progress(percent);
-            bar.set_postfix_text("Block " + std::to_string(index) + "/" + std::to_string(blocks));
+            bar.set_option(indicators::option::PostfixText{"Block " + std::to_string(index) + "/" + std::to_string(blocks)});
         }
         else
         {
@@ -126,7 +127,7 @@ static void ProcessTrace(std::string TraceFile, std::function<void(std::string &
             if (iPercent > previousCount + 5)
             {
                 previousCount = ((iPercent / 5) + 1) * 5;
-                spdlog::info("Completed block {0:d} of {1:d}", index, blocks);
+                //spdlog::info("Completed block {0:d} of {1:d}", index, blocks);
             }
         }
     }
@@ -138,4 +139,5 @@ static void ProcessTrace(std::string TraceFile, std::function<void(std::string &
 
     inflateEnd(&strm);
     inputTrace.close();
+    std::cout << "\e[?25h";
 }

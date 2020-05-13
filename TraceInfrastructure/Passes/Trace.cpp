@@ -16,82 +16,75 @@
 
 using namespace llvm;
 
-namespace DashTracer
+namespace DashTracer::Passes
 {
-
-    namespace Passes
+    bool EncodedTrace::runOnFunction(Function &F)
     {
-        bool EncodedTrace::runOnFunction(Function &F)
+        for (auto fi = F.begin(); fi != F.end(); fi++)
         {
-            for (auto fi = F.begin(); fi != F.end(); fi++)
-            {
-                auto BB = cast<BasicBlock>(fi);
-                auto firstInsertion = BB->getFirstInsertionPt();
-                Instruction *firstInst = cast<Instruction>(firstInsertion);
-                Value *trueConst = ConstantInt::get(Type::getInt1Ty(BB->getContext()), 1);
-                Value *falseConst = ConstantInt::get(Type::getInt1Ty(BB->getContext()), 0);
+            auto BB = cast<BasicBlock>(fi);
+            auto firstInsertion = BB->getFirstInsertionPt();
+            auto *firstInst = cast<Instruction>(firstInsertion);
+            Value *trueConst = ConstantInt::get(Type::getInt1Ty(BB->getContext()), 1);
+            Value *falseConst = ConstantInt::get(Type::getInt1Ty(BB->getContext()), 0);
 
-                IRBuilder<> firstBuilder(firstInst);
-                int64_t id = GetBlockID(BB);
-                Value *idValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), id);
-                std::vector<Value *> args;
-                args.push_back(idValue);
-                args.push_back(trueConst);
-                firstBuilder.CreateCall(BB_ID, args);
-                args.pop_back();
-                args.push_back(falseConst);
-                for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
+            IRBuilder<> firstBuilder(firstInst);
+            int64_t id = GetBlockID(BB);
+            Value *idValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), (uint64_t)id);
+            std::vector<Value *> args;
+            args.push_back(idValue);
+            args.push_back(trueConst);
+            firstBuilder.CreateCall(BB_ID, args);
+            args.pop_back();
+            args.push_back(falseConst);
+            for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
+            {
+                auto *CI = dyn_cast<Instruction>(BI);
+                if (DumpLoads)
                 {
-                    bool done = false;
-                    Instruction *CI = dyn_cast<Instruction>(BI);
-                    if (DumpLoads && !done)
+                    if (auto *load = dyn_cast<LoadInst>(CI))
                     {
-                        if (LoadInst *load = dyn_cast<LoadInst>(CI))
-                        {
-                            IRBuilder<> builder(load);
-                            Value *addr = load->getPointerOperand();
-                            auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB->getContext()), 0), true);
-                            Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB->getContext()));
-                            builder.CreateCall(LoadDump, cast);
-                            done = true;
-                        }
-                    }
-                    if (DumpStores && !done)
-                    {
-                        if (StoreInst *store = dyn_cast<StoreInst>(CI))
-                        {
-                            IRBuilder<> builder(store);
-                            Value *addr = store->getPointerOperand();
-                            auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB->getContext()), 0), true);
-                            Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB->getContext()));
-                            builder.CreateCall(StoreDump, cast);
-                            done = true;
-                        }
+                        IRBuilder<> builder(load);
+                        Value *addr = load->getPointerOperand();
+                        auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB->getContext()), 0), true);
+                        Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB->getContext()));
+                        builder.CreateCall(LoadDump, cast);
                     }
                 }
-                Instruction *preTerm = BB->getTerminator();
-                IRBuilder endBuilder(preTerm);
-                endBuilder.CreateCall(BB_ID, args);
+                if (DumpStores)
+                {
+                    if (auto *store = dyn_cast<StoreInst>(CI))
+                    {
+                        IRBuilder<> builder(store);
+                        Value *addr = store->getPointerOperand();
+                        auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(BB->getContext()), 0), true);
+                        Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(BB->getContext()));
+                        builder.CreateCall(StoreDump, cast);
+                    }
+                }
             }
-            return true;
+            Instruction *preTerm = BB->getTerminator();
+            IRBuilder endBuilder(preTerm);
+            endBuilder.CreateCall(BB_ID, args);
         }
+        return true;
+    }
 
-        bool EncodedTrace::doInitialization(Module &M)
-        {
-            BB_ID = cast<Function>(M.getOrInsertFunction("BB_ID_Dump", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext()), Type::getInt1Ty(M.getContext())).getCallee());
-            LoadDump = cast<Function>(M.getOrInsertFunction("LoadDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
-            StoreDump = cast<Function>(M.getOrInsertFunction("StoreDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
-            return false;
-        }
+    bool EncodedTrace::doInitialization(Module &M)
+    {
+        BB_ID = cast<Function>(M.getOrInsertFunction("BB_ID_Dump", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext()), Type::getInt1Ty(M.getContext())).getCallee());
+        LoadDump = cast<Function>(M.getOrInsertFunction("LoadDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
+        StoreDump = cast<Function>(M.getOrInsertFunction("StoreDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
+        return false;
+    }
 
-        void EncodedTrace::getAnalysisUsage(AnalysisUsage &AU) const
-        {
-            AU.addRequired<DashTracer::Passes::EncodedAnnotate>();
-            AU.addRequired<DashTracer::Passes::TraceIO>();
-            AU.setPreservesCFG();
-        }
+    void EncodedTrace::getAnalysisUsage(AnalysisUsage &AU) const
+    {
+        AU.addRequired<DashTracer::Passes::EncodedAnnotate>();
+        AU.addRequired<DashTracer::Passes::TraceIO>();
+        AU.setPreservesCFG();
+    }
 
-        char EncodedTrace::ID = 0;
-        static RegisterPass<EncodedTrace> Y("EncodedTrace", "Adds encoded tracing to the binary", true, false);
-    } // namespace Passes
-} // namespace DashTracer
+    char EncodedTrace::ID = 0;
+    static RegisterPass<EncodedTrace> Y("EncodedTrace", "Adds encoded tracing to the binary", true, false);
+} // namespace DashTracer::Passes

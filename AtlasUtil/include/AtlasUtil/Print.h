@@ -2,13 +2,17 @@
 #include <iostream>
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/Module.h>
+#include <llvm/Support/raw_ostream.h>
 
-inline void PrintVal(llvm::Value *val)
+inline void PrintVal(llvm::Value *val, bool print = true)
 {
     std::string str;
     llvm::raw_string_ostream rso(str);
     val->print(rso);
-    std::cout << str << "\n";
+    if (print)
+    {
+        std::cout << str << "\n";
+    }
 }
 
 inline void PrintVal(llvm::Metadata *val)
@@ -25,11 +29,6 @@ inline void PrintVal(llvm::NamedMDNode *val)
     llvm::raw_string_ostream rso(str);
     val->print(rso);
     std::cout << str << "\n";
-}
-
-inline void PrintVal(const llvm::Value *val)
-{
-    PrintVal(val);
 }
 
 inline void PrintVal(llvm::Module *mod)

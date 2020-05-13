@@ -1,10 +1,10 @@
 #include "TypeFour.h"
 #include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
 #include "cartographer.h"
+#include "tik/Util.h"
 #include <indicators/progress_bar.hpp>
-#include <llvm/IR/CFG.h>
-#include <llvm/IR/Instructions.h>
 #include <queue>
 #include <spdlog/spdlog.h>
 
@@ -13,180 +13,67 @@ using namespace llvm;
 
 namespace TypeFour
 {
-    set<BasicBlock *> GetReachable(BasicBlock *base, set<int> validBlocks)
-    {
-        bool foundSelf = false;
-        queue<BasicBlock *> toProcess;
-        set<BasicBlock *> checked;
-        toProcess.push(base);
-        checked.insert(base);
-        while (!toProcess.empty())
-        {
-            BasicBlock *bb = toProcess.front();
-            toProcess.pop();
-            for (auto suc : successors(bb))
-            {
-                if (suc == base)
-                {
-                    foundSelf = true;
-                }
-                if (checked.find(suc) == checked.end())
-                {
-                    int64_t id = GetBlockID(suc);
-                    if (validBlocks.find(id) != validBlocks.end())
-                    {
-                        checked.insert(suc);
-                        toProcess.push(suc);
-                    }
-                }
-            }
-            //we now check if there is a function call, and if so add the entry
-            for (auto bi = bb->begin(); bi != bb->end(); bi++)
-            {
-                if (auto ci = dyn_cast<CallBase>(bi))
-                {
-                    Function *f = ci->getCalledFunction();
-                    if (f && !f->empty())
-                    {
-                        BasicBlock *entry = &f->getEntryBlock();
-                        if (entry == base)
-                        {
-                            foundSelf = true;
-                        }
-                        if (checked.find(entry) == checked.end())
-                        {
-                            int64_t id = GetBlockID(entry);
-                            if (validBlocks.find(id) != validBlocks.end())
-                            {
-                                checked.insert(entry);
-                                toProcess.push(entry);
-                            }
-                        }
-                    }
-                }
-            }
-            //finally check the terminator and add the call points
-            Instruction *I = bb->getTerminator();
-            if (auto ri = dyn_cast<ReturnInst>(I))
-            {
-                Function *f = bb->getParent();
-                for (auto use : f->users())
-                {
-                    if (auto cb = dyn_cast<CallBase>(use))
-                    {
-                        BasicBlock *entry = cb->getParent();
-                        if (entry == base)
-                        {
-                            foundSelf = true;
-                        }
-                        if (checked.find(entry) == checked.end())
-                        {
-                            int64_t id = GetBlockID(entry);
-                            if (validBlocks.find(id) != validBlocks.end())
-                            {
-                                checked.insert(entry);
-                                toProcess.push(entry);
-                            }
-                        }
-                    }
-                }
-            }
-            else if (auto ri = dyn_cast<ResumeInst>(I))
-            {
-                Function *f = bb->getParent();
-                for (auto use : f->users())
-                {
-                    if (auto cb = dyn_cast<CallBase>(use))
-                    {
-                        BasicBlock *entry = cb->getParent();
-                        if (entry == base)
-                        {
-                            foundSelf = true;
-                        }
-                        if (checked.find(entry) == checked.end())
-                        {
-                            int64_t id = GetBlockID(entry);
-                            if (validBlocks.find(id) != validBlocks.end())
-                            {
-                                checked.insert(entry);
-                                toProcess.push(entry);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    //this was taken from tik. It should probably be moved to libtik once it is made
 
-        if (!foundSelf)
-        {
-            checked.erase(base);
-        }
-        return checked;
-    }
-
-    set<set<int>> Process(set<set<int>> type3Kernels, Module *M)
+    set<set<int64_t>> Process(const set<set<int64_t>> &type3Kernels)
     {
         indicators::ProgressBar bar;
         if (!noBar)
         {
-            bar.set_prefix_text("Detecting type 4 kernels");
-            bar.set_bar_width(50);
-            bar.show_elapsed_time();
-            bar.show_remaining_time();
+            bar.set_option(indicators::option::PrefixText{"Detecting type 4 kernels"});
+            bar.set_option(indicators::option::ShowElapsedTime{true});
+            bar.set_option(indicators::option::ShowRemainingTime{true});
+            bar.set_option(indicators::option::BarWidth{50});
         }
 
-        int total = type3Kernels.size();
+        uint64_t total = type3Kernels.size();
         int status = 0;
 
-        set<set<int>> result;
-        for (auto kernel : type3Kernels)
+        set<set<int64_t>> result;
+        for (const auto &kernel : type3Kernels)
         {
-            set<int> blocks;
-            map<int, set<BasicBlock *>> reachableMap;
+            set<int64_t> blocks;
             for (auto block : kernel)
             {
                 //we need to see if this block can ever reach itself
                 BasicBlock *base = blockMap[block];
-                auto reachable = GetReachable(base, kernel);
-                if (reachable.find(base) != reachable.end())
+                if (TraceAtlas::tik::IsSelfReachable(base, kernel))
                 {
                     blocks.insert(block);
                 }
-                reachableMap[block] = reachable;
             }
             //blocks is now a set, but it may be disjoint, so we need to check that now
-            map<int, set<BasicBlock *>> reachableBlockSets;
+
+            set<BasicBlock *> blockSet;
             for (auto block : blocks)
             {
-                reachableBlockSets[block] = GetReachable(blockMap[block], blocks);
+                blockSet.insert(blockMap[block]);
             }
-            set<set<int>> subSets;
-            for (auto block : blocks)
+
+            set<BasicBlock *> entrances = TraceAtlas::tik::GetEntrances(blockSet);
+
+            for (auto ent : entrances)
             {
-                set<int> sub;
-                for (auto a : reachableBlockSets[block])
+                auto a = TraceAtlas::tik::GetReachable(ent, blocks);
+                set<int64_t> b;
+                for (auto as : a)
                 {
-                    int64_t id = GetBlockID(a);
-                    if (reachableBlockSets[id].find(blockMap[block]) != reachableBlockSets[id].end())
-                    {
-                        sub.insert(id);
-                    }
+                    b.insert(GetBlockID(as));
                 }
-                subSets.insert(sub);
-            }
-            for (auto subSet : subSets)
-            {
-                result.insert(subSet);
+                result.insert(b);
             }
             status++;
-            float percent = float(status) / float(total) * 100;
-            bar.set_postfix_text("Kernel " + to_string(status) + "/" + to_string(total));
-            bar.set_progress(percent);
+            if (!noBar)
+            {
+                float percent = float(status) / float(total) * 100;
+                bar.set_option(indicators::option::PostfixText{"Kernel " + to_string(status) + "/" + to_string(total)});
+                bar.set_progress(percent);
+            }
         }
 
         if (!noBar && !bar.is_completed())
         {
-            bar.set_postfix_text("Kernel " + to_string(status) + "/" + to_string(total));
+            bar.set_option(indicators::option::PostfixText{"Kernel " + to_string(status) + "/" + to_string(total)});
             bar.set_progress(100);
             bar.mark_as_completed();
         }

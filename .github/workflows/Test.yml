@@ -2,27 +2,27 @@ name: Unit Tests
 on: [pull_request]
 
 jobs:
-  Tests:
+  Debug:
     runs-on: ubuntu-18.04
     steps:
-      - name: Install papi
-        run: sudo apt install libpapi-dev
+      - name: Install dependencies
+        run: sudo apt install libpapi-dev clang-tidy-9
         shell: bash 
       - uses: actions/checkout@v1
         with:
           submodules: true
       - name: Set environment variables
         env:
-          vcpkgResponseFile: ${{github.workspace}}/scripts/vcpkg.txt
+          vcpkgResponseFile: ${{github.workspace}}/vcpkg.txt
         run: echo "::set-env name=vcpkgResponseFile::$vcpkgResponseFile"
         shell: bash
       - name: Cache vcpkg artifacts
         uses: actions/cache@v1
         with:
-          path: ${{github.workspace}}/vcpkg
+          path: ${{github.workspace}}/vcpkg/
           key: ${{ hashFiles( env.vcpkgResponseFile ) }}
       - name: Run vcpkg
-        uses: lukka/run-vcpkg@v0
+        uses: lukka/run-vcpkg@v1
         id: runvcpkg
         with:
           vcpkgArguments: '@${{ env.vcpkgResponseFile }}'
@@ -32,13 +32,64 @@ jobs:
           CC: clang-9
           CXX: clang++-9
           LDFLAGS: -fuse-ld=lld-9
-        uses: lukka/run-cmake@v0
+        uses: lukka/run-cmake@v1
         id: runcmake
         with:
+          cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
           cmakeListsTxtPath: '${{ github.workspace }}/CMakeLists.txt'
           useVcpkgToolchainFile: true
           buildWithCMakeArgs: '-- -v'
           buildDirectory: ${{github.workspace}}/build
+          cmakeAppendedArgs: '-G Ninja -DENABLE_LINTER_ERROR=ON -DCMAKE_BUILD_TYPE=Debug'
+      - name: Run ctest
+        run: ctest
+        shell: bash
+        working-directory: ${{github.workspace}}/build
+      - name: Clean vcpkg
+        run: |
+          rm -rf ${{ github.workspace }}/vcpkg/buildtrees
+          rm -rf ${{ github.workspace }}/vcpkg/packages
+          rm -rf ${{ github.workspace }}/vcpkg/downloads
+        shell: bash
+  Release:
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Install dependencies
+        run: sudo apt install libpapi-dev clang-tidy-9
+        shell: bash 
+      - uses: actions/checkout@v1
+        with:
+          submodules: true
+      - name: Set environment variables
+        env:
+          vcpkgResponseFile: ${{github.workspace}}/vcpkg.txt
+        run: echo "::set-env name=vcpkgResponseFile::$vcpkgResponseFile"
+        shell: bash
+      - name: Cache vcpkg artifacts
+        uses: actions/cache@v1
+        with:
+          path: ${{github.workspace}}/vcpkg/
+          key: ${{ hashFiles( env.vcpkgResponseFile ) }}
+      - name: Run vcpkg
+        uses: lukka/run-vcpkg@v1
+        id: runvcpkg
+        with:
+          vcpkgArguments: '@${{ env.vcpkgResponseFile }}'
+          vcpkgDirectory: '${{ github.workspace }}/vcpkg'
+      - name: Run CMake with Ninja
+        env:
+          CC: clang-9
+          CXX: clang++-9
+          LDFLAGS: -fuse-ld=lld-9
+        uses: lukka/run-cmake@v1
+        id: runcmake
+        with:
+          cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
+          cmakeListsTxtPath: '${{ github.workspace }}/CMakeLists.txt'
+          useVcpkgToolchainFile: true
+          buildWithCMakeArgs: '-- -v'
+          buildDirectory: ${{github.workspace}}/build
+          cmakeAppendedArgs: '-G Ninja -DENABLE_LINTER_ERROR=ON -DCMAKE_BUILD_TYPE=Release'
       - name: Run ctest
         run: ctest
         shell: bash
