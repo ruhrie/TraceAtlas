@@ -67,8 +67,10 @@ string getKernel(int64_t block)
 }
 
 int64_t block;
-void Process(string &key, string &value)
+void Process(vector<string> &values)
 {
+    string key = values[0];
+    string value = values[1];
     if (key == "BBEnter")
     {
         block = stol(value, nullptr, 0);
@@ -171,7 +173,7 @@ int main(int argc, char *argv[])
 
     ck = "-1";
     kernelQueue.push(UIDStruct(ck));
-    ProcessTrace(TraceFilename, Process, "Generating DAG", noBar);
+    ProcessTrace(TraceFilename, Process);
 
     return 0;
 }

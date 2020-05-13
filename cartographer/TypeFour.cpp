@@ -63,12 +63,6 @@ namespace TypeFour
                 result.insert(b);
             }
             status++;
-            if (!noBar)
-            {
-                float percent = float(status) / float(total) * 100;
-                bar.set_option(indicators::option::PostfixText{"Kernel " + to_string(status) + "/" + to_string(total)});
-                bar.set_progress(percent);
-            }
         }
 
         if (!noBar && !bar.is_completed())

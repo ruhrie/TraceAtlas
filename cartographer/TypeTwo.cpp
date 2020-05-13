@@ -3,26 +3,30 @@
 #include "cartographer.h"
 #include <set>
 #include <string>
+#include <thread>
 
 using namespace std;
 using namespace llvm;
 
 namespace TypeTwo
 {
-    uint64_t blockCount = 0;
-
-    int *openCount = nullptr;
-    set<int64_t> *finalBlocks = nullptr;
-    set<int> *kernelMap = nullptr;
-    set<int64_t> openBlocks;
-    int *kernelStarts = nullptr;
-    set<int64_t> *blocks = nullptr;
+    thread_local int *openCount = nullptr;
+    thread_local set<int64_t> *finalBlocks = nullptr;
+    thread_local set<int> *kernelMap = nullptr;
+    thread_local set<int64_t> openBlocks;
+    thread_local int *kernelStarts = nullptr;
+    thread_local set<int64_t> *blocks = nullptr;
 
     bool blocksLabeled = false;
     vector<string> currentKernel;
     std::set<std::set<int64_t>> kernels;
-    void Setup(llvm::Module *bitcode, std::set<std::set<int64_t>> k)
+
+    std::set<set<int64_t>> finalSets;
+    mutex setMutex;
+
+    void Setup()
     {
+        uint64_t blockCount = 0;
         for (auto &mi : *bitcode)
         {
             for (auto fi = mi.begin(); fi != mi.end(); fi++)
@@ -31,7 +35,10 @@ namespace TypeTwo
             }
         }
 
-        kernels = move(k);
+        if (blockCount == 0)
+        {
+            throw AtlasException("Found 0 blocks in bitcode");
+        }
 
         openCount = (int *)calloc(sizeof(int), blockCount);                         // counter to know where we are in the callstack
         finalBlocks = (set<int64_t> *)calloc(sizeof(set<int64_t>), kernels.size()); // final kernel definitions
@@ -59,8 +66,19 @@ namespace TypeTwo
             a++;
         }
     }
-    void Process(std::string &key, std::string &value)
+    void Reset()
     {
+        setMutex.lock();
+        for (uint64_t i = 0; i < kernels.size(); i++)
+        {
+            finalSets.insert(finalBlocks[i]);
+        }
+        setMutex.unlock();
+    }
+    void Process(std::vector<std::string> &values)
+    {
+        string key = values[0];
+        string value = values[1];
         if (key == "BBEnter")
         {
             int block = stoi(value, nullptr, 0);
@@ -131,18 +149,6 @@ namespace TypeTwo
         {
             blocksLabeled = true;
         }
-        std::set<set<int64_t>> finalSets;
-        for (uint64_t i = 0; i < kernels.size(); i++)
-        {
-            finalSets.insert(finalBlocks[i]);
-        }
-        free(openCount);
-        free(finalBlocks);
-        free(kernelStarts);
-        free(blocks);
-        free(kernelMap);
-        openBlocks.clear();
-        currentKernel.clear();
         return finalSets;
     }
 } // namespace TypeTwo
