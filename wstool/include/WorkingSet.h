@@ -18,7 +18,6 @@ namespace WorkingSet
     extern vector<InternaladdressLiving> internalAddressLivingVec;
     extern uint64_t inputMapSize;
     extern uint64_t internalMapSize;
-    extern uint64_t maxInternalSize;
-    extern uint64_t maxOutputSize;
+    extern set<uint64_t> outputAddressIndexSet;
     void Process(std::string &key, std::string &value);
 } // namespace WorkingSet

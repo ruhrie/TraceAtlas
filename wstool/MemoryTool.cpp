@@ -28,31 +28,21 @@ int main(int argc, char **argv)
     uint64_t maxInput = 0;
     uint64_t maxOutput = 0;
     uint64_t maxinternal = 0;
-    //set<uint64_t> outputSet; //using this set of output addresses in case of duplicated
-    //set<int64_t> endTimeSet; //using this set of end time to calculate the maximum internal working set
+    set<int64_t> endTimeSet; //using this set of end time to calculate the maximum internal working set
     // struct of internal working set
-    //for (auto it : internalAddressLivingVec)
+    for (auto it : internalAddressLivingVec)
     {
-        //if the deathTime is "-1", it's an output address        
-        // if (it.deathTime == -1 && outputSet.find(it.address) == outputSet.end())
-        // {
-        //     outputSet.insert(it.address);
-        // }
-        // if (it.deathTime > 0)
-        // {
-        //     endTimeSet.insert(it.deathTime);
-        //     if (it.brithTime > *(endTimeSet.begin()))
-        //     {
-        //         endTimeSet.erase(endTimeSet.begin());
-        //     }
-        //     if (endTimeSet.size() > maxinternal)
-        //     {
-        //         maxinternal = endTimeSet.size();
-        //     }
-        // }     
+        endTimeSet.insert(it.deathTime);
+        if (it.brithTime > *(endTimeSet.begin()))
+        {
+            endTimeSet.erase(endTimeSet.begin());
+        }
+        if (endTimeSet.size() > maxinternal)
+        {
+            maxinternal = endTimeSet.size();
+        }    
     }
     maxInput = inputMapSize;
-    maxOutput = maxOutputSize;
-    maxinternal = maxInternalSize;
+    maxOutput = outputAddressIndexSet.size();
     printf("maxInput: %lu \n maxinternal: %lu \n maxOutput: %lu \n", maxInput, maxinternal, maxOutput);
 }
