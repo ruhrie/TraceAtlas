@@ -20,7 +20,7 @@ namespace TraceAtlas::tik
         void RemapExports(llvm::ValueToValueMapTy &VMap);
         void CopyGlobals(llvm::ValueToValueMapTy &VMap);
         void BuildInit(llvm::ValueToValueMapTy &VMap);
-        void BuildExit(llvm::ValueToValueMapTy &VMap);
+        void BuildExit();
         void PatchPhis();
         void Remap(llvm::ValueToValueMapTy &VMap);
     };

@@ -249,43 +249,6 @@ namespace TraceAtlas::tik
             //remap and repipe
             Remap(VMap);
 
-            //remap the conditional to the exit
-            for (auto ki = KernelFunction->begin(); ki != KernelFunction->end(); ki++)
-            {
-                auto c = cast<BasicBlock>(ki);
-                auto cTerm = c->getTerminator();
-                if (cTerm == nullptr)
-                {
-                    continue;
-                }
-                uint32_t cSuc = cTerm->getNumSuccessors();
-                for (uint32_t i = 0; i < cSuc; i++)
-                {
-                    auto suc = cTerm->getSuccessor(i);
-                    if (suc->getParent() != KernelFunction)
-                    {
-                        shared_ptr<KernelExit> ex;
-                        for (const auto &exit : Exits)
-                        {
-                            if (exit->Target == suc)
-                            {
-                                ex = exit;
-                                break;
-                            }
-                        }
-                        if (ex->Destination == nullptr)
-                        {
-                            BasicBlock *tmpExit = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-                            IRBuilder<> exitBuilder(tmpExit);
-                            exitBuilder.CreateBr(Exit);
-                            ex->Destination = tmpExit;
-                        }
-
-                        cTerm->setSuccessor(i, ex->Destination);
-                    }
-                }
-            }
-
             // replace external function calls with tik declarations
             for (auto &bi : *(KernelFunction))
             {
@@ -308,7 +271,7 @@ namespace TraceAtlas::tik
 
             BuildInit(VMap);
 
-            BuildExit(VMap);
+            BuildExit();
 
             RemapNestedKernels(VMap);
 
@@ -344,48 +307,11 @@ namespace TraceAtlas::tik
 
     void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks)
     {
-        int exitId = 0;
-        set<BasicBlock *> coveredExits;
         //we start with entrances
         auto ent = GetEntrances(blocks);
         Entrances.insert(ent.begin(), ent.end());
         for (auto block : blocks)
         {
-            //we now look for exits through the successors and return instructions
-            //formerly GetExits
-            for (auto suc : successors(block))
-            {
-                if (blocks.find(suc) == blocks.end())
-                {
-                    if (coveredExits.find(suc) == coveredExits.end())
-                    {
-                        auto ex = make_shared<KernelExit>(exitId++, suc);
-                        Exits.insert(ex);
-                        coveredExits.insert(suc);
-                    }
-                }
-            }
-            auto term = block->getTerminator();
-            if (auto retInst = dyn_cast<ReturnInst>(term))
-            {
-                Function *base = block->getParent();
-                for (auto user : base->users())
-                {
-                    if (auto v = dyn_cast<Instruction>(user))
-                    {
-                        if (blocks.find(v->getParent()) == blocks.end())
-                        {
-                            if (coveredExits.find(v->getParent()) == coveredExits.end())
-                            {
-                                auto ex = make_shared<KernelExit>(exitId++, v->getParent());
-                                Exits.insert(ex);
-                                coveredExits.insert(v->getParent());
-                            }
-                        }
-                    }
-                }
-            }
-
             //we now finally ask for the external values
             //formerly GetExternalValues
             for (BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; ++BI)
@@ -462,10 +388,6 @@ namespace TraceAtlas::tik
         {
             throw AtlasException("Kernel Exception: tik requires a body entrance");
         }
-        if (exitId == 0)
-        {
-            throw AtlasException("Tik Error: tik found no kernel exits")
-        }
     }
 
     void CartographerKernel::BuildKernelFromBlocks(llvm::ValueToValueMapTy &VMap, set<BasicBlock *> &blocks)
@@ -484,7 +406,6 @@ namespace TraceAtlas::tik
             throw AtlasException("Entrances not on same level");
         }
 
-        set<BasicBlock *> handledExits;
         for (auto block : blocks)
         {
             if (headFunctions.find(block->getParent()) == headFunctions.end())
@@ -524,51 +445,9 @@ namespace TraceAtlas::tik
                         auto sw = intBuilder.CreateSwitch(cc, Exception, (uint32_t)nestedKernel->Exits.size());
                         for (const auto &exit : nestedKernel->Exits)
                         {
-
-                            if (blocks.find(exit->Target) != blocks.end())
-                            {
                                 sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->ExitIndex), exit->Target);
                             }
-                            else
-                            {
-                                if (handledExits.find(exit->Target) == handledExits.end())
-                                {
-                                    //exits both kernels simultaneously
-                                    //we create a temp block and remab the exit so the phi has a value
-                                    //then remap in the dictionary for the final mapping
-                                    //note that we do not change the Exits so we still go to the right place
-
-                                    BasicBlock *tar = nullptr;
-                                    //we need to find every block in the nested kernel that will branch to this target
-                                    //easiest way to do this is to go through every block in this kernel and check if it is in the nested kernel
-                                    set<BasicBlock *> nExits;
-                                    for (auto k : nestedKernel->ExitMap)
-                                    {
-                                        if (k.second == exit->ExitIndex)
-                                        {
-                                            //this is the exit
-                                            nExits.insert(k.first);
-                                        }
-                                    }
-
-                                    if (nExits.size() != 1)
-                                    {
-                                        throw AtlasException("Expected exactly one exit fron nested kernel");
-                                    }
-                                    tar = *nExits.begin();
-                                    BasicBlock *newBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-                                    IRBuilder<> newBlockBuilder(newBlock);
-                                    newBlockBuilder.CreateBr(Exit);
-                                    sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->ExitIndex), newBlock);
-                                    int index = ExitMap[tar];
-                                    ExitMap.erase(tar);
-                                    ExitMap[newBlock] = index;
-                                    handledExits.insert(exit->Target);
-                                }
-                            }
-                        }
                         VMap[block] = intermediateBlock;
-                        //i++;
                     }
                 }
                 else
@@ -937,30 +816,46 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::BuildExit(llvm::ValueToValueMapTy &VMap)
+    void CartographerKernel::BuildExit()
     {
         PrintVal(Exit, false); //another sacrifice
         IRBuilder<> exitBuilder(Exit);
-        int i = 0;
-        for (auto pred : predecessors(Exit))
+
+        //start by getting the exits
+        int exitId = 0;
+        auto ex = GetExits(KernelFunction);
+        map<BasicBlock *, BasicBlock *> exitMap;
+        for (auto exit : ex)
         {
-            ExitMap[pred] = i;
-            i++;
+            Exits.insert(make_shared<KernelExit>(exitId++, exit));
+            BasicBlock *tmp = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
+            IRBuilder<> builder(tmp);
+            builder.CreateBr(Exit);
+            exitMap[exit] = tmp;
         }
 
-        auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), (uint32_t)ExitMap.size());
-        for (auto pair : ExitMap)
+        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
         {
-            Value *v;
-            if (pair.first->getModule() == TikModule)
+            auto block = cast<BasicBlock>(fi);
+            auto term = block->getTerminator();
+            if (term != nullptr)
             {
-                v = pair.first;
-            }
-            else
+                for (uint32_t i = 0; i < term->getNumSuccessors(); i++)
+        {
+                    auto suc = term->getSuccessor(i);
+                    if (suc->getParent() != KernelFunction)
             {
-                v = VMap[pair.first];
+                        //we have an exit
+                        term->setSuccessor(i, exitMap[suc]);
+                    }
+                }
             }
-            phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)pair.second), cast<BasicBlock>(v));
+            }
+
+        auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), (uint32_t)Exits.size());
+        for (const auto &exit : Exits)
+            {
+            phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->ExitIndex), exitMap[exit->Target]);
         }
 
         exitBuilder.CreateRet(phi);

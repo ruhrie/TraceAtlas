@@ -35,7 +35,6 @@ namespace TraceAtlas::tik
         bool Valid = false;
         std::vector<llvm::Value *> KernelImports;
         std::vector<llvm::Value *> KernelExports;
-        std::map<llvm::BasicBlock *, int> ExitMap;
         std::map<llvm::Argument *, llvm::Value *> ArgumentMap;
 
     protected:
