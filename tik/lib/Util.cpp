@@ -132,9 +132,9 @@ namespace TraceAtlas::tik
         }
         return checked;
     }
-    set<BasicBlock*> GetEntrances(set<BasicBlock *> &blocks)
+    set<BasicBlock *> GetEntrances(set<BasicBlock *> &blocks)
     {
-        set<BasicBlock*> Entrances;
+        set<BasicBlock *> Entrances;
         for (auto block : blocks)
         {
             Function *F = block->getParent();
