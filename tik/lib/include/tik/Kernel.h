@@ -23,8 +23,7 @@ namespace TraceAtlas::tik
         std::string Name;
         std::set<llvm::BasicBlock *> Conditional;
 
-        /// @brief  Must be a member because we may dereference it from the KernelMap when building a kernel
-        std::set<llvm::BasicBlock *> Entrances;
+        std::set<std::shared_ptr<KernelInterface>> Entrances;
 
         std::set<std::shared_ptr<KernelInterface>> Exits;
 

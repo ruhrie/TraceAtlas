@@ -2,13 +2,13 @@
 
 namespace TraceAtlas::tik
 {
-    KernelInterface::KernelInterface(int index, llvm::BasicBlock *target)
+    KernelInterface::KernelInterface(int index, llvm::BasicBlock *block)
     {
         Index = index;
-        Target = target;
+        Block = block;
     }
     bool KernelInterface::operator<(const KernelInterface &b) const
     {
-        return Target < b.Target;
+        return Block < b.Block;
     }
 } // namespace TraceAtlas::tik

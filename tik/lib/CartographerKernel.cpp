@@ -309,7 +309,11 @@ namespace TraceAtlas::tik
     {
         //we start with entrances
         auto ent = GetEntrances(blocks);
-        Entrances.insert(ent.begin(), ent.end());
+        int entranceId = 0;
+        for (auto e : ent)
+        {
+            Entrances.insert(make_shared<KernelInterface>(entranceId++, e));
+        }
         for (auto block : blocks)
         {
             //we now finally ask for the external values
@@ -393,12 +397,10 @@ namespace TraceAtlas::tik
     void CartographerKernel::BuildKernelFromBlocks(llvm::ValueToValueMapTy &VMap, set<BasicBlock *> &blocks)
     {
         set<Function *> headFunctions;
-        for (auto ent : Entrances)
+        for (const auto &ent : Entrances)
         {
-            //MDNode* oldID = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(ent->getParent()->getParent()->getContext()), ent->getValueID())));
-            MDNode *oldID = MDNode::get(TikModule->getContext(), MDString::get(ent->getParent()->getParent()->getContext(), ent->getName())); // ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(ent->getParent()->getParent()->getContext()), ent->getValueID())));
-            cast<Instruction>(ent->getFirstInsertionPt())->setMetadata("oldName", oldID);
-            headFunctions.insert(ent->getParent());
+            BasicBlock *eTarget = ent->Block;
+            headFunctions.insert(eTarget->getParent());
         }
 
         if (headFunctions.size() != 1)
@@ -417,7 +419,16 @@ namespace TraceAtlas::tik
             {
                 //this belongs to a subkernel
                 auto nestedKernel = KernelMap[id];
-                if (nestedKernel->Entrances.find(block) != nestedKernel->Entrances.end())
+                bool inNested = false;
+                for (const auto &ent : nestedKernel->Entrances)
+                {
+                    if (ent->Block == block)
+                    {
+                        inNested = true;
+                        break;
+                    }
+                }
+                if (inNested)
                 {
                     //we need to make a unique block for each entrance (there is currently only one)
                     //int i = 0;
@@ -445,7 +456,7 @@ namespace TraceAtlas::tik
                         auto sw = intBuilder.CreateSwitch(cc, Exception, (uint32_t)nestedKernel->Exits.size());
                         for (const auto &exit : nestedKernel->Exits)
                         {
-                            sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), exit->Target);
+                            sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), exit->Block);
                         }
                         VMap[block] = intermediateBlock;
                     }
@@ -480,12 +491,18 @@ namespace TraceAtlas::tik
                             if (blocks.find(pred) == blocks.end())
                             {
                                 //we have an invalid predecessor, replace with init
-                                if (Entrances.find(block) != Entrances.end())
+                                bool found = false;
+                                for (const auto &ent : Entrances)
                                 {
-                                    p->replaceIncomingBlockWith(pred, Init);
-                                    rescheduled++;
+                                    if (ent->Block == block)
+                                    {
+                                        p->replaceIncomingBlockWith(pred, Init);
+                                        rescheduled++;
+                                        found = true;
+                                        break;
+                                    }
                                 }
-                                else
+                                if (!found)
                                 {
                                     auto a = p->getBasicBlockIndex(pred);
                                     if (a != -1)
@@ -801,12 +818,12 @@ namespace TraceAtlas::tik
         IRBuilder<> initBuilder(Init);
         auto initSwitch = initBuilder.CreateSwitch(KernelFunction->arg_begin(), Exception, (uint32_t)Entrances.size());
         uint64_t i = 0;
-        for (auto ent : Entrances)
+        for (const auto &ent : Entrances)
         {
-            int64_t id = GetBlockID(ent);
-            if (KernelMap.find(id) == KernelMap.end() && VMap[ent] != nullptr)
+            int64_t id = GetBlockID(ent->Block);
+            if (KernelMap.find(id) == KernelMap.end() && VMap[ent->Block] != nullptr)
             {
-                initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[ent]));
+                initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[ent->Block]));
             }
             else
             {
@@ -855,7 +872,7 @@ namespace TraceAtlas::tik
         auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), (uint32_t)Exits.size());
         for (const auto &exit : Exits)
         {
-            phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), exitMap[exit->Target]);
+            phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), exitMap[exit->Block]);
         }
 
         exitBuilder.CreateRet(phi);
