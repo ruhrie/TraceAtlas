@@ -1,9 +1,11 @@
 #pragma once
+#include "tik/KernelExit.h"
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Operator.h>
 #include <llvm/Transforms/Utils/ValueMapper.h>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <tuple>
@@ -26,8 +28,8 @@ namespace TraceAtlas::tik
         std::set<int64_t> Entrances;
         std::map<int64_t, llvm::BasicBlock *> EntranceMap;
 
-        /// @brief  Must be a member because we may dereference it when building a kernel with an embedded call
-        std::map<int, llvm::BasicBlock *> ExitTarget;
+        std::set<std::shared_ptr<KernelExit>> Exits;
+
         llvm::BasicBlock *Init = nullptr;
         llvm::BasicBlock *Exit = nullptr;
         llvm::BasicBlock *Exception = nullptr;
@@ -35,9 +37,7 @@ namespace TraceAtlas::tik
         bool Valid = false;
         std::vector<llvm::Value *> KernelImports;
         std::vector<llvm::Value *> KernelExports;
-        std::map<llvm::BasicBlock *, int> ExitMap;
         std::map<llvm::Argument *, llvm::Value *> ArgumentMap;
-        std::map<llvm::BasicBlock *, llvm::BasicBlock *> ExitBlockMap;
 
     protected:
         Kernel();

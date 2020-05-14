@@ -126,14 +126,14 @@ namespace TraceAtlas::tik
             metadata += to_string(index);
         }
         metadata += "],\n\t\"Exits\": [";
-        for (auto index : ExitTarget)
+        /*for (auto index : ExitTarget)
         {
             if (index != *(ExitTarget.begin()))
             {
                 metadata += ", ";
             }
             metadata += to_string(GetBlockID(index.second));
-        }
+        }*/
         metadata += "],\n\t\"Arguments\": [";
         for (auto arg = KernelFunction->arg_begin(); arg != KernelFunction->arg_end(); arg++)
         {

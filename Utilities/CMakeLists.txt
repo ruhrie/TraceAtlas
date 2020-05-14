@@ -45,3 +45,15 @@ set_target_properties(bow
 )
 
 install(TARGETS bow RUNTIME DESTINATION bin)
+
+add_executable(KernelVerifier KernelVerifier.cpp)
+target_link_libraries(KernelVerifier ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil libtik)
+target_include_directories(KernelVerifier PRIVATE ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(KernelVerifier PRIVATE ${LLVM_DEFINITIONS})
+
+set_target_properties(KernelVerifier
+	PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin" 
+)
+
+install(TARGETS KernelVerifier RUNTIME DESTINATION bin)

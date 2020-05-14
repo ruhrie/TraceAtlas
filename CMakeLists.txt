@@ -12,13 +12,7 @@ llvm_map_components_to_libnames(llvm_libs  support core irreader bitreader bitwr
 find_package(ZLIB REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED) #nlohmann_json
 find_package(spdlog CONFIG REQUIRED) #spdlog
-find_package(indica CONFIG REQUIRED) #indicators
-
-function(MakeIR target)
-    set_target_properties(LINK_OPTIONS "-Wl,--plugin-opt=emit-llvm")
-endfunction()
-
-set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld-9")
+find_package(indicators CONFIG REQUIRED) #indicators
 
 option(ENABLE_LINTER_ERROR "Run linter with errors" OFF)
 if(${ENABLE_LINTER_ERROR})
@@ -43,6 +37,8 @@ add_subdirectory("deat")
 add_subdirectory("Utilities")
 
 function(InjectTracer tar)
+    set_target_properties(${tar} PROPERTIES LINK_OPTIONS "-Wl,--plugin-opt=emit-llvm")
+    target_compile_options(${tar} PRIVATE "-flto")
     add_custom_command(OUTPUT opt.bc
         COMMAND opt-9 -load $<TARGET_FILE:AtlasPasses> -EncodedTrace $<TARGET_FILE:${tar}> -o opt.bc
         DEPENDS $<TARGET_FILE:${tar}>

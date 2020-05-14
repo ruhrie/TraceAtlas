@@ -278,15 +278,20 @@ int main(int argc, char *argv[])
     //verify the module
     std::string str;
     llvm::raw_string_ostream rso(str);
+#ifdef DEBUG
     bool broken = verifyModule(*TikModule, &rso);
+#else
+    bool broken = verifyModule(*TikModule);
+#endif
     if (broken)
     {
+#ifdef DEBUG
         auto err = rso.str();
         spdlog::critical("Tik Module Corrupted: " + err);
-#ifndef DEBUG
-        return EXIT_FAILURE;
-#else
         error = true;
+#else
+        spdlog::critical("Tik Module Corrupted");
+        return EXIT_FAILURE;
 #endif
     }
 
