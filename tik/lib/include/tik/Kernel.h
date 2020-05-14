@@ -1,5 +1,5 @@
 #pragma once
-#include "tik/KernelExit.h"
+#include "tik/KernelInterface.h"
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Operator.h>
@@ -26,7 +26,7 @@ namespace TraceAtlas::tik
         /// @brief  Must be a member because we may dereference it from the KernelMap when building a kernel
         std::set<llvm::BasicBlock *> Entrances;
 
-        std::set<std::shared_ptr<KernelExit>> Exits;
+        std::set<std::shared_ptr<KernelInterface>> Exits;
 
         llvm::BasicBlock *Init = nullptr;
         llvm::BasicBlock *Exit = nullptr;

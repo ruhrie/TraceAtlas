@@ -445,8 +445,8 @@ namespace TraceAtlas::tik
                         auto sw = intBuilder.CreateSwitch(cc, Exception, (uint32_t)nestedKernel->Exits.size());
                         for (const auto &exit : nestedKernel->Exits)
                         {
-                                sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->ExitIndex), exit->Target);
-                            }
+                            sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), exit->Target);
+                        }
                         VMap[block] = intermediateBlock;
                     }
                 }
@@ -827,7 +827,7 @@ namespace TraceAtlas::tik
         map<BasicBlock *, BasicBlock *> exitMap;
         for (auto exit : ex)
         {
-            Exits.insert(make_shared<KernelExit>(exitId++, exit));
+            Exits.insert(make_shared<KernelInterface>(exitId++, exit));
             BasicBlock *tmp = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
             IRBuilder<> builder(tmp);
             builder.CreateBr(Exit);
@@ -841,21 +841,21 @@ namespace TraceAtlas::tik
             if (term != nullptr)
             {
                 for (uint32_t i = 0; i < term->getNumSuccessors(); i++)
-        {
+                {
                     auto suc = term->getSuccessor(i);
                     if (suc->getParent() != KernelFunction)
-            {
+                    {
                         //we have an exit
                         term->setSuccessor(i, exitMap[suc]);
                     }
                 }
             }
-            }
+        }
 
         auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), (uint32_t)Exits.size());
         for (const auto &exit : Exits)
-            {
-            phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->ExitIndex), exitMap[exit->Target]);
+        {
+            phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), exitMap[exit->Target]);
         }
 
         exitBuilder.CreateRet(phi);
