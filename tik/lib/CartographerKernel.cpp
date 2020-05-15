@@ -202,7 +202,6 @@ namespace TraceAtlas::tik
             std::map<llvm::Value *, llvm::GlobalObject *> GlobalMap;
 
             GetBoundaryValues(blocks);
-
             //we now have all the information we need
             //start by making the correct function
             std::vector<llvm::Type *> inputArgs;
@@ -358,6 +357,7 @@ namespace TraceAtlas::tik
             {
                 continue;
             }
+            /*
             // initialize KernelImports, KernelExports
             for (BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; ++BI)
             {
@@ -427,9 +427,9 @@ namespace TraceAtlas::tik
                         throw AtlasException("Non-instruction user detected");
                     }
                 }
-            }
+            }*/
         }
-        // initialize ArgumentMap
+        /*// initialize ArgumentMap
         uint64_t i;
         for (i = 0; i < KernelImports.size(); i++)
         {
@@ -443,7 +443,7 @@ namespace TraceAtlas::tik
             auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i + j);
             a->setName("e" + to_string(j));
             ArgumentMap[a] = KernelExports[j];
-        }
+        }*/
     }
 
     void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks)
@@ -774,6 +774,8 @@ namespace TraceAtlas::tik
                     {
                         for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
                         {
+                            auto v = dyn_cast<Value>(sarg);
+                            PrintVal(v);
                             for (auto &b : *(KernelFunction))
                             {
                                 for (BasicBlock::iterator j = b.begin(), BE2 = b.end(); j != BE2; ++j)

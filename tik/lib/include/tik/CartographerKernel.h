@@ -1,3 +1,4 @@
+#pragma once
 #include "tik/Kernel.h"
 #include <llvm/IR/Module.h>
 #include <set>
@@ -11,6 +12,8 @@ namespace TraceAtlas::tik
     public:
         CartographerKernel(std::vector<int64_t> basicBlocks, llvm::Module *M, std::string name = "");
         CartographerKernel(llvm::Function *kernFunc);
+        std::vector<llvm::Value *> KernelImports;
+        std::vector<llvm::Value *> KernelExports;
 
     private:
         CartographerKernel();

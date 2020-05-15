@@ -17,9 +17,9 @@ cl::opt<string> InputFile("t", cl::Required, cl::desc("<input tik bitcode>"), cl
 cl::opt<string> OriginalBitcode("b", cl::Required, cl::desc("<input original bitcode>"), cl::init("a.bc"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"), cl::init("tikSwap.bc"));
 
-int main(int argc, char *argv[])
+int main()//int argc, char *argv[])
 {
-    cl::ParseCommandLineOptions(argc, argv);
+    /*cl::ParseCommandLineOptions(argc, argv);
     //load the original bitcode
     LLVMContext OContext;
     SMDiagnostic Osmerror;
@@ -81,11 +81,11 @@ int main(int argc, char *argv[])
         {
             kernels.push_back(kern);
         }
-    }
+    }*/
 
     // swap in kernel functions to original bitcode
-    for (auto kernel : kernels)
+    /*for (auto kernel : kernels)
     {
-    }
+    }*/
     return 0;
 }

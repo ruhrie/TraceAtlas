@@ -32,9 +32,7 @@ namespace TraceAtlas::tik
         llvm::BasicBlock *Exception = nullptr;
         llvm::Function *KernelFunction = nullptr;
         bool Valid = false;
-        std::vector<llvm::Value *> KernelImports;
-        std::vector<llvm::Value *> KernelExports;
-        std::map<llvm::Argument *, llvm::Value *> ArgumentMap;
+        std::map<llvm::Argument *, int64_t> ArgumentMap;
 
     protected:
         Kernel();

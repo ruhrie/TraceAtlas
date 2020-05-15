@@ -116,7 +116,6 @@ namespace TraceAtlas::tik
             r->eraseFromParent();
         }
         //annotate the kernel functions
-        /* needs to be changed to accomodate for new struct members
         string metadata = "{\n\t\"Entrances\": [";
         for (auto &index : Entrances)
         {
@@ -127,7 +126,7 @@ namespace TraceAtlas::tik
             metadata += to_string(index);
         }
         metadata += "],\n\t\"Exits\": [";
-        for (auto index : ExitTarget)
+        for (auto index : Exits)
         {
             if (index != *(ExitTarget.begin()))
             {
@@ -145,7 +144,7 @@ namespace TraceAtlas::tik
             auto argVal = ArgumentMap[arg];
             if (argVal != nullptr)
             {
-                metadata += to_string(GetValueID(argVal));
+                metadata += to_string(argVal);
             }
             else
             {
@@ -156,8 +155,7 @@ namespace TraceAtlas::tik
         MDNode *kernelNode = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), Name));
         KernelFunction->setMetadata("KernelName", kernelNode);
         MDNode *json = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), metadata));
-        KernelFunction->setMetadata("Boundaries", json);*/
-        /*
+        KernelFunction->setMetadata("Boundaries", json);
         int i = 0;
         for (auto ent : Entrances)
         {
@@ -166,7 +164,7 @@ namespace TraceAtlas::tik
             i++;
         }
         i = 0;
-        for (auto &ex : ExitTarget)
+        for (auto &ex : Exits)
         {
             MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t) static_cast<int>(ex.first))));
             KernelFunction->setMetadata("Ex" + to_string(i), newNode);
@@ -175,7 +173,7 @@ namespace TraceAtlas::tik
         for (auto global : GlobalMap)
         {
             global.second->setMetadata("KernelName", kernelNode);
-        }*/
+        }
         //annotate the conditional, has to happen after body since conditional is a part of the body
         MDNode *condNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::Conditional))));
         for (auto cond : Conditional)
