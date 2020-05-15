@@ -125,7 +125,7 @@ namespace TraceAtlas::tik
             }
             metadata += to_string(GetBlockID(index->Block));
         }
-        metadata+= "],\n\t\t\"Indices\": [";
+        metadata += "],\n\t\t\"Indices\": [";
         for (auto &index : Entrances)
         {
             if (index != *(Entrances.begin()))
@@ -135,7 +135,7 @@ namespace TraceAtlas::tik
             metadata += to_string(index->Index);
         }
         metadata += "]\n\t},\n\t\"Exits\": {\n\t\t\"Blocks\": [";
-        for (auto index : Exits)
+        for (auto &index : Exits)
         {
             if (index != *(Exits.begin()))
             {
@@ -143,8 +143,8 @@ namespace TraceAtlas::tik
             }
             metadata += to_string(GetBlockID(index->Block));
         }
-        metadata+= "],\n\t\t\"Indices\": [";
-        for (auto index : Exits)
+        metadata += "],\n\t\t\"Indices\": [";
+        for (auto &index : Exits)
         {
             if (index != *(Exits.begin()))
             {
@@ -162,11 +162,11 @@ namespace TraceAtlas::tik
             auto argVal = ArgumentMap[arg];
             //if (argVal != nullptr)
             //{
-                metadata += to_string(argVal);
+            metadata += to_string(argVal);
             //}
             //else
             //{
-                metadata += to_string(-1);
+            metadata += to_string(-1);
             //}
         }
         metadata += "]\n}";
@@ -176,7 +176,7 @@ namespace TraceAtlas::tik
         MDNode *json = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), metadata));
         KernelFunction->setMetadata("Boundaries", json);
         int i = 0;
-        for (auto ent : Entrances)
+        for (auto &ent : Entrances)
         {
             MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t) static_cast<int>(ent->Index))));
             KernelFunction->setMetadata("Ent" + to_string(i), newNode);

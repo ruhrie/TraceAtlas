@@ -1,5 +1,7 @@
 #include "tikSwap/tikSwap.h"
 #include "AtlasUtil/Exceptions.h"
+#include "tik/Kernel.h"
+#include "tik/TikKernel.h"
 #include <iostream>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
@@ -17,9 +19,9 @@ cl::opt<string> InputFile("t", cl::Required, cl::desc("<input tik bitcode>"), cl
 cl::opt<string> OriginalBitcode("b", cl::Required, cl::desc("<input original bitcode>"), cl::init("a.bc"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"), cl::init("tikSwap.bc"));
 
-int main()//int argc, char *argv[])
+int main(int argc, char *argv[])
 {
-    /*cl::ParseCommandLineOptions(argc, argv);
+    cl::ParseCommandLineOptions(argc, argv);
     //load the original bitcode
     LLVMContext OContext;
     SMDiagnostic Osmerror;
@@ -73,19 +75,19 @@ int main()//int argc, char *argv[])
             kernelFuncs.push_back(tikModule->getFunction(funcName));
         }
     }
-    vector<CartographerKernel *> kernels;
+    vector<TikKernel *> kernels;
     for (auto func : kernelFuncs)
     {
-        auto kern = new CartographerKernel(func);
+        auto kern = new TikKernel(func);
         if (kern->Valid)
         {
             kernels.push_back(kern);
         }
-    }*/
+    }
 
     // swap in kernel functions to original bitcode
-    /*for (auto kernel : kernels)
+    for (auto kernel : kernels)
     {
-    }*/
+    }
     return 0;
 }
