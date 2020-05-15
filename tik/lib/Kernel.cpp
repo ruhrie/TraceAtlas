@@ -116,26 +116,43 @@ namespace TraceAtlas::tik
             r->eraseFromParent();
         }
         //annotate the kernel functions
-        /*
-        string metadata = "{\n\t\"Entrances\": [";
+        string metadata = "{\n\t\"Entrances\": {\n\t\t\"Blocks\": [";
         for (auto &index : Entrances)
         {
             if (index != *(Entrances.begin()))
             {
                 metadata += ", ";
             }
-            metadata += to_string(index);
+            metadata += to_string(GetBlockID(index->Block));
         }
-        metadata += "],\n\t\"Exits\": [";
-        for (auto index : Exits)
+        metadata+= "],\n\t\t\"Indices\": [";
+        for (auto &index : Entrances)
         {
-            if (index != *(ExitTarget.begin()))
+            if (index != *(Entrances.begin()))
             {
                 metadata += ", ";
             }
-            metadata += to_string(GetBlockID(index.second));
+            metadata += to_string(index->Index);
         }
-        metadata += "],\n\t\"Arguments\": [";
+        metadata += "]\n\t},\n\t\"Exits\": {\n\t\t\"Blocks\": [";
+        for (auto index : Exits)
+        {
+            if (index != *(Exits.begin()))
+            {
+                metadata += ", ";
+            }
+            metadata += to_string(GetBlockID(index->Block));
+        }
+        metadata+= "],\n\t\t\"Indices\": [";
+        for (auto index : Exits)
+        {
+            if (index != *(Exits.begin()))
+            {
+                metadata += ", ";
+            }
+            metadata += to_string(index->Index);
+        }
+        metadata += "]\n\t},\n\t\"Arguments\": [";
         for (auto arg = KernelFunction->arg_begin(); arg != KernelFunction->arg_end(); arg++)
         {
             if (arg != KernelFunction->arg_begin())
@@ -143,16 +160,17 @@ namespace TraceAtlas::tik
                 metadata += ", ";
             }
             auto argVal = ArgumentMap[arg];
-            if (argVal != nullptr)
-            {
+            //if (argVal != nullptr)
+            //{
                 metadata += to_string(argVal);
-            }
-            else
-            {
+            //}
+            //else
+            //{
                 metadata += to_string(-1);
-            }
+            //}
         }
         metadata += "]\n}";
+        cout << metadata << endl;
         MDNode *kernelNode = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), Name));
         KernelFunction->setMetadata("KernelName", kernelNode);
         MDNode *json = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), metadata));
@@ -160,14 +178,14 @@ namespace TraceAtlas::tik
         int i = 0;
         for (auto ent : Entrances)
         {
-            MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t) static_cast<int>(ent))));
+            MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t) static_cast<int>(ent->Index))));
             KernelFunction->setMetadata("Ent" + to_string(i), newNode);
             i++;
         }
         i = 0;
         for (auto &ex : Exits)
         {
-            MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t) static_cast<int>(ex.first))));
+            MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t) static_cast<int>(ex->Index))));
             KernelFunction->setMetadata("Ex" + to_string(i), newNode);
             i++;
         }
@@ -180,7 +198,7 @@ namespace TraceAtlas::tik
         for (auto cond : Conditional)
         {
             cast<Instruction>(cond->getFirstInsertionPt())->setMetadata("TikMetadata", condNode);
-        }*/
+        }
     }
 
     Kernel::Kernel() = default;
