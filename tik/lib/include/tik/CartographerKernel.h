@@ -20,7 +20,7 @@ namespace TraceAtlas::tik
         void GetBoundaryValues(std::set<llvm::BasicBlock *> &blocks);
         void BuildKernelFromBlocks(llvm::ValueToValueMapTy &VMap, std::set<llvm::BasicBlock *> &blocks);
         void InlineFunctionsFromBlocks(std::set<int64_t> &blocks);
-        void RemapNestedKernels(llvm::ValueToValueMapTy &VMap);
+        void RemapNestedKernels(llvm::ValueToValueMapTy &VMap, std::map<int64_t, llvm::Value*>& ArgumentValueMap);
         void RemapExports(llvm::ValueToValueMapTy &VMap);
         void CopyGlobals(llvm::ValueToValueMapTy &VMap);
         void BuildInit(llvm::ValueToValueMapTy &VMap);

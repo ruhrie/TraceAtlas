@@ -216,20 +216,23 @@ namespace TraceAtlas::tik
             }
             FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
             KernelFunction = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
+            map<int64_t, Value*> ArgumentValueMap;
             uint64_t i;
             for (i = 0; i < KernelImports.size(); i++)
             {
                 auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i);
                 a->setName("i" + to_string(i));
                 VMap[KernelImports[i]] = a;
-                ArgumentMap[a] = KernelImports[i];
+                ArgumentMap[a] = GetValueID(KernelImports[i]);
+                ArgumentValueMap[ArgumentMap[a]] = KernelImports[i];
             }
             uint64_t j;
             for (j = 0; j < KernelExports.size(); j++)
             {
                 auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i + j);
                 a->setName("e" + to_string(j));
-                ArgumentMap[a] = KernelExports[j];
+                ArgumentMap[a] = GetValueID(KernelExports[j]);
+                ArgumentValueMap[ArgumentMap[a]] = KernelExports[j];
             }
 
             //create the artificial blocks
@@ -273,7 +276,7 @@ namespace TraceAtlas::tik
 
             BuildExit();
 
-            RemapNestedKernels(VMap);
+            RemapNestedKernels(VMap, ArgumentValueMap);
 
             RemapExports(VMap);
 
@@ -758,7 +761,7 @@ namespace TraceAtlas::tik
     */
     }
 
-    void CartographerKernel::RemapNestedKernels(llvm::ValueToValueMapTy &VMap)
+    void CartographerKernel::RemapNestedKernels(llvm::ValueToValueMapTy &VMap, map<int64_t, Value*>& ArgumentValueMap)
     {
         // Now find all calls to the embedded kernel functions in the body, if any, and change their arguments to the new ones
         std::map<Argument *, Value *> embeddedCallArgs;
@@ -781,14 +784,14 @@ namespace TraceAtlas::tik
                                 for (BasicBlock::iterator j = b.begin(), BE2 = b.end(); j != BE2; ++j)
                                 {
                                     auto inst = cast<Instruction>(j);
-                                    auto subArg = subK->ArgumentMap[sarg];
+                                    auto subArg = ArgumentValueMap[subK->ArgumentMap[sarg]];
                                     if (subArg != nullptr)
                                     {
-                                        if (subK->ArgumentMap[sarg] == inst)
+                                        if (ArgumentValueMap[subK->ArgumentMap[sarg]] == inst)
                                         {
                                             embeddedCallArgs[sarg] = inst;
                                         }
-                                        else if (VMap[subK->ArgumentMap[sarg]] == inst)
+                                        else if (VMap[ArgumentValueMap[subK->ArgumentMap[sarg]]] == inst)
                                         {
                                             embeddedCallArgs[sarg] = inst;
                                         }
@@ -804,7 +807,7 @@ namespace TraceAtlas::tik
                                 {
                                     embeddedCallArgs[sarg] = arg;
                                 }
-                                else if (VMap[subK->ArgumentMap[sarg]] == ArgumentMap[arg])
+                                else if (VMap[ArgumentValueMap[subK->ArgumentMap[sarg]]] == ArgumentValueMap[ArgumentMap[arg]])
                                 {
                                     embeddedCallArgs[sarg] = arg;
                                 }

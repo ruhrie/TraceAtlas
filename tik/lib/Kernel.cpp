@@ -116,6 +116,7 @@ namespace TraceAtlas::tik
             r->eraseFromParent();
         }
         //annotate the kernel functions
+        /*
         string metadata = "{\n\t\"Entrances\": [";
         for (auto &index : Entrances)
         {
@@ -179,7 +180,7 @@ namespace TraceAtlas::tik
         for (auto cond : Conditional)
         {
             cast<Instruction>(cond->getFirstInsertionPt())->setMetadata("TikMetadata", condNode);
-        }
+        }*/
     }
 
     Kernel::Kernel() = default;
