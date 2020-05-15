@@ -27,12 +27,14 @@ namespace TraceAtlas::tik
             AtlasException("Could not convert metadata into string.");
         }
         nlohmann::json js = nlohmann::json::parse(metaString);
-
-        /* Needs to be changed to accomodate for new structure members
         for (auto &i : js["Entrances"])
         {
-            Entrances.insert((int64_t)i);
-        }*/
+            for (int j = 0; j < js["Entrances"]["Blocks"].size(); j++)
+            {
+                auto n = make_shared<KernelInterface>(js["Entrances"]["Indices"][j], js["Entrances"]["Blocks"][j]);
+                Entrances.insert(n);
+            }
+        }
         std::set<BasicBlock *> blocks;
         for (auto BB = KernelFunction->begin(); BB != KernelFunction->end(); BB++)
         {

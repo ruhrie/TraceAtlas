@@ -123,7 +123,7 @@ namespace TraceAtlas::tik
             {
                 metadata += ", ";
             }
-            metadata += to_string(GetBlockID(index->Block));
+            metadata += to_string(index->Block);
         }
         metadata += "],\n\t\t\"Indices\": [";
         for (auto &index : Entrances)
@@ -141,7 +141,7 @@ namespace TraceAtlas::tik
             {
                 metadata += ", ";
             }
-            metadata += to_string(GetBlockID(index->Block));
+            metadata += to_string(index->Block);
         }
         metadata += "],\n\t\t\"Indices\": [";
         for (auto &index : Exits)

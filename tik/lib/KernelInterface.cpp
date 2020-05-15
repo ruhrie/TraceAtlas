@@ -2,7 +2,7 @@
 
 namespace TraceAtlas::tik
 {
-    KernelInterface::KernelInterface(int index, llvm::BasicBlock *block)
+    KernelInterface::KernelInterface(int index, int block)
     {
         Index = index;
         Block = block;
