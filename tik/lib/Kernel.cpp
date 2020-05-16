@@ -160,17 +160,9 @@ namespace TraceAtlas::tik
                 metadata += ", ";
             }
             auto argVal = ArgumentMap[arg];
-            //if (argVal != nullptr)
-            //{
             metadata += to_string(argVal);
-            //}
-            //else
-            //{
-            metadata += to_string(-1);
-            //}
         }
         metadata += "]\n}";
-        cout << metadata << endl;
         MDNode *kernelNode = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), Name));
         KernelFunction->setMetadata("KernelName", kernelNode);
         MDNode *json = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), metadata));
@@ -200,6 +192,5 @@ namespace TraceAtlas::tik
             cast<Instruction>(cond->getFirstInsertionPt())->setMetadata("TikMetadata", condNode);
         }
     }
-
     Kernel::Kernel() = default;
 } // namespace TraceAtlas::tik
