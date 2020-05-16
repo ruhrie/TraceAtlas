@@ -1,5 +1,6 @@
 #include "tikSwap/tikSwap.h"
 #include "AtlasUtil/Exceptions.h"
+#include "AtlasUtil/Annotate.h"
 #include "tik/Kernel.h"
 #include "tik/TikKernel.h"
 #include <iostream>
@@ -43,6 +44,11 @@ int main(int argc, char *argv[])
         spdlog::critical("Failed to open source bitcode: " + OriginalBitcode);
         return EXIT_FAILURE;
     }
+    // Annotate its bitcodes and values
+    Module *base = sourceBitcode.get();
+    CleanModule(base);
+    Annotate(base);
+    
     // load the tik IR
     LLVMContext tikContext;
     SMDiagnostic tikSmerror;

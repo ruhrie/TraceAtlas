@@ -2,6 +2,7 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Metadata.h>
 #include <llvm/IR/Module.h>
+#include <llvm/IR/IntrinsicInst.h>
 
 inline void SetBlockID(llvm::BasicBlock *BB, int64_t i)
 {
@@ -40,6 +41,56 @@ inline void Annotate(llvm::Module *M)
     {
         llvm::Function *F = llvm::cast<llvm::Function>(mi);
         Annotate(F, index, valIndex);
+    }
+}
+
+inline void CleanModule(llvm::Module *M)
+{
+    for (auto mi = M->begin(); mi != M->end(); mi++)
+    {
+        for (auto &fi : *mi)
+        {
+            std::vector<llvm::Instruction *> toRemove;
+            for (auto bi = fi.begin(); bi != fi.end(); bi++)
+            {
+                auto v = llvm::cast<llvm::Instruction>(bi);
+                if (auto ci = llvm::dyn_cast<llvm::DbgInfoIntrinsic>(v))
+                {
+                    toRemove.push_back(ci);
+                }
+                else
+                {
+                    llvm::SmallVector<std::pair<unsigned, llvm::MDNode *>, 1> MDs;
+                    v->getAllMetadata(MDs);
+                    for (auto MD : MDs)
+                    {
+                        v->setMetadata(MD.first, nullptr);
+                    }
+                }
+            }
+            for (auto r : toRemove)
+            {
+                r->eraseFromParent();
+            }
+        }
+        auto *F = llvm::cast<llvm::Function>(mi);
+        llvm::SmallVector<std::pair<unsigned, llvm::MDNode *>, 1> MDs;
+        F->getAllMetadata(MDs);
+        for (auto MD : MDs)
+        {
+            F->setMetadata(MD.first, nullptr);
+        }
+    }
+
+    for (auto gi = M->global_begin(); gi != M->global_end(); gi++)
+    {
+        auto gv = llvm::cast<llvm::GlobalVariable>(gi);
+        llvm::SmallVector<std::pair<unsigned, llvm::MDNode *>, 1> MDs;
+        gv->getAllMetadata(MDs);
+        for (auto MD : MDs)
+        {
+            gv->setMetadata(MD.first, nullptr);
+        }
     }
 }
 
