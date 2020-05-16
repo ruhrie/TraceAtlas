@@ -100,7 +100,7 @@ int main(int argc, char *argv[])
     llvm::ValueToValueMapTy VMap;
     for (auto &kernel : kernels)
     {
-        // if we put this kernel into the source, this flips to signify the need to remap args
+        // if we put this kernel into the source, this flag flips to signify the need to remap args
         bool placed = false;
         for (auto &F : *base)
         {
@@ -157,7 +157,7 @@ int main(int argc, char *argv[])
                                     // need to insert branches here to valid exits
 
                                     // finally, remove old branch inst
-                                    brInst->removeFromParent();
+                                    //brInst->removeFromParent();
                                     placed = true;
                                 }
                             }
@@ -182,17 +182,17 @@ int main(int argc, char *argv[])
                     {
                         auto inst = cast<Instruction>(in);
                         // get the value ID
-                        MDNode* md = inst->getMetadata("ValueID");
-                        if (md == nullptr)
+                        MDNode* mv = inst->getMetadata("ValueID");
+                        if (mv == 0)
                         {
                             AtlasException("Could not find ValueID metadata for value in source bitcode.");
                         }
                         int64_t ValueID = 0;
-                        if (md->getNumOperands() > 1)
+                        if (mv->getNumOperands() > 1)
                         {
                             spdlog::warn("Value in source bitcode has more than one ID. Only looking at the first.");
                         }
-                        if (auto ID = mdconst::dyn_extract<ConstantInt>(md->getOperand(0)))
+                        if (auto ID = mdconst::dyn_extract<ConstantInt>(mv->getOperand(0)))
                         {
                             ValueID = ID->getSExtValue();
                         }
