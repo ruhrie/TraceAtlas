@@ -7,6 +7,7 @@
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/SourceMgr.h>
+#include <llvm/IR/IRBuilder.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
 #include <string>
@@ -48,7 +49,7 @@ int main(int argc, char *argv[])
     Module *base = sourceBitcode.get();
     CleanModule(base);
     Annotate(base);
-    
+
     // load the tik IR
     LLVMContext tikContext;
     SMDiagnostic tikSmerror;
@@ -89,11 +90,128 @@ int main(int argc, char *argv[])
         {
             kernels.push_back(kern);
         }
+        else
+        {
+            delete kern;
+        }
     }
 
     // swap in kernel functions to original bitcode
-    for (auto kernel : kernels)
+    llvm::ValueToValueMapTy VMap;
+    for (auto &kernel : kernels)
     {
+        // if we put this kernel into the source, this flips to signify the need to remap args
+        bool placed = false;
+        for (auto &F : *base)
+        {
+            for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
+            {
+                auto block = cast<BasicBlock>(BB);
+                // get the block ID
+                MDNode* md = block->getFirstInsertionPt()->getMetadata("BlockID");
+                if (md == nullptr)
+                {
+                    AtlasException("Could not find BlockID metadata for basic block in source bitcode.");
+                }
+                int64_t BBID = 0;
+                if (md->getNumOperands() > 1)
+                {
+                    spdlog::warn("BB in source bitcode has more than one ID. Only looking at the first.");
+                }
+                if (auto ID = mdconst::dyn_extract<ConstantInt>(md->getOperand(0)))
+                {
+                    BBID = ID->getSExtValue();
+                }
+                else
+                {
+                    BBID = -1;
+                    spdlog::warn("Couldn't extract BBID from source bitcode. Skipping...");
+                }
+                for (auto &e : kernel->Entrances)
+                {
+                    if (BBID == e->Block)
+                    {
+                        cout << "Found block " << BBID << " that enters " << kernel->Name << endl;
+                        for (auto in = block->begin(), ine = block->end(); in != ine; in++)
+                        {
+                            if (auto inst = dyn_cast<Instruction>(in))
+                            {
+                                if (auto brInst = dyn_cast<BranchInst>(inst))
+                                {
+                                    // get rid of the branch and insert a CallInst
+                                    //inst->removeFromParent();
+                                    IRBuilder iBuilder(block->getTerminator());
+                                    vector<Value*> inargs;
+                                    for ( auto argi = kernel->KernelFunction->arg_begin(); argi < kernel->KernelFunction->arg_end(); argi++)
+                                    {
+                                        if (argi == kernel->KernelFunction->arg_begin())
+                                        {
+                                            inargs.push_back(ConstantInt::get(Type::getInt8Ty(base->getContext()), e->Index));
+                                        }
+                                        else
+                                        {
+                                            inargs.push_back(cast<Value>(argi));
+                                        }   
+                                    }
+                                    CallInst* KInst = iBuilder.CreateCall(kernel->KernelFunction, inargs);
+                                    // need to insert branches here to valid exits
+
+                                    // finally, remove old branch inst
+                                    brInst->removeFromParent();
+                                    placed = true;
+                                }
+                            }
+                            else
+                            {
+                                spdlog::warn("Found a null instruction in a source block. Skipping...");
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (placed)
+        {
+            for (auto &F : *base)
+            {
+                for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
+                {
+                    auto block = cast<BasicBlock>(BB);
+                    for (auto in = block->begin(), ine = block->end(); in != ine; in++)
+                    {
+                        auto inst = cast<Instruction>(in);
+                        // get the value ID
+                        MDNode* md = inst->getMetadata("ValueID");
+                        if (md == nullptr)
+                        {
+                            AtlasException("Could not find ValueID metadata for value in source bitcode.");
+                        }
+                        int64_t ValueID = 0;
+                        if (md->getNumOperands() > 1)
+                        {
+                            spdlog::warn("Value in source bitcode has more than one ID. Only looking at the first.");
+                        }
+                        if (auto ID = mdconst::dyn_extract<ConstantInt>(md->getOperand(0)))
+                        {
+                            ValueID = ID->getSExtValue();
+                        }
+                        else
+                        {
+                            ValueID = -1;
+                            spdlog::warn("Couldn't extract ValueID from source bitcode. Skipping...");
+                        }
+                        for (auto &a : kernel->ArgumentMap)
+                        {
+                            if (a.second == ValueID)
+                            {
+                                VMap[cast<Value>(a.first)] = cast<Value>(inst);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
     return 0;
 }
