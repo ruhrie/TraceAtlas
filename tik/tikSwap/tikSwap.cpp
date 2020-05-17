@@ -108,10 +108,15 @@ int main(int argc, char *argv[])
             {
                 auto block = cast<BasicBlock>(BB);
                 // get the block ID
-                MDNode* md = block->getFirstInsertionPt()->getMetadata("BlockID");
-                if (md == nullptr)
+                MDNode* md = nullptr;
+                if (block->getFirstInsertionPt()->hasMetadataOtherThanDebugLoc())
                 {
-                    AtlasException("Could not find BlockID metadata for basic block in source bitcode.");
+                    md = block->getFirstInsertionPt()->getMetadata("BlockID"); 
+                } 
+                else
+                {
+                    spdlog::warn("Source code basic block has no metadata.");
+                    continue;
                 }
                 int64_t BBID = 0;
                 if (md->getNumOperands() > 1)
@@ -146,7 +151,7 @@ int main(int argc, char *argv[])
                                     {
                                         if (argi == kernel->KernelFunction->arg_begin())
                                         {
-                                            inargs.push_back(ConstantInt::get(Type::getInt8Ty(base->getContext()), e->Index));
+                                            inargs.push_back(ConstantInt::get(Type::getInt8Ty(base->getContext()), (int64_t)e->Index));
                                         }
                                         else
                                         {
@@ -181,16 +186,25 @@ int main(int argc, char *argv[])
                     for (auto in = block->begin(), ine = block->end(); in != ine; in++)
                     {
                         auto inst = cast<Instruction>(in);
+                        MDNode* mv = nullptr;
                         // get the value ID
-                        MDNode* mv = inst->getMetadata("ValueID");
-                        if (mv == 0)
+                        if (inst->hasMetadataOtherThanDebugLoc())
                         {
-                            AtlasException("Could not find ValueID metadata for value in source bitcode.");
+                            mv = inst->getMetadata("ValueID");
+                        }
+                        else
+                        {
+                            spdlog::warn("Value in source bitcode has no ValueID.");
+                            continue;
                         }
                         int64_t ValueID = 0;
                         if (mv->getNumOperands() > 1)
                         {
                             spdlog::warn("Value in source bitcode has more than one ID. Only looking at the first.");
+                        }
+                        else if (mv->getNumOperands() == 0)
+                        {
+                            continue;
                         }
                         if (auto ID = mdconst::dyn_extract<ConstantInt>(mv->getOperand(0)))
                         {
