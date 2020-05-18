@@ -3,14 +3,19 @@
 #include "AtlasUtil/Annotate.h"
 #include "tik/Kernel.h"
 #include "tik/TikKernel.h"
-#include <iostream>
+#include <llvm/IR/CFG.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/Transforms/Utils/Cloning.h>
+#include <llvm/Bitcode/BitcodeWriter.h>
+#include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
 #include <string>
+#include <iostream>
+#include <fstream>
 
 using namespace std;
 //using namespace Kernel;
@@ -72,6 +77,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
     Module *tikModule = tikBitcode.get();
+
     // grab all kernel functions in the tik bitcode and construct objects from them
     vector<Function *> kernelFuncs;
     for (auto &func : *tikModule)
@@ -100,7 +106,7 @@ int main(int argc, char *argv[])
     llvm::ValueToValueMapTy VMap;
     for (auto &kernel : kernels)
     {
-        // if we put this kernel into the source, this flag flips to signify the need to remap args
+        // if we put this kernel into the source, this flag flips to signify the need to remap args and declare this KernelFunction
         bool placed = false;
         for (auto &F : *base)
         {
@@ -136,7 +142,6 @@ int main(int argc, char *argv[])
                 {
                     if (BBID == e->Block)
                     {
-                        cout << "Found block " << BBID << " that enters " << kernel->Name << endl;
                         for (auto in = block->begin(), ine = block->end(); in != ine; in++)
                         {
                             if (auto inst = dyn_cast<Instruction>(in))
@@ -151,7 +156,7 @@ int main(int argc, char *argv[])
                                     {
                                         if (argi == kernel->KernelFunction->arg_begin())
                                         {
-                                            inargs.push_back(ConstantInt::get(Type::getInt8Ty(base->getContext()), (int64_t)e->Index));
+                                            inargs.push_back(ConstantInt::get(Type::getInt8Ty(base->getContext()), (uint64_t)e->Index));
                                         }
                                         else
                                         {
@@ -159,11 +164,24 @@ int main(int argc, char *argv[])
                                         }   
                                     }
                                     CallInst* KInst = iBuilder.CreateCall(kernel->KernelFunction, inargs);
-                                    // need to insert branches here to valid exits
-
+                                    // inline 
+                                    /*auto info = InlineFunctionInfo();
+                                    auto r = InlineFunction(KInst, info);
+                                    string Name = kernel->KernelFunction->getName();
+                                    if (r)
+                                    {
+                                        spdlog::info("Successfully placed "+Name+" into source bitcode.");
+                                        placed = true;
+                                    }
+                                    else
+                                    {
+                                        AtlasException("Failed to inline function "+Name);
+                                    }*/
+                                    // now resolve the exit
+                                    // take the return of the inlined function and put it into a phi to choose the correct exit
                                     // finally, remove old branch inst
                                     //brInst->removeFromParent();
-                                    placed = true;
+
                                 }
                             }
                             else
@@ -226,6 +244,54 @@ int main(int argc, char *argv[])
                 }
             }
         }
+    }
+    for (auto &F : *base)
+    {
+        for (auto fi = F.begin(); fi != F.end(); fi++)
+        {
+            auto BB = cast<BasicBlock>(fi);
+            for (BasicBlock::iterator bi = BB->begin(); bi != BB->end(); bi++)
+            {
+                auto *inst = cast<Instruction>(bi);
+                RemapInstruction(inst, VMap, llvm::RF_None);
+            }
+        }
+    }
+
+    // writing part
+    try
+    {
+        if (true)
+        {
+            // print human readable tik module to file
+            auto *write = new llvm::AssemblyAnnotationWriter();
+            std::string str;
+            llvm::raw_string_ostream rso(str);
+            std::filebuf f0;
+            f0.open(OutputFile, std::ios::out);
+            base->print(rso, write);
+            std::ostream readableStream(&f0);
+            readableStream << str;
+            f0.close();
+        }
+        /*else
+        {
+            // non-human readable IR
+            std::filebuf f;
+            f.open(OutputFile, std::ios::out);
+            std::ostream rawStream(&f);
+            raw_os_ostream raw_stream(rawStream);
+            WriteBitcodeToFile(*TikModule, raw_stream);
+        }*/
+
+        spdlog::info("Successfully wrote tik to file");
+    }
+    catch (exception &e)
+    {
+        std::cerr << "Failed to open output file: " << OutputFile << "\n";
+        std::cerr << e.what() << '\n';
+        spdlog::critical("Failed to write tik to output file: " + OutputFile);
+        return EXIT_FAILURE;
     }
     return 0;
 }
