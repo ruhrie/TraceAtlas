@@ -1,21 +1,21 @@
 #include "tikSwap/tikSwap.h"
-#include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Exceptions.h"
 #include "tik/Kernel.h"
 #include "tik/TikKernel.h"
+#include <fstream>
+#include <iostream>
+#include <llvm/Bitcode/BitcodeWriter.h>
+#include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/CFG.h>
+#include <llvm/IR/IRBuilder.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/SourceMgr.h>
-#include <llvm/IR/IRBuilder.h>
 #include <llvm/Transforms/Utils/Cloning.h>
-#include <llvm/Bitcode/BitcodeWriter.h>
-#include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
 #include <string>
-#include <iostream>
-#include <fstream>
 
 using namespace std;
 //using namespace Kernel;
@@ -114,11 +114,11 @@ int main(int argc, char *argv[])
             {
                 auto block = cast<BasicBlock>(BB);
                 // get the block ID
-                MDNode* md = nullptr;
+                MDNode *md = nullptr;
                 if (block->getFirstInsertionPt()->hasMetadataOtherThanDebugLoc())
                 {
-                    md = block->getFirstInsertionPt()->getMetadata("BlockID"); 
-                } 
+                    md = block->getFirstInsertionPt()->getMetadata("BlockID");
+                }
                 else
                 {
                     spdlog::warn("Source code basic block has no metadata.");
@@ -151,8 +151,8 @@ int main(int argc, char *argv[])
                                     // get rid of the branch and insert a CallInst
                                     //inst->removeFromParent();
                                     IRBuilder iBuilder(block->getTerminator());
-                                    vector<Value*> inargs;
-                                    for ( auto argi = kernel->KernelFunction->arg_begin(); argi < kernel->KernelFunction->arg_end(); argi++)
+                                    vector<Value *> inargs;
+                                    for (auto argi = kernel->KernelFunction->arg_begin(); argi < kernel->KernelFunction->arg_end(); argi++)
                                     {
                                         if (argi == kernel->KernelFunction->arg_begin())
                                         {
@@ -161,10 +161,12 @@ int main(int argc, char *argv[])
                                         else
                                         {
                                             inargs.push_back(cast<Value>(argi));
-                                        }   
+                                        }
                                     }
-                                    CallInst* KInst = iBuilder.CreateCall(kernel->KernelFunction, inargs);
-                                    // inline 
+                                    auto baseFunc = cast<Function>(base->getOrInsertFunction(kernel->KernelFunction->getName(), kernel->KernelFunction->getFunctionType()).getCallee());
+                                    CallInst *KInst = iBuilder.CreateCall(baseFunc, inargs);
+
+                                    // inline
                                     /*auto info = InlineFunctionInfo();
                                     auto r = InlineFunction(KInst, info);
                                     string Name = kernel->KernelFunction->getName();
@@ -181,7 +183,6 @@ int main(int argc, char *argv[])
                                     // take the return of the inlined function and put it into a phi to choose the correct exit
                                     // finally, remove old branch inst
                                     //brInst->removeFromParent();
-
                                 }
                             }
                             else
@@ -196,6 +197,7 @@ int main(int argc, char *argv[])
         }
         if (placed)
         {
+            // first, declare the function in the source bitcode
             for (auto &F : *base)
             {
                 for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
@@ -204,7 +206,7 @@ int main(int argc, char *argv[])
                     for (auto in = block->begin(), ine = block->end(); in != ine; in++)
                     {
                         auto inst = cast<Instruction>(in);
-                        MDNode* mv = nullptr;
+                        MDNode *mv = nullptr;
                         // get the value ID
                         if (inst->hasMetadataOtherThanDebugLoc())
                         {

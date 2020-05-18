@@ -1,8 +1,8 @@
 #pragma once
 #include <llvm/IR/Constants.h>
+#include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/Metadata.h>
 #include <llvm/IR/Module.h>
-#include <llvm/IR/IntrinsicInst.h>
 
 inline void SetBlockID(llvm::BasicBlock *BB, int64_t i)
 {
