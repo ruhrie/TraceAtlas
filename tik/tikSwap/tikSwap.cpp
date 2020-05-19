@@ -54,6 +54,28 @@ int main(int argc, char *argv[])
     Module *base = sourceBitcode.get();
     CleanModule(base);
     Annotate(base);
+    // create a map for its block and value IDs
+    map<int64_t, BasicBlock*> baseBlockMap;
+    for (auto &F : *base)
+    {
+        for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
+        {
+            auto block = cast<BasicBlock>(BB);
+            MDNode* md;
+            if (block->getFirstInsertionPt()->hasMetadataOtherThanDebugLoc())
+            {
+                md = block->getFirstInsertionPt()->getMetadata("BlockID");
+                if (md->getNumOperands() > 0)
+                {
+                    if (auto con = mdconst::dyn_extract<ConstantInt>(md->getOperand(0)))
+                    {   
+                        int64_t blockID = con->getSExtValue();
+                        baseBlockMap[blockID] = block;
+                    }
+                }
+            }
+        }
+    }
 
     // load the tik IR
     LLVMContext tikContext;
@@ -164,8 +186,32 @@ int main(int argc, char *argv[])
                                         }
                                     }
                                     auto baseFunc = cast<Function>(base->getOrInsertFunction(kernel->KernelFunction->getName(), kernel->KernelFunction->getFunctionType()).getCallee());
+                                    baseFunc->setAttributes(kernel->KernelFunction->getAttributes());
                                     CallInst *KInst = iBuilder.CreateCall(baseFunc, inargs);
-
+                                    Value* correctExit = KInst;
+                                    // loop over exit indices in the phi
+                                    for (int i = 0; i < kernel->Exits.size(); i++)
+                                    {
+                                        // find the blockID of our index
+                                        int64_t blockID = -1;
+                                        for (auto &j : kernel->Exits)
+                                        {
+                                            if (j.get()->Index == i)
+                                            {
+                                                blockID = j.get()->Block;
+                                            }
+                                        }
+                                        // if this is the first index, just assume its the right answer 
+                                        if (i == 0)
+                                        {
+                                            correctExit = baseBlockMap[blockID];
+                                            continue;
+                                        }
+                                        auto cmpInst = cast<ICmpInst>(iBuilder.CreateICmpEQ(baseBlockMap[blockID], KInst));
+                                        auto sInst = cast<SelectInst>(iBuilder.CreateSelect(cmpInst, baseBlockMap[blockID], correctExit));
+                                        correctExit = sInst;
+                                    }
+                                    iBuilder.CreateBr(cast<BasicBlock>(correctExit));
                                     // inline
                                     /*auto info = InlineFunctionInfo();
                                     auto r = InlineFunction(KInst, info);
