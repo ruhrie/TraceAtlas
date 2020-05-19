@@ -9,6 +9,7 @@
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Verifier.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/SourceMgr.h>
@@ -55,20 +56,20 @@ int main(int argc, char *argv[])
     CleanModule(base);
     Annotate(base);
     // create a map for its block and value IDs
-    map<int64_t, BasicBlock*> baseBlockMap;
+    map<int64_t, BasicBlock *> baseBlockMap;
     for (auto &F : *base)
     {
         for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
         {
             auto block = cast<BasicBlock>(BB);
-            MDNode* md;
+            MDNode *md;
             if (block->getFirstInsertionPt()->hasMetadataOtherThanDebugLoc())
             {
                 md = block->getFirstInsertionPt()->getMetadata("BlockID");
                 if (md->getNumOperands() > 0)
                 {
                     if (auto con = mdconst::dyn_extract<ConstantInt>(md->getOperand(0)))
-                    {   
+                    {
                         int64_t blockID = con->getSExtValue();
                         baseBlockMap[blockID] = block;
                     }
@@ -187,8 +188,8 @@ int main(int argc, char *argv[])
                                     }
                                     auto baseFunc = cast<Function>(base->getOrInsertFunction(kernel->KernelFunction->getName(), kernel->KernelFunction->getFunctionType()).getCallee());
                                     baseFunc->setAttributes(kernel->KernelFunction->getAttributes());
-                                    CallInst *KInst = iBuilder.CreateCall(baseFunc, inargs);
-                                    Value* correctExit = KInst;
+                                    baseFunc->CallInst *KInst = iBuilder.CreateCall(baseFunc, inargs);
+                                    Value *correctExit = KInst;
                                     // loop over exit indices in the phi
                                     for (int i = 0; i < kernel->Exits.size(); i++)
                                     {
@@ -201,7 +202,7 @@ int main(int argc, char *argv[])
                                                 blockID = j.get()->Block;
                                             }
                                         }
-                                        // if this is the first index, just assume its the right answer 
+                                        // if this is the first index, just assume its the right answer
                                         if (i == 0)
                                         {
                                             correctExit = baseBlockMap[blockID];
@@ -306,6 +307,15 @@ int main(int argc, char *argv[])
         }
     }
 
+    //verify the module
+    std::string str;
+    llvm::raw_string_ostream rso(str);
+    bool broken = verifyModule(*base, &rso);
+    if (broken)
+    {
+        auto err = rso.str();
+        spdlog::critical("Tik Module Corrupted: " + err);
+    }
     // writing part
     try
     {
