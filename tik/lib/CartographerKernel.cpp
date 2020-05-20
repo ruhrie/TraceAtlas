@@ -60,7 +60,7 @@ namespace TraceAtlas::tik
                     }
                     //and not already in the vmap
 
-                    //for some reason if we don't do this first the verifier fails
+                    //for some reason if we don't do this first the  fails
                     //we do absolutely nothing with it and it doesn't even end up in our output
                     //its technically a memory leak, but its an acceptable sacrifice
                     auto *newVar = new GlobalVariable(

@@ -127,10 +127,12 @@ int main(int argc, char *argv[])
 
     // swap in kernel functions to original bitcode
     llvm::ValueToValueMapTy VMap;
+    // set that holds any branch instructions that need to be removed
+    std::set<BranchInst*> toRemove;
     for (auto &kernel : kernels)
     {
-        // if we put this kernel into the source, this flag flips to signify the need to remap args and declare this KernelFunction
-        bool placed = false;
+        auto newFunc = Function::Create(kernel->KernelFunction->getFunctionType(), kernel->KernelFunction->getLinkage(), kernel->KernelFunction->getAddressSpace(), "", base);
+        newFunc->setName(kernel->KernelFunction->getName());
         for (auto &F : *base)
         {
             for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
@@ -186,20 +188,88 @@ int main(int argc, char *argv[])
                                             inargs.push_back(cast<Value>(argi));
                                         }
                                     }
-                                    auto baseFunc = cast<Function>(base->getOrInsertFunction(kernel->KernelFunction->getName(), kernel->KernelFunction->getFunctionType()).getCallee());
-                                    baseFunc->setAttributes(kernel->KernelFunction->getAttributes());
-                                    baseFunc->CallInst *KInst = iBuilder.CreateCall(baseFunc, inargs);
+                                    SmallVector<AttributeSet, 4> NewArgAttrs(kernel->KernelFunction->arg_size());
+                                    // from CloneFunction.cpp, line 111                        
+                                    // Clone any argument attributes that are present in the VMap.
+                                    /*for (const Argument &OldArg : kernel->KernelFunction->args()) 
+                                    {
+                                        if (Argument *NewArg = dyn_cast<Argument>(VMap[&OldArg])) 
+                                        {
+                                            NewArgAttrs[NewArg->getArgNo()] = kernel->KernelFunction->getAttributes().getParamAttributes(OldArg.getArgNo());
+                                        }
+                                    }*/
+                                    auto baseFuncInst = cast<Function>(base->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
+                                    baseFuncInst->setAttributes(AttributeList::get(base->getContext(), newFunc->getAttributes().getFnAttributes(), newFunc->getAttributes().getRetAttributes(), NewArgAttrs));
+                                    CallInst *KInst = iBuilder.CreateCall(baseFuncInst, inargs);
+                                    /* insert correct values for each argument in the callinst from the bitcode */
+                                    for (auto &a : kernel->ArgumentMap)
+                                    {
+                                        for (auto &F : *base)
+                                        {
+                                            for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
+                                            {
+                                                auto block = cast<BasicBlock>(BB);
+                                                // get our value from the source bitcode
+                                                for (auto in = block->begin(), ine = block->end(); in != ine; in++)
+                                                {
+                                                    auto inst = cast<Instruction>(in);
+                                                    MDNode *mv = nullptr;
+                                                    if (inst->hasMetadataOtherThanDebugLoc())
+                                                    {
+                                                        mv = inst->getMetadata("ValueID");
+                                                    }
+                                                    else
+                                                    {
+                                                        spdlog::warn("Value in source bitcode has no ValueID.");
+                                                        continue;
+                                                    }
+                                                    int64_t ValueID = 0;
+                                                    if (mv->getNumOperands() > 1)
+                                                    {
+                                                        spdlog::warn("Value in source bitcode has more than one ID. Only looking at the first.");
+                                                    }
+                                                    else if (mv->getNumOperands() == 0)
+                                                    {
+                                                        continue;
+                                                    }
+                                                    if (auto ID = mdconst::dyn_extract<ConstantInt>(mv->getOperand(0)))
+                                                    {
+                                                        ValueID = ID->getSExtValue();
+                                                    }
+                                                    else
+                                                    {
+                                                        ValueID = -1;
+                                                        spdlog::warn("Couldn't extract ValueID from source bitcode. Skipping...");
+                                                    }
+                                                    // now see this value matches, and if it does, replace the argument in the callinst with the value here                
+                                                    if (a.second == ValueID)
+                                                    {
+                                                        for (int i = 0; i < (int)KInst->getNumArgOperands(); i++)
+                                                        {
+                                                            if (auto InstArg = dyn_cast<Argument>(KInst->getArgOperand((unsigned int)i)))
+                                                            {
+                                                                if (a.first == InstArg)
+                                                                {
+                                                                    KInst->setArgOperand((unsigned int)i, cast<Value>(inst));
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                     Value *correctExit = KInst;
                                     // loop over exit indices in the phi
-                                    for (int i = 0; i < kernel->Exits.size(); i++)
+                                    for (unsigned int i = 0; i < kernel->Exits.size(); i++)
                                     {
                                         // find the blockID of our index
                                         int64_t blockID = -1;
                                         for (auto &j : kernel->Exits)
                                         {
-                                            if (j.get()->Index == i)
+                                            if (j->Index == (int)i)
                                             {
-                                                blockID = j.get()->Block;
+                                                blockID = j->Block;
                                             }
                                         }
                                         // if this is the first index, just assume its the right answer
@@ -216,20 +286,19 @@ int main(int argc, char *argv[])
                                     // inline
                                     /*auto info = InlineFunctionInfo();
                                     auto r = InlineFunction(KInst, info);
-                                    string Name = kernel->KernelFunction->getName();
+                                    string Name = newFunc->getName();
                                     if (r)
                                     {
                                         spdlog::info("Successfully placed "+Name+" into source bitcode.");
-                                        placed = true;
                                     }
                                     else
                                     {
                                         AtlasException("Failed to inline function "+Name);
-                                    }*/
+                                    }
                                     // now resolve the exit
                                     // take the return of the inlined function and put it into a phi to choose the correct exit
-                                    // finally, remove old branch inst
-                                    //brInst->removeFromParent();
+                                    // finally, remove old branch inst*/
+                                    toRemove.insert(brInst);
                                 }
                             }
                             else
@@ -242,57 +311,11 @@ int main(int argc, char *argv[])
                 }
             }
         }
-        if (placed)
-        {
-            // first, declare the function in the source bitcode
-            for (auto &F : *base)
-            {
-                for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
-                {
-                    auto block = cast<BasicBlock>(BB);
-                    for (auto in = block->begin(), ine = block->end(); in != ine; in++)
-                    {
-                        auto inst = cast<Instruction>(in);
-                        MDNode *mv = nullptr;
-                        // get the value ID
-                        if (inst->hasMetadataOtherThanDebugLoc())
-                        {
-                            mv = inst->getMetadata("ValueID");
-                        }
-                        else
-                        {
-                            spdlog::warn("Value in source bitcode has no ValueID.");
-                            continue;
-                        }
-                        int64_t ValueID = 0;
-                        if (mv->getNumOperands() > 1)
-                        {
-                            spdlog::warn("Value in source bitcode has more than one ID. Only looking at the first.");
-                        }
-                        else if (mv->getNumOperands() == 0)
-                        {
-                            continue;
-                        }
-                        if (auto ID = mdconst::dyn_extract<ConstantInt>(mv->getOperand(0)))
-                        {
-                            ValueID = ID->getSExtValue();
-                        }
-                        else
-                        {
-                            ValueID = -1;
-                            spdlog::warn("Couldn't extract ValueID from source bitcode. Skipping...");
-                        }
-                        for (auto &a : kernel->ArgumentMap)
-                        {
-                            if (a.second == ValueID)
-                            {
-                                VMap[cast<Value>(a.first)] = cast<Value>(inst);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    }
+    // remove blocks if any
+    for (auto ind : toRemove)
+    {
+        ind->removeFromParent();
     }
     for (auto &F : *base)
     {
@@ -314,7 +337,7 @@ int main(int argc, char *argv[])
     if (broken)
     {
         auto err = rso.str();
-        spdlog::critical("Tik Module Corrupted: " + err);
+        spdlog::critical("Tik Module Corrupted: \n" + err);
     }
     // writing part
     try
