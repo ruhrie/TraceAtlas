@@ -33,7 +33,7 @@ int main(int argc, char **argv)
     //here calculates the maximum internal working set size
     for (auto it : internalAddressLivingVec)
     {
-        if (it.deathTime >0)
+        if (it.deathTime > 0)
         {
             endTimeSet.insert(it.deathTime);
             while (it.birthTime > *(endTimeSet.begin()))

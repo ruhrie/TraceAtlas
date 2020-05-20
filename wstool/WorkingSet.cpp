@@ -10,11 +10,11 @@ namespace WorkingSet
 
     //internal address struct vector: to store the address structs of birth and death time
     vector<InternaladdressLiving> internalAddressLivingVec;
-    //internal address index map: to speed up the addresses seaching in the internal address struct vector 
+    //internal address index map: to speed up the addresses seaching in the internal address struct vector
     map<uint64_t, uint64_t> internalAddressIndexMap;
     //input address index set: to store the input address indexes
     set<uint64_t> inputAddressIndexSet;
-    //output address index set: to store the output address indexes 
+    //output address index set: to store the output address indexes
     set<uint64_t> outputAddressIndexSet;
     // FirstStore is called when we know that the address appears for the first time, then:
     // 1.Update address index map
@@ -24,7 +24,7 @@ namespace WorkingSet
     {
         // birth from a store inst
         if (fromStore)
-        {            
+        {
             InternaladdressLiving internalAddress = {.address = addrIndex, .birthTime = t, .deathTime = -1};
             //store the address into output set temporally
             outputAddressIndexSet.insert(addrIndex);
