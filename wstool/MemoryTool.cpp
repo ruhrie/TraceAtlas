@@ -30,17 +30,21 @@ int main(int argc, char **argv)
     uint64_t maxinternal = 0;
     set<int64_t> endTimeSet; //using this set of end time to calculate the maximum internal working set
     // struct of internal working set
+    printf("size %zu \n", internalAddressLivingVec.size()  );
     for (auto it : internalAddressLivingVec)
     {
-        endTimeSet.insert(it.deathTime);
-        if (it.brithTime > *(endTimeSet.begin()))
+        if (it.deathTime >0)
         {
-            endTimeSet.erase(endTimeSet.begin());
+            endTimeSet.insert(it.deathTime);
+            while (it.brithTime > *(endTimeSet.begin()))
+            {
+                endTimeSet.erase(endTimeSet.begin());
+            }
+            if (endTimeSet.size() > maxinternal)
+            {
+                maxinternal = endTimeSet.size();
+            }
         }
-        if (endTimeSet.size() > maxinternal)
-        {
-            maxinternal = endTimeSet.size();
-        }    
     }
     maxInput = inputMapSize;
     maxOutput = outputAddressIndexSet.size();

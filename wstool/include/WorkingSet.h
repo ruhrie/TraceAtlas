@@ -15,6 +15,7 @@ namespace WorkingSet
         int64_t brithTime;
         int64_t deathTime;
     } InternaladdressLiving;
+    extern int64_t timing;
     extern vector<InternaladdressLiving> internalAddressLivingVec;
     extern uint64_t inputMapSize;
     extern uint64_t internalMapSize;
