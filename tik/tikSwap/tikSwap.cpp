@@ -13,19 +13,66 @@
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/SourceMgr.h>
+#include <llvm/Support/raw_os_ostream.h>
 #include <llvm/Transforms/Utils/Cloning.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
 #include <string>
 
 using namespace std;
-//using namespace Kernel;
 using namespace llvm;
 using namespace TraceAtlas::tik;
 
 cl::opt<string> InputFile("t", cl::Required, cl::desc("<input tik bitcode>"), cl::init("tik.bc"));
 cl::opt<string> OriginalBitcode("b", cl::Required, cl::desc("<input original bitcode>"), cl::init("a.bc"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"), cl::init("tikSwap.bc"));
+
+/*
+llvm::Type* getArgType(Type* ty, Module* base)
+{
+    if (ty->isVectorTy())
+    {
+        spdlog::warn("Argument type unimplemented.");
+    }
+    else if (ty->isArrayTy())
+    {
+        spdlog::warn("Argument type unimplemented.");
+    }
+    else if (ty->isFunctionTy())
+    {
+        spdlog::warn("Argument type unimplemented.");
+    }
+    else if (ty->isIntegerTy())
+    {
+        auto width = ty->getIntegerBitWidth();
+        return Type::getIntNTy(base->getContext(), width);
+    }
+    else if (ty->isPointerTy())
+    {
+        int stars = 0;
+        Type* newTy = ty;
+        while (newTy->isPointerTy())
+        {
+            newTy = cast<PointerType
+            newTy = newTy->getElementType();
+            stars++;
+        }
+        PointerType* retType;
+        for (int i = 0; i < recursions; i++)
+        {
+            retType = 
+        }
+        return getArgType(_p->getElementType(), base);
+    }
+    else if (ty->isStructTy())
+    {
+        spdlog::warn("Argument type unimplemented.");
+    }
+    else
+    {
+        spdlog::error("Argument type is not recognized.");
+    }
+}*/
 
 int main(int argc, char *argv[])
 {
@@ -131,7 +178,72 @@ int main(int argc, char *argv[])
     std::set<BranchInst*> toRemove;
     for (auto &kernel : kernels)
     {
-        auto newFunc = Function::Create(kernel->KernelFunction->getFunctionType(), kernel->KernelFunction->getLinkage(), kernel->KernelFunction->getAddressSpace(), "", base);
+        // make a copy of the kernel function in the base module context
+        // we know ahead of time the kernel function will return i8
+        // we have to get the arg types from the source values first before we can make the function signature
+        // get the arg values first and put them in a vector
+        vector<Value*> newArgs;
+        for (auto &a : kernel->ArgumentMap)
+        {
+            // set the first arg to the constant index
+            if (a.second == 0)
+            {
+                newArgs.push_back(ConstantInt::get(Type::getInt8Ty(base->getContext()), 0));//(uint64_t)e->Index));
+                continue;
+            }            
+            for (auto &F : *base)
+            {
+                for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
+                {
+                    auto block = cast<BasicBlock>(BB);
+                    // get our value from the source bitcode
+                    for (auto in = block->begin(), ine = block->end(); in != ine; in++)
+                    {
+                        auto inst = cast<Instruction>(in);
+                        MDNode *mv = nullptr;
+                        if (inst->hasMetadataOtherThanDebugLoc())
+                        {
+                            mv = inst->getMetadata("ValueID");
+                        }
+                        else
+                        {
+                            spdlog::warn("Value in source bitcode has no ValueID.");
+                            continue;
+                        }
+                        int64_t ValueID = 0;
+                        if (mv->getNumOperands() > 1)
+                        {
+                            spdlog::warn("Value in source bitcode has more than one ID. Only looking at the first.");
+                        }
+                        else if (mv->getNumOperands() == 0)
+                        {
+                            continue;
+                        }
+                        if (auto ID = mdconst::dyn_extract<ConstantInt>(mv->getOperand(0)))
+                        {
+                            ValueID = ID->getSExtValue();
+                        }
+                        else
+                        {
+                            ValueID = -1;
+                            spdlog::warn("Couldn't extract ValueID from source bitcode. Skipping...");
+                        }
+                        // now see this value matches, and if it does, replace the argument in the callinst with the value here                
+                        if (a.second == ValueID)
+                        {
+                            newArgs.push_back(cast<Value>(inst));
+                        }
+                    }
+                }
+            }
+        }
+        vector<Type*> argTypes;
+        for (auto arg : newArgs)
+        {
+            argTypes.push_back(arg->getType());
+        }
+        auto FuTy = FunctionType::get(Type::getInt8Ty(base->getContext()), argTypes, false);
+        auto newFunc = Function::Create(FuTy, kernel->KernelFunction->getLinkage(), kernel->KernelFunction->getAddressSpace(), "", base);
         newFunc->setName(kernel->KernelFunction->getName());
         for (auto &F : *base)
         {
@@ -199,11 +311,21 @@ int main(int argc, char *argv[])
                                         }
                                     }*/
                                     auto baseFuncInst = cast<Function>(base->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
-                                    baseFuncInst->setAttributes(AttributeList::get(base->getContext(), newFunc->getAttributes().getFnAttributes(), newFunc->getAttributes().getRetAttributes(), NewArgAttrs));
+                                    //baseFuncInst->setAttributes(AttributeList::get(base->getContext(), newFunc->getAttributes().getFnAttributes(), newFunc->getAttributes().getRetAttributes(), NewArgAttrs));
                                     CallInst *KInst = iBuilder.CreateCall(baseFuncInst, inargs);
-                                    /* insert correct values for each argument in the callinst from the bitcode */
-                                    for (auto &a : kernel->ArgumentMap)
+                                    for (int i = 0; i < (int)KInst->getNumArgOperands(); i++)
                                     {
+                                        KInst->setArgOperand((unsigned int)i, newArgs[i]);
+                                    }
+                                    /* insert correct values for each argument in the callinst from the bitcode */
+                                    /*for (auto &a : kernel->ArgumentMap)
+                                    {
+                                        // set the first arg to the constant index
+                                        cout << a.second << endl;
+                                        if (a.second == 0)
+                                        {
+                                            KInst->setArgOperand(0, ConstantInt::get(Type::getInt8Ty(base->getContext()), (uint64_t)e->Index));
+                                        }
                                         for (auto &F : *base)
                                         {
                                             for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
@@ -258,7 +380,7 @@ int main(int argc, char *argv[])
                                                 }
                                             }
                                         }
-                                    }
+                                    }*/
                                     Value *correctExit = KInst;
                                     // loop over exit indices in the phi
                                     for (unsigned int i = 0; i < kernel->Exits.size(); i++)
@@ -315,7 +437,7 @@ int main(int argc, char *argv[])
     // remove blocks if any
     for (auto ind : toRemove)
     {
-        ind->removeFromParent();
+        ind->eraseFromParent();
     }
     for (auto &F : *base)
     {
@@ -342,7 +464,7 @@ int main(int argc, char *argv[])
     // writing part
     try
     {
-        if (true)
+        if (false)
         {
             // print human readable tik module to file
             auto *write = new llvm::AssemblyAnnotationWriter();
@@ -355,15 +477,15 @@ int main(int argc, char *argv[])
             readableStream << str;
             f0.close();
         }
-        /*else
+        else
         {
             // non-human readable IR
             std::filebuf f;
             f.open(OutputFile, std::ios::out);
             std::ostream rawStream(&f);
             raw_os_ostream raw_stream(rawStream);
-            WriteBitcodeToFile(*TikModule, raw_stream);
-        }*/
+            WriteBitcodeToFile(*base, raw_stream);
+        }
 
         spdlog::info("Successfully wrote tik to file");
     }
