@@ -29,14 +29,14 @@ int main(int argc, char **argv)
     uint64_t maxOutput = 0;
     uint64_t maxinternal = 0;
     set<int64_t> endTimeSet; //using this set of end time to calculate the maximum internal working set
-    // struct of internal working set
-    printf("size %zu \n", internalAddressLivingVec.size()  );
+    printf("size %zu \n", internalAddressLivingVec.size());
+    //here calculates the maximum internal working set size
     for (auto it : internalAddressLivingVec)
     {
         if (it.deathTime >0)
         {
             endTimeSet.insert(it.deathTime);
-            while (it.brithTime > *(endTimeSet.begin()))
+            while (it.birthTime > *(endTimeSet.begin()))
             {
                 endTimeSet.erase(endTimeSet.begin());
             }

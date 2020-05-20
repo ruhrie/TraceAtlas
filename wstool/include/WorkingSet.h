@@ -12,7 +12,7 @@ namespace WorkingSet
     typedef struct InternaladdressLiving
     {
         uint64_t address;
-        int64_t brithTime;
+        int64_t birthTime;
         int64_t deathTime;
     } InternaladdressLiving;
     extern int64_t timing;
