@@ -40,7 +40,7 @@ jobs:
           useVcpkgToolchainFile: true
           buildWithCMakeArgs: '-- -v'
           buildDirectory: ${{github.workspace}}/build
-          cmakeAppendedArgs: '-G Ninja -DENABLE_LINTER_ERROR=ON -DCMAKE_BUILD_TYPE=Debug'
+          cmakeAppendedArgs: '-G Ninja -DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=Debug'
       - name: Run ctest
         run: ctest
         shell: bash
@@ -89,7 +89,7 @@ jobs:
           useVcpkgToolchainFile: true
           buildWithCMakeArgs: '-- -v'
           buildDirectory: ${{github.workspace}}/build
-          cmakeAppendedArgs: '-G Ninja -DENABLE_LINTER_ERROR=ON -DCMAKE_BUILD_TYPE=Release'
+          cmakeAppendedArgs: '-G Ninja -DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=Release'
       - name: Run ctest
         run: ctest
         shell: bash
