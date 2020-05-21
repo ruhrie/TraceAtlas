@@ -29,12 +29,9 @@ namespace WorkingSet
             //store the address into output set temporally
             outputAddressIndexSet.insert(addrIndex);
             //update the map and the vector, if the address has never shown before
-            if (internalAddressIndexMap.find(addrIndex) == internalAddressIndexMap.end())
-            {
-                internalAddressIndexMap[addrIndex] = internalMapSize;
-                internalAddressLivingVec.push_back(internalAddress);
-                internalMapSize++;
-            }
+            internalAddressIndexMap[addrIndex] = internalMapSize;
+            internalAddressLivingVec.push_back(internalAddress);
+            internalMapSize++;
         }
         // birth from a load inst
         else
