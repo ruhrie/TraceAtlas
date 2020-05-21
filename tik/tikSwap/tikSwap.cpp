@@ -244,30 +244,24 @@ int main(int argc, char *argv[])
                             }
                             KInst->setArgOperand((unsigned int)i, newArgs[(size_t)i]);
                         }
-                        Value *correctExit = nullptr;
-                        // loop over exit indices in the phi
-                        for (unsigned int i = 0; i < kernel->Exits.size(); i++)
+                        KernelInterface a(-1, -1);
+                        for (auto &j : kernel->Exits)
                         {
-                            // find the blockID of our index
-                            int64_t blockID = -1;
-                            for (auto &j : kernel->Exits)
+                            if (j->Index == 0)
                             {
-                                if (j->Index == (int)i)
-                                {
-                                    blockID = j->Block;
-                                }
+                                a.Block = j->Block;
+                                a.Index = j->Index;
                             }
-                            // if this is the first index, just assume its the right answer
-                            if (i == 0)
-                            {
-                                correctExit = cast<Value>(baseBlockMap[blockID]);
-                                continue;
-                            }
-                            auto cmpInst = cast<ICmpInst>(iBuilder.CreateICmpEQ(ConstantInt::get(Type::getInt8Ty(base->getContext()), (uint64_t)i), cast<Value>(KInst)));
-                            auto sInst = cast<SelectInst>(iBuilder.CreateSelect(cmpInst, baseBlockMap[blockID], correctExit));
-                            correctExit = sInst;
                         }
-                        iBuilder.CreateBr(cast<BasicBlock>(correctExit));
+                        auto sw = iBuilder.CreateSwitch(cast<Value>(KInst), baseBlockMap[a.Block], (unsigned int)kernel->Exits.size());
+                        for (auto &j : kernel->Exits)
+                        {
+                            if (j->Index != 0)
+                            {
+                                sw->addCase(ConstantInt::get(Type::getInt8Ty(base->getContext()), (uint64_t)j->Index), baseBlockMap[j->Block]);
+                            }
+                        }
+                        // remember to remove the old terminator
                         toRemove.insert(block->getTerminator());
                     }
                 }
