@@ -30,18 +30,18 @@ namespace TraceAtlas::tik
         // initialize Entrances, Exits
         for (int j = 0; j < (int)js["Entrances"]["Blocks"].size(); j++)
         {
-            auto n = make_shared<KernelInterface>(js["Entrances"]["Indices"][j], (uint)js["Entrances"]["Blocks"][j]);
+            auto n = make_shared<KernelInterface>(js["Entrances"]["Indices"][(unsigned int)j], (uint)js["Entrances"]["Blocks"][(unsigned int)j]);
             Entrances.insert(n);
         }
         for (int j = 0; j < (int)js["Exits"]["Blocks"].size(); j++)
         {
-            auto n = make_shared<KernelInterface>(js["Exits"]["Indices"][j], (uint)js["Exits"]["Blocks"][j]);
+            auto n = make_shared<KernelInterface>(js["Exits"]["Indices"][(unsigned int)j], (uint)js["Exits"]["Blocks"][(unsigned int)j]);
             Exits.insert(n);
         }
         // initialize ArgumentMap
         for (int j = 0; j < (int)js["Arguments"].size(); j++)
         {
-            ArgumentMap[KernelFunction->arg_begin() + j] = (int)js["Arguments"][j];
+            ArgumentMap[KernelFunction->arg_begin() + j] = (int)js["Arguments"][(unsigned int)j];
         }
         for (auto BB = KernelFunction->begin(); BB != KernelFunction->end(); BB++)
         {
