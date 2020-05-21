@@ -313,9 +313,7 @@ int main(int argc, char *argv[])
     }
     catch (exception &e)
     {
-        std::cerr << "Failed to open output file: " << OutputFile << "\n";
-        std::cerr << e.what() << '\n';
-        spdlog::critical("Failed to write tik to output file: " + OutputFile);
+        spdlog::critical("Failed to open output file: "+OutputFile+":\n"+e.what()+"\n");
         return EXIT_FAILURE;
     }
     return 0;
