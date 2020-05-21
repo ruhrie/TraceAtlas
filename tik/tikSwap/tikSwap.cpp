@@ -1,4 +1,5 @@
 #include "tikSwap/tikSwap.h"
+#include "AtlasUtil/Print.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
 #include "tik/Kernel.h"
@@ -133,8 +134,7 @@ int main(int argc, char *argv[])
     {
         for (auto &e : kernel->Entrances)
         {
-            // make a copy of the kernel function in the base module context
-            // we know ahead of time the kernel function will return i8
+            // make a copy of the kernel function for the base module context
             // we have to get the arg types from the source values first before we can make the function signature (to align context)
             vector<Value *> newArgs;
             for (auto &a : kernel->ArgumentMap)
@@ -244,7 +244,7 @@ int main(int argc, char *argv[])
                             }
                             KInst->setArgOperand((unsigned int)i, newArgs[(size_t)i]);
                         }
-                        Value *correctExit = KInst;
+                        Value *correctExit = nullptr;
                         // loop over exit indices in the phi
                         for (unsigned int i = 0; i < kernel->Exits.size(); i++)
                         {
@@ -260,10 +260,10 @@ int main(int argc, char *argv[])
                             // if this is the first index, just assume its the right answer
                             if (i == 0)
                             {
-                                correctExit = baseBlockMap[blockID];
+                                correctExit = cast<Value>(baseBlockMap[blockID]);
                                 continue;
                             }
-                            auto cmpInst = cast<ICmpInst>(iBuilder.CreateICmpEQ(baseBlockMap[blockID], KInst));
+                            auto cmpInst = cast<ICmpInst>(iBuilder.CreateICmpEQ(ConstantInt::get(Type::getInt8Ty(base->getContext()), (uint64_t)i), cast<Value>(KInst)));
                             auto sInst = cast<SelectInst>(iBuilder.CreateSelect(cmpInst, baseBlockMap[blockID], correctExit));
                             correctExit = sInst;
                         }
