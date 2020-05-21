@@ -28,53 +28,6 @@ cl::opt<string> OriginalBitcode("b", cl::Required, cl::desc("<input original bit
 cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"), cl::init("tikSwap.bc"));
 cl::opt<bool> ASCIIFormat("S", cl::desc("output json as human-readable ASCII text"));
 
-/*
-llvm::Type* getArgType(Type* ty, Module* base)
-{
-    if (ty->isVectorTy())
-    {
-        spdlog::warn("Argument type unimplemented.");
-    }
-    else if (ty->isArrayTy())
-    {
-        spdlog::warn("Argument type unimplemented.");
-    }
-    else if (ty->isFunctionTy())
-    {
-        spdlog::warn("Argument type unimplemented.");
-    }
-    else if (ty->isIntegerTy())
-    {
-        auto width = ty->getIntegerBitWidth();
-        return Type::getIntNTy(base->getContext(), width);
-    }
-    else if (ty->isPointerTy())
-    {
-        int stars = 0;
-        Type* newTy = ty;
-        while (newTy->isPointerTy())
-        {
-            newTy = cast<PointerType
-            newTy = newTy->getElementType();
-            stars++;
-        }
-        PointerType* retType;
-        for (int i = 0; i < recursions; i++)
-        {
-            retType = 
-        }
-        return getArgType(_p->getElementType(), base);
-    }
-    else if (ty->isStructTy())
-    {
-        spdlog::warn("Argument type unimplemented.");
-    }
-    else
-    {
-        spdlog::error("Argument type is not recognized.");
-    }
-}*/
-
 int main(int argc, char *argv[])
 {
     cl::ParseCommandLineOptions(argc, argv);
@@ -174,165 +127,148 @@ int main(int argc, char *argv[])
     }
 
     // set that holds any branch instructions that need to be removed
-    std::set<BranchInst *> toRemove;
+    std::set<Instruction *> toRemove;
+    // tikSwap
     for (auto &kernel : kernels)
     {
-        // make a copy of the kernel function in the base module context
-        // we know ahead of time the kernel function will return i8
-        // we have to get the arg types from the source values first before we can make the function signature
-        // get the arg values first and put them in a vector
-        vector<Value *> newArgs;
-        for (auto &a : kernel->ArgumentMap)
+        for (auto &e : kernel->Entrances)
         {
-            // set the first arg to 0
-            // TODO: we can't initialize this correctly unless we know the entrance (which comes later). Patched right before constructing the CallInst
-            if (a.second == 0)
+            // make a copy of the kernel function in the base module context
+            // we know ahead of time the kernel function will return i8
+            // we have to get the arg types from the source values first before we can make the function signature (to align context)
+            vector<Value *> newArgs;
+            for (auto &a : kernel->ArgumentMap)
             {
-                newArgs.push_back(ConstantInt::get(Type::getInt8Ty(base->getContext()), 0));
-                continue;
+                // set the first arg to the entrance index
+                if (a.second == 0)
+                {
+                    newArgs.push_back(ConstantInt::get(Type::getInt8Ty(base->getContext()), (uint64_t)e->Index));
+                    continue;
+                }
+                for (auto &F : *base)
+                {
+                    for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
+                    {
+                        auto block = cast<BasicBlock>(BB);
+                        // get our value from the source bitcode
+                        for (auto in = block->begin(), ine = block->end(); in != ine; in++)
+                        {
+                            auto inst = cast<Instruction>(in);
+                            MDNode *mv = nullptr;
+                            if (inst->hasMetadataOtherThanDebugLoc())
+                            {
+                                mv = inst->getMetadata("ValueID");
+                            }
+                            else
+                            {
+                                spdlog::warn("Value in source bitcode has no ValueID.");
+                                continue;
+                            }
+                            int64_t ValueID = 0;
+                            if (mv->getNumOperands() > 1)
+                            {
+                                spdlog::warn("Value in source bitcode has more than one ID. Only looking at the first.");
+                            }
+                            else if (mv->getNumOperands() == 0)
+                            {
+                                continue;
+                            }
+                            if (auto ID = mdconst::dyn_extract<ConstantInt>(mv->getOperand(0)))
+                            {
+                                ValueID = ID->getSExtValue();
+                            }
+                            else
+                            {
+                                ValueID = -1;
+                                spdlog::warn("Couldn't extract ValueID from source bitcode. Skipping...");
+                            }
+                            // now see if this value matches, and if so add it (in order)
+                            if (a.second == ValueID)
+                            {
+                                newArgs.push_back(cast<Value>(inst));
+                            }
+                        }
+                    }
+                }
             }
+            vector<Type *> argTypes;
+            argTypes.reserve(newArgs.size());
+            for (auto arg : newArgs)
+            {
+                argTypes.push_back(arg->getType());
+            }
+            auto FuTy = FunctionType::get(Type::getInt8Ty(base->getContext()), argTypes, false);
+            auto newFunc = Function::Create(FuTy, kernel->KernelFunction->getLinkage(), kernel->KernelFunction->getAddressSpace(), "", base);
+            newFunc->setName(kernel->KernelFunction->getName());
             for (auto &F : *base)
             {
                 for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
                 {
                     auto block = cast<BasicBlock>(BB);
-                    // get our value from the source bitcode
-                    for (auto in = block->begin(), ine = block->end(); in != ine; in++)
+                    // get the block ID
+                    MDNode *md = nullptr;
+                    if (block->getFirstInsertionPt()->hasMetadataOtherThanDebugLoc())
                     {
-                        auto inst = cast<Instruction>(in);
-                        MDNode *mv = nullptr;
-                        if (inst->hasMetadataOtherThanDebugLoc())
-                        {
-                            mv = inst->getMetadata("ValueID");
-                        }
-                        else
-                        {
-                            spdlog::warn("Value in source bitcode has no ValueID.");
-                            continue;
-                        }
-                        int64_t ValueID = 0;
-                        if (mv->getNumOperands() > 1)
-                        {
-                            spdlog::warn("Value in source bitcode has more than one ID. Only looking at the first.");
-                        }
-                        else if (mv->getNumOperands() == 0)
-                        {
-                            continue;
-                        }
-                        if (auto ID = mdconst::dyn_extract<ConstantInt>(mv->getOperand(0)))
-                        {
-                            ValueID = ID->getSExtValue();
-                        }
-                        else
-                        {
-                            ValueID = -1;
-                            spdlog::warn("Couldn't extract ValueID from source bitcode. Skipping...");
-                        }
-                        // now see if this value matches, and if so add it (in order)
-                        if (a.second == ValueID)
-                        {
-                            newArgs.push_back(cast<Value>(inst));
-                        }
+                        md = block->getFirstInsertionPt()->getMetadata("BlockID");
                     }
-                }
-            }
-        }
-        vector<Type *> argTypes;
-        argTypes.reserve(newArgs.size());
-        for (auto arg : newArgs)
-        {
-            argTypes.push_back(arg->getType());
-        }
-        auto FuTy = FunctionType::get(Type::getInt8Ty(base->getContext()), argTypes, false);
-        auto newFunc = Function::Create(FuTy, kernel->KernelFunction->getLinkage(), kernel->KernelFunction->getAddressSpace(), "", base);
-        newFunc->setName(kernel->KernelFunction->getName());
-        for (auto &F : *base)
-        {
-            for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
-            {
-                auto block = cast<BasicBlock>(BB);
-                // get the block ID
-                MDNode *md = nullptr;
-                if (block->getFirstInsertionPt()->hasMetadataOtherThanDebugLoc())
-                {
-                    md = block->getFirstInsertionPt()->getMetadata("BlockID");
-                }
-                else
-                {
-                    spdlog::warn("Source code basic block has no metadata.");
-                    continue;
-                }
-                int64_t BBID = 0;
-                if (md->getNumOperands() > 1)
-                {
-                    spdlog::warn("BB in source bitcode has more than one ID. Only looking at the first.");
-                }
-                if (auto ID = mdconst::dyn_extract<ConstantInt>(md->getOperand(0)))
-                {
-                    BBID = ID->getSExtValue();
-                }
-                else
-                {
-                    BBID = -1;
-                    spdlog::warn("Couldn't extract BBID from source bitcode. Skipping...");
-                }
-                for (auto &e : kernel->Entrances)
-                {
+                    else
+                    {
+                        spdlog::warn("Source code basic block has no metadata.");
+                        continue;
+                    }
+                    int64_t BBID = 0;
+                    if (md->getNumOperands() > 1)
+                    {
+                        spdlog::warn("BB in source bitcode has more than one ID. Only looking at the first.");
+                    }
+                    if (auto ID = mdconst::dyn_extract<ConstantInt>(md->getOperand(0)))
+                    {
+                        BBID = ID->getSExtValue();
+                    }
+                    else
+                    {
+                        BBID = -1;
+                        spdlog::warn("Couldn't extract BBID from source bitcode. Skipping...");
+                    }
+                    // if this is our entrance block, swap tik
                     if (BBID == e->Block)
                     {
-                        for (auto in = block->begin(), ine = block->end(); in != ine; in++)
+                        IRBuilder iBuilder(block->getTerminator());
+                        auto baseFuncInst = cast<Function>(base->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
+                        CallInst *KInst = iBuilder.CreateCall(baseFuncInst, newArgs);
+                        for (int i = 0; i < (int)KInst->getNumArgOperands(); i++)
                         {
-                            if (auto inst = dyn_cast<Instruction>(in))
+                            if (e->Index != 0)
                             {
-                                if (auto brInst = dyn_cast<BranchInst>(inst))
+                                newArgs[0] = ConstantInt::get(Type::getInt8Ty(base->getContext()), (uint64_t)e->Index);
+                            }
+                            KInst->setArgOperand((unsigned int)i, newArgs[(size_t)i]);
+                        }
+                        Value *correctExit = KInst;
+                        // loop over exit indices in the phi
+                        for (unsigned int i = 0; i < kernel->Exits.size(); i++)
+                        {
+                            // find the blockID of our index
+                            int64_t blockID = -1;
+                            for (auto &j : kernel->Exits)
+                            {
+                                if (j->Index == (int)i)
                                 {
-                                    IRBuilder iBuilder(block->getTerminator());
-                                    auto baseFuncInst = cast<Function>(base->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
-                                    CallInst *KInst = iBuilder.CreateCall(baseFuncInst, newArgs);
-                                    for (int i = 0; i < (int)KInst->getNumArgOperands(); i++)
-                                    {
-                                        if (e->Index != 0)
-                                        {
-                                            newArgs[0] = ConstantInt::get(Type::getInt8Ty(base->getContext()), (uint64_t)e->Index);
-                                        }
-                                        KInst->setArgOperand((unsigned int)i, newArgs[(size_t)i]);
-                                    }
-                                    Value *correctExit = KInst;
-                                    // loop over exit indices in the phi
-                                    for (unsigned int i = 0; i < kernel->Exits.size(); i++)
-                                    {
-                                        // find the blockID of our index
-                                        int64_t blockID = -1;
-                                        for (auto &j : kernel->Exits)
-                                        {
-                                            if (j->Index == (int)i)
-                                            {
-                                                blockID = j->Block;
-                                            }
-                                        }
-                                        // if this is the first index, just assume its the right answer
-                                        if (i == 0)
-                                        {
-                                            correctExit = baseBlockMap[blockID];
-                                            continue;
-                                        }
-                                        auto cmpInst = cast<ICmpInst>(iBuilder.CreateICmpEQ(baseBlockMap[blockID], KInst));
-                                        auto sInst = cast<SelectInst>(iBuilder.CreateSelect(cmpInst, baseBlockMap[blockID], correctExit));
-                                        correctExit = sInst;
-                                    }
-                                    iBuilder.CreateBr(cast<BasicBlock>(correctExit));
-                                    // now resolve the exit
-                                    // take the return of the inlined function and put it into a phi to choose the correct exit
-                                    // finally, remove old branch inst
-                                    toRemove.insert(brInst);
+                                    blockID = j->Block;
                                 }
                             }
-                            else
+                            // if this is the first index, just assume its the right answer
+                            if (i == 0)
                             {
-                                spdlog::warn("Found a null instruction in a source block. Skipping...");
+                                correctExit = baseBlockMap[blockID];
                                 continue;
                             }
+                            auto cmpInst = cast<ICmpInst>(iBuilder.CreateICmpEQ(baseBlockMap[blockID], KInst));
+                            auto sInst = cast<SelectInst>(iBuilder.CreateSelect(cmpInst, baseBlockMap[blockID], correctExit));
+                            correctExit = sInst;
                         }
+                        iBuilder.CreateBr(cast<BasicBlock>(correctExit));
+                        toRemove.insert(block->getTerminator());
                     }
                 }
             }
@@ -379,7 +315,6 @@ int main(int argc, char *argv[])
             raw_os_ostream raw_stream(rawStream);
             WriteBitcodeToFile(*base, raw_stream);
         }
-
         spdlog::info("Successfully wrote tik to file");
     }
     catch (exception &e)
