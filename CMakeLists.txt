@@ -7,26 +7,25 @@ SET(CMAKE_C_STANDARD 11)
 find_package(LLVM 9 REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
-llvm_map_components_to_libnames(llvm_libs  support core irreader bitreader bitwriter transformutils)
+llvm_map_components_to_libnames(llvm_libs support core irreader bitreader bitwriter transformutils)
 
 find_package(ZLIB REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED) #nlohmann_json
 find_package(spdlog CONFIG REQUIRED) #spdlog
 find_package(indicators CONFIG REQUIRED) #indicators
 
-option(ENABLE_LINTER_ERROR "Run linter with errors" OFF)
-if(${ENABLE_LINTER_ERROR})
+option(ENABLE_LINTER "Run linter" OFF)
+if(${ENABLE_LINTER})
     set(CMAKE_CXX_CLANG_TIDY 
         clang-tidy-9;
         --warnings-as-errors=*;
         --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type;
         )
     add_compile_options(-Werror)
-else()
-    set(CMAKE_CXX_CLANG_TIDY 
-        clang-tidy-9;
-        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type;
-        )
+endif()
+
+if(WIN32)
+    add_compile_definitions(_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS)
 endif()
 
 add_subdirectory("AtlasUtil")
@@ -37,8 +36,8 @@ add_subdirectory("deat")
 add_subdirectory("Utilities")
 
 function(InjectTracer tar)
-    set_target_properties(${tar} PROPERTIES LINK_OPTIONS "-Wl,--plugin-opt=emit-llvm")
     target_compile_options(${tar} PRIVATE "-flto")
+    set_target_properties(${tar} PROPERTIES LINK_FLAGS "-fuse-ld=lld -Wl,--plugin-opt=emit-llvm")
     add_custom_command(OUTPUT opt.bc
         COMMAND opt-9 -load $<TARGET_FILE:AtlasPasses> -EncodedTrace $<TARGET_FILE:${tar}> -o opt.bc
         DEPENDS $<TARGET_FILE:${tar}>
