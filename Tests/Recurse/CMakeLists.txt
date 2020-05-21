@@ -1,6 +1,4 @@
 add_executable(Recurse Recurse.c)
-set_target_properties(FunctionCall PROPERTIES LINK_FLAGS "-Wl,--plugin-opt=emit-llvm")
-target_compile_options(FunctionCall PRIVATE "-flto")
 InjectTracer(Recurse)
 
 add_test(NAME Recurse_Trace COMMAND Recurse-trace)

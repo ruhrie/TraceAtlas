@@ -1,6 +1,4 @@
 add_executable(bubbleSort bubbleSort.c)
-set_target_properties(bubbleSort PROPERTIES LINK_FLAGS "-Wl,--plugin-opt=emit-llvm")
-target_compile_options(bubbleSort PRIVATE "-flto")
 target_include_directories(bubbleSort PRIVATE ${CMAKE_SOURCE_DIR}/TraceInfrastructure/include/)
 InjectTracer(bubbleSort)
 

@@ -36,9 +36,9 @@ add_subdirectory("tik")
 add_subdirectory("deat")
 add_subdirectory("Utilities")
 
-function(InjectTracer tar)
-    set_target_properties(${tar} PROPERTIES LINK_OPTIONS "-Wl,--plugin-opt=emit-llvm")
+function(InjectTracer tar)    
     target_compile_options(${tar} PRIVATE "-flto")
+    set_target_properties(${tar} PROPERTIES LINK_FLAGS "-Wl,--plugin-opt=emit-llvm")
     add_custom_command(OUTPUT opt.bc
         COMMAND opt-9 -load $<TARGET_FILE:AtlasPasses> -EncodedTrace $<TARGET_FILE:${tar}> -o opt.bc
         DEPENDS $<TARGET_FILE:${tar}>

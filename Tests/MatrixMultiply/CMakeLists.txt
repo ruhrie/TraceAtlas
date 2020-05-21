@@ -1,6 +1,4 @@
 add_executable(matmul main.c)
-set_target_properties(matmul PROPERTIES LINK_FLAGS "-Wl,--plugin-opt=emit-llvm")
-target_compile_options(matmul PRIVATE -flto -DTRACING=1)
 target_include_directories(matmul PRIVATE ${CMAKE_SOURCE_DIR}/TraceInfrastructure/include/)
 InjectTracer(matmul)
 
