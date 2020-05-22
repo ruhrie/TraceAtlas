@@ -6,9 +6,9 @@ namespace TraceAtlas::tik
     class KernelInterface
     {
     public:
-        KernelInterface(int index, llvm::BasicBlock *block);
+        KernelInterface(int index, int64_t block);
         int Index;
-        llvm::BasicBlock *Block = nullptr;
+        int64_t Block;
         bool operator<(const KernelInterface &b) const;
     };
 } // namespace TraceAtlas::tik

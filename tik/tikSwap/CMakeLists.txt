@@ -6,7 +6,7 @@ set_target_properties(tikSwap
 target_link_libraries(tikSwap PRIVATE libtik ${llvm_libs} spdlog::spdlog spdlog::spdlog_header_only AtlasUtil)
 target_compile_definitions(tikSwap PRIVATE ${LLVM_DEFINITIONS})
 target_include_directories(tikSwap SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
-target_include_directories(tikSwap PRIVATE "../include/" )
+target_include_directories(tikSwap PRIVATE "include/" )
 if(WIN32)
     target_compile_options(tikSwap PRIVATE -W3 -Wextra -Wconversion)
 else()
