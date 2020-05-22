@@ -16,10 +16,10 @@ using namespace std;
 using namespace llvm;
 namespace TraceAtlas::tik
 {
-
     std::set<GlobalVariable *> globalDeclarationSet;
     std::set<Value *> remappedOperandSet;
-
+    std::map<int64_t, llvm::BasicBlock *> IDToBlock;
+    std::map<int64_t, llvm::Value *> IDToValue;
     void CopyOperand(llvm::User *inst, llvm::ValueToValueMapTy &VMap)
     {
         if (auto func = dyn_cast<Function>(inst))
@@ -60,7 +60,7 @@ namespace TraceAtlas::tik
                     }
                     //and not already in the vmap
 
-                    //for some reason if we don't do this first the  fails
+                    //for some reason if we don't do this first the verifier fails
                     //we do absolutely nothing with it and it doesn't even end up in our output
                     //its technically a memory leak, but its an acceptable sacrifice
                     auto *newVar = new GlobalVariable(
@@ -200,10 +200,8 @@ namespace TraceAtlas::tik
 
             //SplitBlocks(blocks);
             std::map<llvm::Value *, llvm::GlobalObject *> GlobalMap;
-            std::map<int64_t, BasicBlock *> IDToBlock;
-            std::map<int64_t, Value *> IDToValue;
 
-            GetBoundaryValues(blocks, IDToBlock, IDToValue);
+            GetBoundaryValues(blocks);
             //we now have all the information we need
             //start by making the correct function
             std::vector<llvm::Type *> inputArgs;
@@ -218,7 +216,6 @@ namespace TraceAtlas::tik
             }
             FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
             KernelFunction = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
-            map<int64_t, Value *> ArgumentValueMap;
             uint64_t i;
             for (i = 0; i < KernelImports.size(); i++)
             {
@@ -226,7 +223,6 @@ namespace TraceAtlas::tik
                 a->setName("i" + to_string(i));
                 VMap[IDToValue[KernelImports[i]]] = a;
                 ArgumentMap[a] = KernelImports[i];
-                ArgumentValueMap[ArgumentMap[a]] = IDToValue[KernelImports[i]];
             }
             uint64_t j;
             for (j = 0; j < KernelExports.size(); j++)
@@ -234,7 +230,6 @@ namespace TraceAtlas::tik
                 auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i + j);
                 a->setName("e" + to_string(j));
                 ArgumentMap[a] = KernelExports[j];
-                ArgumentValueMap[ArgumentMap[a]] = IDToValue[KernelExports[j]];
             }
 
             //create the artificial blocks
@@ -243,7 +238,7 @@ namespace TraceAtlas::tik
             Exception = BasicBlock::Create(TikModule->getContext(), "Exception", KernelFunction);
 
             //copy the appropriate blocks
-            BuildKernelFromBlocks(VMap, blocks, IDToBlock);
+            BuildKernelFromBlocks(VMap, blocks);
 
             Remap(VMap); //we need to remap before inlining
 
@@ -274,13 +269,13 @@ namespace TraceAtlas::tik
                 }
             }
 
-            BuildInit(VMap, IDToBlock);
+            BuildInit(VMap);
 
-            BuildExit(IDToBlock);
+            BuildExit();
 
-            RemapNestedKernels(VMap, ArgumentValueMap);
+            RemapNestedKernels(VMap);
 
-            RemapExports(VMap, IDToValue);
+            RemapExports(VMap);
 
             PatchPhis();
 
@@ -310,7 +305,7 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks, map<int64_t, BasicBlock *> &IDToBlock, map<int64_t, Value *> &IDToValue)
+    void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks)
     {
         //we start with entrances
         auto ent = GetEntrances(blocks);
@@ -402,7 +397,7 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::BuildKernelFromBlocks(llvm::ValueToValueMapTy &VMap, set<BasicBlock *> &blocks, std::map<int64_t, BasicBlock *> &IDToBlock)
+    void CartographerKernel::BuildKernelFromBlocks(llvm::ValueToValueMapTy &VMap, set<BasicBlock *> &blocks)
     {
         set<Function *> headFunctions;
         for (const auto &ent : Entrances)
@@ -625,7 +620,7 @@ namespace TraceAtlas::tik
     */
     }
 
-    void CartographerKernel::RemapNestedKernels(llvm::ValueToValueMapTy &VMap, map<int64_t, Value *> &ArgumentValueMap)
+    void CartographerKernel::RemapNestedKernels(llvm::ValueToValueMapTy &VMap)
     {
         // Now find all calls to the embedded kernel functions in the body, if any, and change their arguments to the new ones
         std::map<Argument *, Value *> embeddedCallArgs;
@@ -646,14 +641,14 @@ namespace TraceAtlas::tik
                                 for (BasicBlock::iterator j = b.begin(), BE2 = b.end(); j != BE2; ++j)
                                 {
                                     auto inst = cast<Instruction>(j);
-                                    auto subArg = ArgumentValueMap[subK->ArgumentMap[sarg]];
+                                    auto subArg = IDToValue[subK->ArgumentMap[sarg]];
                                     if (subArg != nullptr)
                                     {
-                                        if (ArgumentValueMap[subK->ArgumentMap[sarg]] == inst)
+                                        if (IDToValue[subK->ArgumentMap[sarg]] == inst)
                                         {
                                             embeddedCallArgs[sarg] = inst;
                                         }
-                                        else if (VMap[ArgumentValueMap[subK->ArgumentMap[sarg]]] == inst)
+                                        else if (VMap[IDToValue[subK->ArgumentMap[sarg]]] == inst)
                                         {
                                             embeddedCallArgs[sarg] = inst;
                                         }
@@ -669,7 +664,7 @@ namespace TraceAtlas::tik
                                 {
                                     embeddedCallArgs[sarg] = arg;
                                 }
-                                else if (VMap[ArgumentValueMap[subK->ArgumentMap[sarg]]] == ArgumentValueMap[ArgumentMap[arg]])
+                                else if (VMap[IDToValue[subK->ArgumentMap[sarg]]] == IDToValue[ArgumentMap[arg]])
                                 {
                                     embeddedCallArgs[sarg] = arg;
                                 }
@@ -699,7 +694,7 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::RemapExports(llvm::ValueToValueMapTy &VMap, map<int64_t, Value *> &IDToValue)
+    void CartographerKernel::RemapExports(llvm::ValueToValueMapTy &VMap)
     {
         map<Value *, AllocaInst *> exportMap;
         for (auto ex : KernelExports)
@@ -821,7 +816,7 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::BuildInit(llvm::ValueToValueMapTy &VMap, std::map<int64_t, BasicBlock *> &IDToBlock)
+    void CartographerKernel::BuildInit(llvm::ValueToValueMapTy &VMap)
     {
         IRBuilder<> initBuilder(Init);
         auto initSwitch = initBuilder.CreateSwitch(KernelFunction->arg_begin(), Exception, (uint32_t)Entrances.size());
@@ -841,7 +836,7 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::BuildExit(std::map<int64_t, BasicBlock *> &IDToBlock)
+    void CartographerKernel::BuildExit()
     {
         PrintVal(Exit, false); //another sacrifice
         IRBuilder<> exitBuilder(Exit);
