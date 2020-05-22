@@ -1,4 +1,8 @@
-add_library(AtlasBackend STATIC BackendTrace.c BackendPapi.c)
+set(SOURCES BackendTrace.c)
+if(NOT WIN32)
+    list(APPEND SOURCES BackendPapi.c)
+endif()
+add_library(AtlasBackend STATIC ${SOURCES})
 set_target_properties(
     AtlasBackend PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
@@ -7,7 +11,11 @@ set_target_properties(
 
 target_link_libraries(AtlasBackend ${llvm_libs} ZLIB::ZLIB)
 target_include_directories(AtlasBackend PUBLIC ${TRACE_INC})
-target_compile_options(AtlasBackend PRIVATE -Wall  -Wextra -Wconversion)
+if(WIN32)
+    target_compile_options(AtlasBackend PRIVATE -W3 -Wextra -Wconversion)
+else()
+    target_compile_options(AtlasBackend PRIVATE -Wall -Wextra -Wconversion)
+endif()
 
 install(TARGETS AtlasBackend
     ARCHIVE DESTINATION lib
