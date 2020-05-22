@@ -33,8 +33,6 @@ namespace TraceAtlas::tik
         llvm::Function *KernelFunction = nullptr;
         bool Valid = false;
         std::map<llvm::Argument *, int64_t> ArgumentMap;
-        std::vector<int64_t> KernelImports;
-        std::vector<int64_t> KernelExports;
 
     protected:
         Kernel();

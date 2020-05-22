@@ -199,12 +199,14 @@ namespace TraceAtlas::tik
             }
 
             //SplitBlocks(blocks);
-            std::map<llvm::Value *, llvm::GlobalObject *> GlobalMap;
-
-            GetBoundaryValues(blocks);
+            map<Value *, GlobalObject *> GlobalMap;
+            vector<int64_t> KernelImports;
+            vector<int64_t> KernelExports;
+            GetBoundaryValues(blocks, KernelImports, KernelExports);
             //we now have all the information we need
             //start by making the correct function
-            std::vector<llvm::Type *> inputArgs;
+            vector<Type *> inputArgs;
+            // First arg is always the Entrance index
             inputArgs.push_back(Type::getInt8Ty(TikModule->getContext()));
             for (auto inst : KernelImports)
             {
@@ -212,7 +214,7 @@ namespace TraceAtlas::tik
             }
             for (auto inst : KernelExports)
             {
-                inputArgs.push_back(PointerType::get(IDToValue[inst]->getType(), 0));
+                inputArgs.push_back(IDToValue[inst]->getType());
             }
             FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
             KernelFunction = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
@@ -275,7 +277,7 @@ namespace TraceAtlas::tik
 
             RemapNestedKernels(VMap);
 
-            RemapExports(VMap);
+            RemapExports(VMap, KernelExports);
 
             PatchPhis();
 
@@ -305,7 +307,7 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks)
+    void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks, vector<int64_t> &KernelImports, vector<int64_t> &KernelExports)
     {
         //we start with entrances
         auto ent = GetEntrances(blocks);
@@ -348,8 +350,9 @@ namespace TraceAtlas::tik
                             if (KfMap.find(ci->getCalledFunction()) != KfMap.end())
                             {
                                 auto subKernel = KfMap[ci->getCalledFunction()];
-                                for (auto sExtVal : subKernel->KernelImports)
+                                for (auto arg = subKernel->KernelFunction->arg_begin(); arg < subKernel->KernelFunction->arg_end(); arg++)
                                 {
+                                    auto sExtVal = GetValueID(cast<Value>(arg));
                                     //these are the arguments for the function call in order
                                     //we now can check if they are in our vmap, if so they aren't external
                                     //if not they are and should be mapped as is appropriate
@@ -694,7 +697,7 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::RemapExports(llvm::ValueToValueMapTy &VMap)
+    void CartographerKernel::RemapExports(llvm::ValueToValueMapTy &VMap, vector<int64_t> &KernelExports)
     {
         map<Value *, AllocaInst *> exportMap;
         for (auto ex : KernelExports)
