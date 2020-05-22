@@ -1,7 +1,7 @@
 #include "tikSwap/tikSwap.h"
-#include "AtlasUtil/Print.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
+#include "AtlasUtil/Print.h"
 #include "tik/Kernel.h"
 #include "tik/TikKernel.h"
 #include <fstream>
@@ -313,7 +313,7 @@ int main(int argc, char *argv[])
     }
     catch (exception &e)
     {
-        spdlog::critical("Failed to open output file: "+OutputFile+":\n"+e.what()+"\n");
+        spdlog::critical("Failed to open output file: " + OutputFile + ":\n" + e.what() + "\n");
         return EXIT_FAILURE;
     }
     return 0;

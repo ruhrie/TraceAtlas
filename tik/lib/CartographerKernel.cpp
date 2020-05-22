@@ -201,19 +201,20 @@ namespace TraceAtlas::tik
             //SplitBlocks(blocks);
             std::map<llvm::Value *, llvm::GlobalObject *> GlobalMap;
             std::map<int64_t, BasicBlock *> IDToBlock;
+            std::map<int64_t, Value *> IDToValue;
 
-            GetBoundaryValues(blocks, IDToBlock);
+            GetBoundaryValues(blocks, IDToBlock, IDToValue);
             //we now have all the information we need
             //start by making the correct function
             std::vector<llvm::Type *> inputArgs;
             inputArgs.push_back(Type::getInt8Ty(TikModule->getContext()));
             for (auto inst : KernelImports)
             {
-                inputArgs.push_back(inst->getType());
+                inputArgs.push_back(IDToValue[inst]->getType());
             }
             for (auto inst : KernelExports)
             {
-                inputArgs.push_back(PointerType::get(inst->getType(), 0));
+                inputArgs.push_back(PointerType::get(IDToValue[inst]->getType(), 0));
             }
             FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
             KernelFunction = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
@@ -223,17 +224,17 @@ namespace TraceAtlas::tik
             {
                 auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i);
                 a->setName("i" + to_string(i));
-                VMap[KernelImports[i]] = a;
-                ArgumentMap[a] = GetValueID(KernelImports[i]);
-                ArgumentValueMap[ArgumentMap[a]] = KernelImports[i];
+                VMap[IDToValue[KernelImports[i]]] = a;
+                ArgumentMap[a] = KernelImports[i];
+                ArgumentValueMap[ArgumentMap[a]] = IDToValue[KernelImports[i]];
             }
             uint64_t j;
             for (j = 0; j < KernelExports.size(); j++)
             {
                 auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i + j);
                 a->setName("e" + to_string(j));
-                ArgumentMap[a] = GetValueID(KernelExports[j]);
-                ArgumentValueMap[ArgumentMap[a]] = KernelExports[j];
+                ArgumentMap[a] = KernelExports[j];
+                ArgumentValueMap[ArgumentMap[a]] = IDToValue[KernelExports[j]];
             }
 
             //create the artificial blocks
@@ -279,7 +280,7 @@ namespace TraceAtlas::tik
 
             RemapNestedKernels(VMap, ArgumentValueMap);
 
-            RemapExports(VMap);
+            RemapExports(VMap, IDToValue);
 
             PatchPhis();
 
@@ -309,7 +310,7 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks, map<int64_t, BasicBlock *> &IDToBlock)
+    void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks, map<int64_t, BasicBlock *> &IDToBlock, map<int64_t, Value *> &IDToValue)
     {
         //we start with entrances
         auto ent = GetEntrances(blocks);
@@ -332,14 +333,16 @@ namespace TraceAtlas::tik
                 for (uint32_t i = 0; i < numOps; i++)
                 {
                     Value *op = inst->getOperand(i);
+                    // initialize IDToValue
+                    IDToValue[GetValueID(op)] = op;
                     if (auto *operand = dyn_cast<Instruction>(op))
                     {
                         BasicBlock *parentBlock = operand->getParent();
                         if (std::find(blocks.begin(), blocks.end(), parentBlock) == blocks.end())
                         {
-                            if (find(KernelImports.begin(), KernelImports.end(), operand) == KernelImports.end())
+                            if (find(KernelImports.begin(), KernelImports.end(), GetValueID(operand)) == KernelImports.end())
                             {
-                                KernelImports.push_back(operand);
+                                KernelImports.push_back(GetValueID(operand));
                             }
                         }
                     }
@@ -364,9 +367,9 @@ namespace TraceAtlas::tik
                         }
                         else
                         {
-                            if (find(KernelImports.begin(), KernelImports.end(), ar) == KernelImports.end())
+                            if (find(KernelImports.begin(), KernelImports.end(), GetValueID(ar)) == KernelImports.end())
                             {
-                                KernelImports.push_back(ar);
+                                KernelImports.push_back(GetValueID(ar));
                             }
                         }
                     }
@@ -382,7 +385,7 @@ namespace TraceAtlas::tik
                         if (blocks.find(p) == blocks.end())
                         {
                             //the use is external therefore it should be a kernel export
-                            KernelExports.push_back(inst);
+                            KernelExports.push_back(GetValueID(inst));
                             break;
                         }
                     }
@@ -696,12 +699,12 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::RemapExports(llvm::ValueToValueMapTy &VMap)
+    void CartographerKernel::RemapExports(llvm::ValueToValueMapTy &VMap, map<int64_t, Value *> &IDToValue)
     {
         map<Value *, AllocaInst *> exportMap;
         for (auto ex : KernelExports)
         {
-            Value *mapped = VMap[ex];
+            Value *mapped = VMap[IDToValue[ex]];
             if (mapped != nullptr)
             {
                 if (mapped->getNumUses() != 0)
