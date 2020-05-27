@@ -12,16 +12,38 @@
 #include <string>
 #include <tuple>
 #include <vector>
+#include <nlohmann/json.hpp>
+#include <fstream>
+#include <sstream>
 
 using namespace std;
 using namespace llvm;
 using namespace WorkingSet;
+std::set<uint64_t> kernelBlockValue;
 llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
-
+cl::opt<std::string> KernelFilename("k", cl::desc("Specify kernel json"), cl::value_desc("kernel filename"), cl::Required);
+cl::opt<int> KernelIndex("ki", cl::desc("Specify kernel index to trace"), cl::value_desc("kernel index"));
 int main(int argc, char **argv)
 {
-
     cl::ParseCommandLineOptions(argc, argv);
+    ifstream inputStream(KernelFilename);
+    if (!inputStream.is_open())
+    {
+        cout << "open json file failed." << endl;
+        return -1;
+    }
+    nlohmann::json j;
+    inputStream >> j;
+    inputStream.close();
+    for (auto &[key, value] : j["Kernels"].items())
+    {
+        string index = key;
+        if (stoi(index) == KernelIndex)
+        {
+            nlohmann::json kernel = value["Blocks"];
+            kernelBlockValue = kernel.get<set<uint64_t>>();
+        }
+    }
     ProcessTrace(inputTrace, &WorkingSet::Process, "working set analysis", false);
 
     //store max size of input output internal working set

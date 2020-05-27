@@ -1,5 +1,5 @@
 #include "WorkingSet.h"
-
+#include "MemoryTool.h"
 using namespace std;
 
 namespace WorkingSet
@@ -7,7 +7,7 @@ namespace WorkingSet
     int64_t timing = 0;
     uint64_t inputMapSize = 0;
     uint64_t internalMapSize = 0;
-
+    uint64_t BBCount = 0;
     //internal address struct vector: to store the address structs of birth and death time
     vector<InternaladdressLiving> internalAddressLivingVec;
     //internal address index map: to speed up the addresses seaching in the internal address struct vector
@@ -41,29 +41,41 @@ namespace WorkingSet
         }
     }
     void Process(string &key, string &value)
-    {
+    {    
         uint64_t addressIndex;
-        if (key == "StoreAddress")
+        
+        if (key == "BBEnter"  &&  kernelBlockValue.find(stoul(value, nullptr, 0))!= kernelBlockValue.end())
         {
-            addressIndex = stoul(value, nullptr, 0);
-            firstStore(addressIndex, timing, true);
-            timing++;
+            BBCount++;
         }
-        else if (key == "LoadAddress")
+        if (key == "BBExit"  &&  kernelBlockValue.find(stoul(value, nullptr, 0))!= kernelBlockValue.end())
         {
-            addressIndex = stoul(value, nullptr, 0);
-            //Update the death time in address struct if the address is already in internal address vector
-            if (internalAddressIndexMap.find(addressIndex) != internalAddressIndexMap.end())
+            BBCount--;
+        }
+        if (BBCount > 0)
+        {
+            if (key == "StoreAddress")
             {
-                internalAddressLivingVec[internalAddressIndexMap[addressIndex]].deathTime = timing;
-                //remove the address from output set, if there is a load corresponding to a store
-                outputAddressIndexSet.erase(addressIndex);
+                addressIndex = stoul(value, nullptr, 0);
+                firstStore(addressIndex, timing, true);
+                timing++;
             }
-            else if (inputAddressIndexSet.find(addressIndex) == inputAddressIndexSet.end())
+            else if (key == "LoadAddress")
             {
-                firstStore(addressIndex, timing, false);
+                addressIndex = stoul(value, nullptr, 0);
+                //Update the death time in address struct if the address is already in internal address vector
+                if (internalAddressIndexMap.find(addressIndex) != internalAddressIndexMap.end())
+                {
+                    internalAddressLivingVec[internalAddressIndexMap[addressIndex]].deathTime = timing;
+                    //remove the address from output set, if there is a load corresponding to a store
+                    outputAddressIndexSet.erase(addressIndex);
+                }
+                else if (inputAddressIndexSet.find(addressIndex) == inputAddressIndexSet.end())
+                {
+                    firstStore(addressIndex, timing, false);
+                }
+                timing++;
             }
-            timing++;
         }
     }
 } // namespace WorkingSet
