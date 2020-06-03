@@ -14,12 +14,24 @@ find_package(nlohmann_json CONFIG REQUIRED) #nlohmann_json
 find_package(spdlog CONFIG REQUIRED) #spdlog
 find_package(indicators CONFIG REQUIRED) #indicators
 
-option(ENABLE_LINTER "Run linter" OFF)
+option(ENABLE_LINTER "Run linter" ON)
 if(${ENABLE_LINTER})
+    find_program(TIDY NAMES clang-tidy)
+    if(${TIDY} STREQUAL "clang-tidy_NOT_FOUND")
+        message(FATAL_ERROR "clang-tidy not found! Necessary for linting!")
+    else()
+        message(STATUS "Found clang-tidy in ${TIDY}")
+    endif()
+    
     set(CMAKE_CXX_CLANG_TIDY 
-        clang-tidy-9;
+        ${TIDY};
         --warnings-as-errors=*;
         --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type;
+        )
+    set(CMAKE_C_CLANG_TIDY 
+        ${TIDY};
+        --warnings-as-errors=*;
+        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,-clang-analyzer-security.insecureAPI.*;
         )
     add_compile_options(-Werror)
 endif()
