@@ -1,3 +1,4 @@
+#pragma once
 #include "tik/Kernel.h"
 #include <llvm/IR/Module.h>
 #include <map>

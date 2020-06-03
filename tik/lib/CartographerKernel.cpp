@@ -8,6 +8,7 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/Transforms/Utils/Cloning.h>
+#include <nlohmann/json.hpp>
 #include <queue>
 #include <spdlog/spdlog.h>
 
@@ -15,10 +16,10 @@ using namespace std;
 using namespace llvm;
 namespace TraceAtlas::tik
 {
-
     std::set<GlobalVariable *> globalDeclarationSet;
     std::set<Value *> remappedOperandSet;
-
+    std::map<int64_t, llvm::BasicBlock *> IDToBlock;
+    std::map<int64_t, llvm::Value *> IDToValue;
     void CopyOperand(llvm::User *inst, llvm::ValueToValueMapTy &VMap)
     {
         if (auto func = dyn_cast<Function>(inst))
@@ -198,21 +199,22 @@ namespace TraceAtlas::tik
             }
 
             //SplitBlocks(blocks);
-            std::map<llvm::Value *, llvm::GlobalObject *> GlobalMap;
-
-            GetBoundaryValues(blocks);
-
+            map<Value *, GlobalObject *> GlobalMap;
+            vector<int64_t> KernelImports;
+            vector<int64_t> KernelExports;
+            GetBoundaryValues(blocks, KernelImports, KernelExports);
             //we now have all the information we need
             //start by making the correct function
-            std::vector<llvm::Type *> inputArgs;
+            vector<Type *> inputArgs;
+            // First arg is always the Entrance index
             inputArgs.push_back(Type::getInt8Ty(TikModule->getContext()));
             for (auto inst : KernelImports)
             {
-                inputArgs.push_back(inst->getType());
+                inputArgs.push_back(IDToValue[inst]->getType());
             }
             for (auto inst : KernelExports)
             {
-                inputArgs.push_back(PointerType::get(inst->getType(), 0));
+                inputArgs.push_back(IDToValue[inst]->getType());
             }
             FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
             KernelFunction = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
@@ -221,7 +223,7 @@ namespace TraceAtlas::tik
             {
                 auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i);
                 a->setName("i" + to_string(i));
-                VMap[KernelImports[i]] = a;
+                VMap[IDToValue[KernelImports[i]]] = a;
                 ArgumentMap[a] = KernelImports[i];
             }
             uint64_t j;
@@ -275,7 +277,7 @@ namespace TraceAtlas::tik
 
             RemapNestedKernels(VMap);
 
-            RemapExports(VMap);
+            RemapExports(VMap, KernelExports);
 
             PatchPhis();
 
@@ -305,14 +307,15 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks)
+    void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks, vector<int64_t> &KernelImports, vector<int64_t> &KernelExports)
     {
         //we start with entrances
         auto ent = GetEntrances(blocks);
         int entranceId = 0;
         for (auto e : ent)
         {
-            Entrances.insert(make_shared<KernelInterface>(entranceId++, e));
+            IDToBlock[GetBlockID(e)] = e;
+            Entrances.insert(make_shared<KernelInterface>(entranceId++, GetBlockID(e)));
         }
         for (auto block : blocks)
         {
@@ -327,14 +330,16 @@ namespace TraceAtlas::tik
                 for (uint32_t i = 0; i < numOps; i++)
                 {
                     Value *op = inst->getOperand(i);
+                    // initialize IDToValue
+                    IDToValue[GetValueID(op)] = op;
                     if (auto *operand = dyn_cast<Instruction>(op))
                     {
                         BasicBlock *parentBlock = operand->getParent();
                         if (std::find(blocks.begin(), blocks.end(), parentBlock) == blocks.end())
                         {
-                            if (find(KernelImports.begin(), KernelImports.end(), operand) == KernelImports.end())
+                            if (find(KernelImports.begin(), KernelImports.end(), GetValueID(operand)) == KernelImports.end())
                             {
-                                KernelImports.push_back(operand);
+                                KernelImports.push_back(GetValueID(operand));
                             }
                         }
                     }
@@ -345,8 +350,9 @@ namespace TraceAtlas::tik
                             if (KfMap.find(ci->getCalledFunction()) != KfMap.end())
                             {
                                 auto subKernel = KfMap[ci->getCalledFunction()];
-                                for (auto sExtVal : subKernel->KernelImports)
+                                for (auto arg = subKernel->KernelFunction->arg_begin(); arg < subKernel->KernelFunction->arg_end(); arg++)
                                 {
+                                    auto sExtVal = GetValueID(cast<Value>(arg));
                                     //these are the arguments for the function call in order
                                     //we now can check if they are in our vmap, if so they aren't external
                                     //if not they are and should be mapped as is appropriate
@@ -359,9 +365,9 @@ namespace TraceAtlas::tik
                         }
                         else
                         {
-                            if (find(KernelImports.begin(), KernelImports.end(), ar) == KernelImports.end())
+                            if (find(KernelImports.begin(), KernelImports.end(), GetValueID(ar)) == KernelImports.end())
                             {
-                                KernelImports.push_back(ar);
+                                KernelImports.push_back(GetValueID(ar));
                             }
                         }
                     }
@@ -377,7 +383,7 @@ namespace TraceAtlas::tik
                         if (blocks.find(p) == blocks.end())
                         {
                             //the use is external therefore it should be a kernel export
-                            KernelExports.push_back(inst);
+                            KernelExports.push_back(GetValueID(inst));
                             break;
                         }
                     }
@@ -399,7 +405,7 @@ namespace TraceAtlas::tik
         set<Function *> headFunctions;
         for (const auto &ent : Entrances)
         {
-            BasicBlock *eTarget = ent->Block;
+            BasicBlock *eTarget = IDToBlock[ent->Block];
             headFunctions.insert(eTarget->getParent());
         }
 
@@ -422,7 +428,7 @@ namespace TraceAtlas::tik
                 bool inNested = false;
                 for (const auto &ent : nestedKernel->Entrances)
                 {
-                    if (ent->Block == block)
+                    if (IDToBlock[ent->Block] == block)
                     {
                         inNested = true;
                         break;
@@ -456,7 +462,7 @@ namespace TraceAtlas::tik
                         auto sw = intBuilder.CreateSwitch(cc, Exception, (uint32_t)nestedKernel->Exits.size());
                         for (const auto &exit : nestedKernel->Exits)
                         {
-                            sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), exit->Block);
+                            sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), IDToBlock[exit->Block]);
                         }
                         VMap[block] = intermediateBlock;
                     }
@@ -494,7 +500,7 @@ namespace TraceAtlas::tik
                                 bool found = false;
                                 for (const auto &ent : Entrances)
                                 {
-                                    if (ent->Block == block)
+                                    if (IDToBlock[ent->Block] == block)
                                     {
                                         p->replaceIncomingBlockWith(pred, Init);
                                         rescheduled++;
@@ -638,14 +644,14 @@ namespace TraceAtlas::tik
                                 for (BasicBlock::iterator j = b.begin(), BE2 = b.end(); j != BE2; ++j)
                                 {
                                     auto inst = cast<Instruction>(j);
-                                    auto subArg = subK->ArgumentMap[sarg];
+                                    auto subArg = IDToValue[subK->ArgumentMap[sarg]];
                                     if (subArg != nullptr)
                                     {
-                                        if (subK->ArgumentMap[sarg] == inst)
+                                        if (IDToValue[subK->ArgumentMap[sarg]] == inst)
                                         {
                                             embeddedCallArgs[sarg] = inst;
                                         }
-                                        else if (VMap[subK->ArgumentMap[sarg]] == inst)
+                                        else if (VMap[IDToValue[subK->ArgumentMap[sarg]]] == inst)
                                         {
                                             embeddedCallArgs[sarg] = inst;
                                         }
@@ -661,7 +667,7 @@ namespace TraceAtlas::tik
                                 {
                                     embeddedCallArgs[sarg] = arg;
                                 }
-                                else if (VMap[subK->ArgumentMap[sarg]] == ArgumentMap[arg])
+                                else if (VMap[IDToValue[subK->ArgumentMap[sarg]]] == IDToValue[ArgumentMap[arg]])
                                 {
                                     embeddedCallArgs[sarg] = arg;
                                 }
@@ -691,12 +697,12 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::RemapExports(llvm::ValueToValueMapTy &VMap)
+    void CartographerKernel::RemapExports(llvm::ValueToValueMapTy &VMap, vector<int64_t> &KernelExports)
     {
         map<Value *, AllocaInst *> exportMap;
         for (auto ex : KernelExports)
         {
-            Value *mapped = VMap[ex];
+            Value *mapped = VMap[IDToValue[ex]];
             if (mapped != nullptr)
             {
                 if (mapped->getNumUses() != 0)
@@ -820,10 +826,10 @@ namespace TraceAtlas::tik
         uint64_t i = 0;
         for (const auto &ent : Entrances)
         {
-            int64_t id = GetBlockID(ent->Block);
-            if (KernelMap.find(id) == KernelMap.end() && VMap[ent->Block] != nullptr)
+            int64_t id = ent->Block;
+            if (KernelMap.find(id) == KernelMap.end() && VMap[IDToBlock[ent->Block]] != nullptr)
             {
-                initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[ent->Block]));
+                initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[IDToBlock[ent->Block]]));
             }
             else
             {
@@ -844,7 +850,8 @@ namespace TraceAtlas::tik
         map<BasicBlock *, BasicBlock *> exitMap;
         for (auto exit : ex)
         {
-            Exits.insert(make_shared<KernelInterface>(exitId++, exit));
+            IDToBlock[GetBlockID(exit)] = exit;
+            Exits.insert(make_shared<KernelInterface>(exitId++, GetBlockID(exit)));
             BasicBlock *tmp = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
             IRBuilder<> builder(tmp);
             builder.CreateBr(Exit);
@@ -872,7 +879,7 @@ namespace TraceAtlas::tik
         auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), (uint32_t)Exits.size());
         for (const auto &exit : Exits)
         {
-            phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), exitMap[exit->Block]);
+            phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), exitMap[IDToBlock[exit->Block]]);
         }
 
         exitBuilder.CreateRet(phi);

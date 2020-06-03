@@ -25,8 +25,6 @@
 #include <spdlog/spdlog.h>
 #include <string>
 
-void CleanModule(llvm::Module *M);
-
 using namespace std;
 using namespace llvm;
 using namespace TraceAtlas::tik;
@@ -335,54 +333,4 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
-}
-
-void CleanModule(Module *M)
-{
-    for (auto mi = M->begin(); mi != M->end(); mi++)
-    {
-        for (auto &fi : *mi)
-        {
-            vector<Instruction *> toRemove;
-            for (auto bi = fi.begin(); bi != fi.end(); bi++)
-            {
-                auto v = cast<Instruction>(bi);
-                if (auto ci = dyn_cast<DbgInfoIntrinsic>(v))
-                {
-                    toRemove.push_back(ci);
-                }
-                else
-                {
-                    SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
-                    v->getAllMetadata(MDs);
-                    for (auto MD : MDs)
-                    {
-                        v->setMetadata(MD.first, nullptr);
-                    }
-                }
-            }
-            for (auto r : toRemove)
-            {
-                r->eraseFromParent();
-            }
-        }
-        auto *F = cast<Function>(mi);
-        SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
-        F->getAllMetadata(MDs);
-        for (auto MD : MDs)
-        {
-            F->setMetadata(MD.first, nullptr);
-        }
-    }
-
-    for (auto gi = M->global_begin(); gi != M->global_end(); gi++)
-    {
-        auto gv = cast<GlobalVariable>(gi);
-        SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
-        gv->getAllMetadata(MDs);
-        for (auto MD : MDs)
-        {
-            gv->setMetadata(MD.first, nullptr);
-        }
-    }
 }
