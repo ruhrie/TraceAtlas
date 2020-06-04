@@ -19,10 +19,10 @@
 using namespace std;
 using namespace llvm;
 using namespace WorkingSet;
-std::set<uint64_t> kernelBlockValue;
+map<uint64_t, set<uint64_t>> kernelMap;
+map<uint64_t, uint64_t> BBCount;
 llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
 cl::opt<std::string> KernelFilename("k", cl::desc("Specify kernel json"), cl::value_desc("kernel filename"), cl::Required);
-cl::opt<int> KernelIndex("ki", cl::desc("Specify kernel index to trace"), cl::value_desc("kernel index"));
 int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
@@ -37,38 +37,40 @@ int main(int argc, char **argv)
     inputStream.close();
     for (auto &[key, value] : j["Kernels"].items())
     {
-        string index = key;
-        if (stoi(index) == KernelIndex)
-        {
-            nlohmann::json kernel = value["Blocks"];
-            kernelBlockValue = kernel.get<set<uint64_t>>();
-        }
+        uint64_t index = stoul(key, nullptr, 0);
+        nlohmann::json kernel = value["Blocks"];
+        kernelMap[index] = kernel.get<set<uint64_t>>();
+        BBCount[index]=0;
     }
     ProcessTrace(inputTrace, &WorkingSet::Process, "working set analysis", false);
 
-    //store max size of input output internal working set
-    uint64_t maxInput = 0;
-    uint64_t maxOutput = 0;
-    uint64_t maxinternal = 0;
-    set<int64_t> endTimeSet; //using this set of end time to calculate the maximum internal working set
-    printf("size %zu \n", internalAddressLivingVec.size());
+    
     //here calculates the maximum internal working set size
-    for (auto it : internalAddressLivingVec)
+
+    for (auto &itout: KernelWorkingSetMap)
     {
-        if (it.deathTime > 0)
+        //store max size of input output internal working set
+        uint64_t maxInput = 0;
+        uint64_t maxOutput = 0;
+        uint64_t maxinternal = 0;
+        set<int64_t> endTimeSet; //using this set of end time to calculate the maximum internal working set
+        for (auto it : itout.second.internalAddressLivingVec)
         {
-            endTimeSet.insert(it.deathTime);
-            while (it.birthTime > *(endTimeSet.begin()))
+            if (it.deathTime > 0)
             {
-                endTimeSet.erase(endTimeSet.begin());
-            }
-            if (endTimeSet.size() > maxinternal)
-            {
-                maxinternal = endTimeSet.size();
+                endTimeSet.insert(it.deathTime);
+                while (it.birthTime > *(endTimeSet.begin()))
+                {
+                    endTimeSet.erase(endTimeSet.begin());
+                }
+                if (endTimeSet.size() > maxinternal)
+                {
+                    maxinternal = endTimeSet.size();
+                }
             }
         }
-    }
-    maxInput = inputMapSize;
-    maxOutput = outputAddressIndexSet.size();
-    printf("maxInput: %lu \n maxinternal: %lu \n maxOutput: %lu \n", maxInput, maxinternal, maxOutput);
+        maxInput = itout.second.inputMapSize;
+        maxOutput = itout.second.outputAddressIndexSet.size();
+        printf("maxInput: %lu \n maxinternal: %lu \n maxOutput: %lu \n", maxInput, maxinternal, maxOutput);
+    }   
 }
