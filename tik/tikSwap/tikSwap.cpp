@@ -140,7 +140,7 @@ int main(int argc, char *argv[])
             for (auto &a : kernel->ArgumentMap)
             {
                 // set the first arg to the entrance index
-                if (a.second == 0)
+                if (a.second == -1)
                 {
                     newArgs.push_back(ConstantInt::get(Type::getInt8Ty(base->getContext()), (uint64_t)e->Index));
                     continue;
