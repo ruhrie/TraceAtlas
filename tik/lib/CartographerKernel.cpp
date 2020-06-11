@@ -19,6 +19,10 @@ namespace TraceAtlas::tik
     std::set<GlobalVariable *> globalDeclarationSet;
     std::set<Value *> remappedOperandSet;
     std::map<int64_t, llvm::BasicBlock *> IDToBlock;
+    /// @brief Maps ValueID to a value from the source bitcode
+    ///
+    /// -2 is the key value of entries whose value was not mapped by setValueID (see Annotate.h)
+    /// -1 is reserved for the first argument of every kernel function
     std::map<int64_t, llvm::Value *> IDToValue;
     void CopyOperand(llvm::User *inst, llvm::ValueToValueMapTy &VMap)
     {
@@ -367,6 +371,11 @@ namespace TraceAtlas::tik
                         {
                             if (find(KernelImports.begin(), KernelImports.end(), GetValueID(ar)) == KernelImports.end())
                             {
+                                if (GetValueID(ar) == -2)
+                                {
+                                    spdlog::error("Tried pushing a value without an ID into the KernelImport list. This is not allowed.");
+                                    continue;
+                                }
                                 KernelImports.push_back(GetValueID(ar));
                             }
                         }

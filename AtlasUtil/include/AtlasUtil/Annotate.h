@@ -112,7 +112,7 @@ inline int64_t GetBlockID(llvm::BasicBlock *BB)
 
 inline int64_t GetValueID(llvm::Value *val)
 {
-    int64_t result = -1;
+    int64_t result = -2;
     if (llvm::Instruction *first = llvm::dyn_cast<llvm::Instruction>(val))
     {
         if (llvm::MDNode *node = first->getMetadata("ValueID"))
