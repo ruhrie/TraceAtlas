@@ -11,3 +11,12 @@ set_tests_properties(FunctionCall_tik PROPERTIES DEPENDS FunctionCall_cartograph
 
 add_test(NAME FunctionCall_dag COMMAND dagExtractor -t ${CMAKE_CURRENT_BINARY_DIR}/raw.trc -o ${CMAKE_CURRENT_BINARY_DIR}/dag.json -k ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
 set_tests_properties(FunctionCall_dag PROPERTIES DEPENDS FunctionCall_cartographer)
+
+add_test(NAME FunctionCall_ts COMMAND tikSwap -t ${CMAKE_CURRENT_BINARY_DIR}/tik.bc -b $<TARGET_FILE:FunctionCall> -o ${CMAKE_CURRENT_BINARY_DIR}/tikSwap.bc)
+set_tests_properties(FunctionCall_ts PROPERTIES DEPENDS FunctionCall_cartographer)
+
+add_test(NAME FunctionCall_swap COMMAND clang-9 ${CMAKE_CURRENT_BINARY_DIR}/tik.bc ${CMAKE_CURRENT_BINARY_DIR}/tikSwap.bc -o ${CMAKE_CURRENT_BINARY_DIR}/swap.exec)
+set_tests_properties(FunctionCall_swap PROPERTIES DEPENDS FunctionCall_ts)
+
+add_test(NAME FunctionCallSwap_run COMMAND ${CMAKE_CURRENT_BINARY_DIR}/swap.exec)
+set_tests_properties(FunctionCallSwap_run PROPERTIES DEPENDS FunctionCall_swap)

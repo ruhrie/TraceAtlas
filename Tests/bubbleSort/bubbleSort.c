@@ -28,7 +28,9 @@ int main(int argc, char *argv[])
     int *in = get_input(SIZE);
 
     // bubble sort
+#ifdef TRACING
     KernelEnter("bubbleSort");
+#endif
     int swap;
     for (int i = 0; i < SIZE; i++)
     {
@@ -42,7 +44,9 @@ int main(int argc, char *argv[])
             }
         }
     }
+#ifdef TRACING
     KernelExit("bubbleSort");
+#endif
 
     printf("\nSorting Done");
     return 0;
