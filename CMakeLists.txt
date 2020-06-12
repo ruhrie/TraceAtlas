@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
-project(TraceAtlas VERSION 0.3.1)
+project(TraceAtlas VERSION 0.3.2)
 
 SET(CMAKE_CXX_STANDARD 17)
 SET(CMAKE_C_STANDARD 11)
@@ -9,11 +9,29 @@ message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 llvm_map_components_to_libnames(llvm_libs support core irreader bitreader bitwriter transformutils)
 
+#use the llvm toolchain
+#we fix these ourselves since we don't support gcc anyway
+#I want windows support, but passes on windows are tricky anyway so that is a secondary goal
+get_filename_component(PARENT_DIR ${LLVM_DIR} DIRECTORY)
+set(CMAKE_C_COMPILER ${PARENT_DIR}/bin/clang)
+set(CMAKE_CXX_COMPILER ${PARENT_DIR}/bin/clang++)
+set(CMAKE_LINKER ${PARENT_DIR}/bin/ld.lld)
+set(CMAKE_AR ${PARENT_DIR}/bin/llvm-ar)
+set(CMAKE_ADDR2LINE ${PARENT_DIR}/bin/llvm-addr2line)
+set(CMAKE_NM ${PARENT_DIR}/bin/llvm-nm)
+set(CMAKE_OBJCOPY ${PARENT_DIR}/bin/llvm-objcopy)
+set(CMAKE_OBJDUMP ${PARENT_DIR}/bin/llvm-objdump)
+set(CMAKE_RANLIB ${PARENT_DIR}/bin/llvm-ranlib)
+set(CMAKE_READELF ${PARENT_DIR}/bin/llvm-readelf)
+set(CMAKE_STRIP ${PARENT_DIR}/bin/llvm-strip)
+
+#other dependencies, provided by vcpkg but you can get them elsewhere as long as you have a cmake file
 find_package(ZLIB REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED) #nlohmann_json
 find_package(spdlog CONFIG REQUIRED) #spdlog
 find_package(indicators CONFIG REQUIRED) #indicators
 
+#clang-tidy options
 option(ENABLE_LINTER "Run linter" OFF)
 if(${ENABLE_LINTER})
     find_program(TIDY NAMES clang-tidy-9 clang-tidy)
@@ -47,11 +65,12 @@ add_subdirectory("tik")
 add_subdirectory("deat")
 add_subdirectory("Utilities")
 
+#repsonsible for injecting the tracer. Fairly fragile so be careful
 function(InjectTracer tar)
     target_compile_options(${tar} PRIVATE "-flto")
     set_target_properties(${tar} PROPERTIES LINK_FLAGS "-fuse-ld=lld -Wl,--plugin-opt=emit-llvm")
     add_custom_command(OUTPUT opt.bc
-        COMMAND opt-9 -load $<TARGET_FILE:AtlasPasses> -EncodedTrace $<TARGET_FILE:${tar}> -o opt.bc
+        COMMAND ${PARENT_DIR}/bin/opt -load $<TARGET_FILE:AtlasPasses> -EncodedTrace $<TARGET_FILE:${tar}> -o opt.bc
         DEPENDS $<TARGET_FILE:${tar}>
     )
     set_source_files_properties(
@@ -65,6 +84,7 @@ function(InjectTracer tar)
     target_link_libraries(${tar}-trace PRIVATE AtlasBackend)
 endfunction()
 
+#our unit tests
 option(ENABLE_TESTING "Build tests" ON)
 option(ENABLE_TESTING_LONG "Build tests long" OFF)
 if(${ENABLE_TESTING})
@@ -80,21 +100,29 @@ if(DOXYGEN_FOUND)
 endif(DOXYGEN_FOUND)
 
 #stollen from https://github.com/ttroy50/cmake-examples/blob/master/04-static-analysis/clang-format/cmake/modules/clang-format.cmake
-set(CLANG_FORMAT_EXCLUDE_PATTERNS "build" "vcpkg")
-file(GLOB_RECURSE ALL_SOURCE_FILES *.cpp *.h *.c)
-foreach (SOURCE_FILE ${ALL_SOURCE_FILES})
-    foreach (EXCLUDE_PATTERN ${CLANG_FORMAT_EXCLUDE_PATTERNS})
-        string(FIND ${SOURCE_FILE} ${EXCLUDE_PATTERN} PROJECT_TRDPARTY_DIR_FOUND)
-        if (NOT ${PROJECT_TRDPARTY_DIR_FOUND} EQUAL -1)
-            list(REMOVE_ITEM ALL_SOURCE_FILES ${SOURCE_FILE})
-        endif ()
-    endforeach()
-endforeach ()
+#used to run clang-format on the entire source tree
+find_program(FORMAT NAMES clang-format-9 clang-format)
+if(${FORMAT} STREQUAL "FORMAT-NOTFOUND")
+    message(WARNING "clang-format not found. Disabling formatting target")
+else()
+    message(STATUS "Found clang-format in ${FORMAT}")
+    set(CLANG_FORMAT_EXCLUDE_PATTERNS "build" "vcpkg")
+    file(GLOB_RECURSE ALL_SOURCE_FILES *.cpp *.h *.c)
+    foreach (SOURCE_FILE ${ALL_SOURCE_FILES})
+        foreach (EXCLUDE_PATTERN ${CLANG_FORMAT_EXCLUDE_PATTERNS})
+            string(FIND ${SOURCE_FILE} ${EXCLUDE_PATTERN} PROJECT_TRDPARTY_DIR_FOUND)
+            if (NOT ${PROJECT_TRDPARTY_DIR_FOUND} EQUAL -1)
+                list(REMOVE_ITEM ALL_SOURCE_FILES ${SOURCE_FILE})
+            endif ()
+        endforeach()
+    endforeach ()
 
-add_custom_target(
-    format
-    COMMAND /usr/bin/clang-format-9
-    -style=file
-    -i
-    ${ALL_SOURCE_FILES}
-)
+    add_custom_target(
+        format
+        COMMAND ${FORMAT}
+        -style=file
+        -i
+        ${ALL_SOURCE_FILES}
+    )
+endif()
+

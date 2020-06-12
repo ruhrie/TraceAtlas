@@ -9,8 +9,6 @@ set_target_properties(
     OUTPUT_NAME AtlasBackend
 )
 
-target_link_options(AtlasBackend INTERFACE "-fuse-ld=lld-9")
-
 target_link_libraries(AtlasBackend ${llvm_libs} ZLIB::ZLIB)
 target_include_directories(AtlasBackend PUBLIC ${TRACE_INC})
 if(WIN32)
