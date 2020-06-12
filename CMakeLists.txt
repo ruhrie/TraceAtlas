@@ -16,7 +16,7 @@ find_package(indicators CONFIG REQUIRED) #indicators
 
 option(ENABLE_LINTER "Run linter" OFF)
 if(${ENABLE_LINTER})
-    find_program(TIDY NAMES clang-tidy)
+    find_program(TIDY NAMES clang-tidy-9 clang-tidy)
     if(${TIDY} STREQUAL "TIDY-NOTFOUND")
         message(FATAL_ERROR "clang-tidy not found! Necessary for linting!")
     else()
