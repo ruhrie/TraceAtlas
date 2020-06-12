@@ -7,14 +7,14 @@
 using namespace std;
 using namespace llvm;
 
-string GenerateDot(set<set<int64_t>> kernels)
+string GenerateDot(const set<set<int64_t>> &kernels)
 {
     map<int64_t, set<int64_t>> kernelMap;
     map<int64_t, set<int64_t>> bottomKernelMap;
     map<int64_t, set<int64_t>> parentMap;
     int k = 0;
     set<int64_t> allBlocks;
-    for (auto kernel : kernels)
+    for (const auto &kernel : kernels)
     {
         kernelMap[k++] = kernel;
         allBlocks.insert(kernel.begin(), kernel.end());
@@ -49,10 +49,11 @@ string GenerateDot(set<set<int64_t>> kernels)
         }
         for (auto k : kernelsPresent)
         {
+            bool done = false;
             if (parentMap.find(k) == parentMap.end())
             {
                 bottomKernelMap[k].insert(block);
-                break;
+                done = true;
             }
             else
             {
@@ -60,15 +61,19 @@ string GenerateDot(set<set<int64_t>> kernels)
                 if (children.find(k) == children.end())
                 {
                     bottomKernelMap[k].insert(block);
-                    break;
+                    done = true;
                 }
+            }
+            if (done)
+            {
+                break;
             }
         }
     }
 
     string result = "digraph{\n";
     int j = 0;
-    for (auto kernel : kernels)
+    for (const auto &kernel : kernels)
     {
         result += "\tsubgraph cluster_" + to_string(j) + "{\n";
         result += "\t\tlabel=\"Kernel " + to_string(j++) + "\";\n";
@@ -91,7 +96,7 @@ string GenerateDot(set<set<int64_t>> kernels)
         }
         for (auto bi = block->begin(); bi != block->end(); bi++)
         {
-            if (CallInst *ci = dyn_cast<CallInst>(bi))
+            if (auto ci = dyn_cast<CallInst>(bi))
             {
                 auto F = ci->getCalledFunction();
                 if (F != nullptr && !F->empty())

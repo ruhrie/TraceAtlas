@@ -35,7 +35,7 @@ map<string, set<int>> kernelMap;
 map<string, set<string>> parentMap;
 map<int, set<int>> consumerMap;
 
-string GenerateGraph(map<int, string> instanceMap, map<int, set<int>> consumerMap)
+string GenerateGraph(map<int, string> instanceMap, const map<int, set<int>> &consumerMap)
 {
     string result = "digraph{\n";
 
@@ -52,7 +52,7 @@ string GenerateGraph(map<int, string> instanceMap, map<int, set<int>> consumerMa
         }
     }
 
-    for (auto cons : consumerMap)
+    for (const auto &cons : consumerMap)
     {
         for (auto c : cons.second)
         {
