@@ -48,7 +48,7 @@ string GenerateGraph(map<int, string> instanceMap, map<int, set<int>> consumerMa
     {
         for (int i = 1; i < instanceMap.size(); i++)
         {
-            result += "\t" + to_string(i-1) + " -> " + to_string(i) + ";\n";
+            result += "\t" + to_string(i - 1) + " -> " + to_string(i) + ";\n";
         }
     }
 
