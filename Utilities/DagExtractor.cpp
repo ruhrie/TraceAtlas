@@ -22,6 +22,7 @@ cl::opt<std::string> KernelFilename("k", cl::desc("Specify kernel json"), cl::va
 llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::value_desc("No progress bar"));
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
+cl::opt<string> DotFile("d", cl::desc("Specify dot filename"), cl::value_desc("dot file"));
 static int UID = 0;
 
 string currentKernel = "-1";
@@ -33,6 +34,35 @@ map<int, string> kernelIdMap;
 map<string, set<int>> kernelMap;
 map<string, set<string>> parentMap;
 map<int, set<int>> consumerMap;
+
+string GenerateGraph(map<int, string> instanceMap, const map<int, set<int>> &consumerMap)
+{
+    string result = "digraph{\n";
+
+    for (int i = 0; i < instanceMap.size(); i++)
+    {
+        result += "\t" + to_string(i) + " [label=" + instanceMap[i] + "]\n";
+    }
+
+    if (instanceMap.size() > 1)
+    {
+        for (int i = 1; i < instanceMap.size(); i++)
+        {
+            result += "\t" + to_string(i - 1) + " -> " + to_string(i) + ";\n";
+        }
+    }
+
+    for (const auto &cons : consumerMap)
+    {
+        for (auto c : cons.second)
+        {
+            result += "\t" + instanceMap[cons.first] + " -> " + to_string(c) + " [style=dashed];\n";
+        }
+    }
+
+    result += "}";
+    return result;
+}
 
 void Process(string &key, string &value)
 {
@@ -178,6 +208,14 @@ int main(int argc, char **argv)
     file.open(OutputFilename);
     file << jOut;
     file.close();
+
+    if (!DotFile.empty())
+    {
+        ofstream dStream(DotFile);
+        auto graph = GenerateGraph(kernelIdMap, consumerMap);
+        dStream << graph << "\n";
+        dStream.close();
+    }
 
     spdlog::info("Successfully extracted DAG");
 

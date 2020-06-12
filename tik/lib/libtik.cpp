@@ -1,5 +1,4 @@
 #include "tik/libtik.h"
-#include "tik/Kernel.h"
 #include <map>
 #include <memory>
 namespace TraceAtlas::tik

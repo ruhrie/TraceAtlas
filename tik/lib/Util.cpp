@@ -407,4 +407,22 @@ namespace TraceAtlas::tik
         }
         return false;
     }
+
+    set<BasicBlock *> GetExits(Function *F)
+    {
+        set<BasicBlock *> result;
+
+        for (auto fi = F->begin(); fi != F->end(); fi++)
+        {
+            auto block = cast<BasicBlock>(fi);
+            for (auto suc : successors(block))
+            {
+                if (suc->getParent() != F)
+                {
+                    result.insert(suc);
+                }
+            }
+        }
+        return result;
+    }
 } // namespace TraceAtlas::tik

@@ -1,5 +1,5 @@
 #pragma once
-#include "tik/KernelExit.h"
+#include "tik/KernelInterface.h"
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Operator.h>
@@ -23,20 +23,16 @@ namespace TraceAtlas::tik
         std::string Name;
         std::set<llvm::BasicBlock *> Conditional;
 
-        /// @brief  Must be a member because we may dereference it from the KernelMap when building a kernel
-        std::set<llvm::BasicBlock *> Entrances;
+        std::set<std::shared_ptr<KernelInterface>> Entrances;
 
-        std::set<std::shared_ptr<KernelExit>> Exits;
+        std::set<std::shared_ptr<KernelInterface>> Exits;
 
         llvm::BasicBlock *Init = nullptr;
         llvm::BasicBlock *Exit = nullptr;
         llvm::BasicBlock *Exception = nullptr;
         llvm::Function *KernelFunction = nullptr;
         bool Valid = false;
-        std::vector<llvm::Value *> KernelImports;
-        std::vector<llvm::Value *> KernelExports;
-        std::map<llvm::BasicBlock *, int> ExitMap;
-        std::map<llvm::Argument *, llvm::Value *> ArgumentMap;
+        std::map<llvm::Argument *, int64_t> ArgumentMap;
 
     protected:
         Kernel();
