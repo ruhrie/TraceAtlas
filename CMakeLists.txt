@@ -12,18 +12,17 @@ llvm_map_components_to_libnames(llvm_libs support core irreader bitreader bitwri
 #use the llvm toolchain
 #we fix these ourselves since we don't support gcc anyway
 #I want windows support, but passes on windows are tricky anyway so that is a secondary goal
-get_filename_component(PARENT_DIR ${LLVM_DIR} DIRECTORY)
-set(CMAKE_C_COMPILER ${PARENT_DIR}/bin/clang)
-set(CMAKE_CXX_COMPILER ${PARENT_DIR}/bin/clang++)
-set(CMAKE_LINKER ${PARENT_DIR}/bin/ld.lld)
-set(CMAKE_AR ${PARENT_DIR}/bin/llvm-ar)
-set(CMAKE_ADDR2LINE ${PARENT_DIR}/bin/llvm-addr2line)
-set(CMAKE_NM ${PARENT_DIR}/bin/llvm-nm)
-set(CMAKE_OBJCOPY ${PARENT_DIR}/bin/llvm-objcopy)
-set(CMAKE_OBJDUMP ${PARENT_DIR}/bin/llvm-objdump)
-set(CMAKE_RANLIB ${PARENT_DIR}/bin/llvm-ranlib)
-set(CMAKE_READELF ${PARENT_DIR}/bin/llvm-readelf)
-set(CMAKE_STRIP ${PARENT_DIR}/bin/llvm-strip)
+set(CMAKE_C_COMPILER ${LLVM_INSTALL_PREFIX}/bin/clang)
+set(CMAKE_CXX_COMPILER ${LLVM_INSTALL_PREFIX}/bin/clang++)
+set(CMAKE_LINKER ${LLVM_INSTALL_PREFIX}/bin/ld.lld)
+set(CMAKE_AR ${LLVM_INSTALL_PREFIX}/bin/llvm-ar)
+set(CMAKE_ADDR2LINE ${LLVM_INSTALL_PREFIX}/bin/llvm-addr2line)
+set(CMAKE_NM ${LLVM_INSTALL_PREFIX}/bin/llvm-nm)
+set(CMAKE_OBJCOPY ${LLVM_INSTALL_PREFIX}/bin/llvm-objcopy)
+set(CMAKE_OBJDUMP ${LLVM_INSTALL_PREFIX}/bin/llvm-objdump)
+set(CMAKE_RANLIB ${LLVM_INSTALL_PREFIX}/bin/llvm-ranlib)
+set(CMAKE_READELF ${LLVM_INSTALL_PREFIX}/bin/llvm-readelf)
+set(CMAKE_STRIP ${LLVM_INSTALL_PREFIX}/bin/llvm-strip)
 
 #other dependencies, provided by vcpkg but you can get them elsewhere as long as you have a cmake file
 find_package(ZLIB REQUIRED)
@@ -70,7 +69,7 @@ function(InjectTracer tar)
     target_compile_options(${tar} PRIVATE "-flto")
     set_target_properties(${tar} PROPERTIES LINK_FLAGS "-fuse-ld=lld -Wl,--plugin-opt=emit-llvm")
     add_custom_command(OUTPUT opt.bc
-        COMMAND ${PARENT_DIR}/bin/opt -load $<TARGET_FILE:AtlasPasses> -EncodedTrace $<TARGET_FILE:${tar}> -o opt.bc
+        COMMAND ${LLVM_INSTALL_PREFIX}/bin/opt -load $<TARGET_FILE:AtlasPasses> -EncodedTrace $<TARGET_FILE:${tar}> -o opt.bc
         DEPENDS $<TARGET_FILE:${tar}>
     )
     set_source_files_properties(
