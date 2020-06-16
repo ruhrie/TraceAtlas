@@ -64,10 +64,10 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
     {
         spdlog::debug("chunk {0}", m++);
         // read a block size of the trace
-        inputTrace.readsome(dataArray, BLOCK_SIZE);
+        size_t bytesRead = inputTrace.readsome(dataArray, BLOCK_SIZE);
         strm.next_in = (Bytef *)dataArray;             // input data to z_lib for decompression
-        strm.avail_in = (uint32_t)inputTrace.gcount(); // remaining characters in the compressed inputTrace
-        spdlog::debug("Bytes {0}", inputTrace.gcount());
+        strm.avail_in = bytesRead; // remaining characters in the compressed inputTrace
+        spdlog::debug("Bytes {0}", bytesRead);
         while (strm.avail_in != 0)
         {
             spdlog::debug("subchunk {0}", n++);
