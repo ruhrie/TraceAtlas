@@ -1,9 +1,9 @@
 #include "AtlasUtil/Traces.h"
 #include "inc/WorkingSet.h"
 #include <llvm/Support/CommandLine.h>
+#include <ostream>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
-#include <ostream>
 
 using namespace std;
 using namespace llvm;
@@ -78,7 +78,7 @@ int main(int argc, char **argv)
 
     // initialize global kernel block map
 
-    // parse trace 
+    // parse trace
     try
     {
         WorkingSet::Setup(j);
