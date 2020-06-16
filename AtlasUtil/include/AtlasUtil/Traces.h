@@ -43,6 +43,7 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
 
     if (!inputTrace)
     {
+        spdlog::info(TraceFile);
         throw AtlasException("Failed to open trace file");
     }
 
