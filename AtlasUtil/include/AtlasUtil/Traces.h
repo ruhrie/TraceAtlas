@@ -50,14 +50,18 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
     bool seenFirst;
     std::string priorLine;
 
+    int m = 0;
+    int n = 0;
     while (notDone)
     {
+        spdlog::debug("chunk {0}", m++);
         // read a block size of the trace
         inputTrace.readsome(dataArray, BLOCK_SIZE);
         strm.next_in = (Bytef *)dataArray;             // input data to z_lib for decompression
         strm.avail_in = (uint32_t)inputTrace.gcount(); // remaining characters in the compressed inputTrace
         while (strm.avail_in != 0)
         {
+            spdlog::debug("subchunk {0}", n++);
             // decompress our data
             strm.next_out = (Bytef *)decompressedArray; // pointer where uncompressed data is written to
             strm.avail_out = BLOCK_SIZE - 1;            // remaining space in decompressedArray
@@ -101,6 +105,7 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
                 }
 
                 //process the line here
+                spdlog::trace("Found key value: {0} {1}", key, value);
                 LogicFunction(key, value);
                 if (fin)
                 {
