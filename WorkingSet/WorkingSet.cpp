@@ -1,80 +1,77 @@
-#include "AtlasUtil/Traces.h"
-#include <llvm/Support/CommandLine.h>
-#include <nlohmann/json.hpp>
-#include <set>
-#include <spdlog/sinks/basic_file_sink.h>
-#include <spdlog/spdlog.h>
-#include <pair>
+#include "inc/WorkingSet.h"
+#include <iostream>
 
 using namespace std;
-using namespace llvm;
-
-llvm::cl::opt<string> kernelFile("k", llvm::cl::desc("Specify output json name"), llvm::cl::value_desc("kernel filename"), llvm::cl::init("kernel.json"));
-llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
-llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::value_desc("No progress bar"));
-cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
-int main(int argc, char **argv)
+namespace WorkingSet
 {
-    cl::ParseCommandLineOptions(argc, argv);
-
-    switch (LogLevel)
+    /// Maps a kernel index to its set of basic block IDs
+    std::map<int, std::set<int64_t>> kernelBlockMap;
+    void Setup(nlohmann::json& j)
     {
-        case 0:
+        for (auto &[k, l] : j["Kernels"].items())
         {
-            spdlog::set_level(spdlog::level::off);
-            break;
+            int index = stoi(k);
+            cout << "Initializing kernel index " << index << endl;
+            nlohmann::json kernel = l["Blocks"];
+            kernelBlockMap[index] = kernel.get<set<int64_t>>();
         }
-        case 1:
+        for( const auto& key : kernelBlockMap )
         {
-            spdlog::set_level(spdlog::level::critical);
-            break;
-        }
-        case 2:
-        {
-            spdlog::set_level(spdlog::level::err);
-            break;
-        }
-        case 3:
-        {
-            spdlog::set_level(spdlog::level::warn);
-            break;
-        }
-        case 4:
-        {
-            spdlog::set_level(spdlog::level::info);
-            break;
-        }
-        case 5:
-        {
-            spdlog::set_level(spdlog::level::debug);
-        }
-        case 6:
-        {
-            spdlog::set_level(spdlog::level::trace);
-            break;
-        }
-        default:
-        {
-            spdlog::warn("Invalid logging level: " + to_string(LogLevel));
-        }
-    }
-
-    try
-    {
-        spdlog::info("Started analysis");
-        ProcessTrace(inputTrace, &TypeOne::Process, "Detecting type 1 kernels", noBar);
-        auto type1Kernels = TypeOne::Get();
-        spdlog::info("Detected " + to_string(type1Kernels.size()) + " type 1 kernels");
-
-        for (auto &[block, count] : TypeOne::blockCount)
-        {
-            if (count != 0)
+            cout << "The kernel index is " << key.first << endl;
+            for( const auto& ind : key.second )
             {
-                ValidBlocks.insert(block);
+                cout << ind << endl;
             }
         }
-
-        TypeTwo::Setup(M, type1Kernels);
-        ProcessTrace(inputTrace, &TypeTwo::Process, "Detecting type 2 kernels", noBar);
-        auto type2Kernels = TypeTwo::Get();
-        spdlog::info("Detected " + to_string(type2Kernels.size()) + " type 2 kernels");
+    }
+    /// Maps a kernel index to a pair of sets (first -> ld addr, second -> st addr)
+    std::map<int, std::pair< std::set<uint64_t>, std::set<uint64_t> >> kernelSetMap; 
+    int currentKernelID;
+    void Process(std::string &key, std::string &value)
+    {
+        if( key == "BBEnter")
+        {
+            int64_t blockID = stoi(value, nullptr, 0);
+            for( const auto& ID : kernelBlockMap )
+            {
+                if( ID.second.find(blockID) != ID.second.end() )
+                {
+                    currentKernelID = ID.first;
+                    break;
+                }
+            } 
+        }
+        else if( key == "LoadAddress" )
+        {
+            uint64_t addr = stoul(value, nullptr, 16);
+            kernelSetMap[currentKernelID].first.insert(addr);
+        }
+        else if( key == "StoreAddress" )
+        {
+            uint64_t addr = stoul(value, nullptr, 16);
+            kernelSetMap[currentKernelID].second.insert(addr);
+        }
+        else if( key == "BBExit" )
+        {
+            // do nothing for now
+        }
+    }
+    void Print()
+    {
+        cout << "Outputting kernelSetMap" << endl;
+        for( const auto& key : kernelSetMap )
+        {
+            cout << "The kernel index is: " << key.first << endl;
+            cout << "The ld addrs are: " << endl;
+            for( const auto& ind : key.second.first )
+            {
+                cout << ind << ",";
+            }
+            cout << "The st addrs are: " << endl;
+            for( const auto& ind: key.second.second )
+            {
+                cout << ind << ",";
+            }
+        }
+    }
+} // namespace WorkingSets
