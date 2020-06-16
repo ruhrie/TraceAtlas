@@ -26,7 +26,7 @@ namespace WorkingSet
     }
     /// Maps a kernel index to a pair of sets (first -> ld addr, second -> st addr)
     std::map<int, std::pair<std::set<uint64_t>, std::set<uint64_t>>> kernelSetMap;
-    int currentKernelID;
+    vector<int> currentKernelIDs;
     void Process(std::string &key, std::string &value)
     {
         if (key == "BBEnter")
@@ -36,27 +36,33 @@ namespace WorkingSet
             {
                 if (ID.second.find(blockID) != ID.second.end())
                 {
-                    currentKernelID = ID.first;
+                    currentKernelIDs.push_back(ID.first);
                     break;
                 }
             }
         }
         else if (key == "LoadAddress")
         {
-            uint64_t addr = stoul(value, nullptr, 16);
-            kernelSetMap[currentKernelID].first.insert(addr);
+            for (const auto &ind : currentKernelIDs)
+            {
+                uint64_t addr = stoul(value, nullptr, 16);
+                kernelSetMap[ind].first.insert(addr);
+            }
         }
         else if (key == "StoreAddress")
         {
-            uint64_t addr = stoul(value, nullptr, 16);
-            kernelSetMap[currentKernelID].second.insert(addr);
+            for (const auto &ind : currentKernelIDs)
+            {
+                uint64_t addr = stoul(value, nullptr, 16);
+                kernelSetMap[ind].second.insert(addr);
+            }
         }
         else if (key == "BBExit")
         {
-            // do nothing for now
+            currentKernelIDs.clear();
         }
     }
-    void Print()
+    void PrintOutput()
     {
         cout << "Outputting kernelSetMap" << endl;
         for (const auto &key : kernelSetMap)
@@ -72,6 +78,14 @@ namespace WorkingSet
             {
                 cout << ind << ",";
             }
+        }
+    }
+    void PrintSizes()
+    {
+        cout << "Outputting kernelSetMap" << endl;
+        for (const auto &key : kernelSetMap)
+        {
+            cout << "The kernel index is: " << key.first << ", its ld set size is " << key.second.first.size() << ", and its st set size is " << key.second.second.size() << endl;
         }
     }
 } // namespace WorkingSet

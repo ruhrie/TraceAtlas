@@ -59,7 +59,7 @@ int main(int argc, char **argv)
         }
     }
 
-    // Read input kernel file and (if successful) populate WorkingSet::kernelBlockMap
+    // Read input kernel file
     ifstream inputJson;
     nlohmann::json j;
     try
@@ -76,17 +76,15 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    // initialize global kernel block map
-
-    // parse trace
+    // initialize and parse trace
     try
     {
         WorkingSet::Setup(j);
         spdlog::info("Started WorkingSet analysis.");
         ProcessTrace(inputTrace, &WorkingSet::Process, "Parsing Load and Store sets.", noBar);
-        //WorkingSet::Print();
-
-    } // try
+        //WorkingSet::PrintOutput();
+        WorkingSet::PrintSizes();
+    }
     catch (int e)
     {
         spdlog::critical("Failed to analyze trace");
@@ -94,4 +92,4 @@ int main(int argc, char **argv)
     }
 
     return 0;
-} // main
+}
