@@ -374,6 +374,12 @@ int main(int argc, char **argv)
             Dump(DumpFile, M);
         }
     }
+    catch (AtlasException e)
+    {
+        spdlog::critical("Failed to analyze trace");
+        spdlog::critical(e.what());
+        return EXIT_FAILURE;
+    }
     catch (int e)
     {
         spdlog::critical("Failed to analyze trace");

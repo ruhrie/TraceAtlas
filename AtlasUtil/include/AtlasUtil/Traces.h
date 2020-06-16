@@ -1,4 +1,5 @@
 #pragma once
+#include "AtlasUtil/Exceptions.h"
 #include <fstream>
 #include <functional>
 #include <indicators/progress_bar.hpp>
@@ -39,6 +40,11 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
 
     //open the file
     inputTrace.open(TraceFile);
+
+    if (!inputTrace)
+    {
+        throw AtlasException("Failed to open trace file");
+    }
 
     //get the file size
     inputTrace.seekg(0, std::ios_base::end);
