@@ -43,6 +43,7 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
     //get the file size
     inputTrace.seekg(0, std::ios_base::end);
     int64_t size = inputTrace.tellg();
+    spdlog::debug("Size {0}", size);
     inputTrace.seekg(0, std::ios_base::beg);
     int64_t blocks = size / BLOCK_SIZE + 1;
 
@@ -59,6 +60,7 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
         inputTrace.readsome(dataArray, BLOCK_SIZE);
         strm.next_in = (Bytef *)dataArray;             // input data to z_lib for decompression
         strm.avail_in = (uint32_t)inputTrace.gcount(); // remaining characters in the compressed inputTrace
+        spdlog::debug("Bytes {0}", inputTrace.gcount());
         while (strm.avail_in != 0)
         {
             spdlog::debug("subchunk {0}", n++);
