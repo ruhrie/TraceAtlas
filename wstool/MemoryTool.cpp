@@ -44,30 +44,41 @@ int main(int argc, char **argv)
             kernelBlockValue = kernel.get<set<uint64_t>>();
         }
     }
+    //output address index set: to store the output address indexes
+    set<uint64_t> outputAddressIndexSet;
+
+    ProcessTrace(inputTrace, &WorkingSet::ProcessFirst, "working set analysis first pass", false);
+    for ( auto it :AddrEndtimeMap)
+    {
+        if (it.second ==1)
+        {
+            outputAddressIndexSet.insert(it.first);
+        }
+    }
     ProcessTrace(inputTrace, &WorkingSet::Process, "working set analysis", false);
 
     //store max size of input output internal working set
     uint64_t maxInput = 0;
     uint64_t maxOutput = 0;
     uint64_t maxinternal = 0;
-    set<int64_t> endTimeSet; //using this set of end time to calculate the maximum internal working set
-    printf("size %zu \n", internalAddressLivingVec.size());
+    //set<int64_t> endTimeSet; //using this set of end time to calculate the maximum internal working set
+    //printf("size %zu \n", internalAddressLivingVec.size());
     //here calculates the maximum internal working set size
-    for (auto it : internalAddressLivingVec)
-    {
-        if (it.deathTime > 0)
-        {
-            endTimeSet.insert(it.deathTime);
-            while (it.birthTime > *(endTimeSet.begin()))
-            {
-                endTimeSet.erase(endTimeSet.begin());
-            }
-            if (endTimeSet.size() > maxinternal)
-            {
-                maxinternal = endTimeSet.size();
-            }
-        }
-    }
+    // for (auto it : internalAddressLivingVec)
+    // {
+    //     if (it.deathTime > 0)
+    //     {
+    //         endTimeSet.insert(it.deathTime);
+    //         while (it.birthTime > *(endTimeSet.begin()))
+    //         {
+    //             endTimeSet.erase(endTimeSet.begin());
+    //         }
+    //         if (endTimeSet.size() > maxinternal)
+    //         {
+    //             maxinternal = endTimeSet.size();
+    //         }
+    //     }
+    // }
     maxInput = inputMapSize;
     maxOutput = outputAddressIndexSet.size();
     printf("maxInput: %lu \n maxinternal: %lu \n maxOutput: %lu \n", maxInput, maxinternal, maxOutput);

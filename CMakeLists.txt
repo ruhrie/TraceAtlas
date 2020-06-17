@@ -30,6 +30,12 @@ find_package(nlohmann_json CONFIG REQUIRED) #nlohmann_json
 find_package(spdlog CONFIG REQUIRED) #spdlog
 find_package(indicators CONFIG REQUIRED) #indicators
 
+function(MakeIR target)
+    set_target_properties(LINK_OPTIONS "-Wl,--plugin-opt=emit-llvm")
+endfunction()
+
+set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld-9")
+
 #clang-tidy options
 option(ENABLE_LINTER "Run linter" OFF)
 if(${ENABLE_LINTER})
