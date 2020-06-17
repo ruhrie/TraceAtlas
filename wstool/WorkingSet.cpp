@@ -58,7 +58,7 @@ namespace WorkingSet
                 internalAddressLivingVec.push_back(internalAddress);
                 internalMapSize++;
             }
-            else if (internalAddressLivingVec[internalAddressIndexMap[addressIndex]].deathTime != -1)
+            else if (internalAddressLivingVec[internalAddressIndexMap[addrIndex]].deathTime != -1)
             {
                 SizeUpdate(addrIndex,t);
             }
