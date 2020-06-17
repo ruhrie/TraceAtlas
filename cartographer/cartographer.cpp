@@ -4,6 +4,7 @@
 #include "TypeOne.h"
 #include "TypeThree.h"
 #include "TypeTwo.h"
+#include "dot.h"
 #include "profile.h"
 #include <functional>
 #include <llvm/Bitcode/BitcodeReader.h>
@@ -36,6 +37,7 @@ llvm::cl::opt<bool> label("L", llvm::cl::desc("ExportLabel"), llvm::cl::value_de
 llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::value_desc("No progress bar"));
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
+cl::opt<string> DotFile("d", cl::desc("Specify dot filename"), cl::value_desc("dot file"));
 int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
@@ -197,6 +199,96 @@ int main(int argc, char **argv)
             }
         }
         outputJson["ValidBlocks"] = ValidBlocks;
+        //temp stuff
+        //outputJson["BlockCounts"] = TypeOne::blockCount;
+        {
+            map<string, uint64_t> t;
+            for (const auto &a : TypeOne::blockCount)
+            {
+                t[to_string(a.first)] = a.second;
+            }
+            outputJson["BlockCounts"] = t;
+        }
+
+        //type 1
+        {
+            map<string, set<int64_t>> t;
+            int j = 0;
+            for (const auto &set : type1Kernels)
+            {
+                if (!set.empty())
+                {
+                    t[to_string(j++)] = set;
+                }
+            }
+            outputJson["TypeOne"] = t;
+        }
+        //type 2
+        {
+            map<string, set<int64_t>> t;
+            int j = 0;
+            for (const auto &set : type2Kernels)
+            {
+                if (!set.empty())
+                {
+                    t[to_string(j++)] = set;
+                }
+            }
+            outputJson["TypeTwo"] = t;
+        }
+        //type 2.5
+        {
+            map<string, set<int64_t>> t;
+            int j = 0;
+            for (const auto &set : type25Kernels)
+            {
+                if (!set.empty())
+                {
+                    t[to_string(j++)] = set;
+                }
+            }
+            outputJson["TypeTwoFive"] = t;
+        }
+        //type 3
+        {
+            map<string, set<int64_t>> t;
+            int j = 0;
+            for (const auto &set : type3Kernels)
+            {
+                if (!set.empty())
+                {
+                    t[to_string(j++)] = set;
+                }
+            }
+            outputJson["TypeThree"] = t;
+        }
+        //type 4
+        {
+            map<string, set<int64_t>> t;
+            int j = 0;
+            for (const auto &set : type4Kernels)
+            {
+                if (!set.empty())
+                {
+                    t[to_string(j++)] = set;
+                }
+            }
+            outputJson["TypeFour"] = t;
+        }
+        //type 3.5
+        {
+            map<string, set<int64_t>> t;
+            int j = 0;
+            for (const auto &set : type35Kernels)
+            {
+                if (!set.empty())
+                {
+                    t[to_string(j++)] = set;
+                }
+            }
+            outputJson["TypeThreeFive"] = t;
+        }
+        //end of temp stucc
         ofstream oStream(kernelFile);
         oStream << outputJson;
         oStream.close();
@@ -206,6 +298,13 @@ int main(int argc, char **argv)
             ofstream pStream(profileFile);
             pStream << prof;
             pStream.close();
+        }
+        if (!DotFile.empty())
+        {
+            ofstream dStream(DotFile);
+            auto graph = GenerateDot(type35Kernels);
+            dStream << graph << "\n";
+            dStream.close();
         }
     }
     catch (int e)

@@ -1,8 +1,11 @@
-
 add_library(AtlasPasses MODULE Trace.cpp TraceMem.cpp TraceMemIO.cpp Annotate.cpp TraceIO.cpp CommandArgs.cpp PapiExport.cpp PapiIO.cpp Functions.cpp AddLibrary.cpp)
 target_link_libraries(AtlasPasses PRIVATE nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
 target_compile_definitions(AtlasPasses PRIVATE ${LLVM_DEFINITIONS})
-target_compile_options(AtlasPasses PRIVATE -Wall  -Wextra  -Wconversion)
+if(WIN32)
+    target_compile_options(AtlasPasses PRIVATE -W4  -Wextra  -Wconversion)
+else()
+    target_compile_options(AtlasPasses PRIVATE -Wall  -Wextra  -Wconversion)
+endif()
 set_target_properties(AtlasPasses
     PROPERTIES
     PREFIX ""
@@ -10,7 +13,6 @@ set_target_properties(AtlasPasses
 )
 
 target_include_directories(AtlasPasses PRIVATE ${TRACE_INC})
-target_include_directories(AtlasPasses SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
 install(TARGETS AtlasPasses
     LIBRARY DESTINATION lib
 )

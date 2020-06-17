@@ -45,5 +45,6 @@ int main(int argc, char *argv[])
     KernelExit("bubbleSort");
 
     printf("\nSorting Done");
+    free(in);
     return 0;
 }

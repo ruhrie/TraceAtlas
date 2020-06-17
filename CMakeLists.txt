@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.10)
-project(TraceAtlas VERSION 0.2.2)
+cmake_minimum_required(VERSION 3.13)
+project(TraceAtlas VERSION 0.3.2)
 
 SET(CMAKE_CXX_STANDARD 17)
 SET(CMAKE_C_STANDARD 11)
@@ -7,32 +7,54 @@ SET(CMAKE_C_STANDARD 11)
 find_package(LLVM 9 REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
-llvm_map_components_to_libnames(llvm_libs  support core irreader bitreader bitwriter transformutils)
+llvm_map_components_to_libnames(llvm_libs support core irreader bitreader bitwriter transformutils)
 
+#use the llvm toolchain
+#we fix these ourselves since we don't support gcc anyway
+#I want windows support, but passes on windows are tricky anyway so that is a secondary goal
+set(CMAKE_C_COMPILER ${LLVM_INSTALL_PREFIX}/bin/clang)
+set(CMAKE_CXX_COMPILER ${LLVM_INSTALL_PREFIX}/bin/clang++)
+set(CMAKE_LINKER ${LLVM_INSTALL_PREFIX}/bin/ld.lld)
+set(CMAKE_AR ${LLVM_INSTALL_PREFIX}/bin/llvm-ar)
+set(CMAKE_ADDR2LINE ${LLVM_INSTALL_PREFIX}/bin/llvm-addr2line)
+set(CMAKE_NM ${LLVM_INSTALL_PREFIX}/bin/llvm-nm)
+set(CMAKE_OBJCOPY ${LLVM_INSTALL_PREFIX}/bin/llvm-objcopy)
+set(CMAKE_OBJDUMP ${LLVM_INSTALL_PREFIX}/bin/llvm-objdump)
+set(CMAKE_RANLIB ${LLVM_INSTALL_PREFIX}/bin/llvm-ranlib)
+set(CMAKE_READELF ${LLVM_INSTALL_PREFIX}/bin/llvm-readelf)
+set(CMAKE_STRIP ${LLVM_INSTALL_PREFIX}/bin/llvm-strip)
+
+#other dependencies, provided by vcpkg but you can get them elsewhere as long as you have a cmake file
 find_package(ZLIB REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED) #nlohmann_json
 find_package(spdlog CONFIG REQUIRED) #spdlog
-find_package(indica CONFIG REQUIRED) #indicators
+find_package(indicators CONFIG REQUIRED) #indicators
 
-function(MakeIR target)
-    set_target_properties(LINK_OPTIONS "-Wl,--plugin-opt=emit-llvm")
-endfunction()
-
-set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld-9")
-
-option(ENABLE_LINTER_ERROR "Run linter with errors" OFF)
-if(${ENABLE_LINTER_ERROR})
+#clang-tidy options
+option(ENABLE_LINTER "Run linter" OFF)
+if(${ENABLE_LINTER})
+    find_program(TIDY NAMES clang-tidy-9 clang-tidy)
+    if(${TIDY} STREQUAL "TIDY-NOTFOUND")
+        message(FATAL_ERROR "clang-tidy not found! Necessary for linting!")
+    else()
+        message(STATUS "Found clang-tidy in ${TIDY}")
+    endif()
+    
     set(CMAKE_CXX_CLANG_TIDY 
-        clang-tidy-9;
+        ${TIDY};
         --warnings-as-errors=*;
         --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type;
         )
-    add_compile_options(-Werror)
-else()
-    set(CMAKE_CXX_CLANG_TIDY 
-        clang-tidy-9;
-        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type;
+    set(CMAKE_C_CLANG_TIDY 
+        ${TIDY};
+        --warnings-as-errors=*;
+        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,-clang-analyzer-security.insecureAPI.*;
         )
+    add_compile_options(-Werror)
+endif()
+
+if(WIN32)
+    add_compile_definitions(_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS)
 endif()
 
 add_subdirectory("AtlasUtil")
@@ -43,9 +65,12 @@ add_subdirectory("deat")
 add_subdirectory("Utilities")
 add_subdirectory("wstool")
 
+#repsonsible for injecting the tracer. Fairly fragile so be careful
 function(InjectTracer tar)
+    target_compile_options(${tar} PRIVATE "-flto")
+    set_target_properties(${tar} PROPERTIES LINK_FLAGS "-fuse-ld=lld -Wl,--plugin-opt=emit-llvm")
     add_custom_command(OUTPUT opt.bc
-        COMMAND opt-9 -load $<TARGET_FILE:AtlasPasses> -EncodedTrace $<TARGET_FILE:${tar}> -o opt.bc
+        COMMAND ${LLVM_INSTALL_PREFIX}/bin/opt -load $<TARGET_FILE:AtlasPasses> -EncodedTrace $<TARGET_FILE:${tar}> -o opt.bc
         DEPENDS $<TARGET_FILE:${tar}>
     )
     set_source_files_properties(
@@ -77,6 +102,7 @@ function(InjectMemoryTracer tarMem)
     target_link_libraries(${tarMem}-memory-trace PRIVATE AtlasBackend)
 endfunction()
 
+#our unit tests
 option(ENABLE_TESTING "Build tests" ON)
 option(ENABLE_TESTING_LONG "Build tests long" OFF)
 if(${ENABLE_TESTING})
@@ -92,21 +118,29 @@ if(DOXYGEN_FOUND)
 endif(DOXYGEN_FOUND)
 
 #stollen from https://github.com/ttroy50/cmake-examples/blob/master/04-static-analysis/clang-format/cmake/modules/clang-format.cmake
-set(CLANG_FORMAT_EXCLUDE_PATTERNS "build" "vcpkg")
-file(GLOB_RECURSE ALL_SOURCE_FILES *.cpp *.h *.c)
-foreach (SOURCE_FILE ${ALL_SOURCE_FILES})
-    foreach (EXCLUDE_PATTERN ${CLANG_FORMAT_EXCLUDE_PATTERNS})
-        string(FIND ${SOURCE_FILE} ${EXCLUDE_PATTERN} PROJECT_TRDPARTY_DIR_FOUND)
-        if (NOT ${PROJECT_TRDPARTY_DIR_FOUND} EQUAL -1)
-            list(REMOVE_ITEM ALL_SOURCE_FILES ${SOURCE_FILE})
-        endif ()
-    endforeach()
-endforeach ()
+#used to run clang-format on the entire source tree
+find_program(FORMAT NAMES clang-format-9 clang-format)
+if(${FORMAT} STREQUAL "FORMAT-NOTFOUND")
+    message(WARNING "clang-format not found. Disabling formatting target")
+else()
+    message(STATUS "Found clang-format in ${FORMAT}")
+    set(CLANG_FORMAT_EXCLUDE_PATTERNS "build" "vcpkg")
+    file(GLOB_RECURSE ALL_SOURCE_FILES *.cpp *.h *.c)
+    foreach (SOURCE_FILE ${ALL_SOURCE_FILES})
+        foreach (EXCLUDE_PATTERN ${CLANG_FORMAT_EXCLUDE_PATTERNS})
+            string(FIND ${SOURCE_FILE} ${EXCLUDE_PATTERN} PROJECT_TRDPARTY_DIR_FOUND)
+            if (NOT ${PROJECT_TRDPARTY_DIR_FOUND} EQUAL -1)
+                list(REMOVE_ITEM ALL_SOURCE_FILES ${SOURCE_FILE})
+            endif ()
+        endforeach()
+    endforeach ()
 
-add_custom_target(
-    format
-    COMMAND /usr/bin/clang-format-9
-    -style=file
-    -i
-    ${ALL_SOURCE_FILES}
-)
+    add_custom_target(
+        format
+        COMMAND ${FORMAT}
+        -style=file
+        -i
+        ${ALL_SOURCE_FILES}
+    )
+endif()
+

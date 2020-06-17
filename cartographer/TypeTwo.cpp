@@ -1,4 +1,5 @@
 #include "TypeTwo.h"
+#include "AtlasUtil/Exceptions.h"
 #include "cartographer.h"
 #include <set>
 #include <string>
@@ -18,7 +19,7 @@ namespace TypeTwo
     set<int64_t> *blocks = nullptr;
 
     bool blocksLabeled = false;
-    set<string> currentKernel;
+    vector<string> currentKernel;
     std::set<std::set<int64_t>> kernels;
     void Setup(llvm::Module *bitcode, std::set<std::set<int64_t>> k)
     {
@@ -112,11 +113,15 @@ namespace TypeTwo
         }
         else if (key == "KernelEnter")
         {
-            currentKernel.insert(value);
+            currentKernel.push_back(value);
         }
         else if (key == "KernelExit")
         {
-            currentKernel.erase(value);
+            if (currentKernel.back() != value)
+            {
+                throw AtlasException("Kernel Entrance/Exit not Matched");
+            }
+            currentKernel.pop_back();
         }
     }
 

@@ -1,6 +1,4 @@
 add_executable(2DConv 2DConv.c)
-set_target_properties(2DConv PROPERTIES LINK_FLAGS "-Wl,--plugin-opt=emit-llvm")
-target_compile_options(2DConv PRIVATE "-flto")
 InjectTracer(2DConv)
 
 add_test(NAME 2DConv_Trace COMMAND 2DConv-trace)

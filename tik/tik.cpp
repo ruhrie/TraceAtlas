@@ -1,9 +1,10 @@
-#include "tik/tik.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Print.h"
-#include "tik/TikHeader.h"
+#include "tik/CartographerKernel.h"
+#include "tik/Header.h"
 #include "tik/Util.h"
+#include "tik/libtik.h"
 #include <fstream>
 #include <iostream>
 #include <llvm/Bitcode/BitcodeReader.h>
@@ -26,6 +27,7 @@
 
 using namespace std;
 using namespace llvm;
+using namespace TraceAtlas::tik;
 
 enum Filetype
 {
@@ -33,9 +35,6 @@ enum Filetype
     DPDA
 };
 
-llvm::Module *TikModule;
-std::map<int64_t, Kernel *> KernelMap;
-std::map<llvm::Function *, Kernel *> KfMap;
 set<int64_t> ValidBlocks;
 cl::opt<string> JsonFile("j", cl::desc("Specify input json filename"), cl::value_desc("json filename"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"));
@@ -184,7 +183,7 @@ int main(int argc, char *argv[])
     TikModule->setTargetTriple(sourceBitcode->getTargetTriple());
 
     //we now process all kernels who have no children and then remove them as we go
-    std::vector<Kernel *> results;
+    std::vector<shared_ptr<Kernel>> results;
 
     bool change = true;
     set<vector<int64_t>> failedKernels;
@@ -200,10 +199,9 @@ int main(int argc, char *argv[])
             if (childParentMapping.find(kernel.first) == childParentMapping.end())
             {
                 //this kernel has no unexplained parents
-                auto *kern = new Kernel(kernel.second, sourceBitcode.get(), kernel.first);
+                auto kern = make_shared<CartographerKernel>(kernel.second, sourceBitcode.get(), kernel.first);
                 if (!kern->Valid)
                 {
-                    delete kern;
                     failedKernels.insert(kernel.second);
                     error = true;
                     spdlog::error("Failed to convert kernel: " + kernel.first);
@@ -258,7 +256,7 @@ int main(int argc, char *argv[])
     // insert all structures in the tik module and convert them
     std::set<llvm::StructType *> AllStructures;
     headerFile += GetTikStructures(results, AllStructures);
-    for (auto kernel : results)
+    for (const auto &kernel : results)
     {
         headerFile += "\n" + kernel->GetHeaderDeclaration(AllStructures);
     }
@@ -278,15 +276,20 @@ int main(int argc, char *argv[])
     //verify the module
     std::string str;
     llvm::raw_string_ostream rso(str);
+#ifdef DEBUG
     bool broken = verifyModule(*TikModule, &rso);
+#else
+    bool broken = verifyModule(*TikModule);
+#endif
     if (broken)
     {
+#ifdef DEBUG
         auto err = rso.str();
         spdlog::critical("Tik Module Corrupted: " + err);
-#ifndef DEBUG
-        return EXIT_FAILURE;
-#else
         error = true;
+#else
+        spdlog::critical("Tik Module Corrupted");
+        return EXIT_FAILURE;
 #endif
     }
 
@@ -330,54 +333,4 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
-}
-
-void CleanModule(Module *M)
-{
-    for (auto mi = M->begin(); mi != M->end(); mi++)
-    {
-        for (auto &fi : *mi)
-        {
-            vector<Instruction *> toRemove;
-            for (auto bi = fi.begin(); bi != fi.end(); bi++)
-            {
-                auto v = cast<Instruction>(bi);
-                if (auto ci = dyn_cast<DbgInfoIntrinsic>(v))
-                {
-                    toRemove.push_back(ci);
-                }
-                else
-                {
-                    SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
-                    v->getAllMetadata(MDs);
-                    for (auto MD : MDs)
-                    {
-                        v->setMetadata(MD.first, nullptr);
-                    }
-                }
-            }
-            for (auto r : toRemove)
-            {
-                r->eraseFromParent();
-            }
-        }
-        auto *F = cast<Function>(mi);
-        SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
-        F->getAllMetadata(MDs);
-        for (auto MD : MDs)
-        {
-            F->setMetadata(MD.first, nullptr);
-        }
-    }
-
-    for (auto gi = M->global_begin(); gi != M->global_end(); gi++)
-    {
-        auto gv = cast<GlobalVariable>(gi);
-        SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
-        gv->getAllMetadata(MDs);
-        for (auto MD : MDs)
-        {
-            gv->setMetadata(MD.first, nullptr);
-        }
-    }
 }

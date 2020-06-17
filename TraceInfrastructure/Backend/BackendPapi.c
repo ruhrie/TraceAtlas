@@ -379,26 +379,16 @@ void StopPapi()
 
 void CertifyPapiOn()
 {
-    if (PapiRunning)
-    {
-        return;
-    }
-    else
+    if (!PapiRunning)
     {
         StartPapi();
     }
-    return;
 }
 
 void CertifyPapiOff()
 {
-    if (!PapiRunning)
-    {
-        return;
-    }
-    else
+    if (PapiRunning)
     {
         StopPapi();
     }
-    return;
 }
