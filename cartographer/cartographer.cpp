@@ -263,7 +263,7 @@ int main(int argc, char **argv)
         }
         outputJson["ValidBlocks"] = ValidBlocks;
         //temp stuff
-        outputJson["BlockCounts"] = TypeOne::blockCount;
+        //outputJson["BlockCounts"] = TypeOne::blockCount;
         {
             map<string, uint64_t> t;
             for (const auto &a : TypeOne::blockCount)

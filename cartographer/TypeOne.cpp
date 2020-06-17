@@ -3,7 +3,6 @@
 #include <map>
 #include <queue>
 #include <set>
-#include <spdlog/spdlog.h>
 #include <string>
 
 using namespace std;
@@ -18,7 +17,6 @@ namespace TypeOne
     {
         if (key == "BBEnter")
         {
-            spdlog::debug("Type one: {0};{1}", key, value);
             long int block = stoi(value, nullptr, 0);
             blockCount[block] += 1;
             priorBlocks.push_back(block);
