@@ -82,6 +82,7 @@ int main(int argc, char **argv)
         WorkingSet::Setup(j);
         spdlog::info("Started WorkingSet analysis.");
         ProcessTrace(inputTrace, &WorkingSet::Process, "Parsing Load and Store sets.", noBar);
+        WorkingSet::InternalSet();
         //WorkingSet::PrintOutput();
         WorkingSet::PrintSizes();
     }

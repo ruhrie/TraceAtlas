@@ -1,4 +1,5 @@
 #include "inc/WorkingSet.h"
+#include <algorithm>
 #include <iostream>
 
 using namespace std;
@@ -11,17 +12,8 @@ namespace WorkingSet
         for (auto &[k, l] : j["Kernels"].items())
         {
             int index = stoi(k);
-            cout << "Initializing kernel index " << index << endl;
             nlohmann::json kernel = l["Blocks"];
             kernelBlockMap[index] = kernel.get<set<int64_t>>();
-        }
-        for (const auto &key : kernelBlockMap)
-        {
-            cout << "The kernel index is " << key.first << endl;
-            for (const auto &ind : key.second)
-            {
-                cout << ind << endl;
-            }
         }
     }
     /// Maps a kernel index to a pair of sets (first -> ld addr, second -> st addr)
@@ -37,7 +29,6 @@ namespace WorkingSet
                 if (ID.second.find(blockID) != ID.second.end())
                 {
                     currentKernelIDs.push_back(ID.first);
-                    break;
                 }
             }
         }
@@ -45,7 +36,7 @@ namespace WorkingSet
         {
             for (const auto &ind : currentKernelIDs)
             {
-                uint64_t addr = stoul(value, nullptr, 16);
+                uint64_t addr = stoul(value, nullptr, 0);
                 kernelSetMap[ind].first.insert(addr);
             }
         }
@@ -53,7 +44,7 @@ namespace WorkingSet
         {
             for (const auto &ind : currentKernelIDs)
             {
-                uint64_t addr = stoul(value, nullptr, 16);
+                uint64_t addr = stoul(value, nullptr, 0);
                 kernelSetMap[ind].second.insert(addr);
             }
         }
@@ -62,6 +53,29 @@ namespace WorkingSet
             currentKernelIDs.clear();
         }
     }
+
+    /// Maps a kernel index to its internal working set
+    std::map<int, std::set<uint64_t>> kernelIntSetMap;
+    void InternalSet()
+    {
+        for (const auto &key : kernelSetMap)
+        {
+            vector<uint64_t> intersect;
+            if (key.second.first.size() > key.second.second.size())
+            {
+                intersect = vector<uint64_t>(key.second.first.size());
+            }
+            else
+            {
+                intersect = vector<uint64_t>(key.second.first.size());
+            }
+            auto it = set_intersection(key.second.first.begin(), key.second.first.end(), key.second.second.begin(), key.second.second.end(), intersect.begin());
+            intersect.resize(it - intersect.begin());
+            kernelIntSetMap[key.first] = set<uint64_t>(intersect.begin(), intersect.end());
+            cout << "The size of the internal working set for kernel ID " << key.first << " is " << kernelIntSetMap[key.first].size() << endl;
+        }
+    }
+
     void PrintOutput()
     {
         cout << "Outputting kernelSetMap" << endl;
@@ -73,19 +87,25 @@ namespace WorkingSet
             {
                 cout << ind << ",";
             }
-            cout << "The st addrs are: " << endl;
+            cout << "\nThe st addrs are: " << endl;
             for (const auto &ind : key.second.second)
+            {
+                cout << ind << ",";
+            }
+            cout << "\nThe internal addrs are " << endl;
+            for (const auto &ind : kernelIntSetMap[key.first])
             {
                 cout << ind << ",";
             }
         }
     }
+
     void PrintSizes()
     {
         cout << "Outputting kernelSetMap" << endl;
         for (const auto &key : kernelSetMap)
         {
-            cout << "The kernel index is: " << key.first << ", its ld set size is " << key.second.first.size() << ", and its st set size is " << key.second.second.size() << endl;
+            cout << "The kernel index is: " << key.first << ", its ld set size is " << key.second.first.size() << ", its st set size is " << key.second.second.size() << ", and its internal set size is " << kernelIntSetMap[key.first].size() << endl;
         }
     }
 } // namespace WorkingSet

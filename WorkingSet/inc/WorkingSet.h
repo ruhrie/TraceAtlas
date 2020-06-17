@@ -10,6 +10,7 @@ namespace WorkingSet
     void Setup(nlohmann::json &);
     /// Parses input trace into kernelSetMap
     void Process(std::string &, std::string &);
+    void InternalSet();
     void PrintOutput();
     void PrintSizes();
 } // namespace WorkingSet
