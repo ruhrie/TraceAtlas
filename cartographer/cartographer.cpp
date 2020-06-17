@@ -8,6 +8,7 @@
 #include "profile.h"
 #include <functional>
 #include <llvm/Bitcode/BitcodeReader.h>
+#include <llvm/IR/CFG.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/SourceMgr.h>
@@ -38,6 +39,68 @@ llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::val
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 cl::opt<string> DotFile("d", cl::desc("Specify dot filename"), cl::value_desc("dot file"));
+cl::opt<string> DumpFile("D", cl::desc("Block relationship file"), cl::value_desc("Relationship file"));
+
+void Dump(const string &dump, Module *M)
+{
+    nlohmann::json dumpJson;
+    for (auto &mi : *M)
+    {
+        for (auto &fi : mi)
+        {
+            auto BB = cast<BasicBlock>(&fi);
+            auto id = GetBlockID(BB);
+            set<int64_t> blocks;
+            for (auto suc : successors(BB))
+            {
+                blocks.insert(GetBlockID(suc));
+            }
+
+            for (auto &bi : fi)
+            {
+                if (auto i = dyn_cast<CallBase>(&bi))
+                {
+                    auto F = i->getCalledFunction();
+                    if (F != nullptr && !F->empty())
+                    {
+                        auto entry = &F->getEntryBlock();
+                        blocks.insert(GetBlockID(entry));
+                    }
+                }
+            }
+
+            auto term = BB->getTerminator();
+            if (auto ret = dyn_cast<ReturnInst>(term))
+            {
+                auto F = BB->getParent();
+                for (auto user : F->users())
+                {
+                    if (auto i = dyn_cast<CallBase>(user))
+                    {
+                        blocks.insert(GetBlockID(i->getParent()));
+                    }
+                }
+            }
+            else if (auto res = dyn_cast<ResumeInst>(term))
+            {
+                auto F = BB->getParent();
+                for (auto user : F->users())
+                {
+                    if (auto i = dyn_cast<CallBase>(user))
+                    {
+                        blocks.insert(GetBlockID(i->getParent()));
+                    }
+                }
+            }
+
+            dumpJson[to_string(id)] = blocks;
+        }
+    }
+    ofstream oStream(dump);
+    oStream << dumpJson;
+    oStream.close();
+}
+
 int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
@@ -306,6 +369,16 @@ int main(int argc, char **argv)
             dStream << graph << "\n";
             dStream.close();
         }
+        if (!DumpFile.empty())
+        {
+            Dump(DumpFile, M);
+        }
+    }
+    catch (AtlasException e)
+    {
+        spdlog::critical("Failed to analyze trace");
+        spdlog::critical(e.what());
+        return EXIT_FAILURE;
     }
     catch (int e)
     {
