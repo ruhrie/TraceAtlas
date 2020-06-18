@@ -20,6 +20,7 @@ using namespace std;
 using namespace llvm;
 using namespace WorkingSet;
 std::set<uint64_t> kernelBlockValue;
+set<uint64_t> outputAddressIndexSet;
 llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
 cl::opt<std::string> KernelFilename("k", cl::desc("Specify kernel json"), cl::value_desc("kernel filename"), cl::Required);
 cl::opt<int> KernelIndex("ki", cl::desc("Specify kernel index to trace"), cl::value_desc("kernel index"));
@@ -45,7 +46,7 @@ int main(int argc, char **argv)
         }
     }
     //output address index set: to store the output address indexes
-    set<uint64_t> outputAddressIndexSet;
+    
 
     ProcessTrace(inputTrace, &WorkingSet::ProcessFirst, "working set analysis first pass", false);
     for ( auto it :AddrEndtimeMap)
@@ -60,7 +61,6 @@ int main(int argc, char **argv)
     //store max size of input output internal working set
     uint64_t maxInput = 0;
     uint64_t maxOutput = 0;
-    uint64_t maxinternal = 0;
     //set<int64_t> endTimeSet; //using this set of end time to calculate the maximum internal working set
     //printf("size %zu \n", internalAddressLivingVec.size());
     //here calculates the maximum internal working set size

@@ -25,15 +25,24 @@ namespace WorkingSet
     // 2.Construct the address structs of birth and death time
     // “fromStore” is a flag to indicate that if the address first appears from a load or a store instruction
 
-    // 1. max size update 2. erase/update the vector 
+    // 1. max size update 2. update the vector 
     void SizeUpdate(uint64_t addrIndex, int64_t t)
     {
         set <int64_t> endTimeSet;
+        int64_t counter = 1;
         for (auto it : internalAddressLivingVec)
         {
-            if (it.deathTime > 0)
+            if (outputAddressIndexSet.find(it.address) == outputAddressIndexSet.end())
             {
-                endTimeSet.insert(it.deathTime);
+                if (EndTimeFirst.find(it.deathTime)==EndTimeFirst.end())
+                {
+                    endTimeSet.insert(t + counter);
+                    counter++;
+                }
+                else
+                {
+                    endTimeSet.insert(it.deathTime);
+                }
                 while (it.birthTime > *(endTimeSet.begin()))
                 {
                     endTimeSet.erase(endTimeSet.begin());
@@ -44,13 +53,15 @@ namespace WorkingSet
                 }
             }
         }
+        internalAddressLivingVec[internalAddressIndexMap[addrIndex]].birthTime=t;
+        internalAddressLivingVec[internalAddressIndexMap[addrIndex]].birthTime= -1;
     }
     void firstStore(uint64_t addrIndex, int64_t t, bool fromStore)
     {
         // birth from a store inst
         if (fromStore)
         {
-            if (internalAddressIndexMap.find(addressIndex) == internalAddressIndexMap.end())
+            if (internalAddressIndexMap.find(addrIndex) == internalAddressIndexMap.end())
             {
                 InternaladdressLiving internalAddress = {.address = addrIndex, .birthTime = t, .deathTime = -1};
                 //update the map and the vector, if the address has never shown before
@@ -60,12 +71,11 @@ namespace WorkingSet
             }
             else if (internalAddressLivingVec[internalAddressIndexMap[addrIndex]].deathTime != -1)
             {
-                SizeUpdate(addrIndex,t);
+                //SizeUpdate(addrIndex,t);
             }
             
         }
         // birth from a load inst
-
         else
         {
             inputAddressIndexSet.insert(addrIndex);
