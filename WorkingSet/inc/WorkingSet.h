@@ -11,6 +11,7 @@ namespace WorkingSet
     /// Parses input trace into kernelSetMap
     void Process(std::string &, std::string &);
     void CreateSets();
+    void IntersectKernels();
     void PrintOutput();
     void PrintSizes();
 } // namespace WorkingSet

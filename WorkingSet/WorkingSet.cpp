@@ -75,13 +75,13 @@ namespace WorkingSet
             }
             auto it = set_intersection(key.second.first.begin(), key.second.first.end(), key.second.second.begin(), key.second.second.end(), intersect.begin());
             intersect.resize(it - intersect.begin());
-            kernelWSMap[key.first][1] =  set<uint64_t>(intersect.begin(), intersect.end());
+            kernelWSMap[key.first][1] = set<uint64_t>(intersect.begin(), intersect.end());
 
             /// input working set = ld set - intersect
             kernelWSMap[key.first][0] = set<uint64_t>();
-            for( const auto& ind : kernelSetMap[key.first].first )
+            for (const auto &ind : kernelSetMap[key.first].first)
             {
-                if( kernelWSMap[key.first][1].find(ind) == kernelWSMap[key.first][1].end() )
+                if (kernelWSMap[key.first][1].find(ind) == kernelWSMap[key.first][1].end())
                 {
                     kernelWSMap[key.first][0].insert(ind);
                 }
@@ -89,12 +89,78 @@ namespace WorkingSet
 
             // output working set = st set - intersect
             kernelWSMap[key.first][2] = set<uint64_t>();
-            for( const auto& ind : kernelSetMap[key.first].second )
+            for (const auto &ind : kernelSetMap[key.first].second)
             {
-                if( kernelWSMap[key.first][1].find(ind) == kernelWSMap[key.first][1].end() )
+                if (kernelWSMap[key.first][1].find(ind) == kernelWSMap[key.first][1].end())
                 {
                     kernelWSMap[key.first][2].insert(ind);
                 }
+            }
+        }
+    }
+
+    /// Maps kernel ID pairs to a vector of sets (length 3) containing the intersections of each kernel's working sets
+    map<pair<int, int>, vector<set<uint64_t>>> prodComMap;
+    void IntersectKernels()
+    {
+        for (auto it0 = kernelWSMap.begin(); it0 != kernelWSMap.end(); it0++)
+        {
+            /// for each kernel, intersect with all other kernels
+            for (auto it1 = it0; it1 != kernelWSMap.end(); it1++)
+            {
+                if (it0->first == it1->first)
+                {
+                    continue;
+                }
+
+                /// Create vector of set intersections
+                /// 0: it0->input working set & it1->output working set
+                /// 1: it0->internal working set & it1->internal working set
+                /// 2: it0->output working set & it1->input working set
+                pair<int, int> newPair = pair(it0->first, it1->first);
+                prodComMap[newPair] = vector<set<uint64_t>>(3);
+
+                /// it0->input working set & it1->output working set
+                vector<uint64_t> intersect;
+                if (it0->second[0].size() > it1->second[2].size())
+                {
+                    intersect = vector<uint64_t>(it0->second[0].size());
+                }
+                else
+                {
+                    intersect = vector<uint64_t>(it1->second[2].size());
+                }
+                auto it = set_intersection(it0->second[0].begin(), it0->second[0].end(), it1->second[2].begin(), it1->second[2].end(), intersect.begin());
+                intersect.resize(it - intersect.begin());
+                prodComMap[newPair][0] = set<uint64_t>(intersect.begin(), intersect.end());
+
+                /// it0->internal working set & it1->internal working set
+                intersect.clear();
+                if (it0->second[1].size() > it1->second[1].size())
+                {
+                    intersect = vector<uint64_t>(it0->second[1].size());
+                }
+                else
+                {
+                    intersect = vector<uint64_t>(it1->second[1].size());
+                }
+                it = set_intersection(it0->second[1].begin(), it0->second[1].end(), it1->second[1].begin(), it1->second[1].end(), intersect.begin());
+                intersect.resize(it - intersect.begin());
+                prodComMap[newPair][1] = set<uint64_t>(intersect.begin(), intersect.end());
+
+                /// it0->output working set & it1->input working set
+                intersect.clear();
+                if (it0->second[2].size() > it1->second[0].size())
+                {
+                    intersect = vector<uint64_t>(it0->second[2].size());
+                }
+                else
+                {
+                    intersect = vector<uint64_t>(it1->second[0].size());
+                }
+                it = set_intersection(it0->second[2].begin(), it0->second[2].end(), it1->second[0].begin(), it1->second[0].end(), intersect.begin());
+                intersect.resize(it - intersect.begin());
+                prodComMap[newPair][2] = set<uint64_t>(intersect.begin(), intersect.end());
             }
         }
     }
@@ -146,15 +212,20 @@ namespace WorkingSet
 
     void PrintSizes()
     {
-        cout << "Outputting kernelSetMap" << endl;
+        /*cout << "Outputting kernelSetMap" << endl;
         for (const auto &key : kernelSetMap)
         {
             cout << "The kernel index is: " << key.first << ", its ld set size is " << key.second.first.size() << ", its st set size is " << key.second.second.size() << ", and its internal set size is " << kernelWSMap[key.first].size() << endl;
-        }        
+        }*/
         cout << "Outputting kernelWSMap" << endl;
         for (const auto &key : kernelWSMap)
         {
             cout << "The kernel index is: " << key.first << ", its input working set size is " << key.second[0].size() << ", its internal working set size is " << key.second[1].size() << ", and its output working set size is " << key.second[2].size() << endl;
+        }
+        cout << "Outputting prodComMap" << endl;
+        for (const auto &key : prodComMap)
+        {
+            cout << "The kernel pair is: " << key.first.first << "," << key.first.second << ", its input-output intersection size is " << key.second[0].size() << ", its internal intersection size is " << key.second[1].size() << ", and its output-input intersection set size is " << key.second[2].size() << endl;
         }
     }
 } // namespace WorkingSet
