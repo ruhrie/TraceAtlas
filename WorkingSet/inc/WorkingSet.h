@@ -12,6 +12,7 @@ namespace WorkingSet
     void Process(std::string &, std::string &);
     void CreateSets();
     void IntersectKernels();
+    void parseDeathMap();
     void PrintOutput();
     void PrintSizes();
 } // namespace WorkingSet

@@ -1,5 +1,6 @@
 #include "AtlasUtil/Traces.h"
 #include "inc/WorkingSet.h"
+#include "inc/MemorySize.h"
 #include <llvm/Support/CommandLine.h>
 #include <ostream>
 #include <spdlog/sinks/basic_file_sink.h>
@@ -84,6 +85,8 @@ int main(int argc, char **argv)
         ProcessTrace(inputTrace, &WorkingSet::Process, "Parsing Load and Store sets.", noBar);
         WorkingSet::CreateSets();
         WorkingSet::IntersectKernels();
+        WorkingSet::parseDeathMap();
+        //ProcessTrace(inputTrace, &MemorySize::Process, "Parsing input working sets.", noBar);
         //WorkingSet::PrintOutput();
         WorkingSet::PrintSizes();
     }
