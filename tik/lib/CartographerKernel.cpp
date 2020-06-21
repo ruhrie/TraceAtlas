@@ -374,7 +374,6 @@ namespace TraceAtlas::tik
                                 if (GetValueID(ar) == -2)
                                 {
                                     spdlog::error("Tried pushing a value without an ID into the KernelImport list. This is not allowed.");
-                                    continue;
                                 }
                                 KernelImports.push_back(GetValueID(ar));
                             }
