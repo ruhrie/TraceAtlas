@@ -10,12 +10,68 @@ inline void SetBlockID(llvm::BasicBlock *BB, int64_t i)
     BB->getFirstInsertionPt()->setMetadata("BlockID", idNode);
 }
 
-inline void SetValueID(llvm::Value *val, int64_t i)
+inline void SetValueIDs(llvm::Value *val, int64_t &i)
 {
     if (llvm::Instruction *inst = llvm::dyn_cast<llvm::Instruction>(val))
     {
         llvm::MDNode *idNode = llvm::MDNode::get(inst->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(inst->getContext()), (uint64_t)i)));
-        inst->setMetadata("ValueID", idNode);
+        if (!inst->hasMetadataOtherThanDebugLoc())
+        {
+            inst->setMetadata("ValueID", idNode);
+            i++;
+        }
+        else
+        {
+            return;
+        }
+        for (unsigned int j = 0; j < inst->getNumOperands(); j++)
+        {
+            if (auto subInst = llvm::dyn_cast<llvm::Instruction>(inst->getOperand(j)))
+            {
+                if (auto v = llvm::dyn_cast<llvm::Value>(subInst))
+                {
+                    SetValueIDs(v, i);
+                }
+            }
+            else if (auto subGV = llvm::dyn_cast<llvm::GlobalVariable>(inst->getOperand(j)))
+            {
+                if (auto v = llvm::dyn_cast<llvm::Value>(subGV))
+                {
+                    SetValueIDs(v, i);
+                }
+            }
+        }
+    }
+    else if (auto gv = llvm::dyn_cast<llvm::GlobalVariable>(val))
+    {
+        llvm::MDNode *gvNode = llvm::MDNode::get(gv->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(gv->getContext()), (uint64_t)i)));
+        if (!gv->hasMetadata())
+        {
+            gv->setMetadata("ValueID", gvNode);
+            i++;
+        }
+        else
+        {
+            return;
+        }
+
+        for (unsigned int j = 0; j < gv->getNumOperands(); j++)
+        {
+            if (auto subInst = llvm::dyn_cast<llvm::Instruction>(gv->getOperand(j)))
+            {
+                if (auto v = llvm::dyn_cast<llvm::Value>(subInst))
+                {
+                    SetValueIDs(v, i);
+                }
+            }
+            else if (auto subGV = llvm::dyn_cast<llvm::GlobalVariable>(gv->getOperand(j)))
+            {
+                if (auto v = llvm::dyn_cast<llvm::Value>(subGV))
+                {
+                    SetValueIDs(v, i);
+                }
+            }
+        }
     }
 }
 
@@ -27,8 +83,9 @@ inline void Annotate(llvm::Function *F, uint64_t &startingIndex, uint64_t &valIn
         startingIndex++;
         for (auto bb = BB->begin(); bb != BB->end(); bb++)
         {
-            SetValueID(llvm::cast<llvm::Value>(bb), (int64_t)valIndex);
-            valIndex++;
+            int64_t recVal = (int64_t)valIndex;
+            SetValueIDs(llvm::cast<llvm::Value>(bb), recVal);
+            valIndex = (uint64_t)recVal;
         }
     }
 }

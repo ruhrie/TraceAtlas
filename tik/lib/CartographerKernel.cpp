@@ -335,7 +335,13 @@ namespace TraceAtlas::tik
                 {
                     Value *op = inst->getOperand(i);
                     // initialize IDToValue
-                    IDToValue[GetValueID(op)] = op;
+                    int64_t valID = GetValueID(op);
+                    if (valID == -2)
+                    {
+                        //spdlog::error("Parsed a value from the source bitcode that did not receive a valueID. Skipping...");
+                        continue;
+                    }
+                    IDToValue[valID] = op;
                     if (auto *operand = dyn_cast<Instruction>(op))
                     {
                         BasicBlock *parentBlock = operand->getParent();
