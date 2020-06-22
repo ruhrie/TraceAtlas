@@ -18,8 +18,6 @@ namespace TraceAtlas::tik
 {
     std::set<GlobalVariable *> globalDeclarationSet;
     std::set<Value *> remappedOperandSet;
-    std::map<int64_t, llvm::BasicBlock *> IDToBlock;
-    std::map<int64_t, llvm::Value *> IDToValue;
     void CopyOperand(llvm::User *inst, llvm::ValueToValueMapTy &VMap)
     {
         if (auto func = dyn_cast<Function>(inst))
@@ -331,7 +329,6 @@ namespace TraceAtlas::tik
                 {
                     Value *op = inst->getOperand(i);
                     // initialize IDToValue
-                    IDToValue[GetValueID(op)] = op;
                     if (auto *operand = dyn_cast<Instruction>(op))
                     {
                         BasicBlock *parentBlock = operand->getParent();

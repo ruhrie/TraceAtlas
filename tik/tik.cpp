@@ -178,6 +178,8 @@ int main(int argc, char *argv[])
     //annotate it with the same algorithm used in the tracer
     Annotate(base);
 
+    PopulateIdMap(base);
+
     TikModule = new Module(InputFile, context);
     TikModule->setDataLayout(sourceBitcode->getDataLayout());
     TikModule->setTargetTriple(sourceBitcode->getTargetTriple());

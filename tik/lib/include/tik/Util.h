@@ -11,6 +11,9 @@
 #include <vector>
 namespace TraceAtlas::tik
 {
+    extern std::map<int64_t, llvm::BasicBlock *> IDToBlock;
+    extern std::map<int64_t, llvm::Value *> IDToValue;
+    void PopulateIdMap(llvm::Module *M);
     std::string GetString(llvm::Value *v);
     std::vector<std::string> GetStrings(llvm::BasicBlock *bb);
     std::vector<std::string> GetStrings(std::set<llvm::Instruction *> instructions);

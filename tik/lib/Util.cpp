@@ -13,6 +13,30 @@ using namespace llvm;
 
 namespace TraceAtlas::tik
 {
+
+    std::map<int64_t, llvm::BasicBlock *> IDToBlock;
+    std::map<int64_t, llvm::Value *> IDToValue;
+
+    void PopulateIdMap(llvm::Module *M)
+    {
+        for (auto mi = M->begin(); mi != M->end(); mi++)
+        {
+            for (auto fi = mi->begin(); fi != mi->end(); fi++)
+            {
+                for (auto bi = fi->begin(); bi != fi->end(); bi++)
+                {
+                    auto inst = cast<Instruction>(bi);
+                    uint32_t numOps = inst->getNumOperands();
+                    for (uint32_t i = 0; i < numOps; i++)
+                    {
+                        Value *op = inst->getOperand(i);
+                        IDToValue[GetValueID(op)] = op;
+                    }
+                }
+            }
+        }
+    }
+
     string GetString(Value *v)
     {
         std::string str;
