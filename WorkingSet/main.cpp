@@ -1,5 +1,4 @@
 #include "AtlasUtil/Traces.h"
-#include "inc/MemorySize.h"
 #include "inc/WorkingSet.h"
 #include <llvm/Support/CommandLine.h>
 #include <ostream>
@@ -87,7 +86,6 @@ int main(int argc, char **argv)
         WorkingSet::IntersectKernels();
         //WorkingSet::parseDeathMap();
         WorkingSet::JohnsAlgorithm();
-        //ProcessTrace(inputTrace, &MemorySize::Process, "Parsing input working sets.", noBar);
         //WorkingSet::PrintOutput();
         WorkingSet::PrintSizes();
     }
