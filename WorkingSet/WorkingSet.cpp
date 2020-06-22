@@ -20,6 +20,7 @@ namespace WorkingSet
     /// Global time keeper
     uint64_t timeCount = 0;
     /// Maps an address to a pair that holds the time of its first store and last load
+    /// first -> birth time, second -> death time
     map<uint64_t, pair<uint64_t, uint64_t>> addrDeathMap;
     /// Maps a kernel index to a pair of sets (first -> ld addr, second -> st addr)
     map<int, pair<set<uint64_t>, set<uint64_t>>> kernelSetMap;
@@ -40,6 +41,7 @@ namespace WorkingSet
         else if (key == "LoadAddress")
         {
             uint64_t addr = stoul(value, nullptr, 0);
+            // death time, constantly updating
             addrDeathMap[addr].second = timeCount;
             for (const auto &ind : currentKernelIDs)
             {
@@ -50,7 +52,8 @@ namespace WorkingSet
         else if (key == "StoreAddress")
         {
             uint64_t addr = stoul(value, nullptr, 0);
-            if( addrDeathMap.find(addr) == addrDeathMap.end() )
+            // birth time
+            if (addrDeathMap.find(addr) == addrDeathMap.end())
             {
                 addrDeathMap[addr].first = timeCount;
             }
@@ -177,7 +180,7 @@ namespace WorkingSet
         }
     }
 
-    bool isBad (int ind) { return ind != -1; }
+    bool isBad(int ind) { return ind != -1; }
     /// Maps kernel ID to a vector, contains pairs of maxCount, timestamp
     /// 0 -> input set max count, 1 -> internal set max count, 2 -> output set max count
     map<int, vector<uint64_t>> kernelAdMaxCntMap;
@@ -187,33 +190,33 @@ namespace WorkingSet
         /// 0 -> input set count, 1 -> internal set count, 2 -> output set count
         map<int, vector<set<pair<uint64_t, uint64_t>>>> kernelAdLifetimeMap;
 
-        for( auto& key : kernelWSMap )
+        for (auto &key : kernelWSMap)
         {
             kernelAdLifetimeMap[key.first] = vector<set<pair<uint64_t, uint64_t>>>(3);
             kernelAdLifetimeMap[key.first][0] = set<pair<uint64_t, uint64_t>>();
             kernelAdLifetimeMap[key.first][1] = set<pair<uint64_t, uint64_t>>();
-            kernelAdLifetimeMap[key.first][2] = set<pair<uint64_t, uint64_t>>();        
+            kernelAdLifetimeMap[key.first][2] = set<pair<uint64_t, uint64_t>>();
         }
-        for( auto& key : kernelWSMap )
+        for (auto &key : kernelWSMap)
         {
             kernelAdMaxCntMap[key.first] = vector<uint64_t>(3);
             kernelAdMaxCntMap[key.first][0] = 0;
             kernelAdMaxCntMap[key.first][1] = 0;
-            kernelAdMaxCntMap[key.first][2] = 0;        
+            kernelAdMaxCntMap[key.first][2] = 0;
         }
-        for( const auto& addr : addrDeathMap )
+        for (const auto &addr : addrDeathMap)
         {
-            for( const auto& kIndex : kernelWSMap )
+            for (const auto &kIndex : kernelWSMap)
             {
-                if( kIndex.second[0].find( addr.first ) != kIndex.second[0].end() )
+                if (kIndex.second[0].find(addr.first) != kIndex.second[0].end())
                 {
                     kernelAdLifetimeMap[kIndex.first][0].insert(addr.second);
                 }
-                else if( kIndex.second[1].find( addr.first ) != kIndex.second[1].end() )
+                else if (kIndex.second[1].find(addr.first) != kIndex.second[1].end())
                 {
                     kernelAdLifetimeMap[kIndex.first][1].insert(addr.second);
                 }
-                else if( kIndex.second[2].find( addr.first ) != kIndex.second[2].end() )
+                else if (kIndex.second[2].find(addr.first) != kIndex.second[2].end())
                 {
                     kernelAdLifetimeMap[kIndex.first][2].insert(addr.second);
                 }
@@ -222,11 +225,11 @@ namespace WorkingSet
 
         // allocate our tabling array
         size_t maxSize = 0;
-        for( const auto& key : kernelAdLifetimeMap )
+        for (const auto &key : kernelAdLifetimeMap)
         {
-            for( const auto& setT : key.second )
+            for (const auto &setT : key.second)
             {
-                if( setT.size() > maxSize )
+                if (setT.size() > maxSize)
                 {
                     maxSize = setT.size();
                 }
@@ -234,12 +237,14 @@ namespace WorkingSet
         }
         cout << "maxsize is " << maxSize << endl;
         vector<vector<int>> Marray = vector<vector<int>>(maxSize);
-        for( auto& ind : Marray )
+        for (auto &ind : Marray)
         {
             ind = vector<int>(maxSize);
         }
 
         // find the maximum live count for each working set of each kernel index
+        // TODO: this algorithm is intractable because the tabling matrix becomes way to big for large set sizes
+        /*
         int index;
         for( const auto& kIndex : kernelAdLifetimeMap )
         {
@@ -293,6 +298,61 @@ namespace WorkingSet
                 }
                 kernelAdMaxCntMap[kIndex.first][index] = maxCount;
                 index++;
+            }
+        }*/
+    }
+
+    /// Maps a time in the trace to the birth or death time of an address
+    map<int, map<uint64_t, uint64_t>> BirthTimeMap;
+    map<int, map<uint64_t, uint64_t>> DeathTimeMap;
+    /// Maps a kernel ID to its max alive address count
+    map<int, unsigned long> liveAddressMaxCounts;
+    void JohnsAlgorithm()
+    {
+        // reverse map addrDeathMap using BirthTimeMap and DeathTimeMap
+        for (const auto &addr : addrDeathMap)
+        {
+            // find kernel membership
+            vector<int> kernelIDs = vector<int>();
+            for (const auto &key : kernelSetMap)
+            {
+                if (key.second.first.find(addr.first) != key.second.first.end())
+                {
+                    kernelIDs.push_back(key.first);
+                }
+                else if (key.second.second.find(addr.first) != key.second.second.end())
+                {
+                    kernelIDs.push_back(key.first);
+                }
+            }
+            if (kernelIDs.empty())
+            {
+                continue;
+            }
+            for (const auto &ID : kernelIDs)
+            {
+                DeathTimeMap[ID][addr.second.first] = addr.first;
+                BirthTimeMap[ID][addr.second.second] = addr.first;
+            }
+        }
+
+        // now go key by key in the birth and death time maps and keep a count of alive addresses
+        set<uint64_t> liveAddresses;
+        for (const auto &kernelID : BirthTimeMap)
+        {
+            liveAddressMaxCounts[kernelID.first] = 0;
+            liveAddresses.clear();
+            for (const auto &time : kernelID.second)
+            {
+                liveAddresses.insert(time.second);
+                if (DeathTimeMap[kernelID.first].find(time.first) != DeathTimeMap[kernelID.first].end())
+                {
+                    liveAddresses.erase(DeathTimeMap[kernelID.first][time.first]);
+                }
+                if (liveAddressMaxCounts[kernelID.first] < liveAddresses.size())
+                {
+                    liveAddressMaxCounts[kernelID.first] = liveAddresses.size();
+                }
             }
         }
     }
@@ -359,10 +419,16 @@ namespace WorkingSet
         {
             cout << "The kernel pair is: " << key.first.first << "," << key.first.second << ", its input-output intersection size is " << key.second[0].size() << ", its internal intersection size is " << key.second[1].size() << ", and its output-input intersection set size is " << key.second[2].size() << endl;
         }
+        /*
         cout << "Outputting maximum set sizes" << endl;
         for( const auto& kIndex : kernelAdMaxCntMap )
         {
             cout << "For kernel " << kIndex.first << ", the size of the input working set is " << kIndex.second[0] << ", internal " << kIndex.second[1] << " and output " << kIndex.second[2] << endl;
+        }*/
+        cout << "Outputting maximum set size counts" << endl;
+        for (const auto &KI : liveAddressMaxCounts)
+        {
+            cout << "The kernel ID is " << KI.first << ", the maximum size was " << KI.second << endl;
         }
     }
 } // namespace WorkingSet
