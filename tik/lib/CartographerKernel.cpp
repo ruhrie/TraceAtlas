@@ -188,10 +188,6 @@ namespace TraceAtlas::tik
                         {
                             throw AtlasException("Tik Error: Recursion is unimplemented")
                         }
-                        if (isa<InvokeInst>(cb))
-                        {
-                            throw AtlasException("Invoke Inst is unsupported")
-                        }
                     }
                 }
             }
@@ -278,6 +274,8 @@ namespace TraceAtlas::tik
             RemapExports(VMap, KernelExports);
 
             PatchPhis();
+
+            FixInvokes();
 
             //apply metadata
             ApplyMetadata(GlobalMap);
@@ -545,7 +543,7 @@ namespace TraceAtlas::tik
                 }
                 for (auto bi = fi->begin(); bi != fi->end(); bi++)
                 {
-                    if (auto ci = dyn_cast<CallInst>(bi))
+                    if (auto ci = dyn_cast<CallBase>(bi))
                     {
                         if (auto debug = ci->getMetadata("KernelCall"))
                         {
@@ -1090,4 +1088,30 @@ namespace TraceAtlas::tik
             }
         }
     }
+
+    void CartographerKernel::FixInvokes()
+    {
+        auto F = TikModule->getOrInsertFunction("__gxx_personality_v0", Type::getInt32Ty(TikModule->getContext()));
+        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+        {
+            for (auto bi = fi->begin(); bi != fi->end(); bi++)
+            {
+                if (auto ii = dyn_cast<InvokeInst>(bi))
+                {
+                    auto a = ii->getLandingPadInst();
+                    if (isa<BranchInst>(a))
+                    {
+                        auto unwind = ii->getUnwindDest();
+                        auto term = unwind->getTerminator();
+                        IRBuilder<> builder(term);
+                        auto landing = builder.CreateLandingPad(Type::getVoidTy(TikModule->getContext()), 0);
+                        landing->addClause(ConstantPointerNull::get(PointerType::get(Type::getVoidTy(TikModule->getContext()), 0)));
+                        KernelFunction->setPersonalityFn(cast<Constant>(F.getCallee()));
+                        spdlog::warn("Adding landingpad for non-inlinable Invoke Instruction. May segfault if exception is thrown.");
+                    }
+                }
+            }
+        }
+    }
+
 } // namespace TraceAtlas::tik
