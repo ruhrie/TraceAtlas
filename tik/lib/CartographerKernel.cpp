@@ -18,12 +18,66 @@ namespace TraceAtlas::tik
 {
     std::set<GlobalVariable *> globalDeclarationSet;
     std::set<Value *> remappedOperandSet;
+    /// @brief Maps BlockID to a BasicBlock pointer from the source bitcode
+    ///
+    /// -2 is the key value of entries whose value was not mapped by setBlockID (see Annotate.h)
     std::map<int64_t, llvm::BasicBlock *> IDToBlock;
     /// @brief Maps ValueID to a value from the source bitcode
     ///
     /// -2 is the key value of entries whose value was not mapped by setValueID (see Annotate.h)
     /// -1 is reserved for the first argument of every kernel function
     std::map<int64_t, llvm::Value *> IDToValue;
+
+    void RecurseThroughOperands(Value *val)
+    {
+        if (GetValueID(val) > -1)
+        {
+            if (IDToValue.find(GetValueID(val)) == IDToValue.end())
+            {
+                IDToValue[GetValueID(val)] = val;
+            }
+            if (auto inst = dyn_cast<Instruction>(val))
+            {
+                for (unsigned int i = 0; i < inst->getNumOperands(); i++)
+                {
+                    if (auto subVal = dyn_cast<Value>(inst->getOperand(i)))
+                    {
+                        RecurseThroughOperands(subVal);
+                    }
+                }
+            }
+            else if (auto gp = dyn_cast<GlobalVariable>(val))
+            {
+                for (unsigned int i = 0; i < gp->getNumOperands(); i++)
+                {
+                    if (auto subVal = dyn_cast<Value>(gp->getOperand(i)))
+                    {
+                        RecurseThroughOperands(subVal);
+                    }
+                }
+            }
+        }
+    }
+
+    void InitializeIDMaps(std::set<BasicBlock *> blocks)
+    {
+        for (const auto &block : blocks)
+        {
+            if ((GetBlockID(block) != -2) && (IDToBlock[GetBlockID(block)] == nullptr))
+            {
+                IDToBlock[GetBlockID(block)] = block;
+            }
+            for (auto it = block->begin(); it != block->end(); it++)
+            {
+                auto inst = cast<Instruction>(it);
+                if (auto val = dyn_cast<Value>(inst))
+                {
+                    RecurseThroughOperands(val);
+                }
+            }
+        }
+    }
+
     void CopyOperand(llvm::User *inst, llvm::ValueToValueMapTy &VMap)
     {
         if (auto func = dyn_cast<Function>(inst))
@@ -170,7 +224,7 @@ namespace TraceAtlas::tik
             {
                 auto *b = cast<BasicBlock>(BB);
                 int64_t id = GetBlockID(b);
-                if (id != -1)
+                if (id != -2)
                 {
                     if (find(basicBlocks.begin(), basicBlocks.end(), id) != basicBlocks.end())
                     {
@@ -202,6 +256,9 @@ namespace TraceAtlas::tik
                 }
             }
 
+            /// Initialize our IDtoX maps
+            InitializeIDMaps(blocks);
+
             //SplitBlocks(blocks);
             map<Value *, GlobalObject *> GlobalMap;
             vector<int64_t> KernelImports;
@@ -214,11 +271,33 @@ namespace TraceAtlas::tik
             inputArgs.push_back(Type::getInt8Ty(TikModule->getContext()));
             for (auto inst : KernelImports)
             {
-                inputArgs.push_back(IDToValue[inst]->getType());
+                if (IDToValue[inst] != nullptr)
+                {
+                    inputArgs.push_back(IDToValue[inst]->getType());
+                }
+                else if (IDToBlock[inst] != nullptr)
+                {
+                    inputArgs.push_back(IDToBlock[inst]->getType());
+                }
+                else
+                {
+                    spdlog::error("Tried to push a nullptr into the inputArgs when parsing imports.");
+                }
             }
             for (auto inst : KernelExports)
             {
-                inputArgs.push_back(IDToValue[inst]->getType());
+                if (IDToValue[inst] != nullptr)
+                {
+                    inputArgs.push_back(IDToValue[inst]->getType());
+                }
+                else if (IDToBlock[inst] != nullptr)
+                {
+                    inputArgs.push_back(IDToBlock[inst]->getType());
+                }
+                else
+                {
+                    spdlog::error("Tried to push a nullptr into the inputArgs when parsing exports.");
+                }
             }
             FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
             KernelFunction = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
@@ -381,6 +460,7 @@ namespace TraceAtlas::tik
                                 {
                                     spdlog::error("Tried pushing a value without an ID into the KernelImport list. This is not allowed.");
                                 }
+                                PrintVal(ar->getType());
                                 KernelImports.push_back(GetValueID(ar));
                             }
                         }
@@ -396,8 +476,23 @@ namespace TraceAtlas::tik
                         auto p = i->getParent();
                         if (blocks.find(p) == blocks.end())
                         {
+                            int64_t ID = -2;
                             //the use is external therefore it should be a kernel export
-                            KernelExports.push_back(GetValueID(inst));
+                            if (GetValueID(p) != -2)
+                            {
+                                ID = GetValueID(p);
+                            }
+                            else if (GetBlockID(p) != -2)
+                            {
+                                ID = GetBlockID(p);
+                            }
+                            else
+                            {
+                                PrintVal(p->getType());
+                                spdlog::error("Tried putting an entity without a value or block ID. Skipping...");
+                                continue;
+                            }
+                            KernelExports.push_back(ID);
                             break;
                         }
                     }
@@ -525,7 +620,7 @@ namespace TraceAtlas::tik
                                 if (!found)
                                 {
                                     auto a = p->getBasicBlockIndex(pred);
-                                    if (a != -1)
+                                    if (a != -2)
                                     {
                                         p->removeIncomingValue(pred);
                                     }
@@ -1107,4 +1202,5 @@ namespace TraceAtlas::tik
             }
         }
     }
+
 } // namespace TraceAtlas::tik
