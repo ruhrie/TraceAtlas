@@ -56,30 +56,34 @@ int main(int argc, char **argv)
     
     //here calculates the maximum internal working set size
 
-    // for (auto &itout: KernelWorkingSetMap)
-    // {
-    //     //store max size of input output internal working set
-    //     uint64_t maxInput = 0;
-    //     uint64_t maxOutput = 0;
-    //     uint64_t maxinternal = 0;
-    //     set<int64_t> endTimeSet; //using this set of end time to calculate the maximum internal working set
-    //     for (auto it : itout.second.internalAddressLivingVec)
-    //     {
-    //         if (it.deathTime > 0)
-    //         {
-    //             endTimeSet.insert(it.deathTime);
-    //             while (it.birthTime > *(endTimeSet.begin()))
-    //             {
-    //                 endTimeSet.erase(endTimeSet.begin());
-    //             }
-    //             if (endTimeSet.size() > maxinternal)
-    //             {
-    //                 maxinternal = endTimeSet.size();
-    //             }
-    //         }
-    //     }
-    //     maxInput = itout.second.inputMapSize;
-    //     maxOutput = itout.second.outputAddressIndexSet.size();
-    //     printf("maxInput: %lu \n maxinternal: %lu \n maxOutput: %lu \n", maxInput, maxinternal, maxOutput);
-    // }   
+    for (auto &itout: KernelWorkingSetMap)
+    {
+        //store max size of input output internal working set
+        uint64_t maxInput = 0;
+        uint64_t maxOutput = 0;
+        uint64_t maxinternal = 0;
+        set<int64_t> endTimeSet; //using this set of end time to calculate the maximum internal working set
+        for (auto it : itout.second.internalAddressLivingVec)
+        {
+            if (it.deathTime > 0)
+            {
+                endTimeSet.insert(it.deathTime);
+                while (it.birthTime > *(endTimeSet.begin()))
+                {
+                    endTimeSet.erase(endTimeSet.begin());
+                }
+                if (endTimeSet.size() > maxinternal)
+                {
+                    maxinternal = endTimeSet.size();
+                }
+            }
+        }
+        if (maxinternalfiring[itout.first]>maxinternal)
+        {
+            maxinternal = maxinternalfiring[itout.first];
+        }
+        maxInput = itout.second.inputMapSize;
+        maxOutput = itout.second.outputAddressIndexSet.size();
+        printf("maxInput: %lu \n maxinternal: %lu \n maxOutput: %lu \n", maxInput, maxinternal, maxOutput);
+    }   
 }

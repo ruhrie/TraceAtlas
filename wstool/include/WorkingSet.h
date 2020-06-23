@@ -11,7 +11,6 @@ namespace WorkingSet
 {
     typedef struct InternaladdressLiving
     {
-        uint64_t address;
         int64_t birthTime;
         int64_t deathTime;
     } InternaladdressLiving;
@@ -34,5 +33,7 @@ namespace WorkingSet
     extern uint64_t inputMapSize;
     extern uint64_t internalMapSize;
     extern set<uint64_t> outputAddressIndexSet;
+    extern map<uint64_t,uint64_t> maxinternalfiring;
     void Process(std::string &key, std::string &value);
+    void ProcessBlock(std::string &key, std::string &value);
 } // namespace WorkingSet
