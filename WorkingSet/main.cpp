@@ -8,7 +8,8 @@
 using namespace std;
 using namespace llvm;
 
-llvm::cl::opt<string> kernelFile("k", llvm::cl::desc("Specify output json name"), llvm::cl::value_desc("kernel filename"), llvm::cl::init("kernel.json"));
+llvm::cl::opt<string> kernelFile("k", llvm::cl::desc("Specify input json name"), llvm::cl::value_desc("kernel filename"), llvm::cl::init("kernel.json"));
+llvm::cl::opt<string> OutputFile("o", llvm::cl::desc("Specify output json name"), llvm::cl::value_desc("working set filename"), llvm::cl::init("WorkingSet.json"));
 llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
 llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::value_desc("No progress bar"));
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
@@ -84,10 +85,7 @@ int main(int argc, char **argv)
         ProcessTrace(inputTrace, &WorkingSet::Process, "Parsing Load and Store sets.", noBar);
         WorkingSet::CreateSets();
         WorkingSet::IntersectKernels();
-        //WorkingSet::parseDeathMap();
         WorkingSet::JohnsAlgorithm();
-        //WorkingSet::PrintOutput();
-        WorkingSet::PrintSizes();
     }
     catch (int e)
     {
@@ -95,5 +93,32 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
+    // write output to file
+    nlohmann::json outputJson;
+    for (const auto &key : WorkingSet::kernelWSMap)
+    {
+        outputJson["Sizes"][to_string(key.first)]["Static"]["Input"] = key.second[0].size();
+        outputJson["Sizes"][to_string(key.first)]["Static"]["Internal"] = key.second[1].size();
+        outputJson["Sizes"][to_string(key.first)]["Static"]["Output"] = key.second[2].size();
+    }
+    for (const auto &key : WorkingSet::liveAddressMaxCounts)
+    {
+        outputJson["Sizes"][to_string(key.first)]["Dynamic"]["Total"] = key.second;
+    }
+    for (const auto &key : WorkingSet::kernelWSLiveAddrMaxCounts)
+    {
+        outputJson["Sizes"][to_string(key.first)]["Dynamic"]["Input"] = key.second[0];
+        outputJson["Sizes"][to_string(key.first)]["Dynamic"]["Internal"] = key.second[1];
+        outputJson["Sizes"][to_string(key.first)]["Dynamic"]["Output"] = key.second[2];
+    }
+    for (const auto &key : WorkingSet::ProdConMap)
+    {
+        outputJson["Producer-Consumer"]["Kernel IDs"][to_string(key.first.first) + "," + to_string(key.first.second)]["Input,Output"] = key.second[0].size();
+        outputJson["Producer-Consumer"]["Kernel IDs"][to_string(key.first.first) + "," + to_string(key.first.second)]["Internal,Internal"] = key.second[1].size();
+        outputJson["Producer-Consumer"]["Kernel IDs"][to_string(key.first.first) + "," + to_string(key.first.second)]["Output,Input"] = key.second[2].size();
+    }
+    ofstream out(OutputFile);
+    out << setw(4) << outputJson << endl;
+    out.close();
     return 0;
 }

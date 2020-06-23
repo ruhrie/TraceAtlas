@@ -1,6 +1,7 @@
 #include "inc/WorkingSet.h"
 #include <algorithm>
 #include <iostream>
+#include <spdlog/spdlog.h>
 
 using namespace std;
 namespace WorkingSet
@@ -21,7 +22,7 @@ namespace WorkingSet
     uint64_t timeCount = 0;
     /// Maps an address to a pair that holds the time of its first store and last load
     /// first -> birth time, second -> death time
-    map<uint64_t, pair<uint64_t, uint64_t>> addrDeathMap;
+    map<uint64_t, pair<uint64_t, uint64_t>> addrLiveSpanMap;
     /// Maps a kernel index to a pair of sets (first -> ld addr, second -> st addr)
     map<int, pair<set<uint64_t>, set<uint64_t>>> kernelSetMap;
     vector<int> currentKernelIDs;
@@ -42,7 +43,7 @@ namespace WorkingSet
         {
             uint64_t addr = stoul(value, nullptr, 0);
             // death time, constantly updating
-            addrDeathMap[addr].second = timeCount;
+            addrLiveSpanMap[addr].second = timeCount;
             for (const auto &ind : currentKernelIDs)
             {
                 kernelSetMap[ind].first.insert(addr);
@@ -53,9 +54,9 @@ namespace WorkingSet
         {
             uint64_t addr = stoul(value, nullptr, 0);
             // birth time
-            if (addrDeathMap.find(addr) == addrDeathMap.end())
+            if (addrLiveSpanMap.find(addr) == addrLiveSpanMap.end())
             {
-                addrDeathMap[addr].first = timeCount;
+                addrLiveSpanMap[addr].first = timeCount;
             }
             for (const auto &ind : currentKernelIDs)
             {
@@ -115,7 +116,7 @@ namespace WorkingSet
     }
 
     /// Maps kernel ID pairs to a vector of sets (length 3) containing the intersections of each kernel's working sets
-    map<pair<int, int>, vector<set<uint64_t>>> prodConMap;
+    map<pair<int, int>, vector<set<uint64_t>>> ProdConMap;
     void IntersectKernels()
     {
         for (auto it0 = kernelWSMap.begin(); it0 != kernelWSMap.end(); it0++)
@@ -133,7 +134,7 @@ namespace WorkingSet
                 /// 1: it0->internal working set & it1->internal working set
                 /// 2: it0->output working set   & it1->input working set
                 pair<int, int> newPair = pair(it0->first, it1->first);
-                prodConMap[newPair] = vector<set<uint64_t>>(3);
+                ProdConMap[newPair] = vector<set<uint64_t>>(3);
 
                 /// it0->input working set & it1->output working set
                 vector<uint64_t> intersect;
@@ -147,7 +148,7 @@ namespace WorkingSet
                 }
                 auto it = set_intersection(it0->second[0].begin(), it0->second[0].end(), it1->second[2].begin(), it1->second[2].end(), intersect.begin());
                 intersect.resize(it - intersect.begin());
-                prodConMap[newPair][0] = set<uint64_t>(intersect.begin(), intersect.end());
+                ProdConMap[newPair][0] = set<uint64_t>(intersect.begin(), intersect.end());
 
                 /// it0->internal working set & it1->internal working set
                 intersect.clear();
@@ -161,7 +162,7 @@ namespace WorkingSet
                 }
                 it = set_intersection(it0->second[1].begin(), it0->second[1].end(), it1->second[1].begin(), it1->second[1].end(), intersect.begin());
                 intersect.resize(it - intersect.begin());
-                prodConMap[newPair][1] = set<uint64_t>(intersect.begin(), intersect.end());
+                ProdConMap[newPair][1] = set<uint64_t>(intersect.begin(), intersect.end());
 
                 /// it0->output working set & it1->input working set
                 intersect.clear();
@@ -175,142 +176,22 @@ namespace WorkingSet
                 }
                 it = set_intersection(it0->second[2].begin(), it0->second[2].end(), it1->second[0].begin(), it1->second[0].end(), intersect.begin());
                 intersect.resize(it - intersect.begin());
-                prodConMap[newPair][2] = set<uint64_t>(intersect.begin(), intersect.end());
+                ProdConMap[newPair][2] = set<uint64_t>(intersect.begin(), intersect.end());
             }
         }
-    }
-
-    bool isBad(int ind) { return ind != -1; }
-    /// Maps kernel ID to a vector, contains pairs of maxCount, timestamp
-    /// 0 -> input set max count, 1 -> internal set max count, 2 -> output set max count
-    map<int, vector<uint64_t>> kernelAdMaxCntMap;
-    void parseDeathMap()
-    {
-        /// Vector of counters for current live address size, mapped to each kernel index
-        /// 0 -> input set count, 1 -> internal set count, 2 -> output set count
-        map<int, vector<set<pair<uint64_t, uint64_t>>>> kernelAdLifetimeMap;
-
-        for (auto &key : kernelWSMap)
-        {
-            kernelAdLifetimeMap[key.first] = vector<set<pair<uint64_t, uint64_t>>>(3);
-            kernelAdLifetimeMap[key.first][0] = set<pair<uint64_t, uint64_t>>();
-            kernelAdLifetimeMap[key.first][1] = set<pair<uint64_t, uint64_t>>();
-            kernelAdLifetimeMap[key.first][2] = set<pair<uint64_t, uint64_t>>();
-        }
-        for (auto &key : kernelWSMap)
-        {
-            kernelAdMaxCntMap[key.first] = vector<uint64_t>(3);
-            kernelAdMaxCntMap[key.first][0] = 0;
-            kernelAdMaxCntMap[key.first][1] = 0;
-            kernelAdMaxCntMap[key.first][2] = 0;
-        }
-        for (const auto &addr : addrDeathMap)
-        {
-            for (const auto &kIndex : kernelWSMap)
-            {
-                if (kIndex.second[0].find(addr.first) != kIndex.second[0].end())
-                {
-                    kernelAdLifetimeMap[kIndex.first][0].insert(addr.second);
-                }
-                else if (kIndex.second[1].find(addr.first) != kIndex.second[1].end())
-                {
-                    kernelAdLifetimeMap[kIndex.first][1].insert(addr.second);
-                }
-                else if (kIndex.second[2].find(addr.first) != kIndex.second[2].end())
-                {
-                    kernelAdLifetimeMap[kIndex.first][2].insert(addr.second);
-                }
-            }
-        }
-
-        // allocate our tabling array
-        size_t maxSize = 0;
-        for (const auto &key : kernelAdLifetimeMap)
-        {
-            for (const auto &setT : key.second)
-            {
-                if (setT.size() > maxSize)
-                {
-                    maxSize = setT.size();
-                }
-            }
-        }
-        cout << "maxsize is " << maxSize << endl;
-        vector<vector<int>> Marray = vector<vector<int>>(maxSize);
-        for (auto &ind : Marray)
-        {
-            ind = vector<int>(maxSize);
-        }
-
-        // find the maximum live count for each working set of each kernel index
-        // TODO: this algorithm is intractable because the tabling matrix becomes way to big for large set sizes
-        /*
-        int index;
-        for( const auto& kIndex : kernelAdLifetimeMap )
-        {
-            index = 0;
-            for( const auto& setT : kIndex.second )
-            {
-                for( auto& ind : Marray )
-                {
-                    replace_if(ind.begin(), ind.end(), isBad, -1);
-                }
-                int i = 0;
-                int j = 0;
-                uint64_t count = 0;
-                uint64_t maxCount = 0;
-                for( auto it0 = setT.begin(); it0 != setT.end(); it0++ )
-                {
-                    for( auto it1 = setT.begin(); it1 != setT.end(); it1++ )
-                    {
-                        if( Marray[i][j] == 1 )
-                        {
-                            count++;
-                        }
-                        else if( Marray[i][j] == 0 )
-                        {
-                            continue;
-                        }
-                        else if( Marray[i][j] == -1)
-                        {
-                            if( (it1->second >= it0->first) || (it1->first <= it0->second) )
-                            {
-                                count++;
-                                Marray[i][j] = 1;
-                            }
-                            else
-                            {
-                                Marray[i][j] = 0;
-                            }
-                        }
-                        j++;
-                    }
-                    if( count > maxCount )
-                    {
-                        maxCount = count;
-                    }
-                    i++;
-                    count = 0;
-                }
-                for( const auto ind : Marray )
-                {
-
-                }
-                kernelAdMaxCntMap[kIndex.first][index] = maxCount;
-                index++;
-            }
-        }*/
     }
 
     /// Maps a time in the trace to the birth or death time of an address
-    map<int, map<uint64_t, uint64_t>> BirthTimeMap;
-    map<int, map<uint64_t, uint64_t>> DeathTimeMap;
+    map<int, map<uint64_t, uint64_t, std::greater<uint64_t>>> BirthTimeMap;
+    map<int, map<uint64_t, uint64_t, std::greater<uint64_t>>> DeathTimeMap;
     /// Maps a kernel ID to its max alive address count
     map<int, unsigned long> liveAddressMaxCounts;
+    /// Maps a kernel ID to the max live address counts of each working set
+    map<int, vector<uint64_t>> kernelWSLiveAddrMaxCounts;
     void JohnsAlgorithm()
     {
-        // reverse map addrDeathMap using BirthTimeMap and DeathTimeMap
-        for (const auto &addr : addrDeathMap)
+        // reverse map addrLiveSpanMap using BirthTimeMap and DeathTimeMap
+        for (const auto &addr : addrLiveSpanMap)
         {
             // find kernel membership
             vector<int> kernelIDs = vector<int>();
@@ -331,8 +212,8 @@ namespace WorkingSet
             }
             for (const auto &ID : kernelIDs)
             {
-                DeathTimeMap[ID][addr.second.first] = addr.first;
-                BirthTimeMap[ID][addr.second.second] = addr.first;
+                DeathTimeMap[ID][addr.second.second] = addr.first;
+                BirthTimeMap[ID][addr.second.first] = addr.first;
             }
         }
 
@@ -340,18 +221,93 @@ namespace WorkingSet
         set<uint64_t> liveAddresses;
         for (const auto &kernelID : BirthTimeMap)
         {
+            spdlog::info("Creating total live address counts for kernel index " + to_string(kernelID.first));
             liveAddressMaxCounts[kernelID.first] = 0;
             liveAddresses.clear();
-            for (const auto &time : kernelID.second)
+            uint64_t minTime = min(BirthTimeMap[kernelID.first].end()->first, DeathTimeMap[kernelID.first].end()->first);
+            uint64_t maxTime = max(BirthTimeMap[kernelID.first].begin()->first, DeathTimeMap[kernelID.first].begin()->first);
+            for (uint64_t timeCount = minTime - 1; timeCount < maxTime + 1; timeCount++)
             {
-                liveAddresses.insert(time.second);
-                if (DeathTimeMap[kernelID.first].find(time.first) != DeathTimeMap[kernelID.first].end())
+                if (BirthTimeMap[kernelID.first].find(timeCount) != BirthTimeMap[kernelID.first].end())
                 {
-                    liveAddresses.erase(DeathTimeMap[kernelID.first][time.first]);
+                    liveAddresses.insert(BirthTimeMap[kernelID.first][timeCount]);
+                }
+                if (DeathTimeMap[kernelID.first].find(timeCount) != DeathTimeMap[kernelID.first].end())
+                {
+                    liveAddresses.erase(DeathTimeMap[kernelID.first][timeCount]);
                 }
                 if (liveAddressMaxCounts[kernelID.first] < liveAddresses.size())
                 {
                     liveAddressMaxCounts[kernelID.first] = liveAddresses.size();
+                }
+            }
+        }
+
+        // project the same idea onto the individual sets of each kernel index
+        // vector to hold our separate live address sets, indexed in the same way as kernelWSLiveAddrMaxCounts
+        auto liveAddrSets = vector<set<uint64_t>>(3);
+        for (const auto &kernelID : BirthTimeMap)
+        {
+            spdlog::info("Creating live address counts on each working set for kernel index " + to_string(kernelID.first));
+            kernelWSLiveAddrMaxCounts[kernelID.first] = vector<uint64_t>(3);
+            for (auto &ind : liveAddrSets)
+            {
+                ind.clear();
+            }
+            uint64_t minTime = max(BirthTimeMap[kernelID.first].end()->first, DeathTimeMap[kernelID.first].end()->first);
+            uint64_t maxTime = max(BirthTimeMap[kernelID.first].begin()->first, DeathTimeMap[kernelID.first].begin()->first);
+            for (uint64_t timeCount = minTime - 1; timeCount < maxTime + 1; timeCount++)
+            {
+                // if this is a birth address
+                if (BirthTimeMap[kernelID.first].find(timeCount) != BirthTimeMap[kernelID.first].end())
+                {
+                    // if we are an input set addr
+                    if (kernelWSMap[kernelID.first][0].find(BirthTimeMap[kernelID.first][timeCount]) != kernelWSMap[kernelID.first][0].end())
+                    {
+                        liveAddrSets[0].insert(BirthTimeMap[kernelID.first][timeCount]);
+                    }
+                    // if we are an output set addr
+                    else if (kernelWSMap[kernelID.first][1].find(BirthTimeMap[kernelID.first][timeCount]) != kernelWSMap[kernelID.first][1].end())
+                    {
+                        liveAddrSets[1].insert(BirthTimeMap[kernelID.first][timeCount]);
+                    }
+                    // if we are an output set addr
+                    else if (kernelWSMap[kernelID.first][2].find(BirthTimeMap[kernelID.first][timeCount]) != kernelWSMap[kernelID.first][2].end())
+                    {
+                        liveAddrSets[2].insert(BirthTimeMap[kernelID.first][timeCount]);
+                    }
+                }
+                // if this is a death address
+                else if (DeathTimeMap[kernelID.first].find(timeCount) != DeathTimeMap[kernelID.first].end())
+                {
+                    // if we are an input set addr
+                    if (kernelWSMap[kernelID.first][0].find(BirthTimeMap[kernelID.first][timeCount]) != kernelWSMap[kernelID.first][0].end())
+                    {
+                        liveAddrSets[0].erase(DeathTimeMap[kernelID.first][timeCount]);
+                    }
+                    // if we are an internal set addr
+                    else if (kernelWSMap[kernelID.first][1].find(BirthTimeMap[kernelID.first][timeCount]) != kernelWSMap[kernelID.first][1].end())
+                    {
+                        liveAddrSets[1].erase(DeathTimeMap[kernelID.first][timeCount]);
+                    }
+                    // if we are an output set addr
+                    else if (kernelWSMap[kernelID.first][2].find(BirthTimeMap[kernelID.first][timeCount]) != kernelWSMap[kernelID.first][2].end())
+                    {
+                        liveAddrSets[2].erase(DeathTimeMap[kernelID.first][timeCount]);
+                    }
+                }
+                // update our sizes
+                if (kernelWSLiveAddrMaxCounts[kernelID.first][0] < liveAddrSets[0].size())
+                {
+                    kernelWSLiveAddrMaxCounts[kernelID.first][0] = liveAddrSets[0].size();
+                }
+                if (kernelWSLiveAddrMaxCounts[kernelID.first][1] < liveAddrSets[1].size())
+                {
+                    kernelWSLiveAddrMaxCounts[kernelID.first][1] = liveAddrSets[1].size();
+                }
+                if (kernelWSLiveAddrMaxCounts[kernelID.first][2] < liveAddrSets[2].size())
+                {
+                    kernelWSLiveAddrMaxCounts[kernelID.first][2] = liveAddrSets[2].size();
                 }
             }
         }
@@ -414,8 +370,8 @@ namespace WorkingSet
         {
             cout << "The kernel index is: " << key.first << ", its input working set size is " << key.second[0].size() << ", its internal working set size is " << key.second[1].size() << ", and its output working set size is " << key.second[2].size() << endl;
         }
-        cout << "Outputting prodConMap" << endl;
-        for (const auto &key : prodConMap)
+        cout << "Outputting ProdConMap" << endl;
+        for (const auto &key : ProdConMap)
         {
             cout << "The kernel pair is: " << key.first.first << "," << key.first.second << ", its input-output intersection size is " << key.second[0].size() << ", its internal intersection size is " << key.second[1].size() << ", and its output-input intersection set size is " << key.second[2].size() << endl;
         }
