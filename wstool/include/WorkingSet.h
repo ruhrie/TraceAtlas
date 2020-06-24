@@ -11,6 +11,8 @@ namespace WorkingSet
 {
     typedef struct InternaladdressLiving
     {
+        uint64_t addr;
+        bool dep;
         int64_t birthTime;
         int64_t deathTime;
     } InternaladdressLiving;

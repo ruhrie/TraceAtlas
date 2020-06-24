@@ -19,7 +19,7 @@ namespace WorkingSet
         {
             if(KernelWorkingSetMap[kernelIndex].internalAddressIndexMap.find(addrIndex)==KernelWorkingSetMap[kernelIndex].internalAddressIndexMap.end())
             {
-                InternaladdressLiving internalAddress = {.birthTime = t, .deathTime = -1};
+                InternaladdressLiving internalAddress = {.addr =addrIndex, .birthTime = t, .deathTime = -1,.dep =false};
                 //store the address into output set temporally
                 KernelWorkingSetMap[kernelIndex].outputAddressIndexSet.insert(addrIndex);
                 KernelWorkingSetMap[kernelIndex].internalAddressIndexMap[addrIndex] = KernelWorkingSetMap[kernelIndex].internalMapSize;
@@ -28,9 +28,10 @@ namespace WorkingSet
             }
             else
             {
-                InternaladdressLiving internalAddress = {.birthTime = t, .deathTime = -1};
+                InternaladdressLiving internalAddress = {.addr =addrIndex, .birthTime = t, .deathTime = -1,.dep =false};
                 //store the address into output set temporally
                 KernelWorkingSetMap[kernelIndex].outputAddressIndexSet.insert(addrIndex);
+                KernelWorkingSetMap[kernelIndex].internalAddressLivingVec[KernelWorkingSetMap[kernelIndex].internalAddressIndexMap[addrIndex]].dep = true;
                 KernelWorkingSetMap[kernelIndex].internalAddressIndexMap[addrIndex] = KernelWorkingSetMap[kernelIndex].internalMapSize;
                 KernelWorkingSetMap[kernelIndex].internalAddressLivingVec.push_back(internalAddress);
                 KernelWorkingSetMap[kernelIndex].internalMapSize++;
@@ -46,7 +47,7 @@ namespace WorkingSet
         }
     }
 
-    void firingClear(uint64_t kernelIndex)// (uint64_t kernelIndex,int64_t t)
+    void firingClear (uint64_t kernelIndex)//(uint64_t kernelIndex)// (uint64_t kernelIndex,int64_t t)
     {
         set<int64_t> endTimeSet;
         for (auto it : KernelWorkingSetMap[kernelIndex].internalAddressLivingVec)
@@ -66,9 +67,9 @@ namespace WorkingSet
         }
         uint64_t counterF = 0;
         vector<InternaladdressLiving> temp;
-        set<uint64_t>runSet;
-        map<uint64_t,uint64_t>inverseMap;
-        KernelWorkingSetMap[kernelIndex].internalAddressLivingVec.clear();
+        //set<uint64_t>runSet;
+        //map<uint64_t,uint64_t>inverseMap;
+        //KernelWorkingSetMap[kernelIndex].internalAddressLivingVec.clear();
 
         // for (auto &it :KernelWorkingSetMap[kernelIndex].internalAddressIndexMap)
         // {
@@ -77,21 +78,38 @@ namespace WorkingSet
         //     counterF++;
         //     KernelWorkingSetMap[kernelIndex].internalAddressLivingVec.push_back(internalAddress);
         // }
-        for (auto &it :KernelWorkingSetMap[kernelIndex].internalAddressIndexMap)
+        // for (auto &it :KernelWorkingSetMap[kernelIndex].internalAddressIndexMap)
+        // {
+        //     runSet.insert(it.second);
+        //     inverseMap[it.second] = it.first;
+        // }
+
+        // for(auto &it :runSet)
+        // {
+        //     KernelWorkingSetMap[kernelIndex].internalAddressIndexMap[inverseMap[it]] = counterF;
+        //     temp.push_back(KernelWorkingSetMap[kernelIndex].internalAddressLivingVec[it]);
+        //     counterF++;
+        // }
+
+
+        // KernelWorkingSetMap[kernelIndex].internalAddressLivingVec.clear();
+        // KernelWorkingSetMap[kernelIndex].internalAddressLivingVec = temp;
+        // KernelWorkingSetMap[kernelIndex].internalMapSize = KernelWorkingSetMap[kernelIndex].internalAddressIndexMap.size();
+        
+
+
+        for (auto it :KernelWorkingSetMap[kernelIndex].internalAddressLivingVec)
         {
-            runSet.insert(it.second);
-            inverseMap[it.second] = it.first;
-        }
-        for(auto &it :runSet)
-        {
-            KernelWorkingSetMap[kernelIndex].internalAddressIndexMap[inverseMap[it]] = counterF;
-            temp.push_back(KernelWorkingSetMap[kernelIndex].internalAddressLivingVec[it]);
-            counterF++;
+            if (it.dep == false)
+            {
+                temp.push_back(it);
+                KernelWorkingSetMap[kernelIndex].internalAddressIndexMap[it.addr]= counterF;
+                counterF++;
+            }
         }
         KernelWorkingSetMap[kernelIndex].internalAddressLivingVec.clear();
         KernelWorkingSetMap[kernelIndex].internalAddressLivingVec = temp;
         KernelWorkingSetMap[kernelIndex].internalMapSize = KernelWorkingSetMap[kernelIndex].internalAddressIndexMap.size();
-        
     }
 
     void Process(string &key, string &value)
@@ -149,8 +167,8 @@ namespace WorkingSet
             }
             if(kernelFiringNum[it]>30000)
             {
-                //firingClear(it,timing);
                 firingClear(it);
+                //firingClear(it);
             }
         }  
     }
