@@ -444,7 +444,6 @@ namespace TraceAtlas::tik
                                 continue;
                             }
                         }
-                        //spdlog::error("Parsed a value from the source bitcode that did not receive a valueID. Skipping...");
                         continue;
                     }
                     IDToValue[valID] = op;
@@ -1227,5 +1226,4 @@ namespace TraceAtlas::tik
             }
         }
     }
-
 } // namespace TraceAtlas::tik
