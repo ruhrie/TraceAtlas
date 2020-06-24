@@ -57,3 +57,15 @@ set_target_properties(KernelVerifier
 )
 
 install(TARGETS KernelVerifier RUNTIME DESTINATION bin)
+
+add_executable(JR JR.cpp)
+target_link_libraries(JR ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
+target_include_directories(JR SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(JR PRIVATE ${LLVM_DEFINITIONS})
+
+set_target_properties(JR
+	PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin" 
+)
+
+install(TARGETS JR RUNTIME DESTINATION bin)

@@ -13,7 +13,7 @@ int Kernel1(int input)
     return input * 3 - 2;
 }
 
-void Kernel2(int *input, int *output)
+void Kernel2(const int *input, int *output)
 {
     for (int i = 0; i < WIDTH; i++)
     {

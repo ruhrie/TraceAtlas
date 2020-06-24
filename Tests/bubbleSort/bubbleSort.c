@@ -49,5 +49,6 @@ int main(int argc, char *argv[])
 #endif
 
     printf("\nSorting Done");
+    free(in);
     return 0;
 }
