@@ -1,5 +1,6 @@
 #pragma once
 #include <llvm/IR/Constants.h>
+#include <llvm/IR/Instruction.h>
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/Metadata.h>
 #include <llvm/IR/Module.h>
@@ -15,7 +16,8 @@ inline void SetValueIDs(llvm::Value *val, int64_t &i)
     if (llvm::Instruction *inst = llvm::dyn_cast<llvm::Instruction>(val))
     {
         llvm::MDNode *idNode = llvm::MDNode::get(inst->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(inst->getContext()), (uint64_t)i)));
-        if (!inst->hasMetadataOtherThanDebugLoc())
+        std::string metaKind = "ValueID";
+        if (inst->getMetadata(metaKind) == nullptr)
         {
             inst->setMetadata("ValueID", idNode);
             i++;

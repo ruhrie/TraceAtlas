@@ -36,6 +36,10 @@ namespace TraceAtlas::tik
             {
                 IDToValue[GetValueID(val)] = val;
             }
+            else
+            {
+                return;
+            }
             if (auto inst = dyn_cast<Instruction>(val))
             {
                 for (unsigned int i = 0; i < inst->getNumOperands(); i++)
@@ -191,6 +195,18 @@ namespace TraceAtlas::tik
 
     CartographerKernel::CartographerKernel(std::vector<int64_t> basicBlocks, llvm::Module *M, std::string name)
     {
+        /// Initialize our IDtoX maps
+        set<BasicBlock *> wholeBitcode;
+        for (auto &F : *M)
+        {
+            for (auto BB = F.begin(); BB != F.end(); BB++)
+            {
+                auto *b = cast<BasicBlock>(BB);
+                wholeBitcode.insert(b);
+            }
+        }
+        InitializeIDMaps(wholeBitcode);
+
         llvm::ValueToValueMapTy VMap;
         set<int64_t> blockSet;
         for (auto b : basicBlocks)
@@ -256,9 +272,6 @@ namespace TraceAtlas::tik
                 }
             }
 
-            /// Initialize our IDtoX maps
-            InitializeIDMaps(blocks);
-
             //SplitBlocks(blocks);
             map<Value *, GlobalObject *> GlobalMap;
             vector<int64_t> KernelImports;
@@ -296,6 +309,7 @@ namespace TraceAtlas::tik
                 }
                 else
                 {
+                    cout << inst << endl;
                     spdlog::error("Tried to push a nullptr into the inputArgs when parsing exports.");
                 }
             }
@@ -417,6 +431,19 @@ namespace TraceAtlas::tik
                     int64_t valID = GetValueID(op);
                     if (valID == -2)
                     {
+                        // if its a block, ignore it
+                        if (auto block = dyn_cast<BasicBlock>(op))
+                        {
+                            if (GetBlockID(block) == -2)
+                            {
+                                spdlog::error("Found a non-const entity in the bitcode that did not have a valueID or a blockID.");
+                                PrintVal(op);
+                            }
+                            else
+                            {
+                                continue;
+                            }
+                        }
                         //spdlog::error("Parsed a value from the source bitcode that did not receive a valueID. Skipping...");
                         continue;
                     }
@@ -460,7 +487,6 @@ namespace TraceAtlas::tik
                                 {
                                     spdlog::error("Tried pushing a value without an ID into the KernelImport list. This is not allowed.");
                                 }
-                                PrintVal(ar->getType());
                                 KernelImports.push_back(GetValueID(ar));
                             }
                         }
@@ -488,7 +514,6 @@ namespace TraceAtlas::tik
                             }
                             else
                             {
-                                PrintVal(p->getType());
                                 spdlog::error("Tried putting an entity without a value or block ID. Skipping...");
                                 continue;
                             }
