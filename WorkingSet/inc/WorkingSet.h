@@ -11,10 +11,8 @@ namespace WorkingSet
     /// Parses input trace into kernelSetMap
     void Process(std::string &, std::string &);
     void CreateSets();
-    void IntersectKernels();
-    void JohnsAlgorithm();
-    void PrintOutput();
-    void PrintSizes();
+    void StaticSetSizes();
+    void DynamicSetSizes();
     extern std::map<int, std::vector<std::set<uint64_t>>> kernelWSMap;
     extern std::map<std::pair<int, int>, std::vector<std::set<uint64_t>>> ProdConMap;
     extern std::map<int, unsigned long> liveAddressMaxCounts;

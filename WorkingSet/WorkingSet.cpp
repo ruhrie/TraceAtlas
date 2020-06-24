@@ -117,7 +117,7 @@ namespace WorkingSet
 
     /// Maps kernel ID pairs to a vector of sets (length 3) containing the intersections of each kernel's working sets
     map<pair<int, int>, vector<set<uint64_t>>> ProdConMap;
-    void IntersectKernels()
+    void StaticSetSizes()
     {
         for (auto it0 = kernelWSMap.begin(); it0 != kernelWSMap.end(); it0++)
         {
@@ -182,13 +182,13 @@ namespace WorkingSet
     }
 
     /// Maps a time in the trace to the birth or death time of an address
-    map<int, map<uint64_t, uint64_t, std::greater<uint64_t>>> BirthTimeMap;
-    map<int, map<uint64_t, uint64_t, std::greater<uint64_t>>> DeathTimeMap;
+    map<int, map<uint64_t, uint64_t, greater<>>> BirthTimeMap;
+    map<int, map<uint64_t, uint64_t, greater<>>> DeathTimeMap;
     /// Maps a kernel ID to its max alive address count
     map<int, unsigned long> liveAddressMaxCounts;
     /// Maps a kernel ID to the max live address counts of each working set
     map<int, vector<uint64_t>> kernelWSLiveAddrMaxCounts;
-    void JohnsAlgorithm()
+    void DynamicSetSizes()
     {
         // reverse map addrLiveSpanMap using BirthTimeMap and DeathTimeMap
         for (const auto &addr : addrLiveSpanMap)
@@ -216,7 +216,6 @@ namespace WorkingSet
                 BirthTimeMap[ID][addr.second.first] = addr.first;
             }
         }
-
         // now go key by key in the birth and death time maps and keep a count of alive addresses
         set<uint64_t> liveAddresses;
         for (const auto &kernelID : BirthTimeMap)
@@ -224,7 +223,7 @@ namespace WorkingSet
             spdlog::info("Creating total live address counts for kernel index " + to_string(kernelID.first));
             liveAddressMaxCounts[kernelID.first] = 0;
             liveAddresses.clear();
-            uint64_t minTime = min(BirthTimeMap[kernelID.first].end()->first, DeathTimeMap[kernelID.first].end()->first);
+            uint64_t minTime = min(prev(BirthTimeMap[kernelID.first].end())->first, prev(DeathTimeMap[kernelID.first].end())->first);
             uint64_t maxTime = max(BirthTimeMap[kernelID.first].begin()->first, DeathTimeMap[kernelID.first].begin()->first);
             for (uint64_t timeCount = minTime - 1; timeCount < maxTime + 1; timeCount++)
             {
@@ -254,7 +253,7 @@ namespace WorkingSet
             {
                 ind.clear();
             }
-            uint64_t minTime = max(BirthTimeMap[kernelID.first].end()->first, DeathTimeMap[kernelID.first].end()->first);
+            uint64_t minTime = max(prev(BirthTimeMap[kernelID.first].end())->first, prev(DeathTimeMap[kernelID.first].end())->first);
             uint64_t maxTime = max(BirthTimeMap[kernelID.first].begin()->first, DeathTimeMap[kernelID.first].begin()->first);
             for (uint64_t timeCount = minTime - 1; timeCount < maxTime + 1; timeCount++)
             {
@@ -310,81 +309,6 @@ namespace WorkingSet
                     kernelWSLiveAddrMaxCounts[kernelID.first][2] = liveAddrSets[2].size();
                 }
             }
-        }
-    }
-
-    void PrintOutput()
-    {
-        /*
-        cout << "Outputting kernelSetMap" << endl;
-        for (const auto &key : kernelSetMap)
-        {
-            cout << "The kernel index is: " << key.first << endl;
-            cout << "The ld addrs are: " << endl;
-            for (const auto &ind : key.second.first)
-            {
-                cout << ind << ",";
-            }
-            cout << "\nThe st addrs are: " << endl;
-            for (const auto &ind : key.second.second)
-            {
-                cout << ind << ",";
-            }
-            cout << "\nThe internal addrs are " << endl;
-            for (const auto &ind : kernelIntSetMap[key.first])
-            {
-                cout << ind << ",";
-            }
-        }
-        */
-        for (const auto &key : kernelWSMap)
-        {
-            cout << "The kernel index is: " << key.first << endl;
-            cout << "The input working set addrs are: " << endl;
-            for (const auto &ind : key.second[0])
-            {
-                cout << ind << ",";
-            }
-            cout << "\nThe output working set addrs are: " << endl;
-            for (const auto &ind : key.second[1])
-            {
-                cout << ind << ",";
-            }
-            cout << "\nThe internal working set addrs are " << endl;
-            for (const auto &ind : key.second[2])
-            {
-                cout << ind << ",";
-            }
-        }
-    }
-
-    void PrintSizes()
-    {
-        /*cout << "Outputting kernelSetMap" << endl;
-        for (const auto &key : kernelSetMap)
-        {
-            cout << "The kernel index is: " << key.first << ", its ld set size is " << key.second.first.size() << ", its st set size is " << key.second.second.size() << ", and its internal set size is " << kernelWSMap[key.first].size() << endl;
-        }*/
-        cout << "Outputting kernelWSMap" << endl;
-        for (const auto &key : kernelWSMap)
-        {
-            cout << "The kernel index is: " << key.first << ", its input working set size is " << key.second[0].size() << ", its internal working set size is " << key.second[1].size() << ", and its output working set size is " << key.second[2].size() << endl;
-        }
-        cout << "Outputting ProdConMap" << endl;
-        for (const auto &key : ProdConMap)
-        {
-            cout << "The kernel pair is: " << key.first.first << "," << key.first.second << ", its input-output intersection size is " << key.second[0].size() << ", its internal intersection size is " << key.second[1].size() << ", and its output-input intersection set size is " << key.second[2].size() << endl;
-        }
-        /*
-        cout << "Outputting maximum set sizes" << endl;
-        for( const auto& kIndex : kernelAdMaxCntMap )
-        {
-            cout << "For kernel " << kIndex.first << ", the size of the input working set is " << kIndex.second[0] << ", internal " << kIndex.second[1] << " and output " << kIndex.second[2] << endl;
-        }*/
-        cout << "Outputting maximum set size counts" << endl;
-        for (const auto &KI : liveAddressMaxCounts)
-        {
-            cout << "The kernel ID is " << KI.first << ", the maximum size was " << KI.second << endl;
         }
     }
 } // namespace WorkingSet

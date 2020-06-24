@@ -84,8 +84,8 @@ int main(int argc, char **argv)
         spdlog::info("Started WorkingSet analysis.");
         ProcessTrace(inputTrace, &WorkingSet::Process, "Parsing Load and Store sets.", noBar);
         WorkingSet::CreateSets();
-        WorkingSet::IntersectKernels();
-        WorkingSet::JohnsAlgorithm();
+        WorkingSet::StaticSetSizes();
+        WorkingSet::DynamicSetSizes();
     }
     catch (int e)
     {

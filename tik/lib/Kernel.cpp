@@ -155,14 +155,14 @@ namespace TraceAtlas::tik
         metadata += "]\n\t},\n\t\"Arguments\": [";
         for (auto arg = KernelFunction->arg_begin(); arg != KernelFunction->arg_end(); arg++)
         {
-            if (arg == KernelFunction->arg_begin())
+            if (arg != KernelFunction->arg_begin())
             {
-                metadata += to_string(-1);
-                continue;
+                metadata += ", ";
             }
             else
             {
-                metadata += ", ";
+                metadata += to_string(-1);
+                continue;
             }
             auto argVal = ArgumentMap[arg];
             metadata += to_string(argVal);

@@ -1153,9 +1153,10 @@ namespace TraceAtlas::tik
     void CartographerKernel::FixInvokes()
     {
         auto F = TikModule->getOrInsertFunction("__gxx_personality_v0", Type::getInt32Ty(TikModule->getContext()));
-        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+        //for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+        for (auto &fi : *KernelFunction)
         {
-            for (auto bi = fi->begin(); bi != fi->end(); bi++)
+            for (auto bi = fi.begin(); bi != fi.end(); bi++)
             {
                 if (auto ii = dyn_cast<InvokeInst>(bi))
                 {
@@ -1174,5 +1175,4 @@ namespace TraceAtlas::tik
             }
         }
     }
-
 } // namespace TraceAtlas::tik
