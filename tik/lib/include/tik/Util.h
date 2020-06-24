@@ -11,6 +11,17 @@
 #include <vector>
 namespace TraceAtlas::tik
 {
+    /// @brief Maps BlockID to a BasicBlock pointer from the source bitcode
+    ///
+    /// -2 is the key value of entries whose value was not mapped by setBlockID (see Annotate.h)
+    extern std::map<int64_t, llvm::BasicBlock *> IDToBlock;
+    /// @brief Maps ValueID to a value from the source bitcode
+    ///
+    /// -2 is the key value of entries whose value was not mapped by setValueID (see Annotate.h)
+    /// -1 is reserved for the first argument of every kernel function
+    extern std::map<int64_t, llvm::Value *> IDToValue;
+    void RecurseThroughOperands(llvm::Value *val);
+    void InitializeIDMaps(llvm::Module *M);
     std::string GetString(llvm::Value *v);
     std::vector<std::string> GetStrings(llvm::BasicBlock *bb);
     std::vector<std::string> GetStrings(std::set<llvm::Instruction *> instructions);

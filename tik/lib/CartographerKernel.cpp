@@ -18,69 +18,6 @@ namespace TraceAtlas::tik
 {
     std::set<GlobalVariable *> globalDeclarationSet;
     std::set<Value *> remappedOperandSet;
-    /// @brief Maps BlockID to a BasicBlock pointer from the source bitcode
-    ///
-    /// -2 is the key value of entries whose value was not mapped by setBlockID (see Annotate.h)
-    std::map<int64_t, llvm::BasicBlock *> IDToBlock;
-    /// @brief Maps ValueID to a value from the source bitcode
-    ///
-    /// -2 is the key value of entries whose value was not mapped by setValueID (see Annotate.h)
-    /// -1 is reserved for the first argument of every kernel function
-    std::map<int64_t, llvm::Value *> IDToValue;
-
-    void RecurseThroughOperands(Value *val)
-    {
-        if (GetValueID(val) > -1)
-        {
-            if (IDToValue.find(GetValueID(val)) == IDToValue.end())
-            {
-                IDToValue[GetValueID(val)] = val;
-            }
-            else
-            {
-                return;
-            }
-            if (auto inst = dyn_cast<Instruction>(val))
-            {
-                for (unsigned int i = 0; i < inst->getNumOperands(); i++)
-                {
-                    if (auto subVal = dyn_cast<Value>(inst->getOperand(i)))
-                    {
-                        RecurseThroughOperands(subVal);
-                    }
-                }
-            }
-            else if (auto gp = dyn_cast<GlobalVariable>(val))
-            {
-                for (unsigned int i = 0; i < gp->getNumOperands(); i++)
-                {
-                    if (auto subVal = dyn_cast<Value>(gp->getOperand(i)))
-                    {
-                        RecurseThroughOperands(subVal);
-                    }
-                }
-            }
-        }
-    }
-
-    void InitializeIDMaps(std::set<BasicBlock *> blocks)
-    {
-        for (const auto &block : blocks)
-        {
-            if ((GetBlockID(block) != -2) && (IDToBlock[GetBlockID(block)] == nullptr))
-            {
-                IDToBlock[GetBlockID(block)] = block;
-            }
-            for (auto it = block->begin(); it != block->end(); it++)
-            {
-                auto inst = cast<Instruction>(it);
-                if (auto val = dyn_cast<Value>(inst))
-                {
-                    RecurseThroughOperands(val);
-                }
-            }
-        }
-    }
 
     void CopyOperand(llvm::User *inst, llvm::ValueToValueMapTy &VMap)
     {
@@ -195,18 +132,6 @@ namespace TraceAtlas::tik
 
     CartographerKernel::CartographerKernel(std::vector<int64_t> basicBlocks, llvm::Module *M, std::string name)
     {
-        /// Initialize our IDtoX maps
-        set<BasicBlock *> wholeBitcode;
-        for (auto &F : *M)
-        {
-            for (auto BB = F.begin(); BB != F.end(); BB++)
-            {
-                auto *b = cast<BasicBlock>(BB);
-                wholeBitcode.insert(b);
-            }
-        }
-        InitializeIDMaps(wholeBitcode);
-
         llvm::ValueToValueMapTy VMap;
         set<int64_t> blockSet;
         for (auto b : basicBlocks)
@@ -263,10 +188,6 @@ namespace TraceAtlas::tik
                         if (cb->getCalledFunction() == f)
                         {
                             throw AtlasException("Tik Error: Recursion is unimplemented")
-                        }
-                        if (isa<InvokeInst>(cb))
-                        {
-                            throw AtlasException("Invoke Inst is unsupported")
                         }
                     }
                 }
@@ -377,6 +298,8 @@ namespace TraceAtlas::tik
             RemapExports(VMap, KernelExports);
 
             PatchPhis();
+
+            FixInvokes();
 
             //apply metadata
             ApplyMetadata(GlobalMap);
@@ -681,7 +604,7 @@ namespace TraceAtlas::tik
                 }
                 for (auto bi = fi->begin(); bi != fi->end(); bi++)
                 {
-                    if (auto ci = dyn_cast<CallInst>(bi))
+                    if (auto ci = dyn_cast<CallBase>(bi))
                     {
                         if (auto debug = ci->getMetadata("KernelCall"))
                         {
@@ -1226,4 +1149,30 @@ namespace TraceAtlas::tik
             }
         }
     }
+
+    void CartographerKernel::FixInvokes()
+    {
+        auto F = TikModule->getOrInsertFunction("__gxx_personality_v0", Type::getInt32Ty(TikModule->getContext()));
+        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+        {
+            for (auto bi = fi->begin(); bi != fi->end(); bi++)
+            {
+                if (auto ii = dyn_cast<InvokeInst>(bi))
+                {
+                    auto a = ii->getLandingPadInst();
+                    if (isa<BranchInst>(a))
+                    {
+                        auto unwind = ii->getUnwindDest();
+                        auto term = unwind->getTerminator();
+                        IRBuilder<> builder(term);
+                        auto landing = builder.CreateLandingPad(Type::getVoidTy(TikModule->getContext()), 0);
+                        landing->addClause(ConstantPointerNull::get(PointerType::get(Type::getVoidTy(TikModule->getContext()), 0)));
+                        KernelFunction->setPersonalityFn(cast<Constant>(F.getCallee()));
+                        spdlog::warn("Adding landingpad for non-inlinable Invoke Instruction. May segfault if exception is thrown.");
+                    }
+                }
+            }
+        }
+    }
+
 } // namespace TraceAtlas::tik

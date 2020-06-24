@@ -1,4 +1,5 @@
 #pragma once
+#include "AtlasUtil/Exceptions.h"
 #include <fstream>
 #include <functional>
 #include <indicators/progress_bar.hpp>
@@ -40,6 +41,11 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
     //open the file
     inputTrace.open(TraceFile);
 
+    if (!inputTrace)
+    {
+        throw AtlasException("Failed to open trace file");
+    }
+
     //get the file size
     inputTrace.seekg(0, std::ios_base::end);
     int64_t size = inputTrace.tellg();
@@ -53,9 +59,10 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
     while (notDone)
     {
         // read a block size of the trace
-        inputTrace.readsome(dataArray, BLOCK_SIZE);
-        strm.next_in = (Bytef *)dataArray;             // input data to z_lib for decompression
-        strm.avail_in = (uint32_t)inputTrace.gcount(); // remaining characters in the compressed inputTrace
+        inputTrace.read(dataArray, BLOCK_SIZE);
+        int64_t bytesRead = inputTrace.gcount();
+        strm.next_in = (Bytef *)dataArray;   // input data to z_lib for decompression
+        strm.avail_in = (uint32_t)bytesRead; // remaining characters in the compressed inputTrace
         while (strm.avail_in != 0)
         {
             // decompress our data

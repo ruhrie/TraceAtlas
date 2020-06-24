@@ -24,5 +24,6 @@ namespace TraceAtlas::tik
         void BuildExit();
         void PatchPhis();
         void Remap(llvm::ValueToValueMapTy &VMap);
+        void FixInvokes();
     };
 } // namespace TraceAtlas::tik

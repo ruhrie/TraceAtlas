@@ -13,6 +13,67 @@ using namespace llvm;
 
 namespace TraceAtlas::tik
 {
+    std::map<int64_t, llvm::BasicBlock *> IDToBlock;
+    std::map<int64_t, llvm::Value *> IDToValue;
+    void RecurseThroughOperands(Value *val)
+    {
+        if (GetValueID(val) > -1)
+        {
+            if (IDToValue.find(GetValueID(val)) == IDToValue.end())
+            {
+                IDToValue[GetValueID(val)] = val;
+            }
+            else
+            {
+                return;
+            }
+            if (auto inst = dyn_cast<Instruction>(val))
+            {
+                for (unsigned int i = 0; i < inst->getNumOperands(); i++)
+                {
+                    if (auto subVal = dyn_cast<Value>(inst->getOperand(i)))
+                    {
+                        RecurseThroughOperands(subVal);
+                    }
+                }
+            }
+            else if (auto gp = dyn_cast<GlobalVariable>(val))
+            {
+                for (unsigned int i = 0; i < gp->getNumOperands(); i++)
+                {
+                    if (auto subVal = dyn_cast<Value>(gp->getOperand(i)))
+                    {
+                        RecurseThroughOperands(subVal);
+                    }
+                }
+            }
+        }
+    }
+
+    void InitializeIDMaps(llvm::Module *M)
+    {
+        set<BasicBlock *> wholeBitcode;
+        for (auto &F : *M)
+        {
+            for (auto BB = F.begin(); BB != F.end(); BB++)
+            {
+                auto *block = cast<BasicBlock>(BB);
+                if ((GetBlockID(block) != -2) && (IDToBlock[GetBlockID(block)] == nullptr))
+                {
+                    IDToBlock[GetBlockID(block)] = block;
+                }
+                for (auto it = block->begin(); it != block->end(); it++)
+                {
+                    auto inst = cast<Instruction>(it);
+                    if (auto val = dyn_cast<Value>(inst))
+                    {
+                        RecurseThroughOperands(val);
+                    }
+                }
+            }
+        }
+    }
+
     string GetString(Value *v)
     {
         std::string str;
