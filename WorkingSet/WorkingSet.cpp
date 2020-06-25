@@ -1,5 +1,6 @@
 #include "inc/WorkingSet.h"
 #include <algorithm>
+#include <indicators/progress_bar.hpp>
 #include <iostream>
 #include <spdlog/spdlog.h>
 
@@ -22,7 +23,7 @@ namespace WorkingSet
     uint64_t timeCount = 0;
     /// Maps an address to a pair that holds the time of its first store and last load
     /// first -> birth time, second -> death time
-    map<uint64_t, pair<uint64_t, uint64_t>> addrLiveSpanMap;
+    map<uint64_t, pair<uint64_t, uint64_t>> addrLifeSpanMap;
     /// Maps a kernel index to a pair of sets (first -> ld addr, second -> st addr)
     map<int, pair<set<uint64_t>, set<uint64_t>>> kernelSetMap;
     vector<int> currentKernelIDs;
@@ -43,7 +44,7 @@ namespace WorkingSet
         {
             uint64_t addr = stoul(value, nullptr, 0);
             // death time, constantly updating
-            addrLiveSpanMap[addr].second = timeCount;
+            addrLifeSpanMap[addr].second = timeCount;
             for (const auto &ind : currentKernelIDs)
             {
                 kernelSetMap[ind].first.insert(addr);
@@ -54,9 +55,9 @@ namespace WorkingSet
         {
             uint64_t addr = stoul(value, nullptr, 0);
             // birth time
-            if (addrLiveSpanMap.find(addr) == addrLiveSpanMap.end())
+            if (addrLifeSpanMap.find(addr) == addrLifeSpanMap.end())
             {
-                addrLiveSpanMap[addr].first = timeCount;
+                addrLifeSpanMap[addr].first = timeCount;
             }
             for (const auto &ind : currentKernelIDs)
             {
@@ -182,133 +183,148 @@ namespace WorkingSet
     }
 
     /// Maps a time in the trace to the birth or death time of an address
-    map<int, map<uint64_t, uint64_t, greater<>>> BirthTimeMap;
-    map<int, map<uint64_t, uint64_t, greater<>>> DeathTimeMap;
-    /// Maps a kernel ID to its max alive address count
-    map<int, unsigned long> liveAddressMaxCounts;
-    /// Maps a kernel ID to the max live address counts of each working set
+    map<uint64_t, uint64_t, greater<>> BirthTimeMap;
+    map<uint64_t, uint64_t, greater<>> DeathTimeMap;
+    /// Maps a kernel ID to the max live address counts of each working set and total
     map<int, vector<uint64_t>> kernelWSLiveAddrMaxCounts;
-    void DynamicSetSizes()
+    void DynamicSetSizes(bool nobar)
     {
-        // reverse map addrLiveSpanMap using BirthTimeMap and DeathTimeMap
-        for (const auto &addr : addrLiveSpanMap)
+        // indicators for time parsing progress
+        std::cout << "\e[?25l";
+        indicators::ProgressBar bar;
+        int previousCount = 0;
+        if (!nobar)
         {
-            // find kernel membership
-            vector<int> kernelIDs = vector<int>();
-            for (const auto &key : kernelSetMap)
-            {
-                if (key.second.first.find(addr.first) != key.second.first.end())
-                {
-                    kernelIDs.push_back(key.first);
-                }
-                else if (key.second.second.find(addr.first) != key.second.second.end())
-                {
-                    kernelIDs.push_back(key.first);
-                }
-            }
-            if (kernelIDs.empty())
-            {
-                continue;
-            }
-            for (const auto &ID : kernelIDs)
-            {
-                DeathTimeMap[ID][addr.second.second] = addr.first;
-                BirthTimeMap[ID][addr.second.first] = addr.first;
-            }
+            bar.set_option(indicators::option::PrefixText{"Parsing dynamic working sets."});
+            bar.set_option(indicators::option::ShowElapsedTime{true});
+            bar.set_option(indicators::option::ShowRemainingTime{true});
+            bar.set_option(indicators::option::BarWidth{50});
         }
-        // now go key by key in the birth and death time maps and keep a count of alive addresses
-        set<uint64_t> liveAddresses;
-        for (const auto &kernelID : BirthTimeMap)
+        // reverse map addrLifeSpanMap using BirthTimeMap and DeathTimeMap
+        for (const auto &addr : addrLifeSpanMap)
         {
-            spdlog::info("Creating total live address counts for kernel index " + to_string(kernelID.first));
-            liveAddressMaxCounts[kernelID.first] = 0;
-            liveAddresses.clear();
-            uint64_t minTime = min(prev(BirthTimeMap[kernelID.first].end())->first, prev(DeathTimeMap[kernelID.first].end())->first);
-            uint64_t maxTime = max(BirthTimeMap[kernelID.first].begin()->first, DeathTimeMap[kernelID.first].begin()->first);
-            for (uint64_t timeCount = minTime - 1; timeCount < maxTime + 1; timeCount++)
-            {
-                if (BirthTimeMap[kernelID.first].find(timeCount) != BirthTimeMap[kernelID.first].end())
-                {
-                    liveAddresses.insert(BirthTimeMap[kernelID.first][timeCount]);
-                }
-                if (DeathTimeMap[kernelID.first].find(timeCount) != DeathTimeMap[kernelID.first].end())
-                {
-                    liveAddresses.erase(DeathTimeMap[kernelID.first][timeCount]);
-                }
-                if (liveAddressMaxCounts[kernelID.first] < liveAddresses.size())
-                {
-                    liveAddressMaxCounts[kernelID.first] = liveAddresses.size();
-                }
-            }
+            DeathTimeMap[addr.second.second] = addr.first;
+            BirthTimeMap[addr.second.first] = addr.first;
         }
 
-        // project the same idea onto the individual sets of each kernel index
-        // vector to hold our separate live address sets, indexed in the same way as kernelWSLiveAddrMaxCounts
-        auto liveAddrSets = vector<set<uint64_t>>(3);
-        for (const auto &kernelID : BirthTimeMap)
+        // Find the max time point of our trace
+        uint64_t maxTime = max(BirthTimeMap.begin()->first, DeathTimeMap.begin()->first);
+        uint64_t timeDivide = maxTime / 10000;
+        // initialize our max count map, initialize our live address set map
+        map<int, vector<set<uint64_t>>> liveAddressSetMap;
+        for (const auto &kernelID : kernelSetMap)
         {
-            spdlog::info("Creating live address counts on each working set for kernel index " + to_string(kernelID.first));
-            kernelWSLiveAddrMaxCounts[kernelID.first] = vector<uint64_t>(3);
-            for (auto &ind : liveAddrSets)
+            // max ount map
+            kernelWSLiveAddrMaxCounts[kernelID.first] = vector<uint64_t>(4);
+            kernelWSLiveAddrMaxCounts[kernelID.first][0] = 0;
+            kernelWSLiveAddrMaxCounts[kernelID.first][1] = 0;
+            kernelWSLiveAddrMaxCounts[kernelID.first][2] = 0;
+            kernelWSLiveAddrMaxCounts[kernelID.first][3] = 0;
+            // live address set map
+            liveAddressSetMap[kernelID.first] = vector<set<uint64_t>>(4);
+            liveAddressSetMap[kernelID.first][0] = set<uint64_t>();
+            liveAddressSetMap[kernelID.first][1] = set<uint64_t>();
+            liveAddressSetMap[kernelID.first][2] = set<uint64_t>();
+            liveAddressSetMap[kernelID.first][3] = set<uint64_t>();
+        }
+        vector<int> currentKernels = vector<int>();
+        // go through the entire trace time
+        for (uint64_t timeCount = 0; timeCount < maxTime + 1; timeCount++)
+        {
+            // find the map that has our timestamp in it
+            if (BirthTimeMap.find(timeCount) != BirthTimeMap.end())
             {
-                ind.clear();
+                // find the kernel IDs that have this address
+                for (const auto key : kernelSetMap)
+                {
+                    if ((key.second.first.find(BirthTimeMap[timeCount]) != key.second.first.end()) || (key.second.second.find(BirthTimeMap[timeCount]) != key.second.second.end()))
+                    {
+                        currentKernels.push_back(key.first);
+                    }
+                }
+                // for each kernel our address belongs to, add it to the total live address set
+                for (const auto ind : currentKernels)
+                {
+                    liveAddressSetMap[ind][3].insert(BirthTimeMap[timeCount]);
+                    // if this address belongs to the input working set
+                    if (kernelWSMap[ind][0].find(BirthTimeMap[timeCount]) != kernelWSMap[ind][0].end())
+                    {
+                        liveAddressSetMap[ind][0].insert(BirthTimeMap[timeCount]);
+                    }
+                    // if this address belongs to the output working set
+                    if (kernelWSMap[ind][2].find(BirthTimeMap[timeCount]) != kernelWSMap[ind][2].end())
+                    {
+                        liveAddressSetMap[ind][2].insert(BirthTimeMap[timeCount]);
+                    }
+                    // if this address belongs to the internal working set
+                    if (kernelWSMap[ind][1].find(BirthTimeMap[timeCount]) != kernelWSMap[ind][1].end())
+                    {
+                        liveAddressSetMap[ind][1].insert(BirthTimeMap[timeCount]);
+                    }
+                    // update our max counts
+                    if (kernelWSLiveAddrMaxCounts[ind][0] < liveAddressSetMap[ind][0].size())
+                    {
+                        kernelWSLiveAddrMaxCounts[ind][0] = liveAddressSetMap[ind][0].size();
+                    }
+                    if (kernelWSLiveAddrMaxCounts[ind][1] < liveAddressSetMap[ind][1].size())
+                    {
+                        kernelWSLiveAddrMaxCounts[ind][1] = liveAddressSetMap[ind][1].size();
+                    }
+                    if (kernelWSLiveAddrMaxCounts[ind][2] < liveAddressSetMap[ind][2].size())
+                    {
+                        kernelWSLiveAddrMaxCounts[ind][2] = liveAddressSetMap[ind][2].size();
+                    }
+                    if (kernelWSLiveAddrMaxCounts[ind][3] < liveAddressSetMap[ind][3].size())
+                    {
+                        kernelWSLiveAddrMaxCounts[ind][3] = liveAddressSetMap[ind][3].size();
+                    }
+                }
             }
-            uint64_t minTime = max(prev(BirthTimeMap[kernelID.first].end())->first, prev(DeathTimeMap[kernelID.first].end())->first);
-            uint64_t maxTime = max(BirthTimeMap[kernelID.first].begin()->first, DeathTimeMap[kernelID.first].begin()->first);
-            for (uint64_t timeCount = minTime - 1; timeCount < maxTime + 1; timeCount++)
+            else if (DeathTimeMap.find(timeCount) != DeathTimeMap.end())
             {
-                // if this is a birth address
-                if (BirthTimeMap[kernelID.first].find(timeCount) != BirthTimeMap[kernelID.first].end())
+                // find the kernel IDs that have this address
+                for (const auto key : kernelSetMap)
                 {
-                    // if we are an input set addr
-                    if (kernelWSMap[kernelID.first][0].find(BirthTimeMap[kernelID.first][timeCount]) != kernelWSMap[kernelID.first][0].end())
+                    if ((key.second.first.find(DeathTimeMap[timeCount]) != key.second.first.end()) || (key.second.second.find(DeathTimeMap[timeCount]) != key.second.second.end()))
                     {
-                        liveAddrSets[0].insert(BirthTimeMap[kernelID.first][timeCount]);
-                    }
-                    // if we are an output set addr
-                    else if (kernelWSMap[kernelID.first][1].find(BirthTimeMap[kernelID.first][timeCount]) != kernelWSMap[kernelID.first][1].end())
-                    {
-                        liveAddrSets[1].insert(BirthTimeMap[kernelID.first][timeCount]);
-                    }
-                    // if we are an output set addr
-                    else if (kernelWSMap[kernelID.first][2].find(BirthTimeMap[kernelID.first][timeCount]) != kernelWSMap[kernelID.first][2].end())
-                    {
-                        liveAddrSets[2].insert(BirthTimeMap[kernelID.first][timeCount]);
+                        currentKernels.push_back(key.first);
                     }
                 }
-                // if this is a death address
-                else if (DeathTimeMap[kernelID.first].find(timeCount) != DeathTimeMap[kernelID.first].end())
+                for (const auto &ind : currentKernels)
                 {
-                    // if we are an input set addr
-                    if (kernelWSMap[kernelID.first][0].find(BirthTimeMap[kernelID.first][timeCount]) != kernelWSMap[kernelID.first][0].end())
+                    liveAddressSetMap[ind][3].erase(DeathTimeMap[timeCount]);
+                    // if this address belongs to the input working set
+                    if (kernelWSMap[ind][0].find(DeathTimeMap[timeCount]) != kernelWSMap[ind][0].end())
                     {
-                        liveAddrSets[0].erase(DeathTimeMap[kernelID.first][timeCount]);
+                        liveAddressSetMap[ind][0].erase(DeathTimeMap[timeCount]);
                     }
-                    // if we are an internal set addr
-                    else if (kernelWSMap[kernelID.first][1].find(BirthTimeMap[kernelID.first][timeCount]) != kernelWSMap[kernelID.first][1].end())
+                    // if this address belongs to the output working set
+                    if (kernelWSMap[ind][2].find(DeathTimeMap[timeCount]) != kernelWSMap[ind][2].end())
                     {
-                        liveAddrSets[1].erase(DeathTimeMap[kernelID.first][timeCount]);
+                        liveAddressSetMap[ind][2].erase(DeathTimeMap[timeCount]);
                     }
-                    // if we are an output set addr
-                    else if (kernelWSMap[kernelID.first][2].find(BirthTimeMap[kernelID.first][timeCount]) != kernelWSMap[kernelID.first][2].end())
+                    // if this address belongs to the internal working set
+                    if (kernelWSMap[ind][1].find(DeathTimeMap[timeCount]) != kernelWSMap[ind][1].end())
                     {
-                        liveAddrSets[2].erase(DeathTimeMap[kernelID.first][timeCount]);
+                        liveAddressSetMap[ind][1].erase(DeathTimeMap[timeCount]);
                     }
                 }
-                // update our sizes
-                if (kernelWSLiveAddrMaxCounts[kernelID.first][0] < liveAddrSets[0].size())
+            }
+            currentKernels.clear();
+            if (!nobar)
+            {
+                if (timeCount % timeDivide == 0)
                 {
-                    kernelWSLiveAddrMaxCounts[kernelID.first][0] = liveAddrSets[0].size();
-                }
-                if (kernelWSLiveAddrMaxCounts[kernelID.first][1] < liveAddrSets[1].size())
-                {
-                    kernelWSLiveAddrMaxCounts[kernelID.first][1] = liveAddrSets[1].size();
-                }
-                if (kernelWSLiveAddrMaxCounts[kernelID.first][2] < liveAddrSets[2].size())
-                {
-                    kernelWSLiveAddrMaxCounts[kernelID.first][2] = liveAddrSets[2].size();
+                    float percent = (float)timeCount / (float)maxTime * 100.0f;
+                    bar.set_progress(percent);
+                    bar.set_option(indicators::option::PostfixText{"Time " + std::to_string(timeCount) + "/" + std::to_string(maxTime)});
                 }
             }
         }
+        if (!nobar && !bar.is_completed())
+        {
+            bar.mark_as_completed();
+        }
+        std::cout << "\e[?25h";
     }
 } // namespace WorkingSet

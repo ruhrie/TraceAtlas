@@ -85,7 +85,7 @@ int main(int argc, char **argv)
         ProcessTrace(inputTrace, &WorkingSet::Process, "Parsing Load and Store sets.", noBar);
         WorkingSet::CreateSets();
         WorkingSet::StaticSetSizes();
-        WorkingSet::DynamicSetSizes();
+        WorkingSet::DynamicSetSizes(noBar);
     }
     catch (int e)
     {
@@ -101,15 +101,12 @@ int main(int argc, char **argv)
         outputJson["Sizes"][to_string(key.first)]["Static"]["Internal"] = key.second[1].size();
         outputJson["Sizes"][to_string(key.first)]["Static"]["Output"] = key.second[2].size();
     }
-    for (const auto &key : WorkingSet::liveAddressMaxCounts)
-    {
-        outputJson["Sizes"][to_string(key.first)]["Dynamic"]["Total"] = key.second;
-    }
     for (const auto &key : WorkingSet::kernelWSLiveAddrMaxCounts)
     {
         outputJson["Sizes"][to_string(key.first)]["Dynamic"]["Input"] = key.second[0];
         outputJson["Sizes"][to_string(key.first)]["Dynamic"]["Internal"] = key.second[1];
         outputJson["Sizes"][to_string(key.first)]["Dynamic"]["Output"] = key.second[2];
+        outputJson["Sizes"][to_string(key.first)]["Dynamic"]["Total"] = key.second[3];
     }
     for (const auto &key : WorkingSet::ProdConMap)
     {
