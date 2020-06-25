@@ -221,16 +221,19 @@ namespace WorkingSet
         {
             // max count map
             kernelWSLiveAddrMaxCounts[kernelID.first] = vector<uint64_t>(4);
-            kernelWSLiveAddrMaxCounts[kernelID.first][0] = 0;
+            // the input working set is all alive at time 0
+            kernelWSLiveAddrMaxCounts[kernelID.first][0] = kernelWSMap[kernelID.first][0].size();
             kernelWSLiveAddrMaxCounts[kernelID.first][1] = 0;
             kernelWSLiveAddrMaxCounts[kernelID.first][2] = 0;
-            kernelWSLiveAddrMaxCounts[kernelID.first][3] = 0;
+            kernelWSLiveAddrMaxCounts[kernelID.first][3] = kernelWSMap[kernelID.first][0].size();
             // live address set map
             liveAddressSetMap[kernelID.first] = vector<set<uint64_t>>(4);
-            liveAddressSetMap[kernelID.first][0] = set<uint64_t>();
+            // input working set must be pre-populated (because all input addresses are alive at the start of the program)
+            liveAddressSetMap[kernelID.first][0] = set<uint64_t>(kernelWSMap[kernelID.first][0].begin(), kernelWSMap[kernelID.first][0].end());
+            // this map needs to be primed with internal addresses that are first read from, but the current implementation can't do this
             liveAddressSetMap[kernelID.first][1] = set<uint64_t>();
             liveAddressSetMap[kernelID.first][2] = set<uint64_t>();
-            liveAddressSetMap[kernelID.first][3] = set<uint64_t>();
+            liveAddressSetMap[kernelID.first][3] = set<uint64_t>(kernelWSMap[kernelID.first][0].begin(), kernelWSMap[kernelID.first][0].end());
         }
         vector<int> currentKernels = vector<int>();
         // go through the entire trace time
@@ -251,11 +254,7 @@ namespace WorkingSet
                 for (const auto &ind : currentKernels)
                 {
                     liveAddressSetMap[ind][3].insert(BirthTimeMap[timeCount]);
-                    // if this address belongs to the input working set
-                    if (kernelWSMap[ind][0].find(BirthTimeMap[timeCount]) != kernelWSMap[ind][0].end())
-                    {
-                        liveAddressSetMap[ind][0].insert(BirthTimeMap[timeCount]);
-                    }
+                    // since this is a birth address, it can't belong to the input working set of this kernel
                     // if this address belongs to the output working set
                     if (kernelWSMap[ind][2].find(BirthTimeMap[timeCount]) != kernelWSMap[ind][2].end())
                     {
@@ -267,10 +266,7 @@ namespace WorkingSet
                         liveAddressSetMap[ind][1].insert(BirthTimeMap[timeCount]);
                     }
                     // update our max counts
-                    if (kernelWSLiveAddrMaxCounts[ind][0] < liveAddressSetMap[ind][0].size())
-                    {
-                        kernelWSLiveAddrMaxCounts[ind][0] = liveAddressSetMap[ind][0].size();
-                    }
+                    // input working set max can never be updated
                     if (kernelWSLiveAddrMaxCounts[ind][1] < liveAddressSetMap[ind][1].size())
                     {
                         kernelWSLiveAddrMaxCounts[ind][1] = liveAddressSetMap[ind][1].size();
@@ -303,16 +299,12 @@ namespace WorkingSet
                     {
                         liveAddressSetMap[ind][0].erase(DeathTimeMap[timeCount]);
                     }
-                    // if this address belongs to the output working set
-                    if (kernelWSMap[ind][2].find(DeathTimeMap[timeCount]) != kernelWSMap[ind][2].end())
-                    {
-                        liveAddressSetMap[ind][2].erase(DeathTimeMap[timeCount]);
-                    }
                     // if this address belongs to the internal working set
                     if (kernelWSMap[ind][1].find(DeathTimeMap[timeCount]) != kernelWSMap[ind][1].end())
                     {
                         liveAddressSetMap[ind][1].erase(DeathTimeMap[timeCount]);
                     }
+                    // since this is a death address, it can't belong to the output working set of this kernel
                 }
             }
             currentKernels.clear();
