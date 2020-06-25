@@ -209,12 +209,17 @@ namespace WorkingSet
 
         // Find the max time point of our trace
         uint64_t maxTime = max(BirthTimeMap.begin()->first, DeathTimeMap.begin()->first);
+        if (maxTime == 0)
+        {
+            spdlog::critical("The maxtime as parsed from the trace is 0. Exiting...");
+            return;
+        }
         uint64_t timeDivide = maxTime / 10000;
         // initialize our max count map, initialize our live address set map
         map<int, vector<set<uint64_t>>> liveAddressSetMap;
         for (const auto &kernelID : kernelSetMap)
         {
-            // max ount map
+            // max count map
             kernelWSLiveAddrMaxCounts[kernelID.first] = vector<uint64_t>(4);
             kernelWSLiveAddrMaxCounts[kernelID.first][0] = 0;
             kernelWSLiveAddrMaxCounts[kernelID.first][1] = 0;
@@ -315,7 +320,7 @@ namespace WorkingSet
             {
                 if (timeCount % timeDivide == 0)
                 {
-                    float percent = (float)timeCount / (float)maxTime * 100.0f;
+                    double percent = (double)timeCount / (double)maxTime * (double)100.0;
                     bar.set_progress(percent);
                     bar.set_option(indicators::option::PostfixText{"Time " + std::to_string(timeCount) + "/" + std::to_string(maxTime)});
                 }
