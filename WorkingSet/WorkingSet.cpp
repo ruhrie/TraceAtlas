@@ -235,7 +235,7 @@ namespace WorkingSet
             if (BirthTimeMap.find(timeCount) != BirthTimeMap.end())
             {
                 // find the kernel IDs that have this address
-                for (const auto key : kernelSetMap)
+                for (const auto &key : kernelSetMap)
                 {
                     if ((key.second.first.find(BirthTimeMap[timeCount]) != key.second.first.end()) || (key.second.second.find(BirthTimeMap[timeCount]) != key.second.second.end()))
                     {
@@ -243,7 +243,7 @@ namespace WorkingSet
                     }
                 }
                 // for each kernel our address belongs to, add it to the total live address set
-                for (const auto ind : currentKernels)
+                for (const auto &ind : currentKernels)
                 {
                     liveAddressSetMap[ind][3].insert(BirthTimeMap[timeCount]);
                     // if this address belongs to the input working set
@@ -283,7 +283,7 @@ namespace WorkingSet
             else if (DeathTimeMap.find(timeCount) != DeathTimeMap.end())
             {
                 // find the kernel IDs that have this address
-                for (const auto key : kernelSetMap)
+                for (const auto &key : kernelSetMap)
                 {
                     if ((key.second.first.find(DeathTimeMap[timeCount]) != key.second.first.end()) || (key.second.second.find(DeathTimeMap[timeCount]) != key.second.second.end()))
                     {
