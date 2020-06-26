@@ -24,7 +24,6 @@ namespace WorkingSet
     /// Maps an address to a pair that holds the time of its first store and last load
     /// first -> birth time, second -> death time
     map<uint64_t, pair<uint64_t, uint64_t>> addrLifeSpanMap;
-    /// Maps a kernel index to AddressSets
     map<int, AddressSets> AddressSetMap;
     vector<int> currentKernelIDs;
     void Process(string &key, string &value)
@@ -54,7 +53,7 @@ namespace WorkingSet
         else if (key == "StoreAddress")
         {
             uint64_t addr = stoul(value, nullptr, 0);
-            // birth time
+            // birth time, only the first time we see it
             if (addrLifeSpanMap.find(addr) == addrLifeSpanMap.end())
             {
                 addrLifeSpanMap[addr].first = timeCount;
@@ -71,8 +70,6 @@ namespace WorkingSet
         }
     }
 
-    /// Maps a kernel index to its working sets
-    /// 0-> input, 1->internal, 2->output
     map<int, struct StaticSets> StaticWSMap;
     void CreateStaticSets()
     {
@@ -119,7 +116,7 @@ namespace WorkingSet
 
     /// Maps kernel ID pairs to a ProdCon struct
     vector<struct ProdCon> ProdConRelationships;
-    // The set of relationships amounts to combinations of length 2 without replacement
+    // The vector of producer-consumer relationships amounts to combinations of length 2 without replacement
     void ProducerConsumer()
     {
         // for each kernel index
@@ -225,7 +222,7 @@ namespace WorkingSet
         {
             // max count map
             DynamicWSMap[kernelID.first] = DynamicSets();
-            // the input working set is all alive at time 0
+            // the entire input working set is alive at time 0
             DynamicWSMap[kernelID.first].inputMax = StaticWSMap[kernelID.first].input.size();
             DynamicWSMap[kernelID.first].internalMax = 0;
             DynamicWSMap[kernelID.first].outputMax = 0;

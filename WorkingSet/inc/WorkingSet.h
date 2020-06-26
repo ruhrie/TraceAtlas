@@ -18,7 +18,7 @@ namespace WorkingSet
         }
     };
 
-    /// Holds the three address sets of each kernel index
+    /// Holds the three static working sets of each kernel index
     struct StaticSets
     {
         std::set<uint64_t> input;
@@ -83,8 +83,6 @@ namespace WorkingSet
     void CreateDynamicSets(bool nobar);
     extern std::map<int, struct StaticSets> StaticWSMap;
     extern std::vector<struct ProdCon> ProdConRelationships;
-    /// Maps a kernel index to a vector of unsigned longs, where each entry is the maximum live addr count of each working set
-    /// 0 -> input live addr max count, 1 -> internal live addr max count, 2 -> output live addr max count, 3 -> maximum alive addr max count
     extern std::map<int, struct DynamicSets> DynamicWSMap;
 
 } // namespace WorkingSet
