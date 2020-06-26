@@ -491,8 +491,6 @@ namespace TraceAtlas::tik
                 if (inNested)
                 {
                     //we need to make a unique block for each entrance (there is currently only one)
-                    //int i = 0;
-                    //for (auto ent : nestedKernel->Entrances)
                     for (uint64_t i = 0; i < nestedKernel->Entrances.size(); i++)
                     {
                         std::vector<llvm::Value *> inargs;
@@ -532,8 +530,6 @@ namespace TraceAtlas::tik
                 auto cb = CloneBasicBlock(block, VMap, "", KernelFunction);
                 VMap[block] = cb;
                 // add medadata to this block to remember what its original predecessor was, for swapping later
-                //MDNode* oldID = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(block->getParent()->getParent()->getContext()), block->getValueID())));
-                //cast<Instruction>(cb->getFirstInsertionPt())->setMetadata("oldName", oldID);
                 if (Conditional.find(block) != Conditional.end())
                 {
                     Conditional.erase(block);
@@ -667,14 +663,6 @@ namespace TraceAtlas::tik
                 bToRemove.push_back(block);
             }
         }
-        /*
-    for (auto block : bToRemove)
-    {
-        //this breaks hard for some reason
-        //not really necessary fortunately
-        //block->eraseFromParent();
-    }
-    */
     }
 
     void CartographerKernel::RemapNestedKernels(llvm::ValueToValueMapTy &VMap)
@@ -1151,7 +1139,6 @@ namespace TraceAtlas::tik
     void CartographerKernel::FixInvokes()
     {
         auto F = TikModule->getOrInsertFunction("__gxx_personality_v0", Type::getInt32Ty(TikModule->getContext()));
-        //for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
         for (auto &fi : *KernelFunction)
         {
             for (auto bi = fi.begin(); bi != fi.end(); bi++)
