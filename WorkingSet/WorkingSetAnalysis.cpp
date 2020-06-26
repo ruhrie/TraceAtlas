@@ -71,8 +71,6 @@ int main(int argc, char **argv)
     }
     catch (exception &e)
     {
-        std::cerr << "Couldn't open input json file: " << kernelFile << "\n";
-        std::cerr << e.what() << '\n';
         spdlog::critical("Failed to open kernel file: " + kernelFile);
         return EXIT_FAILURE;
     }
