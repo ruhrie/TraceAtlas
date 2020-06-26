@@ -24,8 +24,8 @@ namespace WorkingSet
     /// Maps an address to a pair that holds the time of its first store and last load
     /// first -> birth time, second -> death time
     map<uint64_t, pair<uint64_t, uint64_t>> addrLifeSpanMap;
-    /// Maps a kernel index to a pair of sets (first -> ld addr, second -> st addr)
-    map<int, pair<set<uint64_t>, set<uint64_t>>> kernelSetMap;
+    /// Maps a kernel index to AddressSets
+    map<int, AddressSets> AddressSetMap;
     vector<int> currentKernelIDs;
     void Process(string &key, string &value)
     {
@@ -47,7 +47,7 @@ namespace WorkingSet
             addrLifeSpanMap[addr].second = timeCount;
             for (const auto &ind : currentKernelIDs)
             {
-                kernelSetMap[ind].first.insert(addr);
+                AddressSetMap[ind].load.insert(addr);
             }
             timeCount++;
         }
@@ -61,7 +61,7 @@ namespace WorkingSet
             }
             for (const auto &ind : currentKernelIDs)
             {
-                kernelSetMap[ind].second.insert(addr);
+                AddressSetMap[ind].store.insert(addr);
             }
             timeCount++;
         }
@@ -73,111 +73,116 @@ namespace WorkingSet
 
     /// Maps a kernel index to its working sets
     /// 0-> input, 1->internal, 2->output
-    map<int, vector<set<uint64_t>>> kernelWSMap;
-    void CreateSets()
+    map<int, struct StaticSets> StaticWSMap;
+    void CreateStaticSets()
     {
-        for (const auto &key : kernelSetMap)
+        for (const auto &key : AddressSetMap)
         {
             /// Allocate three positions for each of the sets
-            kernelWSMap[key.first] = vector<set<uint64_t>>(3);
+            StaticWSMap[key.first] = StaticSets();
             /// Intersect the ld and st sets
             vector<uint64_t> intersect;
-            if (key.second.first.size() > key.second.second.size())
+            if (key.second.load.size() > key.second.store.size())
             {
-                intersect = vector<uint64_t>(key.second.first.size());
+                intersect = vector<uint64_t>(key.second.load.size());
             }
             else
             {
-                intersect = vector<uint64_t>(key.second.first.size());
+                intersect = vector<uint64_t>(key.second.store.size());
             }
-            auto it = set_intersection(key.second.first.begin(), key.second.first.end(), key.second.second.begin(), key.second.second.end(), intersect.begin());
+            // intersect the load and store sets to generate internal working set
+            auto it = set_intersection(key.second.load.begin(), key.second.load.end(), key.second.store.begin(), key.second.store.end(), intersect.begin());
             intersect.resize(it - intersect.begin());
-            kernelWSMap[key.first][1] = set<uint64_t>(intersect.begin(), intersect.end());
+            StaticWSMap[key.first].internal.insert(intersect.begin(), intersect.end());
 
             /// input working set = ld set - intersect
-            kernelWSMap[key.first][0] = set<uint64_t>();
-            for (const auto &ind : kernelSetMap[key.first].first)
+            // each address not in the internal set is in the input set
+            for (const auto &ind : AddressSetMap[key.first].load)
             {
-                if (kernelWSMap[key.first][1].find(ind) == kernelWSMap[key.first][1].end())
+                if (StaticWSMap[key.first].internal.find(ind) == StaticWSMap[key.first].internal.end())
                 {
-                    kernelWSMap[key.first][0].insert(ind);
+                    StaticWSMap[key.first].input.insert(ind);
                 }
             }
 
             // output working set = st set - intersect
-            kernelWSMap[key.first][2] = set<uint64_t>();
-            for (const auto &ind : kernelSetMap[key.first].second)
+            // each store address not in the internal set is in the output set
+            for (const auto &ind : AddressSetMap[key.first].store)
             {
-                if (kernelWSMap[key.first][1].find(ind) == kernelWSMap[key.first][1].end())
+                if (StaticWSMap[key.first].internal.find(ind) == StaticWSMap[key.first].internal.end())
                 {
-                    kernelWSMap[key.first][2].insert(ind);
+                    StaticWSMap[key.first].output.insert(ind);
                 }
             }
         }
     }
 
-    /// Maps kernel ID pairs to a vector of sets (length 3) containing the intersections of each kernel's working sets
-    map<pair<int, int>, vector<set<uint64_t>>> ProdConMap;
-    void StaticSetSizes()
+    /// Maps kernel ID pairs to a ProdCon struct
+    vector<struct ProdCon> ProdConRelationships;
+    // The set of relationships amounts to combinations of length 2 without replacement
+    void ProducerConsumer()
     {
-        for (auto it0 = kernelWSMap.begin(); it0 != kernelWSMap.end(); it0++)
+        // for each kernel index
+        for (auto it0 = StaticWSMap.begin(); it0 != StaticWSMap.end(); it0++)
         {
             /// for each kernel, intersect with all other kernels
-            for (auto it1 = it0; it1 != kernelWSMap.end(); it1++)
+            for (auto it1 = it0; it1 != StaticWSMap.end(); it1++)
             {
+                // don't intersect kernels with themselves
                 if (it0->first == it1->first)
                 {
                     continue;
                 }
 
-                /// Create vector of set intersections
-                /// 0: it0->input working set    & it1->output working set
-                /// 1: it0->internal working set & it1->internal working set
-                /// 2: it0->output working set   & it1->input working set
-                pair<int, int> newPair = pair(it0->first, it1->first);
-                ProdConMap[newPair] = vector<set<uint64_t>>(3);
+                /// Create a new entry in the ProdConRelationships vector
+                auto newPoint = ProdCon();
+                newPoint.kernels.first = it0->first;
+                newPoint.kernels.second = it1->first;
 
                 /// it0->input working set & it1->output working set
                 vector<uint64_t> intersect;
-                if (it0->second[0].size() > it1->second[2].size())
+                if (it0->second.input.size() > it1->second.output.size())
                 {
-                    intersect = vector<uint64_t>(it0->second[0].size());
+                    intersect = vector<uint64_t>(it0->second.input.size());
                 }
                 else
                 {
-                    intersect = vector<uint64_t>(it1->second[2].size());
+                    intersect = vector<uint64_t>(it1->second.output.size());
                 }
-                auto it = set_intersection(it0->second[0].begin(), it0->second[0].end(), it1->second[2].begin(), it1->second[2].end(), intersect.begin());
+                auto it = set_intersection(it0->second.input.begin(), it0->second.input.end(), it1->second.output.begin(), it1->second.output.end(), intersect.begin());
                 intersect.resize(it - intersect.begin());
-                ProdConMap[newPair][0] = set<uint64_t>(intersect.begin(), intersect.end());
+                newPoint.InputOutput.insert(intersect.begin(), intersect.end());
 
                 /// it0->internal working set & it1->internal working set
                 intersect.clear();
-                if (it0->second[1].size() > it1->second[1].size())
+                if (it0->second.internal.size() > it1->second.internal.size())
                 {
-                    intersect = vector<uint64_t>(it0->second[1].size());
+                    intersect = vector<uint64_t>(it0->second.internal.size());
                 }
                 else
                 {
-                    intersect = vector<uint64_t>(it1->second[1].size());
+                    intersect = vector<uint64_t>(it1->second.internal.size());
                 }
-                it = set_intersection(it0->second[1].begin(), it0->second[1].end(), it1->second[1].begin(), it1->second[1].end(), intersect.begin());
+                it = set_intersection(it0->second.internal.begin(), it0->second.internal.end(), it1->second.internal.begin(), it1->second.internal.end(), intersect.begin());
                 intersect.resize(it - intersect.begin());
-                ProdConMap[newPair][1] = set<uint64_t>(intersect.begin(), intersect.end());
+                newPoint.InternalInternal.insert(intersect.begin(), intersect.end());
 
                 /// it0->output working set & it1->input working set
                 intersect.clear();
-                if (it0->second[2].size() > it1->second[0].size())
+                if (it0->second.output.size() > it1->second.input.size())
                 {
-                    intersect = vector<uint64_t>(it0->second[2].size());
+                    intersect = vector<uint64_t>(it0->second.output.size());
                 }
                 else
                 {
-                    intersect = vector<uint64_t>(it1->second[0].size());
+                    intersect = vector<uint64_t>(it1->second.input.size());
                 }
-                it = set_intersection(it0->second[2].begin(), it0->second[2].end(), it1->second[0].begin(), it1->second[0].end(), intersect.begin());
+                it = set_intersection(it0->second.output.begin(), it0->second.output.end(), it1->second.input.begin(), it1->second.input.end(), intersect.begin());
                 intersect.resize(it - intersect.begin());
-                ProdConMap[newPair][2] = set<uint64_t>(intersect.begin(), intersect.end());
+                newPoint.OutputInput.insert(intersect.begin(), intersect.end());
+
+                // insert newPoint into the global vector
+                ProdConRelationships.push_back(newPoint);
             }
         }
     }
@@ -186,8 +191,8 @@ namespace WorkingSet
     map<uint64_t, uint64_t, greater<>> BirthTimeMap;
     map<uint64_t, uint64_t, greater<>> DeathTimeMap;
     /// Maps a kernel ID to the max live address counts of each working set and total
-    map<int, vector<uint64_t>> kernelWSLiveAddrMaxCounts;
-    void DynamicSetSizes(bool nobar)
+    map<int, struct DynamicSets> DynamicWSMap;
+    void CreateDynamicSets(bool nobar)
     {
         // indicators for time parsing progress
         std::cout << "\e[?25l";
@@ -215,25 +220,22 @@ namespace WorkingSet
             return;
         }
         uint64_t timeDivide = maxTime / 10000;
-        // initialize our max count map, initialize our live address set map
-        map<int, vector<set<uint64_t>>> liveAddressSetMap;
-        for (const auto &kernelID : kernelSetMap)
+        /// Initialize DynamicWSMap
+        for (const auto &kernelID : AddressSetMap)
         {
             // max count map
-            kernelWSLiveAddrMaxCounts[kernelID.first] = vector<uint64_t>(4);
+            DynamicWSMap[kernelID.first] = DynamicSets();
             // the input working set is all alive at time 0
-            kernelWSLiveAddrMaxCounts[kernelID.first][0] = kernelWSMap[kernelID.first][0].size();
-            kernelWSLiveAddrMaxCounts[kernelID.first][1] = 0;
-            kernelWSLiveAddrMaxCounts[kernelID.first][2] = 0;
-            kernelWSLiveAddrMaxCounts[kernelID.first][3] = kernelWSMap[kernelID.first][0].size();
+            DynamicWSMap[kernelID.first].inputMax = StaticWSMap[kernelID.first].input.size();
+            DynamicWSMap[kernelID.first].internalMax = 0;
+            DynamicWSMap[kernelID.first].outputMax = 0;
+            DynamicWSMap[kernelID.first].totalMax = StaticWSMap[kernelID.first].input.size();
             // live address set map
-            liveAddressSetMap[kernelID.first] = vector<set<uint64_t>>(4);
             // input working set must be pre-populated (because all input addresses are alive at the start of the program)
-            liveAddressSetMap[kernelID.first][0] = set<uint64_t>(kernelWSMap[kernelID.first][0].begin(), kernelWSMap[kernelID.first][0].end());
-            // this map needs to be primed with internal addresses that are first read from, but the current implementation can't do this
-            liveAddressSetMap[kernelID.first][1] = set<uint64_t>();
-            liveAddressSetMap[kernelID.first][2] = set<uint64_t>();
-            liveAddressSetMap[kernelID.first][3] = set<uint64_t>(kernelWSMap[kernelID.first][0].begin(), kernelWSMap[kernelID.first][0].end());
+            DynamicWSMap[kernelID.first].input.insert(StaticWSMap[kernelID.first].input.begin(), StaticWSMap[kernelID.first].input.end());
+            // TODO: the internal address set needs to be primed with internal addresses that are first read from, but the current implementation can't do this
+            // The total set also has to be pre-populated with the internal working set
+            DynamicWSMap[kernelID.first].total.insert(StaticWSMap[kernelID.first].input.begin(), StaticWSMap[kernelID.first].input.end());
         }
         vector<int> currentKernels = vector<int>();
         // go through the entire trace time
@@ -243,9 +245,10 @@ namespace WorkingSet
             if (BirthTimeMap.find(timeCount) != BirthTimeMap.end())
             {
                 // find the kernel IDs that have this address
-                for (const auto &key : kernelSetMap)
+                for (const auto &key : AddressSetMap)
                 {
-                    if ((key.second.first.find(BirthTimeMap[timeCount]) != key.second.first.end()) || (key.second.second.find(BirthTimeMap[timeCount]) != key.second.second.end()))
+                    // if this address belongs to this kernel's store set, add the kernel to the list
+                    if ((key.second.store.find(BirthTimeMap[timeCount]) != key.second.store.end()))
                     {
                         currentKernels.push_back(key.first);
                     }
@@ -253,56 +256,57 @@ namespace WorkingSet
                 // for each kernel our address belongs to, add it to the total live address set
                 for (const auto &ind : currentKernels)
                 {
-                    liveAddressSetMap[ind][3].insert(BirthTimeMap[timeCount]);
+                    DynamicWSMap[ind].total.insert(BirthTimeMap[timeCount]);
                     // since this is a birth address, it can't belong to the input working set of this kernel
                     // if this address belongs to the output working set
-                    if (kernelWSMap[ind][2].find(BirthTimeMap[timeCount]) != kernelWSMap[ind][2].end())
+                    if (StaticWSMap[ind].output.find(BirthTimeMap[timeCount]) != StaticWSMap[ind].output.end())
                     {
-                        liveAddressSetMap[ind][2].insert(BirthTimeMap[timeCount]);
+                        DynamicWSMap[ind].output.insert(BirthTimeMap[timeCount]);
                     }
                     // if this address belongs to the internal working set
-                    if (kernelWSMap[ind][1].find(BirthTimeMap[timeCount]) != kernelWSMap[ind][1].end())
+                    if (StaticWSMap[ind].internal.find(BirthTimeMap[timeCount]) != StaticWSMap[ind].internal.end())
                     {
-                        liveAddressSetMap[ind][1].insert(BirthTimeMap[timeCount]);
+                        DynamicWSMap[ind].internal.insert(BirthTimeMap[timeCount]);
                     }
                     // update our max counts
                     // input working set max can never be updated
-                    if (kernelWSLiveAddrMaxCounts[ind][1] < liveAddressSetMap[ind][1].size())
+                    if (DynamicWSMap[ind].internalMax < DynamicWSMap[ind].internal.size())
                     {
-                        kernelWSLiveAddrMaxCounts[ind][1] = liveAddressSetMap[ind][1].size();
+                        DynamicWSMap[ind].internalMax = DynamicWSMap[ind].internal.size();
                     }
-                    if (kernelWSLiveAddrMaxCounts[ind][2] < liveAddressSetMap[ind][2].size())
+                    if (DynamicWSMap[ind].outputMax < DynamicWSMap[ind].output.size())
                     {
-                        kernelWSLiveAddrMaxCounts[ind][2] = liveAddressSetMap[ind][2].size();
+                        DynamicWSMap[ind].outputMax = DynamicWSMap[ind].output.size();
                     }
-                    if (kernelWSLiveAddrMaxCounts[ind][3] < liveAddressSetMap[ind][3].size())
+                    if (DynamicWSMap[ind].totalMax < DynamicWSMap[ind].total.size())
                     {
-                        kernelWSLiveAddrMaxCounts[ind][3] = liveAddressSetMap[ind][3].size();
+                        DynamicWSMap[ind].totalMax = DynamicWSMap[ind].total.size();
                     }
                 }
             }
             else if (DeathTimeMap.find(timeCount) != DeathTimeMap.end())
             {
                 // find the kernel IDs that have this address
-                for (const auto &key : kernelSetMap)
+                for (const auto &key : AddressSetMap)
                 {
-                    if ((key.second.first.find(DeathTimeMap[timeCount]) != key.second.first.end()) || (key.second.second.find(DeathTimeMap[timeCount]) != key.second.second.end()))
+                    // if this address belongs to the kernel's load set, add this kernel to the list
+                    if (key.second.load.find(DeathTimeMap[timeCount]) != key.second.load.end())
                     {
                         currentKernels.push_back(key.first);
                     }
                 }
                 for (const auto &ind : currentKernels)
                 {
-                    liveAddressSetMap[ind][3].erase(DeathTimeMap[timeCount]);
+                    DynamicWSMap[ind].total.erase(DeathTimeMap[timeCount]);
                     // if this address belongs to the input working set
-                    if (kernelWSMap[ind][0].find(DeathTimeMap[timeCount]) != kernelWSMap[ind][0].end())
+                    if (StaticWSMap[ind].input.find(DeathTimeMap[timeCount]) != StaticWSMap[ind].input.end())
                     {
-                        liveAddressSetMap[ind][0].erase(DeathTimeMap[timeCount]);
+                        DynamicWSMap[ind].input.erase(DeathTimeMap[timeCount]);
                     }
                     // if this address belongs to the internal working set
-                    if (kernelWSMap[ind][1].find(DeathTimeMap[timeCount]) != kernelWSMap[ind][1].end())
+                    if (StaticWSMap[ind].internal.find(DeathTimeMap[timeCount]) != StaticWSMap[ind].internal.end())
                     {
-                        liveAddressSetMap[ind][1].erase(DeathTimeMap[timeCount]);
+                        DynamicWSMap[ind].internal.erase(DeathTimeMap[timeCount]);
                     }
                     // since this is a death address, it can't belong to the output working set of this kernel
                 }

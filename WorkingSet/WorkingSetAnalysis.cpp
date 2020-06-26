@@ -83,9 +83,9 @@ int main(int argc, char **argv)
         WorkingSet::Setup(j);
         spdlog::info("Started WorkingSet analysis.");
         ProcessTrace(inputTrace, &WorkingSet::Process, "Parsing Load and Store sets.", noBar);
-        WorkingSet::CreateSets();
-        WorkingSet::StaticSetSizes();
-        WorkingSet::DynamicSetSizes(noBar);
+        WorkingSet::CreateStaticSets();
+        WorkingSet::ProducerConsumer();
+        WorkingSet::CreateDynamicSets(noBar);
     }
     catch (int e)
     {
@@ -95,24 +95,24 @@ int main(int argc, char **argv)
 
     // write output to file
     nlohmann::json outputJson;
-    for (const auto &key : WorkingSet::kernelWSMap)
+    for (const auto &key : WorkingSet::StaticWSMap)
     {
-        outputJson["Sizes"][to_string(key.first)]["Static"]["Input"] = key.second[0].size();
-        outputJson["Sizes"][to_string(key.first)]["Static"]["Internal"] = key.second[1].size();
-        outputJson["Sizes"][to_string(key.first)]["Static"]["Output"] = key.second[2].size();
+        outputJson["Sizes"][to_string(key.first)]["Static"]["Input"] = key.second.input.size();
+        outputJson["Sizes"][to_string(key.first)]["Static"]["Internal"] = key.second.internal.size();
+        outputJson["Sizes"][to_string(key.first)]["Static"]["Output"] = key.second.output.size();
     }
-    for (const auto &key : WorkingSet::kernelWSLiveAddrMaxCounts)
+    for (const auto &key : WorkingSet::DynamicWSMap)
     {
-        outputJson["Sizes"][to_string(key.first)]["Dynamic"]["Input"] = key.second[0];
-        outputJson["Sizes"][to_string(key.first)]["Dynamic"]["Internal"] = key.second[1];
-        outputJson["Sizes"][to_string(key.first)]["Dynamic"]["Output"] = key.second[2];
-        outputJson["Sizes"][to_string(key.first)]["Dynamic"]["Total"] = key.second[3];
+        outputJson["Sizes"][to_string(key.first)]["Dynamic"]["Input"] = key.second.inputMax;
+        outputJson["Sizes"][to_string(key.first)]["Dynamic"]["Internal"] = key.second.internalMax;
+        outputJson["Sizes"][to_string(key.first)]["Dynamic"]["Output"] = key.second.outputMax;
+        outputJson["Sizes"][to_string(key.first)]["Dynamic"]["Total"] = key.second.totalMax;
     }
-    for (const auto &key : WorkingSet::ProdConMap)
+    for (const auto &ind : WorkingSet::ProdConRelationships)
     {
-        outputJson["Producer-Consumer"]["Kernel IDs"][to_string(key.first.first) + "," + to_string(key.first.second)]["Input,Output"] = key.second[0].size();
-        outputJson["Producer-Consumer"]["Kernel IDs"][to_string(key.first.first) + "," + to_string(key.first.second)]["Internal,Internal"] = key.second[1].size();
-        outputJson["Producer-Consumer"]["Kernel IDs"][to_string(key.first.first) + "," + to_string(key.first.second)]["Output,Input"] = key.second[2].size();
+        outputJson["Producer-Consumer"]["Kernel IDs"][to_string(ind.kernels.first) + "," + to_string(ind.kernels.second)]["Input,Output"] = ind.InputOutput.size();
+        outputJson["Producer-Consumer"]["Kernel IDs"][to_string(ind.kernels.first) + "," + to_string(ind.kernels.second)]["Internal,Internal"] = ind.InternalInternal.size();
+        outputJson["Producer-Consumer"]["Kernel IDs"][to_string(ind.kernels.first) + "," + to_string(ind.kernels.second)]["Output,Input"] = ind.OutputInput.size();
     }
     ofstream out(OutputFile);
     out << setw(4) << outputJson << endl;
