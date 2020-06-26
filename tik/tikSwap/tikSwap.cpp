@@ -140,7 +140,7 @@ int main(int argc, char *argv[])
             for (auto &a : kernel->ArgumentMap)
             {
                 // set the first arg to the entrance index
-                if (a.second == -1)
+                if (a.second == IDState::Artificial)
                 {
                     newArgs.push_back(ConstantInt::get(Type::getInt8Ty(base->getContext()), (uint64_t)e->Index));
                     continue;
@@ -179,7 +179,7 @@ int main(int argc, char *argv[])
                             }
                             else
                             {
-                                ValueID = -1;
+                                ValueID = IDState::Artificial;
                                 spdlog::warn("Couldn't extract ValueID from source bitcode. Skipping...");
                             }
                             // now see if this value matches, and if so add it (in order)
@@ -227,7 +227,7 @@ int main(int argc, char *argv[])
                     }
                     else
                     {
-                        BBID = -1;
+                        BBID = IDState::Artificial;
                         spdlog::warn("Couldn't extract BBID from source bitcode. Skipping...");
                     }
                     // if this is our entrance block, swap tik
@@ -244,7 +244,7 @@ int main(int argc, char *argv[])
                             }
                             KInst->setArgOperand((unsigned int)i, newArgs[(size_t)i]);
                         }
-                        KernelInterface a(-1, -1);
+                        KernelInterface a(IDState::Artificial, IDState::Artificial);
                         for (auto &j : kernel->Exits)
                         {
                             if (j->Index == 0)

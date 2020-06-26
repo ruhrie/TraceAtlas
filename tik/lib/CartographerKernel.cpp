@@ -165,7 +165,7 @@ namespace TraceAtlas::tik
             {
                 auto *b = cast<BasicBlock>(BB);
                 int64_t id = GetBlockID(b);
-                if (id != -2)
+                if (id >= IDState::Valid)
                 {
                     if (find(basicBlocks.begin(), basicBlocks.end(), id) != basicBlocks.end())
                     {
@@ -205,11 +205,11 @@ namespace TraceAtlas::tik
             inputArgs.push_back(Type::getInt8Ty(TikModule->getContext()));
             for (auto inst : KernelImports)
             {
-                if (IDToValue[inst] != nullptr)
+                if (IDToValue.find(inst) != IDToValue.end())
                 {
                     inputArgs.push_back(IDToValue[inst]->getType());
                 }
-                else if (IDToBlock[inst] != nullptr)
+                else if (IDToBlock.find(inst) != IDToBlock.end())
                 {
                     inputArgs.push_back(IDToBlock[inst]->getType());
                 }
@@ -220,18 +220,17 @@ namespace TraceAtlas::tik
             }
             for (auto inst : KernelExports)
             {
-                if (IDToValue[inst] != nullptr)
+                if (IDToValue.find(inst) != IDToValue.end())
                 {
                     inputArgs.push_back(IDToValue[inst]->getType());
                 }
-                else if (IDToBlock[inst] != nullptr)
+                else if (IDToBlock.find(inst) != IDToBlock.end())
                 {
                     inputArgs.push_back(IDToBlock[inst]->getType());
                 }
                 else
                 {
-                    cout << inst << endl;
-                    spdlog::error("Tried to push a nullptr into the inputArgs when parsing exports.");
+                    AtlasException("Tried to push a nullptr into the inputArgs when parsing exports.");
                 }
             }
             FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
@@ -352,15 +351,14 @@ namespace TraceAtlas::tik
                     Value *op = inst->getOperand(i);
                     // initialize IDToValue
                     int64_t valID = GetValueID(op);
-                    if (valID == -2)
+                    if (valID == IDState::Uninitialized || valID == IDState::Artificial)
                     {
                         // if its a block, ignore it
                         if (auto block = dyn_cast<BasicBlock>(op))
                         {
-                            if (GetBlockID(block) == -2)
+                            if (GetBlockID(block) == IDState::Uninitialized)
                             {
-                                spdlog::error("Found a non-const entity in the bitcode that did not have a valueID or a blockID.");
-                                PrintVal(op);
+                                spdlog::warn("Found a non-const entity in the bitcode that did not have a valueID or a blockID.");
                             }
                             else
                             {
@@ -405,7 +403,7 @@ namespace TraceAtlas::tik
                         {
                             if (find(KernelImports.begin(), KernelImports.end(), GetValueID(ar)) == KernelImports.end())
                             {
-                                if (GetValueID(ar) == -2)
+                                if (GetValueID(ar) == IDState::Uninitialized)
                                 {
                                     spdlog::error("Tried pushing a value without an ID into the KernelImport list. This is not allowed.");
                                 }
@@ -424,13 +422,13 @@ namespace TraceAtlas::tik
                         auto p = i->getParent();
                         if (blocks.find(p) == blocks.end())
                         {
-                            int64_t ID = -2;
+                            int64_t ID = IDState::Uninitialized;
                             //the use is external therefore it should be a kernel export
-                            if (GetValueID(p) != -2)
+                            if (GetValueID(p) >= IDState::Valid)
                             {
                                 ID = GetValueID(p);
                             }
-                            else if (GetBlockID(p) != -2)
+                            else if (GetBlockID(p) >= IDState::Valid)
                             {
                                 ID = GetBlockID(p);
                             }
@@ -513,7 +511,7 @@ namespace TraceAtlas::tik
                         IRBuilder<> intBuilder(intermediateBlock);
                         auto cc = intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
                         MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(TikModule->getContext()), 1)));
-                        SetBlockID(intermediateBlock, -2);
+                        SetBlockID(intermediateBlock, IDState::Artificial);
                         cc->setMetadata("KernelCall", tikNode);
                         auto sw = intBuilder.CreateSwitch(cc, Exception, (uint32_t)nestedKernel->Exits.size());
                         for (const auto &exit : nestedKernel->Exits)
@@ -567,7 +565,7 @@ namespace TraceAtlas::tik
                                 if (!found)
                                 {
                                     auto a = p->getBasicBlockIndex(pred);
-                                    if (a != -2)
+                                    if (a >= IDState::Valid)
                                     {
                                         p->removeIncomingValue(pred);
                                     }
@@ -653,7 +651,7 @@ namespace TraceAtlas::tik
         {
             auto block = cast<BasicBlock>(fi);
             int64_t id = GetBlockID(block);
-            if (blocks.find(id) == blocks.end() && block != Exit && block != Init && block != Exception && id != -2)
+            if (blocks.find(id) == blocks.end() && block != Exit && block != Init && block != Exception && id >= IDState::Valid)
             {
                 for (auto user : block->users())
                 {
@@ -941,7 +939,7 @@ namespace TraceAtlas::tik
         exitBuilder.CreateRet(phi);
 
         IRBuilder<> exceptionBuilder(Exception);
-        exceptionBuilder.CreateRet(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)-2));
+        exceptionBuilder.CreateRet(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)IDState::Artificial));
     }
 
     void CartographerKernel::PatchPhis()

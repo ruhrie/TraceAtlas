@@ -155,13 +155,15 @@ namespace TraceAtlas::tik
         metadata += "]\n\t},\n\t\"Arguments\": [";
         for (auto arg = KernelFunction->arg_begin(); arg != KernelFunction->arg_end(); arg++)
         {
+            // if this is not the first argument, its a value that comes from the bitcode
             if (arg != KernelFunction->arg_begin())
             {
                 metadata += ", ";
             }
             else
             {
-                metadata += to_string(-1);
+                // This is the first argument, which is always a constant injected by us. Signify to tikSwap this doesn't need to be mapped
+                metadata += to_string(IDState::Artificial);
                 continue;
             }
             auto argVal = ArgumentMap[arg];

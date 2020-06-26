@@ -5,6 +5,19 @@
 #include <llvm/IR/Metadata.h>
 #include <llvm/IR/Module.h>
 
+/// @brief Enumerate the different states of ValueID and BlockID
+///
+/// A ValueID or BlockID can be in three different states:
+/// -2 -> Uninitialized
+/// -1 -> Artificial (injected by tik)
+/// >= 0 -> comes from the source bitcode
+enum IDState : int64_t
+{
+    Uninitialized = -2,
+    Artificial = -1,
+    Valid = 0
+};
+
 inline void SetBlockID(llvm::BasicBlock *BB, int64_t i)
 {
     llvm::MDNode *idNode = llvm::MDNode::get(BB->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(BB->getContext()), (uint64_t)i)));
@@ -155,7 +168,7 @@ inline void CleanModule(llvm::Module *M)
 
 inline int64_t GetBlockID(llvm::BasicBlock *BB)
 {
-    int64_t result = -2;
+    int64_t result = IDState::Uninitialized;
     if (BB->empty())
     {
         return result;
@@ -171,7 +184,7 @@ inline int64_t GetBlockID(llvm::BasicBlock *BB)
 
 inline int64_t GetValueID(llvm::Value *val)
 {
-    int64_t result = -2;
+    int64_t result = IDState::Uninitialized;
     if (llvm::Instruction *first = llvm::dyn_cast<llvm::Instruction>(val))
     {
         if (llvm::MDNode *node = first->getMetadata("ValueID"))
