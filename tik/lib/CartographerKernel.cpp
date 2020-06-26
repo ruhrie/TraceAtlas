@@ -351,7 +351,7 @@ namespace TraceAtlas::tik
                     Value *op = inst->getOperand(i);
                     // initialize IDToValue
                     int64_t valID = GetValueID(op);
-                    if (valID == IDState::Uninitialized || valID == IDState::Artificial)
+                    if (valID < IDState::Valid)
                     {
                         // if its a block, ignore it
                         if (auto block = dyn_cast<BasicBlock>(op))
