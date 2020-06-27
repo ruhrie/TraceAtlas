@@ -165,7 +165,7 @@ namespace TraceAtlas::tik
             {
                 auto *b = cast<BasicBlock>(BB);
                 int64_t id = GetBlockID(b);
-                if (id >= IDState::Valid)
+                if (id >= 0)
                 {
                     if (find(basicBlocks.begin(), basicBlocks.end(), id) != basicBlocks.end())
                     {
@@ -351,7 +351,7 @@ namespace TraceAtlas::tik
                     Value *op = inst->getOperand(i);
                     // initialize IDToValue
                     int64_t valID = GetValueID(op);
-                    if (valID < IDState::Valid)
+                    if (valID < 0)
                     {
                         // if its a block, ignore it
                         if (auto block = dyn_cast<BasicBlock>(op))
@@ -424,11 +424,11 @@ namespace TraceAtlas::tik
                         {
                             int64_t ID = IDState::Uninitialized;
                             //the use is external therefore it should be a kernel export
-                            if (GetValueID(p) >= IDState::Valid)
+                            if (GetValueID(p) >= 0)
                             {
                                 ID = GetValueID(p);
                             }
-                            else if (GetBlockID(p) >= IDState::Valid)
+                            else if (GetBlockID(p) >= 0)
                             {
                                 ID = GetBlockID(p);
                             }
@@ -561,7 +561,7 @@ namespace TraceAtlas::tik
                                 if (!found)
                                 {
                                     auto a = p->getBasicBlockIndex(pred);
-                                    if (a >= IDState::Valid)
+                                    if (a >= 0)
                                     {
                                         p->removeIncomingValue(pred);
                                     }
@@ -647,7 +647,7 @@ namespace TraceAtlas::tik
         {
             auto block = cast<BasicBlock>(fi);
             int64_t id = GetBlockID(block);
-            if (blocks.find(id) == blocks.end() && block != Exit && block != Init && block != Exception && id >= IDState::Valid)
+            if (blocks.find(id) == blocks.end() && block != Exit && block != Init && block != Exception && id >= 0)
             {
                 for (auto user : block->users())
                 {

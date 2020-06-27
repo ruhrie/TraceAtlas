@@ -10,12 +10,10 @@
 /// A ValueID or BlockID can be in three different states:
 /// -2 -> Uninitialized
 /// -1 -> Artificial (injected by tik)
-/// >= 0 -> comes from the source bitcode
 enum IDState : int64_t
 {
     Uninitialized = -2,
-    Artificial = -1,
-    Valid = 0
+    Artificial = -1
 };
 
 inline void SetBlockID(llvm::BasicBlock *BB, int64_t i)

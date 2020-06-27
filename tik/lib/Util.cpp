@@ -17,7 +17,7 @@ namespace TraceAtlas::tik
     std::map<int64_t, llvm::Value *> IDToValue;
     void RecurseThroughOperands(Value *val)
     {
-        if (GetValueID(val) >= IDState::Valid)
+        if (GetValueID(val) >= 0)
         {
             if (IDToValue.find(GetValueID(val)) == IDToValue.end())
             {
@@ -58,7 +58,7 @@ namespace TraceAtlas::tik
             for (auto BB = F.begin(); BB != F.end(); BB++)
             {
                 auto *block = cast<BasicBlock>(BB);
-                if ((GetBlockID(block) >= IDState::Valid) && (IDToBlock[GetBlockID(block)] == nullptr))
+                if ((GetBlockID(block) >= 0) && (IDToBlock[GetBlockID(block)] == nullptr))
                 {
                     IDToBlock[GetBlockID(block)] = block;
                 }
