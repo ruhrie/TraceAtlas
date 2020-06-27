@@ -40,26 +40,24 @@ int main(int argc, char *argv[])
     {
         sourceBitcode = parseIRFile(OriginalBitcode, Osmerror, OContext);
     }
+    // if the file was not found
     catch (exception &e)
     {
-        std::cerr << "Couldn't open input bitcode file: " << OriginalBitcode << "\n";
-        std::cerr << e.what() << '\n';
-        spdlog::critical("Failed to open source bitcode: " + OriginalBitcode);
+        spdlog::critical("Failed to open source bitcode file: " + OriginalBitcode);
         return EXIT_FAILURE;
     }
+    // if the parsing failed
     if (sourceBitcode == nullptr)
     {
-        std::cerr << "Couldn't open input bitcode file: " << OriginalBitcode << "\n";
-        spdlog::critical("Failed to open source bitcode: " + OriginalBitcode);
+        spdlog::critical("Couldn't parse source bitcode: " + OriginalBitcode);
         return EXIT_FAILURE;
     }
     // Annotate its bitcodes and values
-    Module *base = sourceBitcode.get();
-    CleanModule(base);
-    Annotate(base);
+    CleanModule(sourceBitcode.get());
+    Annotate(sourceBitcode.get());
     // create a map for its block and value IDs
     map<int64_t, BasicBlock *> baseBlockMap;
-    for (auto &F : *base)
+    for (auto &F : *sourceBitcode)
     {
         for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
         {
@@ -88,29 +86,27 @@ int main(int argc, char *argv[])
     {
         tikBitcode = parseIRFile(InputFile, tikSmerror, tikContext);
     }
+    // if the file was not found
     catch (exception &e)
     {
-        std::cerr << "Couldn't open input bitcode file: " << InputFile << "\n";
-        std::cerr << e.what() << '\n';
-        spdlog::critical("Failed to open source bitcode: " + InputFile);
+        spdlog::critical("Failed to open tik bitcode file: " + InputFile);
         return EXIT_FAILURE;
     }
+    // if the parsing failed
     if (tikBitcode == nullptr)
     {
-        std::cerr << "Couldn't open input bitcode file: " << InputFile << "\n";
-        spdlog::critical("Failed to open source bitcode: " + InputFile);
+        spdlog::critical("Couldn't parse tik bitcode: " + InputFile);
         return EXIT_FAILURE;
     }
-    Module *tikModule = tikBitcode.get();
 
     // grab all kernel functions in the tik bitcode and construct objects from them
     vector<Function *> kernelFuncs;
-    for (auto &func : *tikModule)
+    for (auto &func : *tikBitcode)
     {
         string funcName = func.getName();
         if (funcName == "K" + to_string(kernelFuncs.size()))
         {
-            kernelFuncs.push_back(tikModule->getFunction(funcName));
+            kernelFuncs.push_back(tikBitcode->getFunction(funcName));
         }
     }
     vector<TikKernel *> kernels;
@@ -134,7 +130,7 @@ int main(int argc, char *argv[])
     {
         for (auto &e : kernel->Entrances)
         {
-            // make a copy of the kernel function for the base module context
+            // make a copy of the kernel function for the sourceBitcode module context
             // we have to get the arg types from the source values first before we can make the function signature (to align context)
             vector<Value *> newArgs;
             for (auto &a : kernel->ArgumentMap)
@@ -142,10 +138,10 @@ int main(int argc, char *argv[])
                 // set the first arg to the entrance index
                 if (a.second == IDState::Artificial)
                 {
-                    newArgs.push_back(ConstantInt::get(Type::getInt8Ty(base->getContext()), (uint64_t)e->Index));
+                    newArgs.push_back(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)e->Index));
                     continue;
                 }
-                for (auto &F : *base)
+                for (auto &F : *sourceBitcode)
                 {
                     for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
                     {
@@ -197,10 +193,10 @@ int main(int argc, char *argv[])
             {
                 argTypes.push_back(arg->getType());
             }
-            auto FuTy = FunctionType::get(Type::getInt8Ty(base->getContext()), argTypes, false);
-            auto newFunc = Function::Create(FuTy, kernel->KernelFunction->getLinkage(), kernel->KernelFunction->getAddressSpace(), "", base);
+            auto FuTy = FunctionType::get(Type::getInt8Ty(sourceBitcode->getContext()), argTypes, false);
+            auto newFunc = Function::Create(FuTy, kernel->KernelFunction->getLinkage(), kernel->KernelFunction->getAddressSpace(), "", sourceBitcode.get());
             newFunc->setName(kernel->KernelFunction->getName());
-            for (auto &F : *base)
+            for (auto &F : *sourceBitcode)
             {
                 for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
                 {
@@ -234,13 +230,13 @@ int main(int argc, char *argv[])
                     if (BBID == e->Block)
                     {
                         IRBuilder iBuilder(block->getTerminator());
-                        auto baseFuncInst = cast<Function>(base->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
+                        auto baseFuncInst = cast<Function>(sourceBitcode->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
                         CallInst *KInst = iBuilder.CreateCall(baseFuncInst, newArgs);
                         for (int i = 0; i < (int)KInst->getNumArgOperands(); i++)
                         {
                             if (e->Index != 0)
                             {
-                                newArgs[0] = ConstantInt::get(Type::getInt8Ty(base->getContext()), (uint64_t)e->Index);
+                                newArgs[0] = ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)e->Index);
                             }
                             KInst->setArgOperand((unsigned int)i, newArgs[(size_t)i]);
                         }
@@ -258,7 +254,7 @@ int main(int argc, char *argv[])
                         {
                             if (j->Index != 0)
                             {
-                                sw->addCase(ConstantInt::get(Type::getInt8Ty(base->getContext()), (uint64_t)j->Index), baseBlockMap[j->Block]);
+                                sw->addCase(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)j->Index), baseBlockMap[j->Block]);
                             }
                         }
                         // remember to remove the old terminator
@@ -277,7 +273,7 @@ int main(int argc, char *argv[])
     //verify the module
     std::string str;
     llvm::raw_string_ostream rso(str);
-    bool broken = verifyModule(*base, &rso);
+    bool broken = verifyModule(*sourceBitcode, &rso);
     if (broken)
     {
         auto err = rso.str();
@@ -295,7 +291,7 @@ int main(int argc, char *argv[])
             llvm::raw_string_ostream rso(str);
             std::filebuf f0;
             f0.open(OutputFile, std::ios::out);
-            base->print(rso, write);
+            sourceBitcode->print(rso, write);
             std::ostream readableStream(&f0);
             readableStream << str;
             f0.close();
@@ -307,7 +303,7 @@ int main(int argc, char *argv[])
             f.open(OutputFile, std::ios::out);
             std::ostream rawStream(&f);
             raw_os_ostream raw_stream(rawStream);
-            WriteBitcodeToFile(*base, raw_stream);
+            WriteBitcodeToFile(*sourceBitcode, raw_stream);
         }
         spdlog::info("Successfully wrote tik to file");
     }
