@@ -15,6 +15,7 @@
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <sstream>
+#include <string>
 
 using namespace std;
 using namespace llvm;
@@ -55,7 +56,7 @@ int main(int argc, char **argv)
 
     
     //here calculates the maximum internal working set size
-
+    map<uint64_t,vector<uint64_t>> internalTimeStampMap;
     for (auto &itout: KernelWorkingSetMap)
     {
         //store max size of input output internal working set
@@ -72,6 +73,10 @@ int main(int argc, char **argv)
                 {
                     endTimeSet.erase(endTimeSet.begin());
                 }
+
+                // for dynamic size printing
+                internalTimeStampMap[itout.first].push_back(endTimeSet.size());
+                
                 if (endTimeSet.size() > maxinternal)
                 {
                     maxinternal = endTimeSet.size();
@@ -85,5 +90,15 @@ int main(int argc, char **argv)
         maxInput = itout.second.inputMapSize;
         maxOutput = itout.second.outputAddressIndexSet.size();
         printf("maxInput: %lu \n maxinternal: %lu \n maxOutput: %lu \n", maxInput, maxinternal, maxOutput);
-    }   
+    }
+    string   fileName;
+    for (auto &it: internalTimeStampMap)
+    {
+        fileName = string("kernel") + to_string(it.first)+string(".txt");
+        ofstream mycout(fileName.c_str());
+        for(auto &itiner: it.second)
+        {
+            mycout<< itiner<<endl;
+        } 
+    }
 }

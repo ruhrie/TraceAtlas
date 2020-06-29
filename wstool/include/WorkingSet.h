@@ -30,7 +30,7 @@ namespace WorkingSet
     extern map<uint64_t,KernelWorkingSet> KernelWorkingSetMap;
     extern int64_t timing;
 
-
+    extern map<uint64_t,vector<uint64_t>> internalTimeStamp;
     extern vector<InternaladdressLiving> internalAddressLivingVec;
     extern uint64_t inputMapSize;
     extern uint64_t internalMapSize;
