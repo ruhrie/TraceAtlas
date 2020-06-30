@@ -131,6 +131,10 @@ namespace TraceAtlas::tik
             {
                 CopyOperand(newOp, VMap);
             }
+            else if (auto newBitCast = dyn_cast<BitCastOperator>(inst->getOperand(j)))
+            {
+                CopyOperand(newBitCast, VMap);
+            }
         }
     }
 
@@ -252,6 +256,7 @@ namespace TraceAtlas::tik
             {
                 auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i + j);
                 a->setName("e" + to_string(j));
+                VMap[IDToValue[KernelExports[i]]] = a;
                 ArgumentMap[a] = KernelExports[j];
             }
 
@@ -362,7 +367,7 @@ namespace TraceAtlas::tik
                         {
                             if (GetBlockID(block) == IDState::Uninitialized)
                             {
-                                spdlog::warn("Found a non-const entity in the bitcode that did not have a valueID or a blockID.");
+                                spdlog::error("Found a value in the bitcode that did not have a valueID or a blockID.");
                             }
                             else
                             {
@@ -416,7 +421,6 @@ namespace TraceAtlas::tik
                         }
                     }
                 }
-
                 //then get all the exports
                 //this is composed of all the instructions whose use extends beyond the current blocks
                 for (auto user : inst->users())
@@ -426,19 +430,16 @@ namespace TraceAtlas::tik
                         auto p = i->getParent();
                         if (blocks.find(p) == blocks.end())
                         {
+                            auto instVal = cast<Value>(inst);
                             int64_t ID = IDState::Uninitialized;
                             //the use is external therefore it should be a kernel export
-                            if (GetValueID(p) >= 0)
+                            if (GetValueID(i) >= 0)
                             {
-                                ID = GetValueID(p);
-                            }
-                            else if (GetBlockID(p) >= 0)
-                            {
-                                ID = GetBlockID(p);
+                                ID = GetValueID(instVal);
                             }
                             else
                             {
-                                spdlog::error("Tried putting an entity without a value or block ID. Skipping...");
+                                spdlog::error("Tried putting an entity without a valueID into the KernelExport list. Skipping...");
                                 continue;
                             }
                             KernelExports.push_back(ID);
