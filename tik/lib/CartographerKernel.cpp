@@ -119,13 +119,17 @@ namespace TraceAtlas::tik
         }
         for (uint32_t j = 0; j < inst->getNumOperands(); j++)
         {
-            if (auto newOp = dyn_cast<GlobalVariable>(inst->getOperand(j)))
+            if (auto newGP = dyn_cast<GlobalVariable>(inst->getOperand(j)))
             {
-                CopyOperand(newOp, VMap);
+                CopyOperand(newGP, VMap);
             }
             else if (auto newFunc = dyn_cast<Function>(inst->getOperand(j)))
             {
                 CopyOperand(newFunc, VMap);
+            }
+            else if (auto newOp = dyn_cast<GEPOperator>(inst->getOperand(j)))
+            {
+                CopyOperand(newOp, VMap);
             }
         }
     }
