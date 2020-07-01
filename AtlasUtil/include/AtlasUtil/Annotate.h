@@ -4,6 +4,7 @@
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/Metadata.h>
 #include <llvm/IR/Module.h>
+#include <llvm/IR/Operator.h>
 
 /// @brief Enumerate the different states of ValueID and BlockID
 ///
@@ -22,11 +23,11 @@ inline void SetBlockID(llvm::BasicBlock *BB, int64_t i)
     BB->getFirstInsertionPt()->setMetadata("BlockID", idNode);
 }
 
-inline void SetValueIDs(llvm::Value *val, int64_t &i)
+inline void SetValueIDs(llvm::Value *val, uint64_t &i)
 {
     if (llvm::Instruction *inst = llvm::dyn_cast<llvm::Instruction>(val))
     {
-        llvm::MDNode *idNode = llvm::MDNode::get(inst->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(inst->getContext()), (uint64_t)i)));
+        llvm::MDNode *idNode = llvm::MDNode::get(inst->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(inst->getContext()), i)));
         std::string metaKind = "ValueID";
         if (inst->getMetadata(metaKind) == nullptr)
         {
@@ -39,25 +40,15 @@ inline void SetValueIDs(llvm::Value *val, int64_t &i)
         }
         for (unsigned int j = 0; j < inst->getNumOperands(); j++)
         {
-            if (auto subInst = llvm::dyn_cast<llvm::Instruction>(inst->getOperand(j)))
+            if (auto use = llvm::dyn_cast<llvm::User>(inst->getOperand(j)))
             {
-                if (auto v = llvm::dyn_cast<llvm::Value>(subInst))
-                {
-                    SetValueIDs(v, i);
-                }
-            }
-            else if (auto subGV = llvm::dyn_cast<llvm::GlobalVariable>(inst->getOperand(j)))
-            {
-                if (auto v = llvm::dyn_cast<llvm::Value>(subGV))
-                {
-                    SetValueIDs(v, i);
-                }
+                SetValueIDs(llvm::cast<llvm::Value>(use), i);
             }
         }
     }
-    else if (auto gv = llvm::dyn_cast<llvm::GlobalVariable>(val))
+    else if (auto gv = llvm::dyn_cast<llvm::GlobalObject>(val))
     {
-        llvm::MDNode *gvNode = llvm::MDNode::get(gv->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(gv->getContext()), (uint64_t)i)));
+        llvm::MDNode *gvNode = llvm::MDNode::get(gv->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(gv->getContext()), i)));
         if (!gv->hasMetadata())
         {
             gv->setMetadata("ValueID", gvNode);
@@ -70,19 +61,9 @@ inline void SetValueIDs(llvm::Value *val, int64_t &i)
 
         for (unsigned int j = 0; j < gv->getNumOperands(); j++)
         {
-            if (auto subInst = llvm::dyn_cast<llvm::Instruction>(gv->getOperand(j)))
+            if (auto use = llvm::dyn_cast<llvm::User>(gv->getOperand(j)))
             {
-                if (auto v = llvm::dyn_cast<llvm::Value>(subInst))
-                {
-                    SetValueIDs(v, i);
-                }
-            }
-            else if (auto subGV = llvm::dyn_cast<llvm::GlobalVariable>(gv->getOperand(j)))
-            {
-                if (auto v = llvm::dyn_cast<llvm::Value>(subGV))
-                {
-                    SetValueIDs(v, i);
-                }
+                SetValueIDs(llvm::cast<llvm::Value>(use), i);
             }
         }
     }
@@ -96,9 +77,7 @@ inline void Annotate(llvm::Function *F, uint64_t &startingIndex, uint64_t &valIn
         startingIndex++;
         for (auto bb = BB->begin(); bb != BB->end(); bb++)
         {
-            int64_t recVal = (int64_t)valIndex;
-            SetValueIDs(llvm::cast<llvm::Value>(bb), recVal);
-            valIndex = (uint64_t)recVal;
+            SetValueIDs(llvm::cast<llvm::Value>(bb), valIndex);
         }
     }
 }
@@ -186,6 +165,14 @@ inline int64_t GetValueID(llvm::Value *val)
     if (llvm::Instruction *first = llvm::dyn_cast<llvm::Instruction>(val))
     {
         if (llvm::MDNode *node = first->getMetadata("ValueID"))
+        {
+            auto ci = llvm::cast<llvm::ConstantInt>(llvm::cast<llvm::ConstantAsMetadata>(node->getOperand(0))->getValue());
+            result = ci->getSExtValue();
+        }
+    }
+    else if (auto second = llvm::dyn_cast<llvm::GlobalObject>(val))
+    {
+        if (llvm::MDNode *node = second->getMetadata("ValueID"))
         {
             auto ci = llvm::cast<llvm::ConstantInt>(llvm::cast<llvm::ConstantAsMetadata>(node->getOperand(0))->getValue());
             result = ci->getSExtValue();

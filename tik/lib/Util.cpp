@@ -1,6 +1,7 @@
 #include "tik/Util.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
+#include "AtlasUtil/Print.h"
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/Instructions.h>
@@ -17,8 +18,12 @@ namespace TraceAtlas::tik
     std::map<int64_t, llvm::Value *> IDToValue;
     void RecurseThroughOperands(Value *val)
     {
-        if (GetValueID(val) >= 0)
+        if (auto inst = dyn_cast<Instruction>(val))
         {
+            if (GetValueID(inst) < 0)
+            {
+                throw AtlasException("Found an instruction that did not have a ValueID.");
+            }
             if (IDToValue.find(GetValueID(val)) == IDToValue.end())
             {
                 IDToValue[GetValueID(val)] = val;
@@ -27,24 +32,34 @@ namespace TraceAtlas::tik
             {
                 return;
             }
-            if (auto inst = dyn_cast<Instruction>(val))
+            for (unsigned int i = 0; i < inst->getNumOperands(); i++)
             {
-                for (unsigned int i = 0; i < inst->getNumOperands(); i++)
+                if (auto subVal = dyn_cast<Value>(inst->getOperand(i)))
                 {
-                    if (auto subVal = dyn_cast<Value>(inst->getOperand(i)))
-                    {
-                        RecurseThroughOperands(subVal);
-                    }
+                    RecurseThroughOperands(subVal);
                 }
             }
-            else if (auto gp = dyn_cast<GlobalVariable>(val))
+        }
+        else if (auto go = dyn_cast<GlobalObject>(val))
+        {
+            if (GetValueID(go) < 0)
             {
-                for (unsigned int i = 0; i < gp->getNumOperands(); i++)
+                PrintVal(go);
+                throw AtlasException("Found a global object that did not have a ValueID.");
+            }
+            if (IDToValue.find(GetValueID(val)) == IDToValue.end())
+            {
+                IDToValue[GetValueID(go)] = val;
+            }
+            else
+            {
+                return;
+            }
+            for (unsigned int i = 0; i < go->getNumOperands(); i++)
+            {
+                if (auto subVal = dyn_cast<Value>(go->getOperand(i)))
                 {
-                    if (auto subVal = dyn_cast<Value>(gp->getOperand(i)))
-                    {
-                        RecurseThroughOperands(subVal);
-                    }
+                    RecurseThroughOperands(subVal);
                 }
             }
         }

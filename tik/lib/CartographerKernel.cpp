@@ -223,7 +223,7 @@ namespace TraceAtlas::tik
                 }
                 else
                 {
-                    spdlog::error("Tried to push a nullptr into the inputArgs when parsing imports.");
+                    throw AtlasException("Tried to push a nullptr into the inputArgs when parsing imports.");
                 }
             }
             for (auto inst : KernelExports)
@@ -238,7 +238,7 @@ namespace TraceAtlas::tik
                 }
                 else
                 {
-                    AtlasException("Tried to push a nullptr into the inputArgs when parsing exports.");
+                    throw AtlasException("Tried to push a nullptr into the inputArgs when parsing exports.");
                 }
             }
             FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
@@ -289,7 +289,6 @@ namespace TraceAtlas::tik
                         {
                             throw AtlasException("Null function call (indirect call)");
                         }
-
                         auto *funcDec = cast<Function>(TikModule->getOrInsertFunction(callBase->getCalledFunction()->getName(), callBase->getCalledFunction()->getFunctionType()).getCallee());
                         funcDec->setAttributes(callBase->getCalledFunction()->getAttributes());
                         callBase->setCalledFunction(funcDec);
@@ -358,25 +357,37 @@ namespace TraceAtlas::tik
                 for (uint32_t i = 0; i < numOps; i++)
                 {
                     Value *op = inst->getOperand(i);
-                    // initialize IDToValue
                     int64_t valID = GetValueID(op);
-                    if (valID < 0)
+                    if (valID < IDState::Artificial)
                     {
-                        // if its a block, ignore it
-                        if (auto block = dyn_cast<BasicBlock>(op))
+                        if (auto testBlock = dyn_cast<BasicBlock>(op))
                         {
-                            if (GetBlockID(block) == IDState::Uninitialized)
+                            if (GetBlockID(testBlock) < IDState::Artificial)
                             {
-                                spdlog::error("Found a value in the bitcode that did not have a valueID or a blockID.");
+                                throw AtlasException("Found a basic block in the bitcode that did not have a blockID.");
                             }
-                            else
+                        }
+                        // check to see if this object can have metadata
+                        else if (auto testInst = dyn_cast<Instruction>(op))
+                        {
+                            PrintVal(op);
+                            throw AtlasException("Found a value in the bitcode that did not have a valueID.");
+                        }
+                        else if (auto testGO = dyn_cast<GlobalObject>(op))
+                        {
+                            if (auto func = dyn_cast<Function>(op))
                             {
                                 continue;
                             }
+                            PrintVal(op);
+                            throw AtlasException("Found a value in the bitcode that did not have a valueID.");
                         }
-                        continue;
+                        else
+                        {
+                            // its not an instruction or global object, we don't care about this value
+                            continue;
+                        }
                     }
-                    IDToValue[valID] = op;
                     if (auto *operand = dyn_cast<Instruction>(op))
                     {
                         BasicBlock *parentBlock = operand->getParent();
@@ -384,7 +395,7 @@ namespace TraceAtlas::tik
                         {
                             if (find(KernelImports.begin(), KernelImports.end(), GetValueID(operand)) == KernelImports.end())
                             {
-                                KernelImports.push_back(GetValueID(operand));
+                                KernelImports.push_back(GetValueID(op));
                             }
                         }
                     }
@@ -414,7 +425,7 @@ namespace TraceAtlas::tik
                             {
                                 if (GetValueID(ar) == IDState::Uninitialized)
                                 {
-                                    spdlog::error("Tried pushing a value without an ID into the KernelImport list. This is not allowed.");
+                                    throw AtlasException("Tried pushing a value without an ID into the KernelImport list.");
                                 }
                                 KernelImports.push_back(GetValueID(ar));
                             }
@@ -431,16 +442,11 @@ namespace TraceAtlas::tik
                         if (blocks.find(p) == blocks.end())
                         {
                             auto instVal = cast<Value>(inst);
-                            int64_t ID = IDState::Uninitialized;
+                            int64_t ID = GetValueID(instVal);
                             //the use is external therefore it should be a kernel export
-                            if (GetValueID(i) >= 0)
+                            if (ID < 0)
                             {
-                                ID = GetValueID(instVal);
-                            }
-                            else
-                            {
-                                spdlog::error("Tried putting an entity without a valueID into the KernelExport list. Skipping...");
-                                continue;
+                                throw AtlasException("Tried putting an entity without a valueID into the KernelExport list.");
                             }
                             KernelExports.push_back(ID);
                             break;
