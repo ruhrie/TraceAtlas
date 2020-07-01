@@ -17,7 +17,7 @@ add_test(NAME bubbleSort_WS COMMAND workingSet -i ${CMAKE_CURRENT_BINARY_DIR}/ra
 set_tests_properties(bubbleSort_WS PROPERTIES DEPENDS bubbleSort_cartographer)
 
 add_test(NAME bubbleSort_ts COMMAND tikSwap -t ${CMAKE_CURRENT_BINARY_DIR}/tik.bc -b $<TARGET_FILE:bubbleSort> -o ${CMAKE_CURRENT_BINARY_DIR}/tikSwap.bc)
-set_tests_properties(bubbleSort_ts PROPERTIES DEPENDS bubbleSort_cartographer)
+set_tests_properties(bubbleSort_ts PROPERTIES DEPENDS bubbleSort_tik)
 
 add_test(NAME bubbleSort_swap COMMAND ${CMAKE_CXX_COMPILER} ${CMAKE_CURRENT_BINARY_DIR}/tik.bc ${CMAKE_CURRENT_BINARY_DIR}/tikSwap.bc -o ${CMAKE_CURRENT_BINARY_DIR}/swap.exec)
 set_tests_properties(bubbleSort_swap PROPERTIES DEPENDS bubbleSort_ts)

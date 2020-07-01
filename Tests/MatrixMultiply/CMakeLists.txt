@@ -31,7 +31,7 @@ add_test(NAME matmul_WS COMMAND workingSet -i ${CMAKE_CURRENT_BINARY_DIR}/raw.tr
 set_tests_properties(matmul_WS PROPERTIES DEPENDS matmul_cartographer)
 
 add_test(NAME matmul_ts COMMAND tikSwap -t ${CMAKE_CURRENT_BINARY_DIR}/tik.bc -b $<TARGET_FILE:matmul> -o ${CMAKE_CURRENT_BINARY_DIR}/tikSwap.bc)
-set_tests_properties(matmul_ts PROPERTIES DEPENDS matmul_cartographer)
+set_tests_properties(matmul_ts PROPERTIES DEPENDS matmul_tik)
 
 add_test(NAME matmul_swap COMMAND ${CMAKE_CXX_COMPILER} ${CMAKE_CURRENT_BINARY_DIR}/tik.bc ${CMAKE_CURRENT_BINARY_DIR}/tikSwap.bc -o ${CMAKE_CURRENT_BINARY_DIR}/swap.exec)
 set_tests_properties(matmul_swap PROPERTIES DEPENDS matmul_ts)

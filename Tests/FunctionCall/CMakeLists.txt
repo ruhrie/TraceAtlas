@@ -16,7 +16,7 @@ add_test(NAME FunctionCall_WS COMMAND workingSet -i ${CMAKE_CURRENT_BINARY_DIR}/
 set_tests_properties(FunctionCall_WS PROPERTIES DEPENDS FunctionCall_cartographer)
 
 add_test(NAME FunctionCall_ts COMMAND tikSwap -t ${CMAKE_CURRENT_BINARY_DIR}/tik.bc -b $<TARGET_FILE:FunctionCall> -o ${CMAKE_CURRENT_BINARY_DIR}/tikSwap.bc)
-set_tests_properties(FunctionCall_ts PROPERTIES DEPENDS FunctionCall_cartographer)
+set_tests_properties(FunctionCall_ts PROPERTIES DEPENDS FunctionCall_tik)
 
 add_test(NAME FunctionCall_swap COMMAND ${CMAKE_CXX_COMPILER} ${CMAKE_CURRENT_BINARY_DIR}/tik.bc ${CMAKE_CURRENT_BINARY_DIR}/tikSwap.bc -o ${CMAKE_CURRENT_BINARY_DIR}/swap.exec)
 set_tests_properties(FunctionCall_swap PROPERTIES DEPENDS FunctionCall_ts)

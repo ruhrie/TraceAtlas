@@ -16,7 +16,7 @@ add_test(NAME 2DConv_WS COMMAND workingSet -i ${CMAKE_CURRENT_BINARY_DIR}/raw.tr
 set_tests_properties(2DConv_WS PROPERTIES DEPENDS 2DConv_cartographer)
 
 add_test(NAME 2DConv_ts COMMAND tikSwap -t ${CMAKE_CURRENT_BINARY_DIR}/tik.bc -b $<TARGET_FILE:2DConv> -o ${CMAKE_CURRENT_BINARY_DIR}/tikSwap.bc)
-set_tests_properties(2DConv_ts PROPERTIES DEPENDS 2DConv_cartographer)
+set_tests_properties(2DConv_ts PROPERTIES DEPENDS 2DConv_tik)
 
 add_test(NAME 2DConv_swap COMMAND ${CMAKE_CXX_COMPILER} ${CMAKE_CURRENT_BINARY_DIR}/tik.bc ${CMAKE_CURRENT_BINARY_DIR}/tikSwap.bc -o ${CMAKE_CURRENT_BINARY_DIR}/swap.exec)
 set_tests_properties(2DConv_swap PROPERTIES DEPENDS 2DConv_ts)

@@ -16,7 +16,7 @@ add_test(NAME 1DBlur_WS COMMAND workingSet -i ${CMAKE_CURRENT_BINARY_DIR}/raw.tr
 set_tests_properties(1DBlur_WS PROPERTIES DEPENDS 1DBlur_cartographer)
 
 add_test(NAME 1DBlur_ts COMMAND tikSwap -t ${CMAKE_CURRENT_BINARY_DIR}/tik.bc -b $<TARGET_FILE:1DBlur> -o ${CMAKE_CURRENT_BINARY_DIR}/tikSwap.bc)
-set_tests_properties(1DBlur_ts PROPERTIES DEPENDS 1DBlur_cartographer)
+set_tests_properties(1DBlur_ts PROPERTIES DEPENDS 1DBlur_tik)
 
 add_test(NAME 1DBlur_swap COMMAND ${CMAKE_CXX_COMPILER} ${CMAKE_CURRENT_BINARY_DIR}/tik.bc ${CMAKE_CURRENT_BINARY_DIR}/tikSwap.bc -o ${CMAKE_CURRENT_BINARY_DIR}/swap.exec)
 set_tests_properties(1DBlur_swap PROPERTIES DEPENDS 1DBlur_ts)
