@@ -63,6 +63,22 @@ namespace TraceAtlas::tik
                 }
             }
         }
+        else if (auto arg = dyn_cast<Argument>(val))
+        {
+            if (GetValueID(arg) < 0)
+            {
+                PrintVal(arg);
+                throw AtlasException("Found a global object that did not have a ValueID.");
+            }
+            if (IDToValue.find(GetValueID(val)) == IDToValue.end())
+            {
+                IDToValue[GetValueID(arg)] = val;
+            }
+            else
+            {
+                return;
+            }
+        }
     }
 
     void InitializeIDMaps(llvm::Module *M)

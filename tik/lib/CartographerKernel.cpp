@@ -370,25 +370,35 @@ namespace TraceAtlas::tik
                         // check to see if this object can have metadata
                         else if (auto testInst = dyn_cast<Instruction>(op))
                         {
-                            PrintVal(op);
                             throw AtlasException("Found a value in the bitcode that did not have a valueID.");
                         }
                         else if (auto testGO = dyn_cast<GlobalObject>(op))
                         {
-                            if (auto func = dyn_cast<Function>(op))
-                            {
-                                continue;
-                            }
-                            PrintVal(op);
                             throw AtlasException("Found a global object in the bitcode that did not have a valueID.");
+                        }
+                        else if (auto arg = dyn_cast<Argument>(op))
+                        {
+                            throw AtlasException("Found an argument in the bitcode that did not have a valueID.");
                         }
                         else
                         {
-                            // its not an instruction or global object, we don't care about this value
+                            // its not an instruction, global object or argument, we don't care about this value
                             continue;
                         }
                     }
-                    if (auto *operand = dyn_cast<Instruction>(op))
+                    if (auto arg = dyn_cast<Argument>(op))
+                    {
+                        if (GetValueID(arg) < 0)
+                        {
+                            throw AtlasException("Found an argument that did not have a ValueID!");
+                        }
+                        // we found an argument of the callinst that came from somewhere else
+                        if (find(KernelImports.begin(), KernelImports.end(), GetValueID(arg)) == KernelImports.end())
+                        {
+                            KernelImports.push_back(GetValueID(arg));
+                        }
+                    }
+                    else if (auto *operand = dyn_cast<Instruction>(op))
                     {
                         BasicBlock *parentBlock = operand->getParent();
                         if (std::find(blocks.begin(), blocks.end(), parentBlock) == blocks.end())
@@ -399,52 +409,21 @@ namespace TraceAtlas::tik
                             }
                         }
                     }
-                    else if (auto callI = dyn_cast<CallInst>(inst))
+                    else if (auto *ci = dyn_cast<CallInst>(inst))
                     {
-                        PrintVal(callI);
-                        for (unsigned int j = 0; j < callI->getNumOperands(); j++)
+                        if (KfMap.find(ci->getCalledFunction()) != KfMap.end())
                         {
-                            if (auto arg = dyn_cast<Argument>(callI->getOperand(j)))
+                            auto subKernel = KfMap[ci->getCalledFunction()];
+                            for (auto arg = subKernel->KernelFunction->arg_begin(); arg < subKernel->KernelFunction->arg_end(); arg++)
                             {
-                                PrintVal(arg);
-                                // we found an argument of the callinst that came from somewhere else
-                                if (find(KernelImports.begin(), KernelImports.end(), GetValueID(arg)) == KernelImports.end())
+                                auto sExtVal = GetValueID(cast<Value>(arg));
+                                //these are the arguments for the function call in order
+                                //we now can check if they are in our vmap, if so they aren't external
+                                //if not they are and should be mapped as is appropriate
+                                if (find(KernelImports.begin(), KernelImports.end(), sExtVal) == KernelImports.end())
                                 {
-                                    KernelImports.push_back(GetValueID(arg));
+                                    KernelImports.push_back(sExtVal);
                                 }
-                            }
-                        }
-                    }
-                    else if (auto *ar = dyn_cast<Argument>(op))
-                    {
-                        if (auto *ci = dyn_cast<CallInst>(inst))
-                        {
-                            if (KfMap.find(ci->getCalledFunction()) != KfMap.end())
-                            {
-                                auto subKernel = KfMap[ci->getCalledFunction()];
-                                for (auto arg = subKernel->KernelFunction->arg_begin(); arg < subKernel->KernelFunction->arg_end(); arg++)
-                                {
-                                    auto sExtVal = GetValueID(cast<Value>(arg));
-                                    //these are the arguments for the function call in order
-                                    //we now can check if they are in our vmap, if so they aren't external
-                                    //if not they are and should be mapped as is appropriate
-                                    if (find(KernelImports.begin(), KernelImports.end(), sExtVal) == KernelImports.end())
-                                    {
-                                        KernelImports.push_back(sExtVal);
-                                    }
-                                }
-                            }
-                        }
-                        else
-                        {
-                            if (find(KernelImports.begin(), KernelImports.end(), GetValueID(ar)) == KernelImports.end())
-                            {
-                                if (GetValueID(ar) == IDState::Uninitialized)
-                                {
-                                    throw AtlasException("Tried pushing a value without an ID into the KernelImport list.");
-                                }
-                                PrintVal(ar);
-                                KernelImports.push_back(GetValueID(ar));
                             }
                         }
                     }

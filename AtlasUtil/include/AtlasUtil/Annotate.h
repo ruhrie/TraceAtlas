@@ -44,12 +44,17 @@ inline void SetValueIDs(llvm::Value *val, uint64_t &i)
             {
                 SetValueIDs(llvm::cast<llvm::Value>(use), i);
             }
+            else if (auto arg = llvm::dyn_cast<llvm::Argument>(inst->getOperand(j)))
+            {
+                SetValueIDs(llvm::cast<llvm::Value>(arg), i);
+            }
         }
     }
     else if (auto gv = llvm::dyn_cast<llvm::GlobalObject>(val))
     {
         llvm::MDNode *gvNode = llvm::MDNode::get(gv->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(gv->getContext()), i)));
-        if (!gv->hasMetadata())
+        std::string metaKind = "ValueID";
+        if (gv->getMetadata(metaKind) == nullptr)
         {
             gv->setMetadata("ValueID", gvNode);
             i++;
@@ -65,6 +70,43 @@ inline void SetValueIDs(llvm::Value *val, uint64_t &i)
             {
                 SetValueIDs(llvm::cast<llvm::Value>(use), i);
             }
+            else if (auto arg = llvm::dyn_cast<llvm::Argument>(inst->getOperand(j)))
+            {
+                SetValueIDs(llvm::cast<llvm::Value>(arg), i);
+            }
+        }
+    }
+    else if (auto arg = llvm::dyn_cast<llvm::Argument>(val))
+    {
+        // find the arg index in the parent function call and append metadata to that parent (arg0->valueID)
+        auto func = arg->getParent();
+        int index = 0;
+        bool found = false;
+        for (auto j = func->arg_begin(); j != func->arg_end(); j++)
+        {
+            auto funcArg = llvm::cast<llvm::Argument>(j);
+            if (funcArg == arg)
+            {
+                found = true;
+                break;
+            }
+            index++;
+        }
+        if (!found)
+        {
+            return;
+        }
+        std::string metaKind = "ArgId" + std::to_string(index);
+        if (func->getMetadata(metaKind) == nullptr)
+        {
+            llvm::MDNode *argNode = llvm::MDNode::get(func->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(func->getContext()), i)));
+            func->setMetadata(metaKind, argNode);
+            i++;
+        }
+        else
+        {
+            // already seen this arg
+            return;
         }
     }
 }
@@ -173,6 +215,32 @@ inline int64_t GetValueID(llvm::Value *val)
     else if (auto second = llvm::dyn_cast<llvm::GlobalObject>(val))
     {
         if (llvm::MDNode *node = second->getMetadata("ValueID"))
+        {
+            auto ci = llvm::cast<llvm::ConstantInt>(llvm::cast<llvm::ConstantAsMetadata>(node->getOperand(0))->getValue());
+            result = ci->getSExtValue();
+        }
+    }
+    else if (auto third = llvm::dyn_cast<llvm::Argument>(val))
+    {
+        auto func = third->getParent();
+        int index = 0;
+        bool found = false;
+        for (auto j = func->arg_begin(); j != func->arg_end(); j++)
+        {
+            auto funcArg = llvm::cast<llvm::Argument>(j);
+            if (funcArg == third)
+            {
+                found = true;
+                break;
+            }
+            index++;
+        }
+        if (!found)
+        {
+            return result;
+        }
+        std::string metaKind = "ArgId" + std::to_string(index);
+        if (auto node = func->getMetadata(metaKind))
         {
             auto ci = llvm::cast<llvm::ConstantInt>(llvm::cast<llvm::ConstantAsMetadata>(node->getOperand(0))->getValue());
             result = ci->getSExtValue();
