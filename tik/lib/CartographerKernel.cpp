@@ -380,7 +380,7 @@ namespace TraceAtlas::tik
                                 continue;
                             }
                             PrintVal(op);
-                            throw AtlasException("Found a value in the bitcode that did not have a valueID.");
+                            throw AtlasException("Found a global object in the bitcode that did not have a valueID.");
                         }
                         else
                         {
@@ -396,6 +396,22 @@ namespace TraceAtlas::tik
                             if (find(KernelImports.begin(), KernelImports.end(), GetValueID(operand)) == KernelImports.end())
                             {
                                 KernelImports.push_back(GetValueID(op));
+                            }
+                        }
+                    }
+                    else if (auto callI = dyn_cast<CallInst>(inst))
+                    {
+                        PrintVal(callI);
+                        for (unsigned int j = 0; j < callI->getNumOperands(); j++)
+                        {
+                            if (auto arg = dyn_cast<Argument>(callI->getOperand(j)))
+                            {
+                                PrintVal(arg);
+                                // we found an argument of the callinst that came from somewhere else
+                                if (find(KernelImports.begin(), KernelImports.end(), GetValueID(arg)) == KernelImports.end())
+                                {
+                                    KernelImports.push_back(GetValueID(arg));
+                                }
                             }
                         }
                     }
@@ -427,6 +443,7 @@ namespace TraceAtlas::tik
                                 {
                                     throw AtlasException("Tried pushing a value without an ID into the KernelImport list.");
                                 }
+                                PrintVal(ar);
                                 KernelImports.push_back(GetValueID(ar));
                             }
                         }
