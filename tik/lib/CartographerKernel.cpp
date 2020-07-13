@@ -662,10 +662,6 @@ namespace TraceAtlas::tik
                     {
                         phi->removeIncomingValue(block);
                     }
-                    else
-                    {
-                        user->replaceUsesOfWith(block, Exit);
-                    }
                 }
                 bToRemove.push_back(block);
             }
@@ -899,7 +895,6 @@ namespace TraceAtlas::tik
         map<BasicBlock *, BasicBlock *> exitMap;
         for (auto exit : ex)
         {
-            IDToBlock[GetBlockID(exit)] = exit;
             Exits.insert(make_shared<KernelInterface>(exitId++, GetBlockID(exit)));
             BasicBlock *tmp = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
             IRBuilder<> builder(tmp);
@@ -1162,6 +1157,11 @@ namespace TraceAtlas::tik
                         landing->addClause(ConstantPointerNull::get(PointerType::get(Type::getVoidTy(TikModule->getContext()), 0)));
                         KernelFunction->setPersonalityFn(cast<Constant>(F.getCallee()));
                         spdlog::warn("Adding landingpad for non-inlinable Invoke Instruction. May segfault if exception is thrown.");
+                    }
+                    else
+                    {
+                        // will cause a "personality function from another module" module error
+                        throw AtlasException("Could not deduce personality.")
                     }
                 }
             }

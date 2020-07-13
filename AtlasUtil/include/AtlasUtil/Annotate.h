@@ -70,7 +70,7 @@ inline void SetValueIDs(llvm::Value *val, uint64_t &i)
             {
                 SetValueIDs(llvm::cast<llvm::Value>(use), i);
             }
-            else if (auto arg = llvm::dyn_cast<llvm::Argument>(inst->getOperand(j)))
+            else if (auto arg = llvm::dyn_cast<llvm::Argument>(gv->getOperand(j)))
             {
                 SetValueIDs(llvm::cast<llvm::Value>(arg), i);
             }
