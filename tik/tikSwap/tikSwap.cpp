@@ -95,7 +95,10 @@ int main(int argc, char *argv[])
     // if the parsing failed
     if (tikBitcode == nullptr)
     {
-        spdlog::critical("Couldn't parse tik bitcode: " + InputFile);
+        string err;
+        raw_string_ostream rso(err);
+        tikSmerror.print(InputFile.data(), rso);
+        spdlog::critical("Couldn't parse tik bitcode:\n" + rso.str());
         return EXIT_FAILURE;
     }
 
