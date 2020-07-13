@@ -923,6 +923,10 @@ namespace TraceAtlas::tik
         auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), (uint32_t)Exits.size());
         for (const auto &exit : Exits)
         {
+            if (exitMap.find(IDToBlock[exit->Block]) == exitMap.end())
+            {
+                throw AtlasException("Block not found in Exit Map!");
+            }
             phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), exitMap[IDToBlock[exit->Block]]);
         }
 
