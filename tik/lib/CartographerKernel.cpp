@@ -872,7 +872,7 @@ namespace TraceAtlas::tik
         for (const auto &ent : Entrances)
         {
             int64_t id = ent->Block;
-            if (KernelMap.find(id) == KernelMap.end() && VMap[IDToBlock[ent->Block]] != nullptr)
+            if (KernelMap.find(id) == KernelMap.end() && (VMap.find(IDToBlock[ent->Block]) != VMap.end()))
             {
                 initSwitch->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), i), cast<BasicBlock>(VMap[IDToBlock[ent->Block]]));
             }
@@ -965,8 +965,27 @@ namespace TraceAtlas::tik
                         if (!isPred)
                         {
                             valuesToRemove.push_back(block);
+                            continue;
                         }
                     }
+                    // check to see if we have redundant predecessor entries in the phi
+                    /*                    for( uint32_t j = 0; j < phi.getNumIncomingValues(); j++)
+                    {
+                        if( i == j )
+                        {
+                            continue;
+                        }
+                        auto parBlock = phi.getIncomingBlock(j);
+                        if( parBlock == block )
+                        {
+                            // check to see if this is valid
+                            // have to resolve this clash
+                            if( find(valuesToRemove.begin(), valuesToRemove.end(), parBlock) == valuesToRemove.end())
+                            {
+                                valuesToRemove.push_back(parBlock);
+                            }
+                        }
+                    }*/
                 }
                 for (auto toR : valuesToRemove)
                 {
