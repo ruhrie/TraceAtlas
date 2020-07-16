@@ -133,137 +133,163 @@ int main(int argc, char *argv[])
     {
         for (auto &e : kernel->Entrances)
         {
-            // make a copy of the kernel function for the sourceBitcode module context
-            // we have to get the arg types from the source values first before we can make the function signature (to align context)
-            vector<Value *> newArgs;
-            for (auto &a : kernel->ArgumentMap)
+            try
             {
-                // set the first arg to the entrance index
-                if (a.second == IDState::Artificial)
+                // make a copy of the kernel function for the sourceBitcode module context
+                // we have to get the arg types from the source values first before we can make the function signature (to align context)
+                vector<Value *> newArgs;
+                for (auto &a : kernel->ArgumentMap)
                 {
-                    newArgs.push_back(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)e->Index));
-                    continue;
+                    // flag for seeing if we actually find a value to map to this kernel function
+                    bool found = false;
+                    // set the first arg to the entrance index
+                    if (a.second == IDState::Artificial)
+                    {
+                        newArgs.push_back(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)e->Index));
+                        continue;
+                    }
+                    for (auto &F : *sourceBitcode)
+                    {
+                        for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
+                        {
+                            auto block = cast<BasicBlock>(BB);
+                            // get our value from the source bitcode
+                            for (auto in = block->begin(), ine = block->end(); in != ine; in++)
+                            {
+                                auto inst = cast<Instruction>(in);
+                                MDNode *mv = nullptr;
+                                if (inst->hasMetadataOtherThanDebugLoc())
+                                {
+                                    mv = inst->getMetadata("ValueID");
+                                }
+                                else
+                                {
+                                    spdlog::warn("Value in source bitcode has no ValueID.");
+                                    continue;
+                                }
+                                int64_t ValueID = 0;
+                                if (mv->getNumOperands() > 1)
+                                {
+                                    spdlog::warn("Value in source bitcode has more than one ID. Only looking at the first.");
+                                }
+                                else if (mv->getNumOperands() == 0)
+                                {
+                                    continue;
+                                }
+                                if (auto ID = mdconst::dyn_extract<ConstantInt>(mv->getOperand(0)))
+                                {
+                                    ValueID = ID->getSExtValue();
+                                }
+                                else
+                                {
+                                    ValueID = IDState::Artificial;
+                                    spdlog::warn("Couldn't extract ValueID from source bitcode. Skipping...");
+                                }
+                                // now see if this value matches, and if so add it (in order)
+                                if (a.second == ValueID)
+                                {
+                                    found = true;
+                                    newArgs.push_back(cast<Value>(inst));
+                                }
+                            }
+                        }
+                    }
+                    if (!found)
+                    {
+                        throw AtlasException("Could not map function argument for entrance " + to_string(e->Index) + " of kernel " + kernel->Name + " to source bitcode.");
+                    }
                 }
+                vector<Type *> argTypes;
+                argTypes.reserve(newArgs.size());
+                for (auto arg : newArgs)
+                {
+                    argTypes.push_back(arg->getType());
+                }
+                // create function signature to swap for this entrance
+                auto FuTy = FunctionType::get(Type::getInt8Ty(sourceBitcode->getContext()), argTypes, false);
+                auto newFunc = Function::Create(FuTy, kernel->KernelFunction->getLinkage(), kernel->KernelFunction->getAddressSpace(), "", sourceBitcode.get());
+                newFunc->setName(kernel->KernelFunction->getName());
+                // keep track of whether or not we actually swap this entrance
+                bool swapped = false;
                 for (auto &F : *sourceBitcode)
                 {
                     for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
                     {
                         auto block = cast<BasicBlock>(BB);
-                        // get our value from the source bitcode
-                        for (auto in = block->begin(), ine = block->end(); in != ine; in++)
+                        // get the block ID
+                        MDNode *md = nullptr;
+                        if (block->getFirstInsertionPt()->hasMetadataOtherThanDebugLoc())
                         {
-                            auto inst = cast<Instruction>(in);
-                            MDNode *mv = nullptr;
-                            if (inst->hasMetadataOtherThanDebugLoc())
+                            md = block->getFirstInsertionPt()->getMetadata("BlockID");
+                        }
+                        else
+                        {
+                            spdlog::warn("Source code basic block has no metadata.");
+                            continue;
+                        }
+                        int64_t BBID = 0;
+                        if (md->getNumOperands() > 1)
+                        {
+                            spdlog::warn("BB in source bitcode has more than one ID. Only looking at the first.");
+                        }
+                        if (auto ID = mdconst::dyn_extract<ConstantInt>(md->getOperand(0)))
+                        {
+                            BBID = ID->getSExtValue();
+                        }
+                        else
+                        {
+                            BBID = IDState::Artificial;
+                            spdlog::warn("Couldn't extract BBID from source bitcode. Skipping...");
+                        }
+                        // if this is our entrance block, swap tik
+                        if (BBID == e->Block)
+                        {
+                            IRBuilder iBuilder(block->getTerminator());
+                            auto baseFuncInst = cast<Function>(sourceBitcode->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
+                            CallInst *KInst = iBuilder.CreateCall(baseFuncInst, newArgs);
+                            for (int i = 0; i < (int)KInst->getNumArgOperands(); i++)
                             {
-                                mv = inst->getMetadata("ValueID");
+                                if (e->Index != 0)
+                                {
+                                    newArgs[0] = ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)e->Index);
+                                }
+                                KInst->setArgOperand((unsigned int)i, newArgs[(size_t)i]);
                             }
-                            else
+                            KernelInterface a(IDState::Artificial, IDState::Artificial);
+                            for (auto &j : kernel->Exits)
                             {
-                                spdlog::warn("Value in source bitcode has no ValueID.");
-                                continue;
+                                if (j->Index == 0)
+                                {
+                                    a.Block = j->Block;
+                                    a.Index = j->Index;
+                                }
                             }
-                            int64_t ValueID = 0;
-                            if (mv->getNumOperands() > 1)
+                            auto sw = iBuilder.CreateSwitch(cast<Value>(KInst), baseBlockMap[a.Block], (unsigned int)kernel->Exits.size());
+                            for (auto &j : kernel->Exits)
                             {
-                                spdlog::warn("Value in source bitcode has more than one ID. Only looking at the first.");
+                                if (j->Index != 0)
+                                {
+                                    sw->addCase(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)j->Index), baseBlockMap[j->Block]);
+                                }
                             }
-                            else if (mv->getNumOperands() == 0)
-                            {
-                                continue;
-                            }
-                            if (auto ID = mdconst::dyn_extract<ConstantInt>(mv->getOperand(0)))
-                            {
-                                ValueID = ID->getSExtValue();
-                            }
-                            else
-                            {
-                                ValueID = IDState::Artificial;
-                                spdlog::warn("Couldn't extract ValueID from source bitcode. Skipping...");
-                            }
-                            // now see if this value matches, and if so add it (in order)
-                            if (a.second == ValueID)
-                            {
-                                newArgs.push_back(cast<Value>(inst));
-                            }
+                            swapped = true;
+                            // remember to remove the old terminator
+                            toRemove.insert(block->getTerminator());
                         }
                     }
                 }
-            }
-            vector<Type *> argTypes;
-            argTypes.reserve(newArgs.size());
-            for (auto arg : newArgs)
-            {
-                argTypes.push_back(arg->getType());
-            }
-            auto FuTy = FunctionType::get(Type::getInt8Ty(sourceBitcode->getContext()), argTypes, false);
-            auto newFunc = Function::Create(FuTy, kernel->KernelFunction->getLinkage(), kernel->KernelFunction->getAddressSpace(), "", sourceBitcode.get());
-            newFunc->setName(kernel->KernelFunction->getName());
-            for (auto &F : *sourceBitcode)
-            {
-                for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
+                if (!swapped)
                 {
-                    auto block = cast<BasicBlock>(BB);
-                    // get the block ID
-                    MDNode *md = nullptr;
-                    if (block->getFirstInsertionPt()->hasMetadataOtherThanDebugLoc())
-                    {
-                        md = block->getFirstInsertionPt()->getMetadata("BlockID");
-                    }
-                    else
-                    {
-                        spdlog::warn("Source code basic block has no metadata.");
-                        continue;
-                    }
-                    int64_t BBID = 0;
-                    if (md->getNumOperands() > 1)
-                    {
-                        spdlog::warn("BB in source bitcode has more than one ID. Only looking at the first.");
-                    }
-                    if (auto ID = mdconst::dyn_extract<ConstantInt>(md->getOperand(0)))
-                    {
-                        BBID = ID->getSExtValue();
-                    }
-                    else
-                    {
-                        BBID = IDState::Artificial;
-                        spdlog::warn("Couldn't extract BBID from source bitcode. Skipping...");
-                    }
-                    // if this is our entrance block, swap tik
-                    if (BBID == e->Block)
-                    {
-                        IRBuilder iBuilder(block->getTerminator());
-                        auto baseFuncInst = cast<Function>(sourceBitcode->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
-                        CallInst *KInst = iBuilder.CreateCall(baseFuncInst, newArgs);
-                        for (int i = 0; i < (int)KInst->getNumArgOperands(); i++)
-                        {
-                            if (e->Index != 0)
-                            {
-                                newArgs[0] = ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)e->Index);
-                            }
-                            KInst->setArgOperand((unsigned int)i, newArgs[(size_t)i]);
-                        }
-                        KernelInterface a(IDState::Artificial, IDState::Artificial);
-                        for (auto &j : kernel->Exits)
-                        {
-                            if (j->Index == 0)
-                            {
-                                a.Block = j->Block;
-                                a.Index = j->Index;
-                            }
-                        }
-                        auto sw = iBuilder.CreateSwitch(cast<Value>(KInst), baseBlockMap[a.Block], (unsigned int)kernel->Exits.size());
-                        for (auto &j : kernel->Exits)
-                        {
-                            if (j->Index != 0)
-                            {
-                                sw->addCase(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)j->Index), baseBlockMap[j->Block]);
-                            }
-                        }
-                        // remember to remove the old terminator
-                        toRemove.insert(block->getTerminator());
-                    }
+                    throw AtlasException("Could not swap entrance " + to_string(e->Index) + " of kernel " + kernel->Name + " to source bitcode.");
                 }
+                else
+                {
+                    spdlog::info("Successfully swapped entrance " + to_string(e->Index) + " of kernel " + kernel->Name);
+                }
+            }
+            catch (AtlasException &e)
+            {
+                spdlog::error(e.what());
             }
         }
     }
