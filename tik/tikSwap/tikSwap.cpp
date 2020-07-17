@@ -103,28 +103,23 @@ int main(int argc, char *argv[])
     }
 
     // grab all kernel functions in the tik bitcode and construct objects from them
-    vector<Function *> kernelFuncs;
+    vector<TikKernel *> kernels;
     for (auto &func : *tikBitcode)
     {
-        string funcName = func.getName();
-        if (funcName == "K" + to_string(kernelFuncs.size()))
+        if (func.hasMetadata("Boundaries"))
         {
-            kernelFuncs.push_back(tikBitcode->getFunction(funcName));
+            auto kern = new TikKernel(tikBitcode->getFunction(func.getName()));
+            if (kern->Valid)
+            {
+                kernels.push_back(kern);
+            }
+            else
+            {
+                delete kern;
+            }
         }
     }
-    vector<TikKernel *> kernels;
-    for (auto func : kernelFuncs)
-    {
-        auto kern = new TikKernel(func);
-        if (kern->Valid)
-        {
-            kernels.push_back(kern);
-        }
-        else
-        {
-            delete kern;
-        }
-    }
+    spdlog::info("Found " + to_string(kernels.size()) + " valid kernels in the tik file.");
 
     // set that holds any branch instructions that need to be removed
     std::set<Instruction *> toRemove;
@@ -137,7 +132,7 @@ int main(int argc, char *argv[])
             {
                 // make a copy of the kernel function for the sourceBitcode module context
                 // we have to get the arg types from the source values first before we can make the function signature (to align context)
-                vector<Value *> newArgs;
+                vector<Value *> mappedVals;
                 for (auto &a : kernel->ArgumentMap)
                 {
                     // flag for seeing if we actually find a value to map to this kernel function
@@ -145,7 +140,7 @@ int main(int argc, char *argv[])
                     // set the first arg to the entrance index
                     if (a.second == IDState::Artificial)
                     {
-                        newArgs.push_back(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)e->Index));
+                        mappedVals.push_back(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)e->Index));
                         continue;
                     }
                     for (auto &F : *sourceBitcode)
@@ -164,6 +159,7 @@ int main(int argc, char *argv[])
                                 }
                                 else
                                 {
+                                    PrintVal(inst);
                                     spdlog::warn("Value in source bitcode has no ValueID.");
                                     continue;
                                 }
@@ -189,7 +185,7 @@ int main(int argc, char *argv[])
                                 if (a.second == ValueID)
                                 {
                                     found = true;
-                                    newArgs.push_back(cast<Value>(inst));
+                                    mappedVals.push_back(cast<Value>(inst));
                                 }
                             }
                         }
@@ -200,8 +196,8 @@ int main(int argc, char *argv[])
                     }
                 }
                 vector<Type *> argTypes;
-                argTypes.reserve(newArgs.size());
-                for (auto arg : newArgs)
+                argTypes.reserve(mappedVals.size());
+                for (auto arg : mappedVals)
                 {
                     argTypes.push_back(arg->getType());
                 }
@@ -244,17 +240,13 @@ int main(int argc, char *argv[])
                         // if this is our entrance block, swap tik
                         if (BBID == e->Block)
                         {
+                            // create the call instruction to kernel
                             IRBuilder iBuilder(block->getTerminator());
                             auto baseFuncInst = cast<Function>(sourceBitcode->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
-                            CallInst *KInst = iBuilder.CreateCall(baseFuncInst, newArgs);
-                            for (int i = 0; i < (int)KInst->getNumArgOperands(); i++)
-                            {
-                                if (e->Index != 0)
-                                {
-                                    newArgs[0] = ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)e->Index);
-                                }
-                                KInst->setArgOperand((unsigned int)i, newArgs[(size_t)i]);
-                            }
+                            CallInst *KInst = iBuilder.CreateCall(baseFuncInst, mappedVals);
+                            MDNode *callNode = MDNode::get(KInst->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(KInst->getContext()), IDState::Artificial)));
+                            KInst->setMetadata("ValueID", callNode);
+                            // create switch case to process retval from kernel callinst
                             KernelInterface a(IDState::Artificial, IDState::Artificial);
                             for (auto &j : kernel->Exits)
                             {
@@ -265,6 +257,8 @@ int main(int argc, char *argv[])
                                 }
                             }
                             auto sw = iBuilder.CreateSwitch(cast<Value>(KInst), baseBlockMap[a.Block], (unsigned int)kernel->Exits.size());
+                            MDNode *swNode = MDNode::get(sw->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(sw->getContext()), IDState::Artificial)));
+                            sw->setMetadata("ValueID", swNode);
                             for (auto &j : kernel->Exits)
                             {
                                 if (j->Index != 0)
@@ -273,7 +267,7 @@ int main(int argc, char *argv[])
                                 }
                             }
                             swapped = true;
-                            // remember to remove the old terminator
+                            // remove the old BB terminator
                             toRemove.insert(block->getTerminator());
                         }
                     }
@@ -284,7 +278,7 @@ int main(int argc, char *argv[])
                 }
                 else
                 {
-                    spdlog::info("Successfully swapped entrance " + to_string(e->Index) + " of kernel " + kernel->Name);
+                    spdlog::info("Successfully swapped entrance " + to_string(e->Index) + " of kernel: " + kernel->Name);
                 }
             }
             catch (AtlasException &e)
@@ -334,7 +328,7 @@ int main(int argc, char *argv[])
             raw_os_ostream raw_stream(rawStream);
             WriteBitcodeToFile(*sourceBitcode, raw_stream);
         }
-        spdlog::info("Successfully wrote tik to file");
+        spdlog::info("Successfully wrote tikSwap to file");
     }
     catch (exception &e)
     {
