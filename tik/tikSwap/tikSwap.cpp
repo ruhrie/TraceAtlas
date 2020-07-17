@@ -4,6 +4,7 @@
 #include "AtlasUtil/Print.h"
 #include "tik/Kernel.h"
 #include "tik/TikKernel.h"
+#include "tik/Util.h"
 #include <fstream>
 #include <iostream>
 #include <llvm/Bitcode/BitcodeWriter.h>
@@ -77,6 +78,8 @@ int main(int argc, char *argv[])
             }
         }
     }
+    /// Initialize our IDtoX maps
+    InitializeIDMaps(sourceBitcode.get());
 
     // load the tik IR
     LLVMContext tikContext;
@@ -130,71 +133,18 @@ int main(int argc, char *argv[])
         {
             try
             {
-                // make a copy of the kernel function for the sourceBitcode module context
-                // we have to get the arg types from the source values first before we can make the function signature (to align context)
+                // list of values that directly map to the list of kernel function args
                 vector<Value *> mappedVals;
-                for (auto &a : kernel->ArgumentMap)
+                // initialize the entrance index arg
+                mappedVals.push_back(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)e->Index));
+                for (auto it = next(kernel->ArgumentMap.begin()); it != kernel->ArgumentMap.end(); it++)
                 {
-                    // flag for seeing if we actually find a value to map to this kernel function
-                    bool found = false;
-                    // set the first arg to the entrance index
-                    if (a.second == IDState::Artificial)
+                    if (IDToValue.find(it->second) == IDToValue.end())
                     {
-                        mappedVals.push_back(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)e->Index));
-                        continue;
-                    }
-                    for (auto &F : *sourceBitcode)
-                    {
-                        for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
-                        {
-                            auto block = cast<BasicBlock>(BB);
-                            // get our value from the source bitcode
-                            for (auto in = block->begin(), ine = block->end(); in != ine; in++)
-                            {
-                                auto inst = cast<Instruction>(in);
-                                MDNode *mv = nullptr;
-                                if (inst->hasMetadataOtherThanDebugLoc())
-                                {
-                                    mv = inst->getMetadata("ValueID");
-                                }
-                                else
-                                {
-                                    PrintVal(inst);
-                                    spdlog::warn("Value in source bitcode has no ValueID.");
-                                    continue;
-                                }
-                                int64_t ValueID = 0;
-                                if (mv->getNumOperands() > 1)
-                                {
-                                    spdlog::warn("Value in source bitcode has more than one ID. Only looking at the first.");
-                                }
-                                else if (mv->getNumOperands() == 0)
-                                {
-                                    continue;
-                                }
-                                if (auto ID = mdconst::dyn_extract<ConstantInt>(mv->getOperand(0)))
-                                {
-                                    ValueID = ID->getSExtValue();
-                                }
-                                else
-                                {
-                                    ValueID = IDState::Artificial;
-                                    spdlog::warn("Couldn't extract ValueID from source bitcode. Skipping...");
-                                }
-                                // now see if this value matches, and if so add it (in order)
-                                if (a.second == ValueID)
-                                {
-                                    found = true;
-                                    mappedVals.push_back(cast<Value>(inst));
-                                }
-                            }
-                        }
-                    }
-                    if (!found)
-                    {
-                        throw AtlasException("Could not map function argument for entrance " + to_string(e->Index) + " of kernel " + kernel->Name + " to source bitcode.");
+                        throw AtlasException("Could not map arg back to source bitcode.");
                     }
                 }
+                // list of types that will be used to create the function signature in the callinst
                 vector<Type *> argTypes;
                 argTypes.reserve(mappedVals.size());
                 for (auto arg : mappedVals)
