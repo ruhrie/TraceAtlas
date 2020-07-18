@@ -202,7 +202,7 @@ int main(int argc, char *argv[])
             if (childParentMapping.find(kernel.first) == childParentMapping.end())
             {
                 //this kernel has no unexplained parents
-                auto kern = make_shared<CartographerKernel>(kernel.second, sourceBitcode.get(), kernel.first);
+                auto kern = make_shared<CartographerKernel>(kernel.second, kernel.first);
                 if (!kern->Valid)
                 {
                     failedKernels.insert(kernel.second);

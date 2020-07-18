@@ -143,6 +143,7 @@ int main(int argc, char *argv[])
                     {
                         throw AtlasException("Could not map arg back to source bitcode.");
                     }
+                    mappedVals.push_back(IDToValue[it->second]);
                 }
                 // list of types that will be used to create the function signature in the callinst
                 vector<Type *> argTypes;
@@ -155,81 +156,44 @@ int main(int argc, char *argv[])
                 auto FuTy = FunctionType::get(Type::getInt8Ty(sourceBitcode->getContext()), argTypes, false);
                 auto newFunc = Function::Create(FuTy, kernel->KernelFunction->getLinkage(), kernel->KernelFunction->getAddressSpace(), "", sourceBitcode.get());
                 newFunc->setName(kernel->KernelFunction->getName());
-                // keep track of whether or not we actually swap this entrance
-                bool swapped = false;
-                for (auto &F : *sourceBitcode)
+                // get our entrance block and swap tik
+                if (IDToBlock.find(e->Block) != IDToBlock.end())
                 {
-                    for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
+                    auto block = IDToBlock[e->Block];
+                    // create the call instruction to kernel
+                    IRBuilder iBuilder(block->getTerminator());
+                    auto baseFuncInst = cast<Function>(sourceBitcode->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
+                    CallInst *KInst = iBuilder.CreateCall(baseFuncInst, mappedVals);
+                    MDNode *callNode = MDNode::get(KInst->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(KInst->getContext()), (uint64_t)IDState::Artificial)));
+                    KInst->setMetadata("ValueID", callNode);
+                    // create switch case to process retval from kernel callinst
+                    KernelInterface a(IDState::Artificial, IDState::Artificial);
+                    for (auto &j : kernel->Exits)
                     {
-                        auto block = cast<BasicBlock>(BB);
-                        // get the block ID
-                        MDNode *md = nullptr;
-                        if (block->getFirstInsertionPt()->hasMetadataOtherThanDebugLoc())
+                        if (j->Index == 0)
                         {
-                            md = block->getFirstInsertionPt()->getMetadata("BlockID");
-                        }
-                        else
-                        {
-                            spdlog::warn("Source code basic block has no metadata.");
-                            continue;
-                        }
-                        int64_t BBID = 0;
-                        if (md->getNumOperands() > 1)
-                        {
-                            spdlog::warn("BB in source bitcode has more than one ID. Only looking at the first.");
-                        }
-                        if (auto ID = mdconst::dyn_extract<ConstantInt>(md->getOperand(0)))
-                        {
-                            BBID = ID->getSExtValue();
-                        }
-                        else
-                        {
-                            BBID = IDState::Artificial;
-                            spdlog::warn("Couldn't extract BBID from source bitcode. Skipping...");
-                        }
-                        // if this is our entrance block, swap tik
-                        if (BBID == e->Block)
-                        {
-                            // create the call instruction to kernel
-                            IRBuilder iBuilder(block->getTerminator());
-                            auto baseFuncInst = cast<Function>(sourceBitcode->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
-                            CallInst *KInst = iBuilder.CreateCall(baseFuncInst, mappedVals);
-                            MDNode *callNode = MDNode::get(KInst->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(KInst->getContext()), IDState::Artificial)));
-                            KInst->setMetadata("ValueID", callNode);
-                            // create switch case to process retval from kernel callinst
-                            KernelInterface a(IDState::Artificial, IDState::Artificial);
-                            for (auto &j : kernel->Exits)
-                            {
-                                if (j->Index == 0)
-                                {
-                                    a.Block = j->Block;
-                                    a.Index = j->Index;
-                                }
-                            }
-                            auto sw = iBuilder.CreateSwitch(cast<Value>(KInst), baseBlockMap[a.Block], (unsigned int)kernel->Exits.size());
-                            MDNode *swNode = MDNode::get(sw->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(sw->getContext()), IDState::Artificial)));
-                            sw->setMetadata("ValueID", swNode);
-                            for (auto &j : kernel->Exits)
-                            {
-                                if (j->Index != 0)
-                                {
-                                    sw->addCase(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)j->Index), baseBlockMap[j->Block]);
-                                }
-                            }
-                            swapped = true;
-                            // remove the old BB terminator
-                            toRemove.insert(block->getTerminator());
+                            a.Block = j->Block;
+                            a.Index = j->Index;
                         }
                     }
-                }
-                if (!swapped)
-                {
-                    throw AtlasException("Could not swap entrance " + to_string(e->Index) + " of kernel " + kernel->Name + " to source bitcode.");
+                    auto sw = iBuilder.CreateSwitch(cast<Value>(KInst), baseBlockMap[a.Block], (unsigned int)kernel->Exits.size());
+                    MDNode *swNode = MDNode::get(sw->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(sw->getContext()), (uint64_t)IDState::Artificial)));
+                    sw->setMetadata("ValueID", swNode);
+                    for (auto &j : kernel->Exits)
+                    {
+                        if (j->Index != 0)
+                        {
+                            sw->addCase(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)j->Index), baseBlockMap[j->Block]);
+                        }
+                    }
+                    // remove the old BB terminator
+                    toRemove.insert(block->getTerminator());
                 }
                 else
                 {
-                    spdlog::info("Successfully swapped entrance " + to_string(e->Index) + " of kernel: " + kernel->Name);
+                    throw AtlasException("Could not swap entrance " + to_string(e->Index) + " of kernel " + kernel->Name + " to source bitcode.");
                 }
+                spdlog::info("Successfully swapped entrance " + to_string(e->Index) + " of kernel: " + kernel->Name);
             }
             catch (AtlasException &e)
             {

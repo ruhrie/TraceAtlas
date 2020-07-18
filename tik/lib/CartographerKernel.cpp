@@ -138,13 +138,18 @@ namespace TraceAtlas::tik
         }
     }
 
-    CartographerKernel::CartographerKernel(std::vector<int64_t> basicBlocks, llvm::Module *M, std::string name)
+    CartographerKernel::CartographerKernel(std::vector<int64_t> basicBlocks, std::string name)
     {
         llvm::ValueToValueMapTy VMap;
-        set<int64_t> blockSet;
-        for (auto b : basicBlocks)
+        auto blockSet = set<int64_t>(basicBlocks.begin(), basicBlocks.end());
+        set<BasicBlock *> blocks;
+        for (auto id : blockSet)
         {
-            blockSet.insert(b);
+            if (IDToBlock.find(id) == IDToBlock.end())
+            {
+                throw AtlasException("Found a basic block with no ID!");
+            }
+            blocks.insert(IDToBlock[id]);
         }
         string Name;
         if (name.empty())
@@ -166,23 +171,6 @@ namespace TraceAtlas::tik
         spdlog::debug("Started converting kernel {0}", Name);
         reservedNames.insert(Name);
 
-        set<BasicBlock *> blocks;
-        for (auto &F : *M)
-        {
-            for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
-            {
-                auto *b = cast<BasicBlock>(BB);
-                int64_t id = GetBlockID(b);
-                if (id >= 0)
-                {
-                    if (find(basicBlocks.begin(), basicBlocks.end(), id) != basicBlocks.end())
-                    {
-                        blocks.insert(b);
-                    }
-                }
-            }
-        }
-
         try
         {
             //this is a recursion check, just so we can enumerate issues
@@ -193,6 +181,7 @@ namespace TraceAtlas::tik
                 {
                     if (auto *cb = dyn_cast<CallBase>(bi))
                     {
+                        // if this is the parent function, its on our context level so don't
                         if (cb->getCalledFunction() == f)
                         {
                             throw AtlasException("Tik Error: Recursion is unimplemented")
@@ -204,8 +193,7 @@ namespace TraceAtlas::tik
             //SplitBlocks(blocks);
             map<Value *, GlobalObject *> GlobalMap;
             vector<int64_t> KernelImports;
-            vector<int64_t> KernelExports;
-            GetBoundaryValues(blocks, KernelImports, KernelExports);
+            GetBoundaryValues(blocks, KernelImports);
             //we now have all the information we need
             //start by making the correct function
             vector<Type *> inputArgs;
@@ -226,21 +214,6 @@ namespace TraceAtlas::tik
                     throw AtlasException("Tried to push a nullptr into the inputArgs when parsing imports.");
                 }
             }
-            for (auto inst : KernelExports)
-            {
-                if (IDToValue.find(inst) != IDToValue.end())
-                {
-                    inputArgs.push_back(IDToValue[inst]->getType());
-                }
-                else if (IDToBlock.find(inst) != IDToBlock.end())
-                {
-                    inputArgs.push_back(IDToBlock[inst]->getType());
-                }
-                else
-                {
-                    throw AtlasException("Tried to push a nullptr into the inputArgs when parsing exports.");
-                }
-            }
             FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
             KernelFunction = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
             uint64_t i;
@@ -251,15 +224,6 @@ namespace TraceAtlas::tik
                 VMap[IDToValue[KernelImports[i]]] = a;
                 ArgumentMap[a] = KernelImports[i];
             }
-            uint64_t j;
-            for (j = 0; j < KernelExports.size(); j++)
-            {
-                auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i + j);
-                a->setName("e" + to_string(j));
-                VMap[IDToValue[KernelExports[i]]] = a;
-                ArgumentMap[a] = KernelExports[j];
-            }
-
             //create the artificial blocks
             Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
             Exit = BasicBlock::Create(TikModule->getContext(), "Exit", KernelFunction);
@@ -302,8 +266,6 @@ namespace TraceAtlas::tik
 
             RemapNestedKernels(VMap);
 
-            RemapExports(VMap, KernelExports);
-
             PatchPhis();
 
             FixInvokes();
@@ -334,8 +296,69 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks, vector<int64_t> &KernelImports, vector<int64_t> &KernelExports)
+    void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks, vector<int64_t> &KernelImports)
     {
+        // first, add all blocks of function calls. they will later be inlined and therefore do not need to be included
+        // we also need the functions so that any args from embedded function calls are skipped as well
+        set<BasicBlock *> scopedBlocks = blocks;
+        set<Function *> scopedFuncs;
+        for (auto block : blocks)
+        {
+            for (auto BI = block->begin(), BE = block->end(); BI != BE; ++BI)
+            {
+                auto inst = cast<Instruction>(BI);
+                // if this is an embedded function call
+                if (auto *ci = dyn_cast<CallInst>(inst))
+                {
+                    if (ci->getCalledFunction() == nullptr)
+                    {
+                        throw AtlasException("Null function call (indirect call)");
+                    }
+                    // if it is not a kernel call
+                    if (KfMap.find(ci->getCalledFunction()) == KfMap.end())
+                    {
+                        // if the function will be inlined
+                        //if( !ci->getCalledFunction()->hasFnAttribute("noinline") )
+                        //{
+                        scopedFuncs.insert(ci->getCalledFunction());
+                        // add each of the function blocks
+                        for (auto fi = ci->getCalledFunction()->begin(); fi != ci->getCalledFunction()->end(); fi++)
+                        {
+                            auto BB = cast<BasicBlock>(fi);
+                            scopedBlocks.insert(BB);
+                        }
+                        //}
+                    }
+                }
+                for (unsigned int i = 0; i < inst->getNumOperands(); i++)
+                {
+                    auto op = inst->getOperand(i);
+                    // if this is an embedded function call
+                    if (auto *ci = dyn_cast<CallInst>(op))
+                    {
+                        if (ci->getCalledFunction() == nullptr)
+                        {
+                            throw AtlasException("Null function call (indirect call)");
+                        }
+                        // if it is not a kernel call
+                        if (KfMap.find(ci->getCalledFunction()) == KfMap.end())
+                        {
+                            // if the function will be inlined
+                            //if( !ci->getCalledFunction()->hasFnAttribute("noinline") )
+                            //{
+                            scopedFuncs.insert(ci->getCalledFunction());
+                            // add each of the function blocks
+                            for (auto fi = ci->getCalledFunction()->begin(); fi != ci->getCalledFunction()->end(); fi++)
+                            {
+                                auto BB = cast<BasicBlock>(fi);
+                                scopedBlocks.insert(BB);
+                            }
+                            //}
+                        }
+                    }
+                }
+            }
+        }
         //we start with entrances
         auto ent = GetEntrances(blocks);
         int entranceId = 0;
@@ -344,7 +367,7 @@ namespace TraceAtlas::tik
             IDToBlock[GetBlockID(e)] = e;
             Entrances.insert(make_shared<KernelInterface>(entranceId++, GetBlockID(e)));
         }
-        for (auto block : blocks)
+        for (auto block : scopedBlocks)
         {
             //we now finally ask for the external values
             //formerly GetExternalValues
@@ -353,8 +376,7 @@ namespace TraceAtlas::tik
                 auto *inst = cast<Instruction>(BI);
                 //start by getting all the inputs
                 //they will be composed of the operands whose input is not defined in one of the parent blocks
-                uint32_t numOps = inst->getNumOperands();
-                for (uint32_t i = 0; i < numOps; i++)
+                for (uint32_t i = 0; i < inst->getNumOperands(); i++)
                 {
                     Value *op = inst->getOperand(i);
                     int64_t valID = GetValueID(op);
@@ -388,20 +410,20 @@ namespace TraceAtlas::tik
                     }
                     if (auto arg = dyn_cast<Argument>(op))
                     {
-                        if (GetValueID(arg) < 0)
+                        if (scopedFuncs.find(arg->getParent()) == scopedFuncs.end())
                         {
-                            throw AtlasException("Found an argument that did not have a ValueID!");
-                        }
-                        // we found an argument of the callinst that came from somewhere else
-                        if (find(KernelImports.begin(), KernelImports.end(), GetValueID(arg)) == KernelImports.end())
-                        {
-                            KernelImports.push_back(GetValueID(arg));
+                            // we found an argument of the callinst that came from somewhere else
+                            if (find(KernelImports.begin(), KernelImports.end(), GetValueID(arg)) == KernelImports.end())
+                            {
+                                //PrintVal(arg->getParent());
+                                KernelImports.push_back(GetValueID(arg));
+                            }
                         }
                     }
                     else if (auto *operand = dyn_cast<Instruction>(op))
                     {
                         BasicBlock *parentBlock = operand->getParent();
-                        if (std::find(blocks.begin(), blocks.end(), parentBlock) == blocks.end())
+                        if (std::find(scopedBlocks.begin(), scopedBlocks.end(), parentBlock) == scopedBlocks.end())
                         {
                             if (find(KernelImports.begin(), KernelImports.end(), GetValueID(operand)) == KernelImports.end())
                             {
@@ -426,31 +448,6 @@ namespace TraceAtlas::tik
                                 }
                             }
                         }
-                    }
-                }
-                //then get all the exports
-                //this is composed of all the instructions whose use extends beyond the current blocks
-                for (auto user : inst->users())
-                {
-                    if (auto i = dyn_cast<Instruction>(user))
-                    {
-                        auto p = i->getParent();
-                        if (blocks.find(p) == blocks.end())
-                        {
-                            auto instVal = cast<Value>(inst);
-                            int64_t ID = GetValueID(instVal);
-                            //the use is external therefore it should be a kernel export
-                            if (ID < 0)
-                            {
-                                throw AtlasException("Tried putting an entity without a valueID into the KernelExport list.");
-                            }
-                            KernelExports.push_back(ID);
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        throw AtlasException("Non-instruction user detected");
                     }
                 }
             }
@@ -737,103 +734,6 @@ namespace TraceAtlas::tik
                             }
                         }
                     }
-                }
-            }
-        }
-    }
-
-    void CartographerKernel::RemapExports(llvm::ValueToValueMapTy &VMap, vector<int64_t> &KernelExports)
-    {
-        map<Value *, AllocaInst *> exportMap;
-        for (auto ex : KernelExports)
-        {
-            Value *mapped = VMap[IDToValue[ex]];
-            if (mapped != nullptr)
-            {
-                if (mapped->getNumUses() != 0)
-                {
-                    IRBuilder iBuilder(Init->getFirstNonPHI());
-                    AllocaInst *alloc = iBuilder.CreateAlloca(mapped->getType());
-                    exportMap[mapped] = alloc;
-                    for (auto u : mapped->users())
-                    {
-                        if (auto *p = dyn_cast<PHINode>(u))
-                        {
-                            for (uint32_t i = 0; i < p->getNumIncomingValues(); i++)
-                            {
-                                if (mapped == p->getIncomingValue(i))
-                                {
-                                    BasicBlock *prev = p->getIncomingBlock(i);
-                                    IRBuilder<> phiBuilder(prev->getTerminator());
-                                    auto load = phiBuilder.CreateLoad(alloc);
-                                    p->setIncomingValue(i, load);
-                                }
-                            }
-                        }
-                        else
-                        {
-                            IRBuilder<> uBuilder(cast<Instruction>(u));
-                            auto load = uBuilder.CreateLoad(alloc);
-                            for (uint32_t i = 0; i < u->getNumOperands(); i++)
-                            {
-                                if (mapped == u->getOperand(i))
-                                {
-                                    u->setOperand(i, load);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
-        {
-            auto block = cast<BasicBlock>(fi);
-            for (auto bi = fi->begin(); bi != fi->end(); bi++)
-            {
-                auto i = cast<Instruction>(bi);
-                if (auto call = dyn_cast<CallInst>(i))
-                {
-                    if (call->getMetadata("KernelCall") != nullptr)
-                    {
-                        Function *F = call->getCalledFunction();
-                        auto fType = F->getFunctionType();
-                        for (uint32_t i = 0; i < call->getNumArgOperands(); i++)
-                        {
-                            auto arg = call->getArgOperand(i);
-                            if (arg == nullptr)
-                            {
-                                continue;
-                            }
-                            auto type = arg->getType();
-                            if (type != fType->getParamType(i))
-                            {
-                                if (type->isPointerTy())
-                                {
-                                    IRBuilder<> aBuilder(call);
-                                    auto load = aBuilder.CreateLoad(arg);
-                                    call->setArgOperand(i, load);
-                                }
-                            }
-                        }
-                    }
-                }
-                if (exportMap.find(i) != exportMap.end())
-                {
-                    Instruction *buildBase;
-                    if (isa<PHINode>(i))
-                    {
-                        buildBase = block->getFirstNonPHI();
-                    }
-                    else
-                    {
-                        buildBase = i->getNextNode();
-                    }
-                    IRBuilder<> b(buildBase);
-                    b.CreateStore(i, exportMap[i]);
-                    bi++;
                 }
             }
         }
