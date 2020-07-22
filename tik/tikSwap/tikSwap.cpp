@@ -33,6 +33,7 @@ cl::opt<bool> ASCIIFormat("S", cl::desc("output json as human-readable ASCII tex
 int main(int argc, char *argv[])
 {
     cl::ParseCommandLineOptions(argc, argv);
+    spdlog::info("Starting tikSwap.");
     //load the original bitcode
     LLVMContext OContext;
     SMDiagnostic Osmerror;

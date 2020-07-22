@@ -21,7 +21,7 @@ namespace TraceAtlas::tik
         void CopyGlobals(llvm::ValueToValueMapTy &VMap);
         void BuildInit(llvm::ValueToValueMapTy &VMap);
         void BuildExit();
-        void PatchPhis();
+        void PatchPhis(llvm::ValueToValueMapTy &VMap);
         void Remap(llvm::ValueToValueMapTy &VMap);
         void FixInvokes();
     };

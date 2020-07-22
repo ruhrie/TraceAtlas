@@ -266,7 +266,7 @@ namespace TraceAtlas::tik
 
             RemapNestedKernels(VMap);
 
-            PatchPhis();
+            PatchPhis(VMap);
 
             FixInvokes();
 
@@ -283,16 +283,6 @@ namespace TraceAtlas::tik
             {
                 KernelFunction->eraseFromParent();
             }
-        }
-
-        try
-        {
-            //GetKernelLabels();
-        }
-        catch (AtlasException &e)
-        {
-            spdlog::warn("Failed to annotate Loop/Memory grammars");
-            spdlog::debug(e.what());
         }
     }
 
@@ -374,6 +364,24 @@ namespace TraceAtlas::tik
             for (BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; ++BI)
             {
                 auto *inst = cast<Instruction>(BI);
+                if (auto *ci = dyn_cast<CallInst>(inst))
+                {
+                    if (KfMap.find(ci->getCalledFunction()) != KfMap.end())
+                    {
+                        auto subKernel = KfMap[ci->getCalledFunction()];
+                        for (auto arg = subKernel->KernelFunction->arg_begin(); arg < subKernel->KernelFunction->arg_end(); arg++)
+                        {
+                            auto sExtVal = GetValueID(cast<Value>(arg));
+                            //these are the arguments for the function call in order
+                            //we now can check if they are in our vmap, if so they aren't external
+                            //if not they are and should be mapped as is appropriate
+                            if (find(KernelImports.begin(), KernelImports.end(), sExtVal) == KernelImports.end())
+                            {
+                                KernelImports.push_back(sExtVal);
+                            }
+                        }
+                    }
+                }
                 //start by getting all the inputs
                 //they will be composed of the operands whose input is not defined in one of the parent blocks
                 for (uint32_t i = 0; i < inst->getNumOperands(); i++)
@@ -428,24 +436,6 @@ namespace TraceAtlas::tik
                             if (find(KernelImports.begin(), KernelImports.end(), GetValueID(operand)) == KernelImports.end())
                             {
                                 KernelImports.push_back(GetValueID(op));
-                            }
-                        }
-                    }
-                    else if (auto *ci = dyn_cast<CallInst>(inst))
-                    {
-                        if (KfMap.find(ci->getCalledFunction()) != KfMap.end())
-                        {
-                            auto subKernel = KfMap[ci->getCalledFunction()];
-                            for (auto arg = subKernel->KernelFunction->arg_begin(); arg < subKernel->KernelFunction->arg_end(); arg++)
-                            {
-                                auto sExtVal = GetValueID(cast<Value>(arg));
-                                //these are the arguments for the function call in order
-                                //we now can check if they are in our vmap, if so they aren't external
-                                //if not they are and should be mapped as is appropriate
-                                if (find(KernelImports.begin(), KernelImports.end(), sExtVal) == KernelImports.end())
-                                {
-                                    KernelImports.push_back(sExtVal);
-                                }
                             }
                         }
                     }
@@ -836,19 +826,51 @@ namespace TraceAtlas::tik
         exceptionBuilder.CreateRet(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)IDState::Artificial));
     }
 
-    void CartographerKernel::PatchPhis()
+    void CartographerKernel::PatchPhis(ValueToValueMapTy &VMap)
     {
         for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
         {
             auto b = cast<BasicBlock>(fi);
+
             vector<Instruction *> phisToRemove;
             for (auto &phi : b->phis())
             {
+                
+                // make sure our phi is accounting for all preds
+                for( auto pred : predecessors(b) )
+                {
+                    bool found = false;
+                    for( unsigned int i = 0; i < phi.getNumIncomingValues(); i++ )
+                    {
+                        if( phi.getIncomingBlock(i) == pred )
+                        {
+                            if( found )
+                            {
+                                // we have two values in here... take this one out
+                                phi.removeIncomingValue(phi.getIncomingBlock(i), false);
+                            }
+                            found = true;
+                        }
+                    }
+                    if( !found )
+                    {
+                        PrintVal(&phi);
+                    }
+                }
                 vector<BasicBlock *> valuesToRemove;
                 for (uint32_t i = 0; i < phi.getNumIncomingValues(); i++)
                 {
                     auto block = phi.getIncomingBlock(i);
-                    if (block->getParent() != KernelFunction)
+                    BasicBlock* rblock;
+                    if( VMap.find(phi.getIncomingBlock(i)) != VMap.end() )
+                    {
+                        rblock = cast<BasicBlock>(VMap[phi.getIncomingBlock(i)]);
+                    }
+                    else
+                    {
+                        rblock = block;
+                    }
+                    if (block->getParent() != KernelFunction && rblock->getParent() != KernelFunction)
                     {
                         valuesToRemove.push_back(block);
                     }
@@ -868,24 +890,6 @@ namespace TraceAtlas::tik
                             continue;
                         }
                     }
-                    // check to see if we have redundant predecessor entries in the phi
-                    /*                    for( uint32_t j = 0; j < phi.getNumIncomingValues(); j++)
-                    {
-                        if( i == j )
-                        {
-                            continue;
-                        }
-                        auto parBlock = phi.getIncomingBlock(j);
-                        if( parBlock == block )
-                        {
-                            // check to see if this is valid
-                            // have to resolve this clash
-                            if( find(valuesToRemove.begin(), valuesToRemove.end(), parBlock) == valuesToRemove.end())
-                            {
-                                valuesToRemove.push_back(parBlock);
-                            }
-                        }
-                    }*/
                 }
                 for (auto toR : valuesToRemove)
                 {
