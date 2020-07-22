@@ -69,7 +69,7 @@ namespace WorkingSet
 
 
 
-    void firingClear (uint64_t kernelIndex)//(uint64_t kernelIndex)// (uint64_t kernelIndex,int64_t t)
+    void firingClear (uint64_t kernelIndex)
     {
         set<int64_t> endTimeSet;
         for (auto it : KernelWorkingSetMap[kernelIndex].internalAddressLivingVec)
@@ -140,7 +140,6 @@ namespace WorkingSet
                 {
                     addressIndex = stoul(value, nullptr, 0);
                     firstStore(addressIndex, timing, true, it);
-                    timing++;
                 }
                 else if (key == "LoadAddress")
                 {
@@ -156,66 +155,14 @@ namespace WorkingSet
                     {
                         firstStore(addressIndex, timing, false, it);
                     }
-                    timing++;
                 }
-                // if(kernelFiringNum[it]>300000)
-                // {
-                //     firingClear(it);
-                // }
-                // if(timing % 100000 == 0)
-                // {
-                //     dynamicSize(it);
-                // }
+                if(kernelFiringNum[it]>30000)
+                {
+                    //firingClear(it);
+                }
             }
-            //cout<< "time:" <<timing<< endl;
-            //timing++;
+            timing++;
         }  
     }
 
-    
-//     void ProcessBlock(string &key, string &value)
-//     {   
-//         uint64_t addressIndex;
-//         if (key == "BBEnter")
-//         {
-//             if (ValidBlock.find(stoul(value, nullptr, 0)) != ValidBlock.end())
-//             {
-//                 VBlock.insert(stoul(value, nullptr, 0));
-//             }
-//             //cout<< "BBID:"<<stoul(value, nullptr, 0)<<endl;
-//         }
-//         if (key == "BBExit")
-//         {
-//             if (ValidBlock.find(stoul(value, nullptr, 0)) != ValidBlock.end())
-//             {
-//                 VBlock.erase(stoul(value, nullptr, 0));
-//             }
-//         }
-        
-//         for (auto it: VBlock)
-//         {
-//             if (key == "StoreAddress")
-//             {
-//                 addressIndex = stoul(value, nullptr, 0);
-//                 firstStore(addressIndex, timing, true, it);
-//                 timing++;
-//             }
-//             else if (key == "LoadAddress")
-//             {
-//                 addressIndex = stoul(value, nullptr, 0);
-//                 //Update the death time in address struct if the address is already in internal address vector
-//                 if (KernelWorkingSetMap[it].internalAddressIndexMap.find(addressIndex) != KernelWorkingSetMap[it].internalAddressIndexMap.end())
-//                 {
-//                     KernelWorkingSetMap[it].internalAddressIndexMap[it].deathTime = timing;
-//                     //remove the address from output set, if there is a load corresponding to a store
-//                     KernelWorkingSetMap[it].outputAddressIndexSet.erase(addressIndex);
-//                 }
-//                 else if (KernelWorkingSetMap[it].inputAddressIndexSet.find(addressIndex) == KernelWorkingSetMap[it].inputAddressIndexSet.end())
-//                 {
-//                     firstStore(addressIndex, timing, false, it);
-//                 }
-//                 timing++;
-//             }
-//         }
-//     }
  } // namespace WorkingSet

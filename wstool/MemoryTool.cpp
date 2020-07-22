@@ -23,9 +23,10 @@ using namespace WorkingSet;
 map<uint64_t, set<uint64_t>> kernelMap;
 
 
-set<uint64_t> ValidBlock;
+set<int64_t> ValidBlock;
 llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
 cl::opt<std::string> KernelFilename("k", cl::desc("Specify kernel json"), cl::value_desc("kernel filename"), cl::Required);
+llvm::cl::opt<string> bitcodeFile("b", llvm::cl::desc("Specify bitcode name"), llvm::cl::value_desc("bitcode filename"), llvm::cl::Required);
 int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
@@ -49,14 +50,66 @@ int main(int argc, char **argv)
     }
 
     nlohmann::json blocks = j["ValidBlocks"];
-    ValidBlock = blocks.get<set<uint64_t>>();
-        
+    ValidBlock = blocks.get<set<int64_t>>();
+
+
+    // build memory instructions to data size map
+    LLVMContext context;
+    SMDiagnostic smerror;
+    unique_ptr<Module> sourceBitcode;
+    try
+    {
+        sourceBitcode = parseIRFile(bitcodeFile, smerror, context);
+    }
+    catch (exception &e)
+    {
+        return 0;
+    }
+
+    Module *M = sourceBitcode.get();
+    Annotate(M);
+
+    //bbid -> instruction data size
+    map<int64_t,vector<uint64_t>> BBMemInstSize;
+
+    for (auto &mi : *M)
+    {
+        for (auto fi = mi.begin(); fi != mi.end(); fi++)
+        {
+            auto *bb = cast<BasicBlock>(fi);
+            auto dl = bb->getModule()->getDataLayout();
+            int64_t id = GetBlockID(bb);
+            if (ValidBlock.find(id) != ValidBlock.end())
+            {
+                for (auto bi = fi->begin(); bi != fi->end(); bi++)
+                {
+                    if (auto *inst = dyn_cast<LoadInst>(bi))
+                    {
+                        //errs()<< *inst<<"\n";
+                        auto *type = inst->getPointerOperand()->getType()->getContainedType(0);
+                        uint64_t dataSize = dl.getTypeAllocSize(type);
+                        //errs()<< dataSize<<"\n";
+                        BBMemInstSize[id].push_back(dataSize);
+                    }
+                    else if(auto *inst = dyn_cast<StoreInst>(bi))
+                    {
+                        auto *type = inst->getPointerOperand()->getType()->getContainedType(0);
+                        uint64_t dataSize = dl.getTypeAllocSize(type);
+                        //errs()<< *inst<<"\n";
+                        //BBMemInstSize[id]
+                        BBMemInstSize[id].push_back(dataSize);
+                    }
+                }              
+            }
+        }
+    }
+
     ProcessTrace(inputTrace, &WorkingSet::Process, "working set analysis", false);
     //ProcessTrace(inputTrace, &WorkingSet::ProcessBlock, "working set analysis", false);
 
     
     //here calculates the maximum internal working set size
-    map<uint64_t,vector<uint64_t>> internalTimeStampMap;
+    map<uint64_t,vector<pair<int64_t,uint64_t>>> internalTimeStampMap;
     for (auto &itout: KernelWorkingSetMap)
     {
         //store max size of input output internal working set
@@ -75,7 +128,10 @@ int main(int argc, char **argv)
                 }
 
                 // for dynamic size printing
-                internalTimeStampMap[itout.first].push_back(endTimeSet.size());
+                pair<int64_t,uint64_t> timePoint;
+                timePoint.first = it.birthTime;
+                timePoint.second = endTimeSet.size();
+                internalTimeStampMap[itout.first].push_back(timePoint);
                 
                 if (endTimeSet.size() > maxinternal)
                 {
@@ -98,7 +154,7 @@ int main(int argc, char **argv)
         ofstream mycout(fileName.c_str());
         for(auto &itiner: it.second)
         {
-            mycout<< itiner<<endl;
+            mycout<< itiner.first<< "   " <<itiner.second<<endl;
         } 
     }
 }
