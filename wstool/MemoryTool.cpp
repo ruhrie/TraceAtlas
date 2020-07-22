@@ -20,8 +20,8 @@
 using namespace std;
 using namespace llvm;
 using namespace WorkingSet;
-map<uint64_t, set<uint64_t>> kernelMap;
-
+map<int64_t, set<uint64_t>> kernelMap;
+map<int64_t,vector<uint64_t>> BBMemInstSize;
 
 set<int64_t> ValidBlock;
 llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
@@ -43,7 +43,7 @@ int main(int argc, char **argv)
     {
         uint64_t index = stoul(key, nullptr, 0);
         nlohmann::json kernel = value["Blocks"];
-        for (auto it :kernel.get<set<uint64_t>>())
+        for (auto it :kernel.get<set<int64_t>>())
         {
             kernelMap[it].insert(index);
         }
@@ -70,7 +70,7 @@ int main(int argc, char **argv)
     Annotate(M);
 
     //bbid -> instruction data size
-    map<int64_t,vector<uint64_t>> BBMemInstSize;
+    
 
     for (auto &mi : *M)
     {

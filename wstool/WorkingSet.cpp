@@ -4,18 +4,21 @@ using namespace std;
 
 namespace WorkingSet
 {
-    set<uint64_t> VBlock;
+    int64_t VBlock;
     set<uint64_t> VKernel;
-    
+
+    uint64_t instCounter = 0;
     int64_t timing = 0;
     map<uint64_t,KernelWorkingSet> KernelWorkingSetMap;
     vector<InternaladdressLiving> internalAddressLivingVec;
     map<uint64_t,uint64_t> kernelFiringNum;
     map<uint64_t,uint64_t> maxinternalfiring;
     map<uint64_t,vector<uint64_t>> internalTimeStamp;
-    void firstStore(uint64_t addrIndex, int64_t t, bool fromStore, uint64_t kernelIndex)
+    void firstStore(uint64_t addrIndex, int64_t t, bool fromStore, uint64_t kernelIndex,uint64_t dataSize)
     {
         // birth from a store inst
+        if(dataSize)
+        {}
         if (fromStore)
         {
             if(KernelWorkingSetMap[kernelIndex].internalAddressIndexMap.find(addrIndex)==KernelWorkingSetMap[kernelIndex].internalAddressIndexMap.end())
@@ -43,8 +46,11 @@ namespace WorkingSet
         //birth from a load inst
         else
         {
-            KernelWorkingSetMap[kernelIndex].inputAddressIndexSet.insert(addrIndex);
-            KernelWorkingSetMap[kernelIndex].inputMapSize++;
+            if (KernelWorkingSetMap[kernelIndex].inputAddressIndexSet.find(addrIndex) == KernelWorkingSetMap[kernelIndex].inputAddressIndexSet.end())
+            {
+                KernelWorkingSetMap[kernelIndex].inputAddressIndexSet.insert(addrIndex);
+                KernelWorkingSetMap[kernelIndex].inputMapSize++;
+            }    
         }
     }
 
@@ -107,39 +113,40 @@ namespace WorkingSet
     {        
         if (key == "BBEnter")
         {
-            if (kernelMap.find(stoul(value, nullptr, 0))!= kernelMap.end())
-            {
-                
+            if (kernelMap.find(stol(value, nullptr, 0))!= kernelMap.end())
+            {         
                 VKernel.clear();
-                VBlock.insert(stoul(value, nullptr, 0));
-                for (auto it : VBlock)
-                {
-                    VKernel.insert(kernelMap[it].begin(),kernelMap[it].end());
-                }           
+                VBlock = (stol(value, nullptr, 0));
+                VKernel.insert(kernelMap[VBlock].begin(),kernelMap[VBlock].end());      
             }
         }
         if (key == "BBExit")
         {
-            if (kernelMap.find(stoul(value, nullptr, 0))!= kernelMap.end())
+            if (kernelMap.find(stol(value, nullptr, 0))!= kernelMap.end())
             {
                 
                 VKernel.clear();
-                VBlock.erase(stoul(value, nullptr, 0));
-                for (auto it : VBlock)
-                {
-                    VKernel.insert(kernelMap[it].begin(),kernelMap[it].end());
-                }           
+                VBlock = 0;
+                instCounter = 0;          
             }
         }
+        uint64_t dataSize = 0 ;
         uint64_t addressIndex;
+        
         if ((key == "StoreAddress")||(key == "LoadAddress"))
-        {
+        {        
             for (auto it: VKernel)
             {
+                dataSize = BBMemInstSize[VBlock][instCounter];
+                if (dataSize==0)
+                {
+                    printf("vblock : %lu instcounter: %lu", VBlock,instCounter);
+                }
+                printf("data size : %lu \n",dataSize);
                 if (key == "StoreAddress")
                 {
                     addressIndex = stoul(value, nullptr, 0);
-                    firstStore(addressIndex, timing, true, it);
+                    firstStore(addressIndex, timing, true, it, dataSize);
                 }
                 else if (key == "LoadAddress")
                 {
@@ -153,15 +160,16 @@ namespace WorkingSet
                     }
                     else if (KernelWorkingSetMap[it].inputAddressIndexSet.find(addressIndex) == KernelWorkingSetMap[it].inputAddressIndexSet.end())
                     {
-                        firstStore(addressIndex, timing, false, it);
+                        firstStore(addressIndex, timing, false, it, dataSize);
                     }
                 }
                 if(kernelFiringNum[it]>30000)
                 {
                     //firingClear(it);
                 }
-            }
-            timing++;
+                instCounter++;
+                timing++;
+            }      
         }  
     }
 
