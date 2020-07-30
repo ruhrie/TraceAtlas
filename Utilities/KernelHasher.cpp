@@ -51,16 +51,26 @@ int main(int argc, char **argv)
         }
     }
 
-    ifstream inputJson(KernelFilename);
+    ifstream inputJson;
     nlohmann::json j;
-    inputJson >> j;
-    inputJson.close();
+    try
+    {
+        inputJson.open(KernelFilename);
+        inputJson >> j;
+        inputJson.close();
+    }
+    catch (exception &e)
+    {
+        std::cerr << "Couldn't open input json file: " << KernelFilename << "\n";
+        std::cerr << e.what() << '\n';
+        return EXIT_FAILURE;
+    }
 
     map<string, uint64_t> outputMap;
     hash<string> hasher;
-    for (auto &[key, value] : j.items())
+    for (auto &[key, value] : j["Kernels"].items())
     {
-        vector<int> blocks = value;
+        vector<int> blocks = value["Blocks"];
         std::sort(blocks.begin(), blocks.end());
         vector<string> blockStrings;
         for (int block : blocks)
