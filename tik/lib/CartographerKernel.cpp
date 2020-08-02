@@ -193,13 +193,29 @@ namespace TraceAtlas::tik
             //SplitBlocks(blocks);
             map<Value *, GlobalObject *> GlobalMap;
             vector<int64_t> KernelImports;
-            GetBoundaryValues(blocks, KernelImports);
+            vector<int64_t> KernelExports;
+            GetBoundaryValues(blocks, KernelImports, KernelExports, VMap);
             //we now have all the information we need
             //start by making the correct function
             vector<Type *> inputArgs;
             // First arg is always the Entrance index
             inputArgs.push_back(Type::getInt8Ty(TikModule->getContext()));
             for (auto inst : KernelImports)
+            {
+                if (IDToValue.find(inst) != IDToValue.end())
+                {
+                    inputArgs.push_back(IDToValue[inst]->getType());
+                }
+                else if (IDToBlock.find(inst) != IDToBlock.end())
+                {
+                    inputArgs.push_back(IDToBlock[inst]->getType());
+                }
+                else
+                {
+                    throw AtlasException("Tried to push a nullptr into the inputArgs when parsing imports.");
+                }
+            }
+            for (auto inst : KernelExports)
             {
                 if (IDToValue.find(inst) != IDToValue.end())
                 {
@@ -223,6 +239,14 @@ namespace TraceAtlas::tik
                 a->setName("i" + to_string(i));
                 VMap[IDToValue[KernelImports[i]]] = a;
                 ArgumentMap[a] = KernelImports[i];
+            }
+            uint64_t j;
+            for( j = 0; j < KernelExports.size(); j++)
+            {
+                auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i + j);
+                a->setName("e" + to_string(j));
+                VMap[IDToValue[KernelImports[j]]] = a;
+                ArgumentMap[a] = KernelImports[j];
             }
             //create the artificial blocks
             Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
@@ -286,7 +310,7 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks, vector<int64_t> &KernelImports)
+    void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks, vector<int64_t> &KernelImports, vector<int64_t> &KernelExports, ValueToValueMapTy &VMap)
     {
         // first, add all blocks of function calls. they will later be inlined and therefore do not need to be included
         // we also need the functions so that any args from embedded function calls are skipped as well
@@ -294,6 +318,7 @@ namespace TraceAtlas::tik
         set<Function *> scopedFuncs;
         for (auto block : blocks)
         {
+            // find all functions that will be inlined and add them to the scope of the basic block set
             for (auto BI = block->begin(), BE = block->end(); BI != BE; ++BI)
             {
                 auto inst = cast<Instruction>(BI);
@@ -359,11 +384,35 @@ namespace TraceAtlas::tik
         }
         for (auto block : scopedBlocks)
         {
-            //we now finally ask for the external values
-            //formerly GetExternalValues
             for (BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; ++BI)
             {
                 auto *inst = cast<Instruction>(BI);
+                BasicBlock *parentBlock = inst->getParent();
+                if (std::find(scopedBlocks.begin(), scopedBlocks.end(), parentBlock) != scopedBlocks.end())
+                {
+                    for ( auto& use : inst->uses() )
+                    {
+                        
+                        if( auto useInst = dyn_cast<Instruction>(use.getUser()))
+                        {
+                            if( find(scopedBlocks.begin(), scopedBlocks.end(), useInst->getParent()) == scopedBlocks.end())
+                            {
+                                // we need to have an export for this value
+                                KernelExports.push_back(GetValueID(inst));
+                                PrintVal(useInst);
+                            }
+                        }
+                        else if( auto useArg = dyn_cast<Argument>(use.getUser()))
+                        {
+                            if( find(scopedFuncs.begin(), scopedFuncs.end(), useArg->getParent()) == scopedFuncs.end())
+                            {
+                                // we need to have an export for this value
+                                KernelExports.push_back(GetValueID(useArg));
+                                PrintVal(useArg);
+                            }                                
+                        }
+                    }
+                }
                 if (auto *ci = dyn_cast<CallInst>(inst))
                 {
                     if (KfMap.find(ci->getCalledFunction()) != KfMap.end())
@@ -375,15 +424,66 @@ namespace TraceAtlas::tik
                             //these are the arguments for the function call in order
                             //we now can check if they are in our vmap, if so they aren't external
                             //if not they are and should be mapped as is appropriate
-                            if (find(KernelImports.begin(), KernelImports.end(), sExtVal) == KernelImports.end())
+                            if( VMap.find(arg) == VMap.end())
                             {
-                                KernelImports.push_back(sExtVal);
+                                if (find(KernelImports.begin(), KernelImports.end(), sExtVal) == KernelImports.end())
+                                {
+                                    KernelImports.push_back(sExtVal);
+                                }
                             }
                         }
                     }
+                    /*for( unsigned int i = 0; i < ci->getNumArgOperands(); i++)
+                    {
+                        auto val = ci->getArgOperand(i);
+                        if( auto argval = dyn_cast<Argument>(val) )
+                        {
+                            if (scopedFuncs.find(argval->getParent()) == scopedFuncs.end())
+                            {
+                                // we found an argument of the callinst that came from somewhere else
+                                if (find(KernelImports.begin(), KernelImports.end(), GetValueID(argval)) == KernelImports.end())
+                                {
+                                    //PrintVal(arg->getParent());
+                                    KernelImports.push_back(GetValueID(argval));
+                                }
+                            }
+                        }
+                        else if (auto *operand = dyn_cast<Instruction>(val))
+                        {
+                            BasicBlock *parentBlock = operand->getParent();
+                            if (std::find(scopedBlocks.begin(), scopedBlocks.end(), parentBlock) == scopedBlocks.end())
+                            {
+                                if (find(KernelImports.begin(), KernelImports.end(), GetValueID(operand)) == KernelImports.end())
+                                {
+                                    KernelImports.push_back(GetValueID(operand));
+                                }
+                            }
+                            // see if this value needs to be exported
+                            else
+                            {
+                                for ( auto& use : operand->uses() )
+                                {
+                                    if( auto useInst = dyn_cast<Instruction>(use))
+                                    {
+                                        if( find(scopedBlocks.begin(), scopedBlocks.end(), useInst->getParent()) == scopedBlocks.end())
+                                        {
+                                            // we need to have an export for this value
+                                            PrintVal(useInst);
+                                        }
+                                    }
+                                    else if( auto useArg = dyn_cast<Argument>(use))
+                                    {
+                                        if( find(scopedFuncs.begin(), scopedFuncs.end(), useArg->getParent()) == scopedFuncs.end())
+                                        {
+                                            // we need to have an export for this value
+                                            PrintVal(useInst);
+                                        }                                
+                                    }
+                                }
+                            }
+                        }
+                    }*/
                 }
-                //start by getting all the inputs
-                //they will be composed of the operands whose input is not defined in one of the parent blocks
                 for (uint32_t i = 0; i < inst->getNumOperands(); i++)
                 {
                     Value *op = inst->getOperand(i);
@@ -436,6 +536,29 @@ namespace TraceAtlas::tik
                             if (find(KernelImports.begin(), KernelImports.end(), GetValueID(operand)) == KernelImports.end())
                             {
                                 KernelImports.push_back(GetValueID(op));
+                            }
+                        }
+                        // see if this value needs to be exported
+                        else
+                        {
+                            for ( auto& use : operand->uses() )
+                            {
+                                if( auto useInst = dyn_cast<Instruction>(use))
+                                {
+                                    if( find(scopedBlocks.begin(), scopedBlocks.end(), useInst->getParent()) == scopedBlocks.end())
+                                    {
+                                        // we need to have an export for this value
+                                        PrintVal(useInst);
+                                    }
+                                }
+                                else if( auto useArg = dyn_cast<Argument>(use))
+                                {
+                                    if( find(scopedFuncs.begin(), scopedFuncs.end(), useArg->getParent()) == scopedFuncs.end())
+                                    {
+                                        // we need to have an export for this value
+                                        PrintVal(useInst);
+                                    }                                
+                                }
                             }
                         }
                     }
@@ -854,6 +977,8 @@ namespace TraceAtlas::tik
                     }
                     if( !found )
                     {
+                        // this phi needs an entry from one of our kernel exits
+                        // not clear yet which value should be exported. Probably a kernel export
                         PrintVal(&phi);
                     }
                 }

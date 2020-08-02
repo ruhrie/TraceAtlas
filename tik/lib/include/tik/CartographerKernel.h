@@ -14,7 +14,7 @@ namespace TraceAtlas::tik
 
     private:
         CartographerKernel();
-        void GetBoundaryValues(std::set<llvm::BasicBlock *> &blocks, std::vector<int64_t> &KernelImports);
+        void GetBoundaryValues(std::set<llvm::BasicBlock *> &blocks, std::vector<int64_t> &KernelImports, std::vector<int64_t> &KernelExports, llvm::ValueToValueMapTy &VMap);
         void BuildKernelFromBlocks(llvm::ValueToValueMapTy &VMap, std::set<llvm::BasicBlock *> &blocks);
         void InlineFunctionsFromBlocks(std::set<int64_t> &blocks);
         void RemapNestedKernels(llvm::ValueToValueMapTy &VMap);
