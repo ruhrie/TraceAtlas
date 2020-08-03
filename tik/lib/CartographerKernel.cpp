@@ -245,7 +245,9 @@ namespace TraceAtlas::tik
             {
                 auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i + j);
                 a->setName("e" + to_string(j));
+                PrintVal(IDToValue[KernelExports[j]]);
                 VMap[IDToValue[KernelExports[j]]] = a;
+                PrintVal(VMap[IDToValue[KernelExports[j]]]);
                 ArgumentMap[a] = KernelExports[j];
             }
             //create the artificial blocks
@@ -317,6 +319,7 @@ namespace TraceAtlas::tik
         set<BasicBlock *> scopedBlocks = blocks;
         set<Function *> scopedFuncs;
         set<int64_t> kernelIE;
+        set<Function *> embeddedKernels;
         for (auto block : blocks)
         {
             // find all functions that will be inlined and add them to the scope of the basic block set
@@ -333,9 +336,6 @@ namespace TraceAtlas::tik
                     // if it is not a kernel call
                     if (KfMap.find(ci->getCalledFunction()) == KfMap.end())
                     {
-                        // if the function will be inlined
-                        //if( !ci->getCalledFunction()->hasFnAttribute("noinline") )
-                        //{
                         scopedFuncs.insert(ci->getCalledFunction());
                         // add each of the function blocks
                         for (auto fi = ci->getCalledFunction()->begin(); fi != ci->getCalledFunction()->end(); fi++)
@@ -343,7 +343,10 @@ namespace TraceAtlas::tik
                             auto BB = cast<BasicBlock>(fi);
                             scopedBlocks.insert(BB);
                         }
-                        //}
+                    }
+                    else
+                    {
+                        embeddedKernels.insert(ci->getCalledFunction());
                     }
                 }
                 for (unsigned int i = 0; i < inst->getNumOperands(); i++)
@@ -359,9 +362,6 @@ namespace TraceAtlas::tik
                         // if it is not a kernel call
                         if (KfMap.find(ci->getCalledFunction()) == KfMap.end())
                         {
-                            // if the function will be inlined
-                            //if( !ci->getCalledFunction()->hasFnAttribute("noinline") )
-                            //{
                             scopedFuncs.insert(ci->getCalledFunction());
                             // add each of the function blocks
                             for (auto fi = ci->getCalledFunction()->begin(); fi != ci->getCalledFunction()->end(); fi++)
@@ -369,7 +369,10 @@ namespace TraceAtlas::tik
                                 auto BB = cast<BasicBlock>(fi);
                                 scopedBlocks.insert(BB);
                             }
-                            //}
+                        }
+                        else
+                        {
+                            embeddedKernels.insert(ci->getCalledFunction());
                         }
                     }
                 }
@@ -398,7 +401,7 @@ namespace TraceAtlas::tik
                         {
                             if (find(scopedBlocks.begin(), scopedBlocks.end(), useInst->getParent()) == scopedBlocks.end())
                             {
-                                auto sExtVal = GetValueID(useInst);
+                                auto sExtVal = GetValueID(inst);
                                 if (kernelIE.find(sExtVal) == kernelIE.end())
                                 {
                                     KernelExports.push_back(sExtVal);
@@ -410,7 +413,7 @@ namespace TraceAtlas::tik
                         {
                             if (find(scopedFuncs.begin(), scopedFuncs.end(), useArg->getParent()) == scopedFuncs.end())
                             {
-                                auto sExtVal = GetValueID(useArg);
+                                auto sExtVal = GetValueID(inst);
                                 if (kernelIE.find(sExtVal) == kernelIE.end())
                                 {
                                     KernelExports.push_back(sExtVal);
@@ -422,10 +425,10 @@ namespace TraceAtlas::tik
                 }
                 if (auto *ci = dyn_cast<CallInst>(inst))
                 {
-                    if (KfMap.find(ci->getCalledFunction()) != KfMap.end())
+                    if (embeddedKernels.find(ci->getCalledFunction()) != embeddedKernels.end())
                     {
-                        auto subKernel = KfMap[ci->getCalledFunction()];
-                        for (auto arg = subKernel->KernelFunction->arg_begin(); arg < subKernel->KernelFunction->arg_end(); arg++)
+                        auto subKernel = *(embeddedKernels.find(ci->getCalledFunction()));
+                        for (auto arg = subKernel->arg_begin(); arg < subKernel->arg_end(); arg++)
                         {
                             auto sExtVal = GetValueID(arg);
                             //these are the arguments for the function call in order
@@ -528,12 +531,15 @@ namespace TraceAtlas::tik
                     {
                         if (scopedFuncs.find(arg->getParent()) == scopedFuncs.end())
                         {
-                            auto sExtVal = GetValueID(arg);
-                            // we found an argument of the callinst that came from somewhere else
-                            if (kernelIE.find(sExtVal) == kernelIE.end())
+                            if (embeddedKernels.find(arg->getParent()) == embeddedKernels.end())
                             {
-                                KernelImports.push_back(sExtVal);
-                                kernelIE.insert(sExtVal);
+                                auto sExtVal = GetValueID(arg);
+                                // we found an argument of the callinst that came from somewhere else
+                                if (kernelIE.find(sExtVal) == kernelIE.end())
+                                {
+                                    KernelImports.push_back(sExtVal);
+                                    kernelIE.insert(sExtVal);
+                                }
                             }
                         }
                     }
@@ -558,11 +564,14 @@ namespace TraceAtlas::tik
                                 {
                                     if (find(scopedBlocks.begin(), scopedBlocks.end(), useInst->getParent()) == scopedBlocks.end())
                                     {
-                                        auto sExtVal = GetValueID(useInst);
-                                        if (kernelIE.find(sExtVal) == kernelIE.end())
+                                        if (embeddedKernels.find(useInst->getParent()->getParent()) == embeddedKernels.end())
                                         {
-                                            KernelExports.push_back(sExtVal);
-                                            kernelIE.insert(sExtVal);
+                                            auto sExtVal = GetValueID(operand);
+                                            if (kernelIE.find(sExtVal) == kernelIE.end())
+                                            {
+                                                KernelExports.push_back(sExtVal);
+                                                kernelIE.insert(sExtVal);
+                                            }
                                         }
                                     }
                                 }
@@ -570,11 +579,14 @@ namespace TraceAtlas::tik
                                 {
                                     if (find(scopedFuncs.begin(), scopedFuncs.end(), useArg->getParent()) == scopedFuncs.end())
                                     {
-                                        auto sExtVal = GetValueID(useArg);
-                                        if (kernelIE.find(sExtVal) == kernelIE.end())
+                                        if (embeddedKernels.find(useArg->getParent()) == embeddedKernels.end())
                                         {
-                                            KernelExports.push_back(sExtVal);
-                                            kernelIE.insert(sExtVal);
+                                            auto sExtVal = GetValueID(operand);
+                                            if (kernelIE.find(sExtVal) == kernelIE.end())
+                                            {
+                                                KernelExports.push_back(sExtVal);
+                                                kernelIE.insert(sExtVal);
+                                            }
                                         }
                                     }
                                 }
