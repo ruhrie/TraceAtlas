@@ -316,6 +316,7 @@ namespace TraceAtlas::tik
         // we also need the functions so that any args from embedded function calls are skipped as well
         set<BasicBlock *> scopedBlocks = blocks;
         set<Function *> scopedFuncs;
+        set<int64_t> kernelIE;
         for (auto block : blocks)
         {
             // find all functions that will be inlined and add them to the scope of the basic block set
@@ -398,9 +399,10 @@ namespace TraceAtlas::tik
                             if (find(scopedBlocks.begin(), scopedBlocks.end(), useInst->getParent()) == scopedBlocks.end())
                             {
                                 auto sExtVal = GetValueID(useInst);
-                                if (find(KernelExports.begin(), KernelExports.end(), sExtVal) == KernelExports.end())
+                                if (kernelIE.find(sExtVal) == kernelIE.end())
                                 {
                                     KernelExports.push_back(sExtVal);
+                                    kernelIE.insert(sExtVal);
                                 }
                             }
                         }
@@ -409,9 +411,10 @@ namespace TraceAtlas::tik
                             if (find(scopedFuncs.begin(), scopedFuncs.end(), useArg->getParent()) == scopedFuncs.end())
                             {
                                 auto sExtVal = GetValueID(useArg);
-                                if (find(KernelExports.begin(), KernelExports.end(), sExtVal) == KernelExports.end())
+                                if (kernelIE.find(sExtVal) == kernelIE.end())
                                 {
                                     KernelExports.push_back(sExtVal);
+                                    kernelIE.insert(sExtVal);
                                 }
                             }
                         }
@@ -430,9 +433,10 @@ namespace TraceAtlas::tik
                             //if not they are and should be mapped as is appropriate
                             //if (VMap.find(arg) == VMap.end())
                             //{
-                            if (find(KernelImports.begin(), KernelImports.end(), sExtVal) == KernelImports.end())
+                            if (kernelIE.find(sExtVal) == kernelIE.end())
                             {
                                 KernelImports.push_back(sExtVal);
+                                kernelIE.insert(sExtVal);
                             }
                             //}
                         }
@@ -524,10 +528,12 @@ namespace TraceAtlas::tik
                     {
                         if (scopedFuncs.find(arg->getParent()) == scopedFuncs.end())
                         {
+                            auto sExtVal = GetValueID(arg);
                             // we found an argument of the callinst that came from somewhere else
-                            if (find(KernelImports.begin(), KernelImports.end(), GetValueID(arg)) == KernelImports.end())
+                            if (kernelIE.find(sExtVal) == kernelIE.end())
                             {
-                                KernelImports.push_back(GetValueID(arg));
+                                KernelImports.push_back(sExtVal);
+                                kernelIE.insert(sExtVal);
                             }
                         }
                     }
@@ -536,9 +542,11 @@ namespace TraceAtlas::tik
                         BasicBlock *parentBlock = operand->getParent();
                         if (std::find(scopedBlocks.begin(), scopedBlocks.end(), parentBlock) == scopedBlocks.end())
                         {
-                            if (find(KernelImports.begin(), KernelImports.end(), GetValueID(operand)) == KernelImports.end())
+                            auto sExtVal = GetValueID(op);
+                            if (kernelIE.find(sExtVal) == kernelIE.end())
                             {
-                                KernelImports.push_back(GetValueID(op));
+                                KernelImports.push_back(sExtVal);
+                                kernelIE.insert(sExtVal);
                             }
                         }
                         // see if this value needs to be exported
@@ -551,9 +559,10 @@ namespace TraceAtlas::tik
                                     if (find(scopedBlocks.begin(), scopedBlocks.end(), useInst->getParent()) == scopedBlocks.end())
                                     {
                                         auto sExtVal = GetValueID(useInst);
-                                        if (find(KernelExports.begin(), KernelExports.end(), sExtVal) == KernelExports.end())
+                                        if (kernelIE.find(sExtVal) == kernelIE.end())
                                         {
                                             KernelExports.push_back(sExtVal);
+                                            kernelIE.insert(sExtVal);
                                         }
                                     }
                                 }
@@ -562,9 +571,10 @@ namespace TraceAtlas::tik
                                     if (find(scopedFuncs.begin(), scopedFuncs.end(), useArg->getParent()) == scopedFuncs.end())
                                     {
                                         auto sExtVal = GetValueID(useArg);
-                                        if (find(KernelExports.begin(), KernelExports.end(), sExtVal) == KernelExports.end())
+                                        if (kernelIE.find(sExtVal) == kernelIE.end())
                                         {
                                             KernelExports.push_back(sExtVal);
+                                            kernelIE.insert(sExtVal);
                                         }
                                     }
                                 }
