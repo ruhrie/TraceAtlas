@@ -19,6 +19,78 @@ namespace TraceAtlas::tik
     std::set<GlobalVariable *> globalDeclarationSet;
     std::set<Value *> remappedOperandSet;
 
+    void findScopedStructures(Value* val, set<BasicBlock *>& scopedBlocks, set<Function *>& scopedFuncs, set<Function *>& embeddedKernels)
+    {
+        if( auto block = dyn_cast<BasicBlock>(val) )
+        {
+            if( scopedBlocks.find(block) == scopedBlocks.end() )
+            {
+                scopedBlocks.insert(block);
+                for( auto BB = block->begin(); BB != block->end(); BB++ )
+                {
+                    auto inst = cast<Instruction>(BB);
+                    for( unsigned int i = 0; i < inst->getNumOperands(); i++)
+                    {
+                        findScopedStructures(inst->getOperand(i), scopedBlocks, scopedFuncs, embeddedKernels);
+                    }
+                }
+            }
+            else
+            {
+                return;
+            }
+        }
+        else if( auto func = dyn_cast<Function>(val) )
+        {
+            if( KfMap.find(func) != KfMap.end() )
+            {
+                embeddedKernels.insert(func);
+                for( auto it = func->begin(); it != func->end(); it++ )
+                {
+                    auto block = cast<BasicBlock>(it);
+                    scopedBlocks.insert(block);
+                    for( auto bb = block->begin(); bb != block->end(); bb++ )
+                    {
+                        auto inst = cast<Instruction>(bb);
+                        for( unsigned int i = 0; i < inst->getNumOperands(); i++ )
+                        {
+                            findScopedStructures(inst->getOperand(i), scopedBlocks, scopedFuncs, embeddedKernels);
+                        }
+                    }
+                }
+            }
+            else if( scopedFuncs.find(func) == scopedFuncs.end() )
+            {
+                scopedFuncs.insert(func);
+                for( auto it = func->begin(); it != func->end(); it++ )
+                {
+                    auto block = cast<BasicBlock>(it);
+                    scopedBlocks.insert(block);
+                    for( auto bb = block->begin(); bb != block->end(); bb++ )
+                    {
+                        auto inst = cast<Instruction>(bb);
+                        for( unsigned int i = 0; i < inst->getNumOperands(); i++ )
+                        {
+                            findScopedStructures(inst->getOperand(i), scopedBlocks, scopedFuncs, embeddedKernels);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                return;
+            }
+        }
+        else if( auto inst = dyn_cast<Instruction>(val) )
+        {
+            for( unsigned int i = 0; i < inst->getNumOperands(); i++ ) 
+            {
+                findScopedStructures(inst->getOperand(i), scopedBlocks, scopedFuncs, embeddedKernels);
+            }
+        }
+        return;
+    }
+
     void CopyOperand(llvm::User *inst, llvm::ValueToValueMapTy &VMap)
     {
         if (auto func = dyn_cast<Function>(inst))
@@ -232,6 +304,12 @@ namespace TraceAtlas::tik
             }
             FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
             KernelFunction = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
+            for( auto arg = KernelFunction->arg_begin(); arg != KernelFunction->arg_end(); arg++ )
+            {
+                uint64_t newId = (uint64_t)(prev(IDToValue.end())->first + 1);
+                SetValueIDs(arg, newId);
+                IDToValue[(int64_t)newId] = arg;
+            }
             uint64_t i;
             for (i = 0; i < KernelImports.size(); i++)
             {
@@ -259,7 +337,7 @@ namespace TraceAtlas::tik
             BuildKernelFromBlocks(VMap, blocks);
 
             Remap(VMap); //we need to remap before inlining
-
+            //PrintVal(KernelFunction);
             InlineFunctionsFromBlocks(blockSet);
 
             CopyGlobals(VMap);
@@ -318,67 +396,13 @@ namespace TraceAtlas::tik
         // we also need the functions so that any args from embedded function calls are skipped as well
         set<BasicBlock *> scopedBlocks = blocks;
         set<Function *> scopedFuncs;
-        set<int64_t> kernelIE;
         set<Function *> embeddedKernels;
+        set<int64_t> kernelIE;
         for (auto block : blocks)
         {
-            // find all functions that will be inlined and add them to the scope of the basic block set
-            for (auto BI = block->begin(), BE = block->end(); BI != BE; ++BI)
-            {
-                auto inst = cast<Instruction>(BI);
-                // if this is an embedded function call
-                if (auto *ci = dyn_cast<CallInst>(inst))
-                {
-                    if (ci->getCalledFunction() == nullptr)
-                    {
-                        throw AtlasException("Null function call (indirect call)");
-                    }
-                    // if it is not a kernel call
-                    if (KfMap.find(ci->getCalledFunction()) == KfMap.end())
-                    {
-                        scopedFuncs.insert(ci->getCalledFunction());
-                        // add each of the function blocks
-                        for (auto fi = ci->getCalledFunction()->begin(); fi != ci->getCalledFunction()->end(); fi++)
-                        {
-                            auto BB = cast<BasicBlock>(fi);
-                            scopedBlocks.insert(BB);
-                        }
-                    }
-                    else
-                    {
-                        embeddedKernels.insert(ci->getCalledFunction());
-                    }
-                }
-                for (unsigned int i = 0; i < inst->getNumOperands(); i++)
-                {
-                    auto op = inst->getOperand(i);
-                    // if this is an embedded function call
-                    if (auto *ci = dyn_cast<CallInst>(op))
-                    {
-                        if (ci->getCalledFunction() == nullptr)
-                        {
-                            throw AtlasException("Null function call (indirect call)");
-                        }
-                        // if it is not a kernel call
-                        if (KfMap.find(ci->getCalledFunction()) == KfMap.end())
-                        {
-                            scopedFuncs.insert(ci->getCalledFunction());
-                            // add each of the function blocks
-                            for (auto fi = ci->getCalledFunction()->begin(); fi != ci->getCalledFunction()->end(); fi++)
-                            {
-                                auto BB = cast<BasicBlock>(fi);
-                                scopedBlocks.insert(BB);
-                            }
-                        }
-                        else
-                        {
-                            embeddedKernels.insert(ci->getCalledFunction());
-                        }
-                    }
-                }
-            }
+            auto val = cast<Value>(block);
+            findScopedStructures(val, scopedBlocks, scopedFuncs, embeddedKernels);
         }
-        //we start with entrances
         auto ent = GetEntrances(blocks);
         int entranceId = 0;
         for (auto e : ent)
@@ -386,20 +410,30 @@ namespace TraceAtlas::tik
             IDToBlock[GetBlockID(e)] = e;
             Entrances.insert(make_shared<KernelInterface>(entranceId++, GetBlockID(e)));
         }
-        for (auto block : scopedBlocks)
+        for (const auto& block : scopedBlocks)
         {
-            for (BasicBlock::iterator BI = block->begin(), BE = block->end(); BI != BE; ++BI)
+            for (auto BI = block->begin(), BE = block->end(); BI != BE; ++BI)
             {
                 auto *inst = cast<Instruction>(BI);
-                BasicBlock *parentBlock = inst->getParent();
-                if (std::find(scopedBlocks.begin(), scopedBlocks.end(), parentBlock) != scopedBlocks.end())
+                if (scopedBlocks.find(inst->getParent()) == scopedBlocks.end())
                 {
+                    PrintVal(inst);
+                    // its from a block not in our kernel, so we have to import it
+                    auto sExtVal = GetValueID(inst);
+                    if (kernelIE.find(sExtVal) == kernelIE.end())
+                    {
+                        KernelImports.push_back(sExtVal);
+                        kernelIE.insert(sExtVal);
+                    }
+                }
+                else
+                {
+                    // check its uses
                     for (auto &use : inst->uses())
                     {
-
                         if (auto useInst = dyn_cast<Instruction>(use.getUser()))
                         {
-                            if (find(scopedBlocks.begin(), scopedBlocks.end(), useInst->getParent()) == scopedBlocks.end())
+                            if (scopedBlocks.find(useInst->getParent()) == scopedBlocks.end())
                             {
                                 auto sExtVal = GetValueID(inst);
                                 if (kernelIE.find(sExtVal) == kernelIE.end())
@@ -411,7 +445,7 @@ namespace TraceAtlas::tik
                         }
                         else if (auto useArg = dyn_cast<Argument>(use.getUser()))
                         {
-                            if (find(scopedFuncs.begin(), scopedFuncs.end(), useArg->getParent()) == scopedFuncs.end())
+                            if (scopedFuncs.find(useArg->getParent()) == scopedFuncs.end())
                             {
                                 auto sExtVal = GetValueID(inst);
                                 if (kernelIE.find(sExtVal) == kernelIE.end())
@@ -444,56 +478,6 @@ namespace TraceAtlas::tik
                             //}
                         }
                     }
-                    /*for( unsigned int i = 0; i < ci->getNumArgOperands(); i++)
-                    {
-                        auto val = ci->getArgOperand(i);
-                        if( auto argval = dyn_cast<Argument>(val) )
-                        {
-                            if (scopedFuncs.find(argval->getParent()) == scopedFuncs.end())
-                            {
-                                // we found an argument of the callinst that came from somewhere else
-                                if (find(KernelImports.begin(), KernelImports.end(), GetValueID(argval)) == KernelImports.end())
-                                {
-                                    //PrintVal(arg->getParent());
-                                    KernelImports.push_back(GetValueID(argval));
-                                }
-                            }
-                        }
-                        else if (auto *operand = dyn_cast<Instruction>(val))
-                        {
-                            BasicBlock *parentBlock = operand->getParent();
-                            if (std::find(scopedBlocks.begin(), scopedBlocks.end(), parentBlock) == scopedBlocks.end())
-                            {
-                                if (find(KernelImports.begin(), KernelImports.end(), GetValueID(operand)) == KernelImports.end())
-                                {
-                                    KernelImports.push_back(GetValueID(operand));
-                                }
-                            }
-                            // see if this value needs to be exported
-                            else
-                            {
-                                for ( auto& use : operand->uses() )
-                                {
-                                    if( auto useInst = dyn_cast<Instruction>(use))
-                                    {
-                                        if( find(scopedBlocks.begin(), scopedBlocks.end(), useInst->getParent()) == scopedBlocks.end())
-                                        {
-                                            // we need to have an export for this value
-                                            PrintVal(useInst);
-                                        }
-                                    }
-                                    else if( auto useArg = dyn_cast<Argument>(use))
-                                    {
-                                        if( find(scopedFuncs.begin(), scopedFuncs.end(), useArg->getParent()) == scopedFuncs.end())
-                                        {
-                                            // we need to have an export for this value
-                                            PrintVal(useInst);
-                                        }                                
-                                    }
-                                }
-                            }
-                        }
-                    }*/
                 }
                 for (uint32_t i = 0; i < inst->getNumOperands(); i++)
                 {
@@ -545,8 +529,7 @@ namespace TraceAtlas::tik
                     }
                     else if (auto *operand = dyn_cast<Instruction>(op))
                     {
-                        BasicBlock *parentBlock = operand->getParent();
-                        if (std::find(scopedBlocks.begin(), scopedBlocks.end(), parentBlock) == scopedBlocks.end())
+                        if (scopedBlocks.find(operand->getParent()) == scopedBlocks.end())
                         {
                             auto sExtVal = GetValueID(op);
                             if (kernelIE.find(sExtVal) == kernelIE.end())
@@ -562,7 +545,7 @@ namespace TraceAtlas::tik
                             {
                                 if (auto useInst = dyn_cast<Instruction>(use.getUser()))
                                 {
-                                    if (find(scopedBlocks.begin(), scopedBlocks.end(), useInst->getParent()) == scopedBlocks.end())
+                                    if (scopedBlocks.find(useInst->getParent()) == scopedBlocks.end())
                                     {
                                         if (embeddedKernels.find(useInst->getParent()->getParent()) == embeddedKernels.end())
                                         {
@@ -577,7 +560,7 @@ namespace TraceAtlas::tik
                                 }
                                 else if (auto useArg = dyn_cast<Argument>(use.getUser()))
                                 {
-                                    if (find(scopedFuncs.begin(), scopedFuncs.end(), useArg->getParent()) == scopedFuncs.end())
+                                    if (scopedFuncs.find(useArg->getParent()) == scopedFuncs.end())
                                     {
                                         if (embeddedKernels.find(useArg->getParent()) == embeddedKernels.end())
                                         {
