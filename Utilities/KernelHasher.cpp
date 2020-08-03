@@ -14,6 +14,8 @@
 #include <nlohmann/json.hpp>
 #include <unordered_map>
 #include <vector>
+#include <set>
+
 using namespace llvm;
 using json = nlohmann::json;
 using namespace std;
@@ -66,7 +68,8 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    map<string, uint64_t> outputMap;
+    map<string, std::set<uint64_t>> blockHash;
+    map<string, uint64_t> kernelHash;
     hash<string> hasher;
     for (auto &[key, value] : j["Kernels"].items())
     {
@@ -106,6 +109,9 @@ int main(int argc, char **argv)
             namedVals.clear();
             blockStr += "\n";
             blockStrings.push_back(blockStr);
+
+            std::sort(blockStr.begin(), blockStr.end());
+            blockHash[key].insert(hasher(blockStr));
         }
 
         std::sort(blockStrings.begin(), blockStrings.begin());
@@ -117,10 +123,17 @@ int main(int argc, char **argv)
         }
 
         uint64_t hashed = hasher(toHash);
-        outputMap[key] = hashed;
+        kernelHash[key] = hashed;
     }
 
-    json j_map(outputMap);
+    //map<string, 
+
+    json j_map;
+    for( const auto& key : kernelHash )
+    {
+        j_map[key.first]["Kernel"] = key.second;
+        j_map[key.first]["Blocks"] = vector<uint64_t>(blockHash[key.first].begin(), blockHash[key.first].end());
+    }
     if (!OutputFilename.empty())
     {
         std::ofstream file;
