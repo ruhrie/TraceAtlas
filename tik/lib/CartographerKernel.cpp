@@ -397,16 +397,22 @@ namespace TraceAtlas::tik
                         {
                             if (find(scopedBlocks.begin(), scopedBlocks.end(), useInst->getParent()) == scopedBlocks.end())
                             {
-                                // we need to have an export for this value
-                                KernelExports.push_back(GetValueID(inst));
+                                auto sExtVal = GetValueID(useInst);
+                                if (find(KernelExports.begin(), KernelExports.end(), sExtVal) == KernelExports.end())
+                                {
+                                    KernelExports.push_back(sExtVal);
+                                }
                             }
                         }
                         else if (auto useArg = dyn_cast<Argument>(use.getUser()))
                         {
                             if (find(scopedFuncs.begin(), scopedFuncs.end(), useArg->getParent()) == scopedFuncs.end())
                             {
-                                // we need to have an export for this value
-                                KernelExports.push_back(GetValueID(useArg));
+                                auto sExtVal = GetValueID(useArg);
+                                if (find(KernelExports.begin(), KernelExports.end(), sExtVal) == KernelExports.end())
+                                {
+                                    KernelExports.push_back(sExtVal);
+                                }
                             }
                         }
                     }
@@ -418,17 +424,17 @@ namespace TraceAtlas::tik
                         auto subKernel = KfMap[ci->getCalledFunction()];
                         for (auto arg = subKernel->KernelFunction->arg_begin(); arg < subKernel->KernelFunction->arg_end(); arg++)
                         {
-                            auto sExtVal = GetValueID(cast<Value>(arg));
+                            auto sExtVal = GetValueID(arg);
                             //these are the arguments for the function call in order
                             //we now can check if they are in our vmap, if so they aren't external
                             //if not they are and should be mapped as is appropriate
-                            if (VMap.find(arg) == VMap.end())
+                            //if (VMap.find(arg) == VMap.end())
+                            //{
+                            if (find(KernelImports.begin(), KernelImports.end(), sExtVal) == KernelImports.end())
                             {
-                                if (find(KernelImports.begin(), KernelImports.end(), sExtVal) == KernelImports.end())
-                                {
-                                    KernelImports.push_back(sExtVal);
-                                }
+                                KernelImports.push_back(sExtVal);
                             }
+                            //}
                         }
                     }
                     /*for( unsigned int i = 0; i < ci->getNumArgOperands(); i++)
@@ -521,7 +527,6 @@ namespace TraceAtlas::tik
                             // we found an argument of the callinst that came from somewhere else
                             if (find(KernelImports.begin(), KernelImports.end(), GetValueID(arg)) == KernelImports.end())
                             {
-                                //PrintVal(arg->getParent());
                                 KernelImports.push_back(GetValueID(arg));
                             }
                         }
@@ -541,20 +546,26 @@ namespace TraceAtlas::tik
                         {
                             for (auto &use : operand->uses())
                             {
-                                if (auto useInst = dyn_cast<Instruction>(use))
+                                if (auto useInst = dyn_cast<Instruction>(use.getUser()))
                                 {
                                     if (find(scopedBlocks.begin(), scopedBlocks.end(), useInst->getParent()) == scopedBlocks.end())
                                     {
-                                        // we need to have an export for this value
-                                        PrintVal(useInst);
+                                        auto sExtVal = GetValueID(useInst);
+                                        if (find(KernelExports.begin(), KernelExports.end(), sExtVal) == KernelExports.end())
+                                        {
+                                            KernelExports.push_back(sExtVal);
+                                        }
                                     }
                                 }
-                                else if (auto useArg = dyn_cast<Argument>(use))
+                                else if (auto useArg = dyn_cast<Argument>(use.getUser()))
                                 {
                                     if (find(scopedFuncs.begin(), scopedFuncs.end(), useArg->getParent()) == scopedFuncs.end())
                                     {
-                                        // we need to have an export for this value
-                                        PrintVal(useInst);
+                                        auto sExtVal = GetValueID(useArg);
+                                        if (find(KernelExports.begin(), KernelExports.end(), sExtVal) == KernelExports.end())
+                                        {
+                                            KernelExports.push_back(sExtVal);
+                                        }
                                     }
                                 }
                             }
@@ -811,9 +822,6 @@ namespace TraceAtlas::tik
                                     }
                                 }
                             }
-                        }
-                        for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
-                        {
                             for (auto arg = KernelFunction->arg_begin(); arg < KernelFunction->arg_end(); arg++)
                             {
                                 if (subK->ArgumentMap[sarg] == ArgumentMap[arg])
