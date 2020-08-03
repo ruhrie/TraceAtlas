@@ -241,12 +241,12 @@ namespace TraceAtlas::tik
                 ArgumentMap[a] = KernelImports[i];
             }
             uint64_t j;
-            for( j = 0; j < KernelExports.size(); j++)
+            for (j = 0; j < KernelExports.size(); j++)
             {
                 auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i + j);
                 a->setName("e" + to_string(j));
-                VMap[IDToValue[KernelImports[j]]] = a;
-                ArgumentMap[a] = KernelImports[j];
+                VMap[IDToValue[KernelExports[j]]] = a;
+                ArgumentMap[a] = KernelExports[j];
             }
             //create the artificial blocks
             Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
@@ -390,26 +390,24 @@ namespace TraceAtlas::tik
                 BasicBlock *parentBlock = inst->getParent();
                 if (std::find(scopedBlocks.begin(), scopedBlocks.end(), parentBlock) != scopedBlocks.end())
                 {
-                    for ( auto& use : inst->uses() )
+                    for (auto &use : inst->uses())
                     {
-                        
-                        if( auto useInst = dyn_cast<Instruction>(use.getUser()))
+
+                        if (auto useInst = dyn_cast<Instruction>(use.getUser()))
                         {
-                            if( find(scopedBlocks.begin(), scopedBlocks.end(), useInst->getParent()) == scopedBlocks.end())
+                            if (find(scopedBlocks.begin(), scopedBlocks.end(), useInst->getParent()) == scopedBlocks.end())
                             {
                                 // we need to have an export for this value
                                 KernelExports.push_back(GetValueID(inst));
-                                PrintVal(useInst);
                             }
                         }
-                        else if( auto useArg = dyn_cast<Argument>(use.getUser()))
+                        else if (auto useArg = dyn_cast<Argument>(use.getUser()))
                         {
-                            if( find(scopedFuncs.begin(), scopedFuncs.end(), useArg->getParent()) == scopedFuncs.end())
+                            if (find(scopedFuncs.begin(), scopedFuncs.end(), useArg->getParent()) == scopedFuncs.end())
                             {
                                 // we need to have an export for this value
                                 KernelExports.push_back(GetValueID(useArg));
-                                PrintVal(useArg);
-                            }                                
+                            }
                         }
                     }
                 }
@@ -424,7 +422,7 @@ namespace TraceAtlas::tik
                             //these are the arguments for the function call in order
                             //we now can check if they are in our vmap, if so they aren't external
                             //if not they are and should be mapped as is appropriate
-                            if( VMap.find(arg) == VMap.end())
+                            if (VMap.find(arg) == VMap.end())
                             {
                                 if (find(KernelImports.begin(), KernelImports.end(), sExtVal) == KernelImports.end())
                                 {
@@ -541,23 +539,23 @@ namespace TraceAtlas::tik
                         // see if this value needs to be exported
                         else
                         {
-                            for ( auto& use : operand->uses() )
+                            for (auto &use : operand->uses())
                             {
-                                if( auto useInst = dyn_cast<Instruction>(use))
+                                if (auto useInst = dyn_cast<Instruction>(use))
                                 {
-                                    if( find(scopedBlocks.begin(), scopedBlocks.end(), useInst->getParent()) == scopedBlocks.end())
+                                    if (find(scopedBlocks.begin(), scopedBlocks.end(), useInst->getParent()) == scopedBlocks.end())
                                     {
                                         // we need to have an export for this value
                                         PrintVal(useInst);
                                     }
                                 }
-                                else if( auto useArg = dyn_cast<Argument>(use))
+                                else if (auto useArg = dyn_cast<Argument>(use))
                                 {
-                                    if( find(scopedFuncs.begin(), scopedFuncs.end(), useArg->getParent()) == scopedFuncs.end())
+                                    if (find(scopedFuncs.begin(), scopedFuncs.end(), useArg->getParent()) == scopedFuncs.end())
                                     {
                                         // we need to have an export for this value
                                         PrintVal(useInst);
-                                    }                                
+                                    }
                                 }
                             }
                         }
@@ -958,16 +956,16 @@ namespace TraceAtlas::tik
             vector<Instruction *> phisToRemove;
             for (auto &phi : b->phis())
             {
-                
+
                 // make sure our phi is accounting for all preds
-                for( auto pred : predecessors(b) )
+                for (auto pred : predecessors(b))
                 {
                     bool found = false;
-                    for( unsigned int i = 0; i < phi.getNumIncomingValues(); i++ )
+                    for (unsigned int i = 0; i < phi.getNumIncomingValues(); i++)
                     {
-                        if( phi.getIncomingBlock(i) == pred )
+                        if (phi.getIncomingBlock(i) == pred)
                         {
-                            if( found )
+                            if (found)
                             {
                                 // we have two values in here... take this one out
                                 phi.removeIncomingValue(phi.getIncomingBlock(i), false);
@@ -975,7 +973,7 @@ namespace TraceAtlas::tik
                             found = true;
                         }
                     }
-                    if( !found )
+                    if (!found)
                     {
                         // this phi needs an entry from one of our kernel exits
                         // not clear yet which value should be exported. Probably a kernel export
@@ -986,8 +984,8 @@ namespace TraceAtlas::tik
                 for (uint32_t i = 0; i < phi.getNumIncomingValues(); i++)
                 {
                     auto block = phi.getIncomingBlock(i);
-                    BasicBlock* rblock;
-                    if( VMap.find(phi.getIncomingBlock(i)) != VMap.end() )
+                    BasicBlock *rblock;
+                    if (VMap.find(phi.getIncomingBlock(i)) != VMap.end())
                     {
                         rblock = cast<BasicBlock>(VMap[phi.getIncomingBlock(i)]);
                     }
