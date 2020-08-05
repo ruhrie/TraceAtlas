@@ -29,15 +29,8 @@ namespace TraceAtlas::tik
                 for( auto BB = block->begin(); BB != block->end(); BB++ )
                 {
                     auto inst = cast<Instruction>(BB);
-                    for( unsigned int i = 0; i < inst->getNumOperands(); i++)
-                    {
-                        findScopedStructures(inst->getOperand(i), scopedBlocks, scopedFuncs, embeddedKernels);
-                    }
+                    findScopedStructures(inst, scopedBlocks, scopedFuncs, embeddedKernels);
                 }
-            }
-            else
-            {
-                return;
             }
         }
         else if( auto func = dyn_cast<Function>(val) )
@@ -48,15 +41,7 @@ namespace TraceAtlas::tik
                 for( auto it = func->begin(); it != func->end(); it++ )
                 {
                     auto block = cast<BasicBlock>(it);
-                    scopedBlocks.insert(block);
-                    for( auto bb = block->begin(); bb != block->end(); bb++ )
-                    {
-                        auto inst = cast<Instruction>(bb);
-                        for( unsigned int i = 0; i < inst->getNumOperands(); i++ )
-                        {
-                            findScopedStructures(inst->getOperand(i), scopedBlocks, scopedFuncs, embeddedKernels);
-                        }
-                    }
+                    findScopedStructures(block, scopedBlocks, scopedFuncs, embeddedKernels);
                 }
             }
             else if( scopedFuncs.find(func) == scopedFuncs.end() )
@@ -65,24 +50,20 @@ namespace TraceAtlas::tik
                 for( auto it = func->begin(); it != func->end(); it++ )
                 {
                     auto block = cast<BasicBlock>(it);
-                    scopedBlocks.insert(block);
-                    for( auto bb = block->begin(); bb != block->end(); bb++ )
-                    {
-                        auto inst = cast<Instruction>(bb);
-                        for( unsigned int i = 0; i < inst->getNumOperands(); i++ )
-                        {
-                            findScopedStructures(inst->getOperand(i), scopedBlocks, scopedFuncs, embeddedKernels);
-                        }
-                    }
+                    findScopedStructures(block, scopedBlocks, scopedFuncs, embeddedKernels);
                 }
-            }
-            else
-            {
-                return;
             }
         }
         else if( auto inst = dyn_cast<Instruction>(val) )
         {
+            if ( auto ci = dyn_cast<CallInst>(inst) )
+            {
+                if( ci->getCalledFunction() == nullptr )
+                {
+                    throw AtlasException("Null function call: indirect call");
+                }
+                findScopedStructures(ci->getCalledFunction(), scopedBlocks, scopedFuncs, embeddedKernels);
+            }
             for( unsigned int i = 0; i < inst->getNumOperands(); i++ ) 
             {
                 findScopedStructures(inst->getOperand(i), scopedBlocks, scopedFuncs, embeddedKernels);
@@ -315,7 +296,9 @@ namespace TraceAtlas::tik
             {
                 auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i);
                 a->setName("i" + to_string(i));
+                //PrintVal(IDToValue[KernelImports[i]]);
                 VMap[IDToValue[KernelImports[i]]] = a;
+                //PrintVal(VMap[IDToValue[KernelImports[i]]]);
                 ArgumentMap[a] = KernelImports[i];
             }
             uint64_t j;
@@ -323,9 +306,9 @@ namespace TraceAtlas::tik
             {
                 auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i + j);
                 a->setName("e" + to_string(j));
-                PrintVal(IDToValue[KernelExports[j]]);
+                //PrintVal(IDToValue[KernelExports[j]]);
                 VMap[IDToValue[KernelExports[j]]] = a;
-                PrintVal(VMap[IDToValue[KernelExports[j]]]);
+                //PrintVal(VMap[IDToValue[KernelExports[j]]]);
                 ArgumentMap[a] = KernelExports[j];
             }
             //create the artificial blocks
@@ -417,7 +400,6 @@ namespace TraceAtlas::tik
                 auto *inst = cast<Instruction>(BI);
                 if (scopedBlocks.find(inst->getParent()) == scopedBlocks.end())
                 {
-                    PrintVal(inst);
                     // its from a block not in our kernel, so we have to import it
                     auto sExtVal = GetValueID(inst);
                     if (kernelIE.find(sExtVal) == kernelIE.end())
@@ -531,11 +513,14 @@ namespace TraceAtlas::tik
                     {
                         if (scopedBlocks.find(operand->getParent()) == scopedBlocks.end())
                         {
-                            auto sExtVal = GetValueID(op);
-                            if (kernelIE.find(sExtVal) == kernelIE.end())
+                            if( scopedFuncs.find(operand->getParent()->getParent()) == scopedFuncs.end() )
                             {
-                                KernelImports.push_back(sExtVal);
-                                kernelIE.insert(sExtVal);
+                                auto sExtVal = GetValueID(op);
+                                if (kernelIE.find(sExtVal) == kernelIE.end())
+                                {
+                                    KernelImports.push_back(sExtVal);
+                                    kernelIE.insert(sExtVal);
+                                }
                             }
                         }
                         // see if this value needs to be exported
