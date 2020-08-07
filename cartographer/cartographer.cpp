@@ -188,12 +188,13 @@ int main(int argc, char **argv)
         ProcessTrace(inputTrace, &TypeOne::Process, "Detecting type 1 kernels", noBar);
         auto type1Kernels = TypeOne::Get();
         spdlog::info("Detected " + to_string(type1Kernels.size()) + " type 1 kernels");
-
+        vector<int64_t> blockIndeces;
         for (auto &[block, count] : TypeOne::blockCount)
         {
             if (count != 0)
             {
                 ValidBlocks.insert(block);
+                blockIndeces.push_back(block);
             }
         }
 
@@ -263,6 +264,14 @@ int main(int argc, char **argv)
             }
         }
         outputJson["ValidBlocks"] = ValidBlocks;
+        map<string, set<int32_t>> calledIndeces;
+        for (auto blockId : blockIndeces)
+        {
+            auto calledBlocks = TypeTwo::blockCaller[blockId];
+            calledIndeces[to_string(blockId)] = calledBlocks;
+        }
+
+        outputJson["BlockCallers"] = calledIndeces;
 
         if (Debug)
         {
