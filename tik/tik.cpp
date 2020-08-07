@@ -1,5 +1,5 @@
-#include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
+#include "AtlasUtil/Format.h"
 #include "AtlasUtil/Print.h"
 #include "tik/CartographerKernel.h"
 #include "tik/Header.h"
@@ -176,13 +176,13 @@ int main(int argc, char *argv[])
     CleanModule(base);
 
     //annotate it with the same algorithm used in the tracer
-    Annotate(base);
+    Format(base);
 
     PopulateIdMap(base);
 
     TikModule = new Module(InputFile, context);
-    TikModule->setDataLayout(sourceBitcode->getDataLayout());
-    TikModule->setTargetTriple(sourceBitcode->getTargetTriple());
+    TikModule->setDataLayout(base->getDataLayout());
+    TikModule->setTargetTriple(base->getTargetTriple());
 
     //we now process all kernels who have no children and then remove them as we go
     std::vector<shared_ptr<Kernel>> results;
@@ -201,7 +201,7 @@ int main(int argc, char *argv[])
             if (childParentMapping.find(kernel.first) == childParentMapping.end())
             {
                 //this kernel has no unexplained parents
-                auto kern = make_shared<CartographerKernel>(kernel.second, sourceBitcode.get(), kernel.first);
+                auto kern = make_shared<CartographerKernel>(kernel.second, base, kernel.first);
                 if (!kern->Valid)
                 {
                     failedKernels.insert(kernel.second);

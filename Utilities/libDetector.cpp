@@ -1,4 +1,4 @@
-#include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Format.h"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -38,7 +38,7 @@ int main(int argc, char *argv[])
     SMDiagnostic smerror;
     unique_ptr<Module> sourceBitcode = parseIRFile(InputFile, smerror, context);
     //annotate it with the same algorithm used in the tracer
-    Annotate(sourceBitcode.get());
+    Format(sourceBitcode.get());
     map<string, set<string>> kernelParents;
     for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
     {

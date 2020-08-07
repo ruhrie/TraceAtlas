@@ -1,6 +1,6 @@
 #include "tikSwap/tikSwap.h"
-#include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
+#include "AtlasUtil/Format.h"
 #include "AtlasUtil/Print.h"
 #include "tik/Kernel.h"
 #include "tik/TikKernel.h"
@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
     // Annotate its bitcodes and values
     Module *base = sourceBitcode.get();
     CleanModule(base);
-    Annotate(base);
+    Format(base);
     // create a map for its block and value IDs
     map<int64_t, BasicBlock *> baseBlockMap;
     for (auto &F : *base)

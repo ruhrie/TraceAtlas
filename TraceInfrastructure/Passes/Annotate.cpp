@@ -1,5 +1,5 @@
 #include "Passes/Annotate.h"
-#include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Format.h"
 #include <llvm/IR/Function.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instruction.h>
@@ -13,7 +13,7 @@ namespace DashTracer::Passes
 {
     bool EncodedAnnotate::runOnModule(Module &M)
     {
-        Annotate(&M);
+        Format(&M);
         return true;
     }
 

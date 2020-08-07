@@ -1,4 +1,4 @@
-#include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Format.h"
 #include "AtlasUtil/Traces.h"
 #include "TypeFour.h"
 #include "TypeOne.h"
@@ -168,7 +168,7 @@ int main(int argc, char **argv)
     }
 
     Module *M = sourceBitcode.get();
-    Annotate(M);
+    Format(M);
 
     //build the blockMap
     for (auto &mi : *M)

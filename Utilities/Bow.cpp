@@ -1,4 +1,4 @@
-#include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Format.h"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -44,7 +44,7 @@ int main(int argc, char *argv[])
     }
     Module *M = sourceBitcode.get();
     //annotate it with the same algorithm used in the tracer
-    Annotate(M);
+    Format(M);
     map<string, set<string>> kernelParents;
     for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
     {

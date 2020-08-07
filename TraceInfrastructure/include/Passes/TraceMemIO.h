@@ -4,11 +4,6 @@ using namespace llvm;
 
 namespace DashTracer
 {
-    void Annotate(Function *F);
-}
-
-namespace DashTracer
-{
     namespace Passes
     {
         /// <summary>

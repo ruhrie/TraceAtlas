@@ -1,5 +1,5 @@
 
-#include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Format.h"
 #include "tik/Util.h"
 #include <fstream>
 #include <llvm/IRReader/IRReader.h>
@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
     SMDiagnostic smerror;
     unique_ptr<Module> sourceBitcode = parseIRFile(BitcodeFile, smerror, context);
     //annotate it with the same algorithm used in the tracer
-    Annotate(sourceBitcode.get());
+    Format(sourceBitcode.get());
 
     ifstream inputJson(KernelFile);
     nlohmann::json j;
