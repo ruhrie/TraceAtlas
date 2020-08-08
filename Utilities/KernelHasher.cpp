@@ -12,9 +12,9 @@
 #include <iostream>
 #include <map>
 #include <nlohmann/json.hpp>
+#include <set>
 #include <unordered_map>
 #include <vector>
-#include <set>
 
 using namespace llvm;
 using json = nlohmann::json;
@@ -126,10 +126,10 @@ int main(int argc, char **argv)
         kernelHash[key] = hashed;
     }
 
-    //map<string, 
+    //map<string,
 
     json j_map;
-    for( const auto& key : kernelHash )
+    for (const auto &key : kernelHash)
     {
         j_map[key.first]["Kernel"] = key.second;
         j_map[key.first]["Blocks"] = vector<uint64_t>(blockHash[key.first].begin(), blockHash[key.first].end());

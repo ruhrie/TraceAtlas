@@ -19,54 +19,49 @@ namespace TraceAtlas::tik
     std::set<GlobalVariable *> globalDeclarationSet;
     std::set<Value *> remappedOperandSet;
 
-    void findScopedStructures(Value* val, set<BasicBlock *>& scopedBlocks, set<Function *>& scopedFuncs, set<Function *>& embeddedKernels)
+    void findScopedStructures(Value *val, set<BasicBlock *> &scopedBlocks, set<Function *> &scopedFuncs, set<Function *> &embeddedKernels)
     {
-        if( auto block = dyn_cast<BasicBlock>(val) )
+        if (auto func = dyn_cast<Function>(val))
         {
-            if( scopedBlocks.find(block) == scopedBlocks.end() )
+            scopedFuncs.insert(func);
+            for (auto it = func->begin(); it != func->end(); it++)
             {
-                scopedBlocks.insert(block);
-                for( auto BB = block->begin(); BB != block->end(); BB++ )
-                {
-                    auto inst = cast<Instruction>(BB);
-                    findScopedStructures(inst, scopedBlocks, scopedFuncs, embeddedKernels);
-                }
+                auto block = cast<BasicBlock>(it);
+                findScopedStructures(block, scopedBlocks, scopedFuncs, embeddedKernels);
             }
         }
-        else if( auto func = dyn_cast<Function>(val) )
+        else if (auto block = dyn_cast<BasicBlock>(val))
         {
-            if( KfMap.find(func) != KfMap.end() )
+            scopedBlocks.insert(block);
+            // check whether its an entrance to a subkernel
+            for (auto key : KfMap)
             {
-                embeddedKernels.insert(func);
-                for( auto it = func->begin(); it != func->end(); it++ )
+                if (key.second.get() != nullptr)
                 {
-                    auto block = cast<BasicBlock>(it);
-                    findScopedStructures(block, scopedBlocks, scopedFuncs, embeddedKernels);
+                    for (auto ent : key.second->Entrances)
+                    {
+                        if (ent->Block == GetBlockID(block))
+                        {
+                            embeddedKernels.insert(key.first);
+                        }
+                    }
                 }
             }
-            else if( scopedFuncs.find(func) == scopedFuncs.end() )
+            for (auto BB = block->begin(); BB != block->end(); BB++)
             {
-                scopedFuncs.insert(func);
-                for( auto it = func->begin(); it != func->end(); it++ )
-                {
-                    auto block = cast<BasicBlock>(it);
-                    findScopedStructures(block, scopedBlocks, scopedFuncs, embeddedKernels);
-                }
+                auto inst = cast<Instruction>(BB);
+                findScopedStructures(inst, scopedBlocks, scopedFuncs, embeddedKernels);
             }
         }
-        else if( auto inst = dyn_cast<Instruction>(val) )
+        else if (auto inst = dyn_cast<Instruction>(val))
         {
-            if ( auto ci = dyn_cast<CallInst>(inst) )
+            if (auto ci = dyn_cast<CallInst>(inst))
             {
-                if( ci->getCalledFunction() == nullptr )
+                if (ci->getCalledFunction() == nullptr)
                 {
                     throw AtlasException("Null function call: indirect call");
                 }
                 findScopedStructures(ci->getCalledFunction(), scopedBlocks, scopedFuncs, embeddedKernels);
-            }
-            for( unsigned int i = 0; i < inst->getNumOperands(); i++ ) 
-            {
-                findScopedStructures(inst->getOperand(i), scopedBlocks, scopedFuncs, embeddedKernels);
             }
         }
         return;
@@ -243,11 +238,25 @@ namespace TraceAtlas::tik
                 }
             }
 
-            //SplitBlocks(blocks);
+            auto ent = GetEntrances(blocks);
+            int entranceId = 0;
+            for (auto e : ent)
+            {
+                IDToBlock[GetBlockID(e)] = e;
+                Entrances.insert(make_shared<KernelInterface>(entranceId++, GetBlockID(e)));
+            }
             map<Value *, GlobalObject *> GlobalMap;
             vector<int64_t> KernelImports;
             vector<int64_t> KernelExports;
-            GetBoundaryValues(blocks, KernelImports, KernelExports, VMap);
+            set<BasicBlock *> scopedBlocks = blocks;
+            set<Function *> scopedFuncs;
+            set<Function *> embeddedKernels;
+            for (auto block : blocks)
+            {
+                findScopedStructures(block, scopedBlocks, scopedFuncs, embeddedKernels);
+            }
+
+            GetBoundaryValues(scopedBlocks, scopedFuncs, embeddedKernels, KernelImports, KernelExports, VMap);
             //we now have all the information we need
             //start by making the correct function
             vector<Type *> inputArgs;
@@ -285,7 +294,7 @@ namespace TraceAtlas::tik
             }
             FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
             KernelFunction = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
-            for( auto arg = KernelFunction->arg_begin(); arg != KernelFunction->arg_end(); arg++ )
+            for (auto arg = KernelFunction->arg_begin(); arg != KernelFunction->arg_end(); arg++)
             {
                 uint64_t newId = (uint64_t)(prev(IDToValue.end())->first + 1);
                 SetValueIDs(arg, newId);
@@ -297,6 +306,19 @@ namespace TraceAtlas::tik
                 auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i);
                 a->setName("i" + to_string(i));
                 //PrintVal(IDToValue[KernelImports[i]]);
+                // remap embedded arg, if any
+                for (auto func : embeddedKernels)
+                {
+                    auto embKern = KfMap[func];
+                    for (auto it = embKern->KernelFunction->arg_begin(); it != embKern->KernelFunction->arg_end(); it++)
+                    {
+                        auto embArg = cast<Argument>(it);
+                        if (KernelImports[i] == embKern->ArgumentMap[embArg])
+                        {
+                            VMap[embArg] = a;
+                        }
+                    }
+                }
                 VMap[IDToValue[KernelImports[i]]] = a;
                 //PrintVal(VMap[IDToValue[KernelImports[i]]]);
                 ArgumentMap[a] = KernelImports[i];
@@ -318,6 +340,7 @@ namespace TraceAtlas::tik
 
             //copy the appropriate blocks
             BuildKernelFromBlocks(VMap, blocks);
+            BuildInit(VMap);
 
             Remap(VMap); //we need to remap before inlining
             //PrintVal(KernelFunction);
@@ -347,11 +370,10 @@ namespace TraceAtlas::tik
                 }
             }
 
-            BuildInit(VMap);
-
+            Remap(VMap);
             BuildExit();
 
-            RemapNestedKernels(VMap);
+            //RemapNestedKernels(VMap);
 
             PatchPhis(VMap);
 
@@ -373,68 +395,26 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &blocks, vector<int64_t> &KernelImports, vector<int64_t> &KernelExports, ValueToValueMapTy &VMap)
+    void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &scopedBlocks, set<Function *> &scopedFuncs, set<Function *> &embeddedKernels, vector<int64_t> &KernelImports, vector<int64_t> &KernelExports, ValueToValueMapTy &VMap)
     {
-        // first, add all blocks of function calls. they will later be inlined and therefore do not need to be included
-        // we also need the functions so that any args from embedded function calls are skipped as well
-        set<BasicBlock *> scopedBlocks = blocks;
-        set<Function *> scopedFuncs;
-        set<Function *> embeddedKernels;
         set<int64_t> kernelIE;
-        for (auto block : blocks)
-        {
-            auto val = cast<Value>(block);
-            findScopedStructures(val, scopedBlocks, scopedFuncs, embeddedKernels);
-        }
-        auto ent = GetEntrances(blocks);
-        int entranceId = 0;
-        for (auto e : ent)
-        {
-            IDToBlock[GetBlockID(e)] = e;
-            Entrances.insert(make_shared<KernelInterface>(entranceId++, GetBlockID(e)));
-        }
-        for (const auto& block : scopedBlocks)
+        for (const auto &block : scopedBlocks)
         {
             for (auto BI = block->begin(), BE = block->end(); BI != BE; ++BI)
             {
                 auto *inst = cast<Instruction>(BI);
-                if (scopedBlocks.find(inst->getParent()) == scopedBlocks.end())
+                // check its uses
+                for (auto &use : inst->uses())
                 {
-                    // its from a block not in our kernel, so we have to import it
-                    auto sExtVal = GetValueID(inst);
-                    if (kernelIE.find(sExtVal) == kernelIE.end())
+                    if (auto useInst = dyn_cast<Instruction>(use.getUser()))
                     {
-                        KernelImports.push_back(sExtVal);
-                        kernelIE.insert(sExtVal);
-                    }
-                }
-                else
-                {
-                    // check its uses
-                    for (auto &use : inst->uses())
-                    {
-                        if (auto useInst = dyn_cast<Instruction>(use.getUser()))
+                        if (scopedBlocks.find(useInst->getParent()) == scopedBlocks.end())
                         {
-                            if (scopedBlocks.find(useInst->getParent()) == scopedBlocks.end())
+                            auto sExtVal = GetValueID(inst);
+                            if (kernelIE.find(sExtVal) == kernelIE.end())
                             {
-                                auto sExtVal = GetValueID(inst);
-                                if (kernelIE.find(sExtVal) == kernelIE.end())
-                                {
-                                    KernelExports.push_back(sExtVal);
-                                    kernelIE.insert(sExtVal);
-                                }
-                            }
-                        }
-                        else if (auto useArg = dyn_cast<Argument>(use.getUser()))
-                        {
-                            if (scopedFuncs.find(useArg->getParent()) == scopedFuncs.end())
-                            {
-                                auto sExtVal = GetValueID(inst);
-                                if (kernelIE.find(sExtVal) == kernelIE.end())
-                                {
-                                    KernelExports.push_back(sExtVal);
-                                    kernelIE.insert(sExtVal);
-                                }
+                                KernelExports.push_back(sExtVal);
+                                kernelIE.insert(sExtVal);
                             }
                         }
                     }
@@ -446,7 +426,7 @@ namespace TraceAtlas::tik
                         auto subKernel = *(embeddedKernels.find(ci->getCalledFunction()));
                         for (auto arg = subKernel->arg_begin(); arg < subKernel->arg_end(); arg++)
                         {
-                            auto sExtVal = GetValueID(arg);
+                            auto sExtVal = KfMap[subKernel]->ArgumentMap[arg];
                             //these are the arguments for the function call in order
                             //we now can check if they are in our vmap, if so they aren't external
                             //if not they are and should be mapped as is appropriate
@@ -495,6 +475,7 @@ namespace TraceAtlas::tik
                     }
                     if (auto arg = dyn_cast<Argument>(op))
                     {
+                        //PrintVal(arg->getParent());
                         if (scopedFuncs.find(arg->getParent()) == scopedFuncs.end())
                         {
                             if (embeddedKernels.find(arg->getParent()) == embeddedKernels.end())
@@ -513,7 +494,7 @@ namespace TraceAtlas::tik
                     {
                         if (scopedBlocks.find(operand->getParent()) == scopedBlocks.end())
                         {
-                            if( scopedFuncs.find(operand->getParent()->getParent()) == scopedFuncs.end() )
+                            if (scopedFuncs.find(operand->getParent()->getParent()) == scopedFuncs.end())
                             {
                                 auto sExtVal = GetValueID(op);
                                 if (kernelIE.find(sExtVal) == kernelIE.end())
@@ -618,7 +599,14 @@ namespace TraceAtlas::tik
                             }
                             else
                             {
-                                inargs.push_back(cast<Value>(ai));
+                                if (VMap.find(ai) != VMap.end())
+                                {
+                                    inargs.push_back(VMap[ai]);
+                                }
+                                else
+                                {
+                                    inargs.push_back(IDToValue[nestedKernel->ArgumentMap[ai]]);
+                                }
                             }
                         }
                         BasicBlock *intermediateBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
@@ -791,36 +779,29 @@ namespace TraceAtlas::tik
                     auto subK = KfMap[calledFunc];
                     if (subK != nullptr)
                     {
-                        for (auto sarg = calledFunc->arg_begin(); sarg < calledFunc->arg_end(); sarg++)
+                        for (auto eCArg = calledFunc->arg_begin(); eCArg < calledFunc->arg_end(); eCArg++)
                         {
-                            for (auto &b : *(KernelFunction))
+                            auto argMapID = subK->ArgumentMap[eCArg];
+                            for (auto it = KernelFunction->arg_begin(); it != KernelFunction->arg_end(); it++)
                             {
-                                for (BasicBlock::iterator j = b.begin(), BE2 = b.end(); j != BE2; ++j)
+                                auto parArg = cast<Argument>(it);
+                                if (GetValueID(parArg) == argMapID)
                                 {
-                                    auto inst = cast<Instruction>(j);
-                                    auto subArg = IDToValue[subK->ArgumentMap[sarg]];
-                                    if (subArg != nullptr)
+                                    embeddedCallArgs[eCArg] = parArg;
+                                }
+                                else
+                                {
+                                    for (auto &b : *(KernelFunction))
                                     {
-                                        if (IDToValue[subK->ArgumentMap[sarg]] == inst)
+                                        for (BasicBlock::iterator j = b.begin(), BE2 = b.end(); j != BE2; ++j)
                                         {
-                                            embeddedCallArgs[sarg] = inst;
-                                        }
-                                        else if (VMap[IDToValue[subK->ArgumentMap[sarg]]] == inst)
-                                        {
-                                            embeddedCallArgs[sarg] = inst;
+                                            auto inst = cast<Instruction>(j);
+                                            if (argMapID == GetValueID(inst))
+                                            {
+                                                embeddedCallArgs[eCArg] = inst;
+                                            }
                                         }
                                     }
-                                }
-                            }
-                            for (auto arg = KernelFunction->arg_begin(); arg < KernelFunction->arg_end(); arg++)
-                            {
-                                if (subK->ArgumentMap[sarg] == ArgumentMap[arg])
-                                {
-                                    embeddedCallArgs[sarg] = arg;
-                                }
-                                else if (VMap[IDToValue[subK->ArgumentMap[sarg]]] == IDToValue[ArgumentMap[arg]])
-                                {
-                                    embeddedCallArgs[sarg] = arg;
                                 }
                             }
                         }
@@ -834,12 +815,12 @@ namespace TraceAtlas::tik
                                 {
                                     throw AtlasException("Failed to find nested argument");
                                 }
-                                auto asdf = embeddedCallArgs[arg];
-                                callInst->setArgOperand(k, asdf);
+                                auto newArg = embeddedCallArgs[arg];
+                                callInst->setArgOperand(k, newArg);
                             }
                             else
                             {
-                                throw AtlasException("Tik Error: Unexpected value passed to function");
+                                throw AtlasException("Unexpected value passed to function");
                             }
                         }
                     }
@@ -876,6 +857,33 @@ namespace TraceAtlas::tik
     void CartographerKernel::BuildInit(llvm::ValueToValueMapTy &VMap)
     {
         IRBuilder<> initBuilder(Init);
+        // if embedded kernels exist, alloca for all the exports that aren't present in the parent function args
+        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+        {
+            auto parentBlock = cast<BasicBlock>(fi);
+            for (auto bi = parentBlock->begin(); bi != parentBlock->end(); bi++)
+            {
+                auto parentInst = cast<Instruction>(bi);
+                if (auto kCall = dyn_cast<CallInst>(parentInst))
+                {
+                    if (KfMap.find(kCall->getCalledFunction()) != KfMap.end())
+                    {
+                        for (unsigned int i = 0; i < kCall->getNumArgOperands(); i++)
+                        {
+                            if (VMap.find(kCall->getArgOperand(i)) == VMap.end())
+                            {
+                                if (dyn_cast<Argument>(kCall->getArgOperand(i)) == nullptr && dyn_cast<Constant>(kCall->getArgOperand(i)) == nullptr)
+                                {
+                                    // must not be mapped to a parent kern func arg or a value within the parent
+                                    auto newAlloc = initBuilder.CreateAlloca(kCall->getArgOperand(i)->getType());
+                                    VMap[kCall->getArgOperand(i)] = newAlloc;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         auto initSwitch = initBuilder.CreateSwitch(KernelFunction->arg_begin(), Exception, (uint32_t)Entrances.size());
         uint64_t i = 0;
         for (const auto &ent : Entrances)
