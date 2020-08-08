@@ -270,7 +270,7 @@ namespace TraceAtlas::tik
                 }
                 else if (IDToBlock.find(inst) != IDToBlock.end())
                 {
-                    inputArgs.push_back(IDToBlock[inst]->getType());
+                    throw AtlasException("Tried pushing an import of type void into kernel function args!");
                 }
                 else
                 {
@@ -281,11 +281,11 @@ namespace TraceAtlas::tik
             {
                 if (IDToValue.find(inst) != IDToValue.end())
                 {
-                    inputArgs.push_back(IDToValue[inst]->getType());
+                    inputArgs.push_back(IDToValue[inst]->getType()->getPointerTo());
                 }
                 else if (IDToBlock.find(inst) != IDToBlock.end())
                 {
-                    inputArgs.push_back(IDToBlock[inst]->getType());
+                    throw AtlasException("Tried pushing an export of type void into kernel function args!");
                 }
                 else
                 {
