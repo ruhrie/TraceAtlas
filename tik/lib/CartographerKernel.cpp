@@ -305,22 +305,6 @@ namespace TraceAtlas::tik
             {
                 auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i);
                 a->setName("i" + to_string(i));
-                //PrintVal(IDToValue[KernelImports[i]]);
-                // remap embedded arg, if any
-                for (auto func : embeddedKernels)
-                {
-                    auto embKern = KfMap[func];
-                    for (auto it = embKern->KernelFunction->arg_begin(); it != embKern->KernelFunction->arg_end(); it++)
-                    {
-                        auto embArg = cast<Argument>(it);
-                        if (KernelImports[i] == embKern->ArgumentMap[embArg])
-                        {
-                            VMap[embArg] = a;
-                        }
-                    }
-                }
-                VMap[IDToValue[KernelImports[i]]] = a;
-                //PrintVal(VMap[IDToValue[KernelImports[i]]]);
                 ArgumentMap[a] = KernelImports[i];
             }
             uint64_t j;
@@ -328,10 +312,33 @@ namespace TraceAtlas::tik
             {
                 auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i + j);
                 a->setName("e" + to_string(j));
-                //PrintVal(IDToValue[KernelExports[j]]);
-                VMap[IDToValue[KernelExports[j]]] = a;
-                //PrintVal(VMap[IDToValue[KernelExports[j]]]);
                 ArgumentMap[a] = KernelExports[j];
+            }
+            // now we have to find embedded kernel args that map to the parent args
+            for (auto parentArg : ArgumentMap)
+            {
+                if (parentArg.first == KernelFunction->arg_begin())
+                {
+                    continue;
+                }
+                bool found = false;
+                for (const auto func : embeddedKernels)
+                {
+                    auto embKern = KfMap[func];
+                    for (auto eKernArg : embKern->ArgumentMap)
+                    {
+                        if (parentArg.second == eKernArg.second)
+                        {
+                            VMap[eKernArg.first] = parentArg.first;
+                            found = true;
+                        }
+                    }
+                }
+                if (!found)
+                {
+                    // it doesn't map to an embedded kernel, remap the original bitcode value
+                    VMap[IDToValue[parentArg.second]] = parentArg.first;
+                }
             }
             //create the artificial blocks
             Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
@@ -340,10 +347,11 @@ namespace TraceAtlas::tik
 
             //copy the appropriate blocks
             BuildKernelFromBlocks(VMap, blocks);
-            BuildInit(VMap);
+
+            BuildInit(VMap, KernelExports);
 
             Remap(VMap); //we need to remap before inlining
-            //PrintVal(KernelFunction);
+
             InlineFunctionsFromBlocks(blockSet);
 
             CopyGlobals(VMap);
@@ -371,9 +379,8 @@ namespace TraceAtlas::tik
             }
 
             Remap(VMap);
-            BuildExit();
 
-            //RemapNestedKernels(VMap);
+            BuildExit();
 
             PatchPhis(VMap);
 
@@ -590,7 +597,10 @@ namespace TraceAtlas::tik
                     //we need to make a unique block for each entrance (there is currently only one)
                     for (uint64_t i = 0; i < nestedKernel->Entrances.size(); i++)
                     {
+                        // values to go into arg operands of callinst
                         std::vector<llvm::Value *> inargs;
+                        // exports from child to be loaded into parent context. <Val, Ptr>
+                        set<pair<Value *, Value *>> exportVals;
                         for (auto ai = nestedKernel->KernelFunction->arg_begin(); ai < nestedKernel->KernelFunction->arg_end(); ai++)
                         {
                             if (ai == nestedKernel->KernelFunction->arg_begin())
@@ -608,13 +618,45 @@ namespace TraceAtlas::tik
                                     inargs.push_back(IDToValue[nestedKernel->ArgumentMap[ai]]);
                                 }
                             }
+                            // check if the arg is an export
+                            string argName = ai->getName();
+                            if (argName[0] == 'e')
+                            {
+                                // check if the arg is an export of our own
+                                PrintVal(ai);
+                                auto parentVal = IDToValue[nestedKernel->ArgumentMap[ai]];
+                                for (auto use : parentVal->users())
+                                {
+                                    if (auto inst = dyn_cast<Instruction>(use))
+                                    {
+                                        PrintVal(inst);
+                                        if (blocks.find(inst->getParent()) != blocks.end())
+                                        {
+                                            // needs to have a pair of values: the pointer used in the callinst and the value used in the parent
+                                            auto val = cast<Value>(use);
+                                            Value *ptr;
+                                            ptr = VMap[ai];
+                                            exportVals.insert(pair(val, ptr));
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
                         }
+
                         BasicBlock *intermediateBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
                         IRBuilder<> intBuilder(intermediateBlock);
                         auto cc = intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
                         MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(TikModule->getContext()), 1)));
                         SetBlockID(intermediateBlock, IDState::Artificial);
                         cc->setMetadata("KernelCall", tikNode);
+
+                        // make loads for exports
+                        for (auto val : exportVals)
+                        {
+                            //auto load = intBuilder.CreateLoad(val.second);
+                            //VMap[val.first] = load;
+                        }
                         auto sw = intBuilder.CreateSwitch(cc, Exception, (uint32_t)nestedKernel->Exits.size());
                         for (const auto &exit : nestedKernel->Exits)
                         {
@@ -854,7 +896,7 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::BuildInit(llvm::ValueToValueMapTy &VMap)
+    void CartographerKernel::BuildInit(llvm::ValueToValueMapTy &VMap, vector<int64_t> &KernelExports)
     {
         IRBuilder<> initBuilder(Init);
         // if embedded kernels exist, alloca for all the exports that aren't present in the parent function args
@@ -877,10 +919,52 @@ namespace TraceAtlas::tik
                                     // must not be mapped to a parent kern func arg or a value within the parent
                                     auto newAlloc = initBuilder.CreateAlloca(kCall->getArgOperand(i)->getType());
                                     VMap[kCall->getArgOperand(i)] = newAlloc;
+                                    // if there are any users of this value in the parent context, we need to load from this pointer after the child kernel exit
+                                    for (auto use : kCall->getArgOperand(i)->users())
+                                    {
+                                        if (auto inst = dyn_cast<Instruction>(use))
+                                        {
+                                            if (inst->getParent()->getParent() == KernelFunction)
+                                            {
+                                                // we have a use in the parent
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
+                }
+            }
+        }
+        // find in-context exports
+        // these are exports that are used in our context, and therefore we need to load its pointer in init
+        for (auto id : KernelExports)
+        {
+            bool found = false;
+            for (auto use : IDToValue[id]->users())
+            {
+                found = false;
+                if (auto parentInst = dyn_cast<Instruction>(use))
+                {
+                    if (parentInst->getParent()->getParent() == KernelFunction)
+                    {
+                        // found an export with a use, make a load for it
+                        for (auto ai = KernelFunction->arg_begin(); ai != KernelFunction->arg_end(); ai++)
+                        {
+                            if (ArgumentMap[ai] == id)
+                            {
+                                auto ld = initBuilder.CreateLoad(ai);
+                                VMap[IDToValue[id]] = ld;
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (found)
+                {
+                    break;
                 }
             }
         }
@@ -906,7 +990,6 @@ namespace TraceAtlas::tik
         PrintVal(Exit, false); //another sacrifice
         IRBuilder<> exitBuilder(Exit);
 
-        //start by getting the exits
         int exitId = 0;
         auto ex = GetExits(KernelFunction);
         map<BasicBlock *, BasicBlock *> exitMap;
@@ -945,6 +1028,17 @@ namespace TraceAtlas::tik
                 throw AtlasException("Block not found in Exit Map!");
             }
             phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), exitMap[IDToBlock[exit->Block]]);
+        }
+
+        // find all exports that need to be stored before exit
+        for (auto it = Init->begin(); it != Init->end(); it++)
+        {
+            auto inst = cast<Instruction>(it);
+            if (auto ld = dyn_cast<LoadInst>(inst))
+            {
+                // must map to an export
+                exitBuilder.CreateStore(ld, ld->getPointerOperand());
+            }
         }
 
         exitBuilder.CreateRet(phi);
