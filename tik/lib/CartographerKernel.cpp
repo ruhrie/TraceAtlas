@@ -321,7 +321,6 @@ namespace TraceAtlas::tik
                 {
                     continue;
                 }
-                bool found = false;
                 for (const auto func : embeddedKernels)
                 {
                     auto embKern = KfMap[func];
@@ -330,15 +329,10 @@ namespace TraceAtlas::tik
                         if (parentArg.second == eKernArg.second)
                         {
                             VMap[eKernArg.first] = parentArg.first;
-                            found = true;
                         }
                     }
                 }
-                if (!found)
-                {
-                    // it doesn't map to an embedded kernel, remap the original bitcode value
-                    VMap[IDToValue[parentArg.second]] = parentArg.first;
-                }
+                VMap[IDToValue[parentArg.second]] = parentArg.first;
             }
             //create the artificial blocks
             Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
@@ -508,43 +502,6 @@ namespace TraceAtlas::tik
                                 {
                                     KernelImports.push_back(sExtVal);
                                     kernelIE.insert(sExtVal);
-                                }
-                            }
-                        }
-                        // see if this value needs to be exported
-                        else
-                        {
-                            for (auto &use : operand->uses())
-                            {
-                                if (auto useInst = dyn_cast<Instruction>(use.getUser()))
-                                {
-                                    if (scopedBlocks.find(useInst->getParent()) == scopedBlocks.end())
-                                    {
-                                        if (embeddedKernels.find(useInst->getParent()->getParent()) == embeddedKernels.end())
-                                        {
-                                            auto sExtVal = GetValueID(operand);
-                                            if (kernelIE.find(sExtVal) == kernelIE.end())
-                                            {
-                                                KernelExports.push_back(sExtVal);
-                                                kernelIE.insert(sExtVal);
-                                            }
-                                        }
-                                    }
-                                }
-                                else if (auto useArg = dyn_cast<Argument>(use.getUser()))
-                                {
-                                    if (scopedFuncs.find(useArg->getParent()) == scopedFuncs.end())
-                                    {
-                                        if (embeddedKernels.find(useArg->getParent()) == embeddedKernels.end())
-                                        {
-                                            auto sExtVal = GetValueID(operand);
-                                            if (kernelIE.find(sExtVal) == kernelIE.end())
-                                            {
-                                                KernelExports.push_back(sExtVal);
-                                                kernelIE.insert(sExtVal);
-                                            }
-                                        }
-                                    }
                                 }
                             }
                         }
@@ -1144,6 +1101,9 @@ namespace TraceAtlas::tik
                         }
                         else
                         {
+                            PrintVal(&phi);
+                            PrintVal(user);
+                            PrintVal(KernelFunction);
                             throw AtlasException("Unexpected phi user");
                         }
                     }
