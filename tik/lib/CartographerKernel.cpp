@@ -476,7 +476,6 @@ namespace TraceAtlas::tik
                     }
                     if (auto arg = dyn_cast<Argument>(op))
                     {
-                        //PrintVal(arg->getParent());
                         if (scopedFuncs.find(arg->getParent()) == scopedFuncs.end())
                         {
                             if (embeddedKernels.find(arg->getParent()) == embeddedKernels.end())
@@ -580,13 +579,11 @@ namespace TraceAtlas::tik
                             if (argName[0] == 'e')
                             {
                                 // check if the arg is an export of our own
-                                PrintVal(ai);
                                 auto parentVal = IDToValue[nestedKernel->ArgumentMap[ai]];
                                 for (auto use : parentVal->users())
                                 {
                                     if (auto inst = dyn_cast<Instruction>(use))
                                     {
-                                        PrintVal(inst);
                                         if (blocks.find(inst->getParent()) != blocks.end())
                                         {
                                             // needs to have a pair of values: the pointer used in the callinst and the value used in the parent
@@ -682,6 +679,43 @@ namespace TraceAtlas::tik
                     spdlog::warn("Rescheduled more than one phi predecessor"); //basically this is a band aid. Needs some more help
                 }
             }
+        }
+        // now insert stores at every export site
+        set<pair<Instruction*, Argument*>>storeSite;
+        for( auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++ )
+        {
+            auto block = cast<BasicBlock>(fi);
+            for( auto bi = block->begin(); bi != block->end(); bi++ )
+            {
+                auto inst = cast<Instruction>(bi);
+                auto instID = GetValueID(inst);
+                for( auto key : ArgumentMap )
+                {
+                    string name = key.first->getName();
+                    if( name[0] == 'e' )
+                    {
+                        if( key.second == instID )
+                        {
+                            storeSite.insert(pair(inst, key.first));
+                        }
+                    }
+                }
+            }
+        }
+        for( auto inst : storeSite )
+        {
+            IRBuilder<> stBuilder(inst.first->getParent());
+            auto st = stBuilder.CreateStore(inst.first, inst.second);
+            if( auto phi = dyn_cast<PHINode>(inst.first) )
+            {
+                st->moveBefore( inst.first->getParent()->getFirstNonPHI() );
+            }
+            else
+            {
+                st->moveAfter(inst.first);
+            }
+            auto newId = (uint64_t)IDState::Artificial;
+            SetValueIDs(st, newId);
         }
     }
 
@@ -891,37 +925,6 @@ namespace TraceAtlas::tik
                             }
                         }
                     }
-                }
-            }
-        }
-        // find in-context exports
-        // these are exports that are used in our context, and therefore we need to load its pointer in init
-        for (auto id : KernelExports)
-        {
-            bool found = false;
-            for (auto use : IDToValue[id]->users())
-            {
-                found = false;
-                if (auto parentInst = dyn_cast<Instruction>(use))
-                {
-                    if (parentInst->getParent()->getParent() == KernelFunction)
-                    {
-                        // found an export with a use, make a load for it
-                        for (auto ai = KernelFunction->arg_begin(); ai != KernelFunction->arg_end(); ai++)
-                        {
-                            if (ArgumentMap[ai] == id)
-                            {
-                                auto ld = initBuilder.CreateLoad(ai);
-                                VMap[IDToValue[id]] = ld;
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-                if (found)
-                {
-                    break;
                 }
             }
         }
