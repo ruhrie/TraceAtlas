@@ -599,22 +599,52 @@ namespace TraceAtlas::tik
                         }
 
                         BasicBlock *intermediateBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
+                        blocks.insert(intermediateBlock);
                         IRBuilder<> intBuilder(intermediateBlock);
                         auto cc = intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
                         MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(TikModule->getContext()), 1)));
                         SetBlockID(intermediateBlock, IDState::Artificial);
                         cc->setMetadata("KernelCall", tikNode);
-
-                        // make loads for exports
-                        for (auto val : exportVals)
-                        {
-                            //auto load = intBuilder.CreateLoad(val.second);
-                            //VMap[val.first] = load;
-                        }
                         auto sw = intBuilder.CreateSwitch(cc, Exception, (uint32_t)nestedKernel->Exits.size());
                         for (const auto &exit : nestedKernel->Exits)
                         {
                             sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), IDToBlock[exit->Block]);
+                            // for each successor of each exit, have to check the preds and change/add an entry to the phi if necessary
+                            if (IDToBlock[exit->Block]->hasNPredecessorsOrMore(2))
+                            {
+                                BasicBlock *trueExit;
+                                if (VMap.find(IDToBlock[exit->Block]) != VMap.end())
+                                {
+                                    trueExit = cast<BasicBlock>(VMap[IDToBlock[exit->Block]]);
+                                }
+                                else
+                                {
+                                    trueExit = IDToBlock[exit->Block];
+                                }
+                                if (auto phi = dyn_cast<PHINode>(trueExit->begin()))
+                                {
+                                    bool found = false;
+                                    auto numVals = phi->getNumIncomingValues();
+                                    for (unsigned int i = 0; i < numVals; i++)
+                                    {
+                                        // the only way a phi is dependent on our exit is if it's using an export
+                                        for (auto key : nestedKernel->ArgumentMap)
+                                        {
+                                            if (key.second == GetValueID(phi->getIncomingValue(i)))
+                                            {
+                                                // don't set the value yet, it will be remapped to the dereferences alloca of the export
+                                                phi->addIncoming(phi->getIncomingValue(i), intermediateBlock);
+                                                VMap[phi->getIncomingValue(i)] = key.first;
+                                                found = true;
+                                            }
+                                        }
+                                    }
+                                    if (!found)
+                                    {
+                                        throw AtlasException("Could not remap phi entry to embedded kernel call");
+                                    }
+                                }
+                            }
                         }
                         VMap[block] = intermediateBlock;
                     }
@@ -681,7 +711,45 @@ namespace TraceAtlas::tik
             }
         }
         // now insert stores at every export site
-        set<pair<Instruction*, Argument*>>storeSite;
+        set<pair<Instruction *, Argument *>> storeSite;
+        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+        {
+            auto block = cast<BasicBlock>(fi);
+            for (auto bi = block->begin(); bi != block->end(); bi++)
+            {
+                auto inst = cast<Instruction>(bi);
+                auto instID = GetValueID(inst);
+                for (auto key : ArgumentMap)
+                {
+                    string name = key.first->getName();
+                    if (name[0] == 'e')
+                    {
+                        if (key.second == instID)
+                        {
+                            storeSite.insert(pair(inst, key.first));
+                        }
+                    }
+                }
+            }
+        }
+        for (auto inst : storeSite)
+        {
+            IRBuilder<> stBuilder(inst.first->getParent());
+            auto st = stBuilder.CreateStore(inst.first, inst.second);
+            if (auto phi = dyn_cast<PHINode>(inst.first))
+            {
+                st->moveBefore(inst.first->getParent()->getFirstNonPHI());
+            }
+            else
+            {
+                st->moveAfter(inst.first);
+            }
+            auto newId = (uint64_t)IDState::Artificial;
+            SetValueIDs(st, newId);
+        }
+        // insert loads for every export use within our context
+        /*set<pair<Instruction*, Argument*>> exportUse;
+        for( auto ai = KernelFunction->arg_begin(); ai != KernelFunction.end(); )
         for( auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++ )
         {
             auto block = cast<BasicBlock>(fi);
@@ -696,27 +764,12 @@ namespace TraceAtlas::tik
                     {
                         if( key.second == instID )
                         {
-                            storeSite.insert(pair(inst, key.first));
+                            exportUse.insert(pair(inst, key.first));
                         }
                     }
                 }
             }
-        }
-        for( auto inst : storeSite )
-        {
-            IRBuilder<> stBuilder(inst.first->getParent());
-            auto st = stBuilder.CreateStore(inst.first, inst.second);
-            if( auto phi = dyn_cast<PHINode>(inst.first) )
-            {
-                st->moveBefore( inst.first->getParent()->getFirstNonPHI() );
-            }
-            else
-            {
-                st->moveAfter(inst.first);
-            }
-            auto newId = (uint64_t)IDState::Artificial;
-            SetValueIDs(st, newId);
-        }
+        }*/
     }
 
     void CartographerKernel::InlineFunctionsFromBlocks(std::set<int64_t> &blocks)
@@ -947,7 +1000,7 @@ namespace TraceAtlas::tik
 
     void CartographerKernel::BuildExit()
     {
-        PrintVal(Exit, false); //another sacrifice
+        //PrintVal(Exit, false); //another sacrifice
         IRBuilder<> exitBuilder(Exit);
 
         int exitId = 0;
@@ -1016,30 +1069,6 @@ namespace TraceAtlas::tik
             vector<Instruction *> phisToRemove;
             for (auto &phi : b->phis())
             {
-
-                // make sure our phi is accounting for all preds
-                for (auto pred : predecessors(b))
-                {
-                    bool found = false;
-                    for (unsigned int i = 0; i < phi.getNumIncomingValues(); i++)
-                    {
-                        if (phi.getIncomingBlock(i) == pred)
-                        {
-                            if (found)
-                            {
-                                // we have two values in here... take this one out
-                                phi.removeIncomingValue(phi.getIncomingBlock(i), false);
-                            }
-                            found = true;
-                        }
-                    }
-                    if (!found)
-                    {
-                        // this phi needs an entry from one of our kernel exits
-                        // not clear yet which value should be exported. Probably a kernel export
-                        PrintVal(&phi);
-                    }
-                }
                 vector<BasicBlock *> valuesToRemove;
                 for (uint32_t i = 0; i < phi.getNumIncomingValues(); i++)
                 {
@@ -1104,9 +1133,6 @@ namespace TraceAtlas::tik
                         }
                         else
                         {
-                            PrintVal(&phi);
-                            PrintVal(user);
-                            PrintVal(KernelFunction);
                             throw AtlasException("Unexpected phi user");
                         }
                     }

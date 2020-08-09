@@ -288,7 +288,7 @@ int main(int argc, char *argv[])
     {
 #ifdef DEBUG
         auto err = rso.str();
-        spdlog::critical("Tik Module Corrupted: " + err);
+        spdlog::critical("Tik Module Corrupted:\n" + err);
         error = true;
 #else
         spdlog::critical("Tik Module Corrupted");
