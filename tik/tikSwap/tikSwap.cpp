@@ -136,8 +136,10 @@ int main(int argc, char *argv[])
             {
                 // list of values that directly map to the list of kernel function args
                 vector<Value *> mappedVals;
+                vector<Type *> argTypes;
                 // initialize the entrance index arg
                 mappedVals.push_back(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)e->Index));
+                argTypes.push_back(mappedVals[0]->getType());
                 for (auto it = next(kernel->ArgumentMap.begin()); it != kernel->ArgumentMap.end(); it++)
                 {
                     if (IDToValue.find(it->second) == IDToValue.end())
@@ -145,13 +147,15 @@ int main(int argc, char *argv[])
                         throw AtlasException("Could not map arg back to source bitcode.");
                     }
                     mappedVals.push_back(IDToValue[it->second]);
-                }
-                // list of types that will be used to create the function signature in the callinst
-                vector<Type *> argTypes;
-                argTypes.reserve(mappedVals.size());
-                for (auto arg : mappedVals)
-                {
-                    argTypes.push_back(arg->getType());
+                    if( it->first->getName()[0] == 'e' )
+                    {
+                        auto ptr = IDToValue[it->second]->getType()->getPointerTo();
+                        argTypes.push_back(cast<Type>(ptr));
+                    }
+                    else
+                    {
+                        argTypes.push_back(IDToValue[it->second]->getType());
+                    }                
                 }
                 // create function signature to swap for this entrance
                 auto FuTy = FunctionType::get(Type::getInt8Ty(sourceBitcode->getContext()), argTypes, false);
@@ -189,6 +193,44 @@ int main(int argc, char *argv[])
                     }
                     // remove the old BB terminator
                     toRemove.insert(block->getTerminator());
+                    // now alloc export pointers in the entrance context and insert loads wherever they're used
+                    for( auto key : kernel->ArgumentMap )
+                    {
+                        string name = key.first->getName();
+                        if( name[0] == 'e' )
+                        {
+                            auto alloc = iBuilder.CreateAlloca(IDToValue[key.second]->getType());
+                            auto insertion = cast<Instruction>(block->getFirstInsertionPt());
+                            alloc->moveBefore(insertion);
+                            KInst->replaceUsesOfWith(IDToValue[key.second], alloc);
+                            for( auto use : IDToValue[key.second]->users() )
+                            {
+                                if( auto phi = dyn_cast<PHINode>(use) )
+                                {
+                                    BasicBlock* predBlock;
+                                    for( unsigned int i = 0; i < phi->getNumIncomingValues(); i++ )
+                                    {
+                                        if( phi->getIncomingValue(i) == IDToValue[key.second] )
+                                        {
+                                            predBlock = phi->getIncomingBlock(i);
+                                        }
+                                    }
+                                    auto term = predBlock->getTerminator();
+                                    IRBuilder<> ldBuilder(predBlock);
+                                    auto ld = ldBuilder.CreateLoad(alloc);
+                                    ld->moveBefore(term);
+                                    phi->replaceUsesOfWith(IDToValue[key.second], ld);
+                                }
+                                else if( auto inst = dyn_cast<Instruction>(use) )
+                                {
+                                    IRBuilder<> ldBuilder(inst->getParent());
+                                    auto ld = ldBuilder.CreateLoad(alloc);
+                                    ld->moveBefore(inst);
+                                    inst->replaceUsesOfWith(IDToValue[key.second], ld);
+                                }
+                            } 
+                        }
+                    }
                 }
                 else
                 {
