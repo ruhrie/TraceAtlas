@@ -57,26 +57,12 @@ int main(int argc, char *argv[])
     // Annotate its bitcodes and values
     CleanModule(sourceBitcode.get());
     Annotate(sourceBitcode.get());
-    // create a map for its block and value IDs
-    map<int64_t, BasicBlock *> baseBlockMap;
+    // change all non-external function definitions to default linkage type
     for (auto &F : *sourceBitcode)
     {
-        for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
+        if (!F.hasExternalLinkage())
         {
-            auto block = cast<BasicBlock>(BB);
-            MDNode *md;
-            if (block->getFirstInsertionPt()->hasMetadataOtherThanDebugLoc())
-            {
-                md = block->getFirstInsertionPt()->getMetadata("BlockID");
-                if (md->getNumOperands() > 0)
-                {
-                    if (auto con = mdconst::dyn_extract<ConstantInt>(md->getOperand(0)))
-                    {
-                        int64_t blockID = con->getSExtValue();
-                        baseBlockMap[blockID] = block;
-                    }
-                }
-            }
+            F.setLinkage(GlobalValue::ExternalLinkage);
         }
     }
     /// Initialize our IDtoX maps
@@ -181,14 +167,14 @@ int main(int argc, char *argv[])
                             a.Index = j->Index;
                         }
                     }
-                    auto sw = iBuilder.CreateSwitch(cast<Value>(KInst), baseBlockMap[a.Block], (unsigned int)kernel->Exits.size());
+                    auto sw = iBuilder.CreateSwitch(cast<Value>(KInst), IDToBlock[a.Block], (unsigned int)kernel->Exits.size());
                     MDNode *swNode = MDNode::get(sw->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(sw->getContext()), (uint64_t)IDState::Artificial)));
                     sw->setMetadata("ValueID", swNode);
                     for (auto &j : kernel->Exits)
                     {
                         if (j->Index != 0)
                         {
-                            sw->addCase(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)j->Index), baseBlockMap[j->Block]);
+                            sw->addCase(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)j->Index), IDToBlock[j->Block]);
                         }
                     }
                     // remove the old BB terminator
