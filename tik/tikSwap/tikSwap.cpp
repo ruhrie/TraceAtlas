@@ -147,7 +147,7 @@ int main(int argc, char *argv[])
                         throw AtlasException("Could not map arg back to source bitcode.");
                     }
                     mappedVals.push_back(IDToValue[it->second]);
-                    if( it->first->getName()[0] == 'e' )
+                    if (it->first->getName()[0] == 'e')
                     {
                         auto ptr = IDToValue[it->second]->getType()->getPointerTo();
                         argTypes.push_back(cast<Type>(ptr));
@@ -155,7 +155,7 @@ int main(int argc, char *argv[])
                     else
                     {
                         argTypes.push_back(IDToValue[it->second]->getType());
-                    }                
+                    }
                 }
                 // create function signature to swap for this entrance
                 auto FuTy = FunctionType::get(Type::getInt8Ty(sourceBitcode->getContext()), argTypes, false);
@@ -194,23 +194,39 @@ int main(int argc, char *argv[])
                     // remove the old BB terminator
                     toRemove.insert(block->getTerminator());
                     // now alloc export pointers in the entrance context and insert loads wherever they're used
-                    for( auto key : kernel->ArgumentMap )
+                    for (auto key : kernel->ArgumentMap)
                     {
                         string name = key.first->getName();
-                        if( name[0] == 'e' )
+                        if (name[0] == 'e')
                         {
                             auto alloc = iBuilder.CreateAlloca(IDToValue[key.second]->getType());
                             auto insertion = cast<Instruction>(block->getFirstInsertionPt());
                             alloc->moveBefore(insertion);
-                            KInst->replaceUsesOfWith(IDToValue[key.second], alloc);
-                            for( auto use : IDToValue[key.second]->users() )
+                            set<pair<Value *, Instruction *>> toReplace;
+                            for (auto use : IDToValue[key.second]->users())
                             {
-                                if( auto phi = dyn_cast<PHINode>(use) )
+                                if (auto inst = dyn_cast<Instruction>(use))
                                 {
-                                    BasicBlock* predBlock;
-                                    for( unsigned int i = 0; i < phi->getNumIncomingValues(); i++ )
+                                    if (auto calli = dyn_cast<CallInst>(inst))
                                     {
-                                        if( phi->getIncomingValue(i) == IDToValue[key.second] )
+                                        if (calli->getCalledFunction() == kernel->KernelFunction)
+                                        {
+                                            continue;
+                                        }
+                                    }
+                                    toReplace.insert(pair(IDToValue[key.second], inst));
+                                }
+                            }
+                            KInst->replaceUsesOfWith(IDToValue[key.second], alloc);
+                            for (auto pa : toReplace)
+                            {
+                                if (auto phi = dyn_cast<PHINode>(pa.second))
+                                {
+                                    PrintVal(phi);
+                                    BasicBlock *predBlock;
+                                    for (unsigned int i = 0; i < phi->getNumIncomingValues(); i++)
+                                    {
+                                        if (phi->getIncomingValue(i) == pa.first)
                                         {
                                             predBlock = phi->getIncomingBlock(i);
                                         }
@@ -219,16 +235,17 @@ int main(int argc, char *argv[])
                                     IRBuilder<> ldBuilder(predBlock);
                                     auto ld = ldBuilder.CreateLoad(alloc);
                                     ld->moveBefore(term);
-                                    phi->replaceUsesOfWith(IDToValue[key.second], ld);
+                                    phi->replaceUsesOfWith(pa.first, ld);
                                 }
-                                else if( auto inst = dyn_cast<Instruction>(use) )
+                                else if (auto inst = dyn_cast<Instruction>(pa.second))
                                 {
+                                    PrintVal(inst);
                                     IRBuilder<> ldBuilder(inst->getParent());
                                     auto ld = ldBuilder.CreateLoad(alloc);
                                     ld->moveBefore(inst);
-                                    inst->replaceUsesOfWith(IDToValue[key.second], ld);
+                                    inst->replaceUsesOfWith(pa.first, ld);
                                 }
-                            } 
+                            }
                         }
                     }
                 }
