@@ -22,10 +22,26 @@ namespace TraceAtlas::tik
         std::string GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures);
         std::string Name;
         std::set<llvm::BasicBlock *> Conditional;
+        struct KICompare
+        {
+            using is_transparent = void;
+            bool operator()(const std::shared_ptr<KernelInterface> &lhs, const std::shared_ptr<KernelInterface> &rhs) const
+            {
+                return lhs->Block < rhs->Block;
+            }
+            bool operator()(const std::shared_ptr<KernelInterface> &lhs, int64_t rhs) const
+            {
+                return lhs->Block < rhs;
+            }
+            bool operator()(int64_t lhs, const std::shared_ptr<KernelInterface> &rhs) const
+            {
+                return lhs < rhs->Block;
+            }
+        };
 
-        std::set<std::shared_ptr<KernelInterface>> Entrances;
+        std::set<std::shared_ptr<KernelInterface>, KICompare> Entrances;
 
-        std::set<std::shared_ptr<KernelInterface>> Exits;
+        std::set<std::shared_ptr<KernelInterface>, KICompare> Exits;
 
         llvm::BasicBlock *Init = nullptr;
         llvm::BasicBlock *Exit = nullptr;

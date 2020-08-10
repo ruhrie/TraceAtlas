@@ -222,7 +222,6 @@ int main(int argc, char *argv[])
                             {
                                 if (auto phi = dyn_cast<PHINode>(pa.second))
                                 {
-                                    PrintVal(phi);
                                     BasicBlock *predBlock;
                                     for (unsigned int i = 0; i < phi->getNumIncomingValues(); i++)
                                     {
@@ -239,7 +238,6 @@ int main(int argc, char *argv[])
                                 }
                                 else if (auto inst = dyn_cast<Instruction>(pa.second))
                                 {
-                                    PrintVal(inst);
                                     IRBuilder<> ldBuilder(inst->getParent());
                                     auto ld = ldBuilder.CreateLoad(alloc);
                                     ld->moveBefore(inst);

@@ -516,8 +516,8 @@ namespace TraceAtlas::tik
                     }
                 }
                 // now we have to check the block successors
-                // if this block can exit the kernel, that means we are replacing a block in the source bitcode
-                // that replaced block will have no predecessors when tikswap is run, but there may still be users of its values. So they need to be exported
+                // if this block can exit the kernel, that means we are replacing a block in the source bitcode that may be left with no predecessors
+                // but there may still be users of its values. So they need to be exported
                 for (auto succ : successors(block))
                 {
                     if (scopedBlocks.find(succ) == scopedBlocks.end())
@@ -591,11 +591,45 @@ namespace TraceAtlas::tik
                     }
                     else if (auto *operand = dyn_cast<Instruction>(op))
                     {
-                        if (scopedBlocks.find(operand->getParent()) == scopedBlocks.end())
+                        // if this operand is being used in a phi, this may be an incoming values that is from a block that is not an entrance
+                        // these values should be ignored
+                        if (auto phi = dyn_cast<PHINode>(inst))
+                        {
+                            for (unsigned int j = 0; j < phi->getNumIncomingValues(); j++)
+                            {
+                                if (phi->getIncomingValue(j) == operand)
+                                {
+                                    // check associated block to be either within the kernel or an entrance
+                                    /*if( scopedBlocks.find(phi->getIncomingBlock(j)) != scopedBlocks.end() )
+                                    {
+                                        auto sExtVal = GetValueID(operand);
+                                        if (kernelIE.find(sExtVal) == kernelIE.end())
+                                        {
+                                            PrintVal(operand);
+                                            KernelImports.push_back(sExtVal);
+                                            kernelIE.insert(sExtVal);
+                                        }
+                                    }*/
+                                    //else
+                                    //{
+                                    if (Entrances.find(GetBlockID(phi->getIncomingBlock(j))) != Entrances.end())
+                                    {
+                                        auto sExtVal = GetValueID(operand);
+                                        if (kernelIE.find(sExtVal) == kernelIE.end())
+                                        {
+                                            KernelImports.push_back(sExtVal);
+                                            kernelIE.insert(sExtVal);
+                                        }
+                                    }
+                                    //}
+                                }
+                            }
+                        }
+                        else if (scopedBlocks.find(operand->getParent()) == scopedBlocks.end())
                         {
                             if (scopedFuncs.find(operand->getParent()->getParent()) == scopedFuncs.end())
                             {
-                                auto sExtVal = GetValueID(op);
+                                auto sExtVal = GetValueID(operand);
                                 if (kernelIE.find(sExtVal) == kernelIE.end())
                                 {
                                     KernelImports.push_back(sExtVal);
