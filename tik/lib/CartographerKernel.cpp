@@ -352,6 +352,79 @@ namespace TraceAtlas::tik
 
             //remap and repipe
             Remap(VMap);
+            PatchPhis(VMap);
+
+            // collect all values that need to be loaded from (kernel function exports and allocas form embedded kernel exports)
+            set<Value *> valuesToReplace;
+            for (auto it = Init->begin(); it != Init->end(); it++)
+            {
+                if (auto alloc = dyn_cast<AllocaInst>(it))
+                {
+                    if (GetValueID(alloc) == IDState::Artificial)
+                    {
+                        valuesToReplace.insert(alloc);
+                    }
+                }
+            }
+            for (auto key : ArgumentMap)
+            {
+                string name = key.first->getName();
+                if (name[0] == 'e')
+                {
+                    valuesToReplace.insert(key.first);
+                }
+            }
+            // now replace all users of our exports and allocas with loads from the alloca or export pointer
+            for (const auto ptr : valuesToReplace)
+            {
+                for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+                {
+                    auto block = cast<BasicBlock>(fi);
+                    for (auto bi = block->begin(); bi != block->end(); bi++)
+                    {
+                        auto inst = cast<Instruction>(bi);
+                        // don't replace embedded call args
+                        if (auto calli = dyn_cast<CallInst>(inst))
+                        {
+                            if (KfMap.find(calli->getCalledFunction()) != KfMap.end())
+                            {
+                                continue;
+                            }
+                        }
+                        // also, skip stores to the exports
+                        else if (auto st = dyn_cast<StoreInst>(inst))
+                        {
+                            continue;
+                        }
+                        else if (auto phi = dyn_cast<PHINode>(inst))
+                        {
+                            for (unsigned int i = 0; i < phi->getNumIncomingValues(); i++)
+                            {
+                                if (phi->getIncomingValue(i) == ptr)
+                                {
+                                    auto predBlock = phi->getIncomingBlock(i);
+                                    auto term = predBlock->getTerminator();
+                                    IRBuilder<> ldBuilder(predBlock);
+                                    auto ld = ldBuilder.CreateLoad(ptr);
+                                    ld->moveBefore(term);
+                                    phi->replaceUsesOfWith(ptr, ld);
+                                }
+                            }
+                            continue;
+                        }
+                        for (unsigned int i = 0; i < inst->getNumOperands(); i++)
+                        {
+                            if (inst->getOperand(i) == cast<Value>(ptr))
+                            {
+                                IRBuilder<> ldBuilder(inst->getParent());
+                                auto ld = ldBuilder.CreateLoad(ptr);
+                                ld->moveBefore(inst);
+                                inst->replaceUsesOfWith(ptr, ld);
+                            }
+                        }
+                    }
+                }
+            }
 
             // replace external function calls with tik declarations
             for (auto &bi : *(KernelFunction))
@@ -376,7 +449,7 @@ namespace TraceAtlas::tik
 
             BuildExit();
 
-            PatchPhis(VMap);
+            //PatchPhis(VMap);
 
             FixInvokes();
 
@@ -747,29 +820,6 @@ namespace TraceAtlas::tik
             auto newId = (uint64_t)IDState::Artificial;
             SetValueIDs(st, newId);
         }
-        // insert loads for every export use within our context
-        /*set<pair<Instruction*, Argument*>> exportUse;
-        for( auto ai = KernelFunction->arg_begin(); ai != KernelFunction.end(); )
-        for( auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++ )
-        {
-            auto block = cast<BasicBlock>(fi);
-            for( auto bi = block->begin(); bi != block->end(); bi++ )
-            {
-                auto inst = cast<Instruction>(bi);
-                auto instID = GetValueID(inst);
-                for( auto key : ArgumentMap )
-                {
-                    string name = key.first->getName();
-                    if( name[0] == 'e' )
-                    {
-                        if( key.second == instID )
-                        {
-                            exportUse.insert(pair(inst, key.first));
-                        }
-                    }
-                }
-            }
-        }*/
     }
 
     void CartographerKernel::InlineFunctionsFromBlocks(std::set<int64_t> &blocks)
@@ -962,18 +1012,9 @@ namespace TraceAtlas::tik
                                 {
                                     // must not be mapped to a parent kern func arg or a value within the parent
                                     auto newAlloc = initBuilder.CreateAlloca(kCall->getArgOperand(i)->getType());
+                                    uint64_t newId = (uint64_t)IDState::Artificial;
+                                    SetValueIDs(newAlloc, newId);
                                     VMap[kCall->getArgOperand(i)] = newAlloc;
-                                    // if there are any users of this value in the parent context, we need to load from this pointer after the child kernel exit
-                                    for (auto use : kCall->getArgOperand(i)->users())
-                                    {
-                                        if (auto inst = dyn_cast<Instruction>(use))
-                                        {
-                                            if (inst->getParent()->getParent() == KernelFunction)
-                                            {
-                                                // we have a use in the parent
-                                            }
-                                        }
-                                    }
                                 }
                             }
                         }
