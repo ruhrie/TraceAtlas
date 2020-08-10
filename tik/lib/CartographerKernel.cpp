@@ -472,7 +472,7 @@ namespace TraceAtlas::tik
     void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &scopedBlocks, set<Function *> &scopedFuncs, set<Function *> &embeddedKernels, vector<int64_t> &KernelImports, vector<int64_t> &KernelExports, ValueToValueMapTy &VMap)
     {
         set<int64_t> kernelIE;
-        for (const auto &block : scopedBlocks)
+        for (const auto block : scopedBlocks)
         {
             for (auto BI = block->begin(), BE = block->end(); BI != BE; ++BI)
             {
@@ -512,6 +512,32 @@ namespace TraceAtlas::tik
                                 kernelIE.insert(sExtVal);
                             }
                             //}
+                        }
+                    }
+                }
+                // now we have to check the block successors
+                // if this block can exit the kernel, that means we are replacing a block in the source bitcode
+                // that replaced block will have no predecessors when tikswap is run, but there may still be users of its values. So they need to be exported
+                for (auto succ : successors(block))
+                {
+                    if (scopedBlocks.find(succ) == scopedBlocks.end())
+                    {
+                        // this block can exit
+                        // if the value uses extend beyond this block, export it
+                        for (auto use : inst->users())
+                        {
+                            if (auto outInst = dyn_cast<Instruction>(use))
+                            {
+                                if (outInst->getParent() != inst->getParent())
+                                {
+                                    auto sExtVal = GetValueID(inst);
+                                    if (kernelIE.find(sExtVal) == kernelIE.end())
+                                    {
+                                        KernelExports.push_back(sExtVal);
+                                        kernelIE.insert(sExtVal);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -848,6 +874,7 @@ namespace TraceAtlas::tik
                         auto info = InlineFunctionInfo();
                         auto r = InlineFunction(ci, info);
                         SetBlockID(baseBlock, id);
+                        blocks.insert(id);
                         if (r)
                         {
                             change = true;

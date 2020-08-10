@@ -209,7 +209,7 @@ int main(int argc, char *argv[])
                                 {
                                     if (auto calli = dyn_cast<CallInst>(inst))
                                     {
-                                        if (calli->getCalledFunction() == kernel->KernelFunction)
+                                        if (calli->getCalledFunction() == baseFuncInst)
                                         {
                                             continue;
                                         }
