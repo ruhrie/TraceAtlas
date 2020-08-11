@@ -242,7 +242,7 @@ namespace TraceAtlas::tik
             int entranceId = 0;
             for (auto e : ent)
             {
-                IDToBlock[GetBlockID(e)] = e;
+                PrintVal(e);
                 Entrances.insert(make_shared<KernelInterface>(entranceId++, GetBlockID(e)));
             }
             map<Value *, GlobalObject *> GlobalMap;
@@ -478,9 +478,9 @@ namespace TraceAtlas::tik
             {
                 auto *inst = cast<Instruction>(BI);
                 // check its uses
-                for (auto &use : inst->uses())
+                for (auto use : inst->users())
                 {
-                    if (auto useInst = dyn_cast<Instruction>(use.getUser()))
+                    if (auto useInst = dyn_cast<Instruction>(use))
                     {
                         if (scopedBlocks.find(useInst->getParent()) == scopedBlocks.end())
                         {
@@ -501,17 +501,11 @@ namespace TraceAtlas::tik
                         for (auto arg = subKernel->arg_begin(); arg < subKernel->arg_end(); arg++)
                         {
                             auto sExtVal = KfMap[subKernel]->ArgumentMap[arg];
-                            //these are the arguments for the function call in order
-                            //we now can check if they are in our vmap, if so they aren't external
-                            //if not they are and should be mapped as is appropriate
-                            //if (VMap.find(arg) == VMap.end())
-                            //{
                             if (kernelIE.find(sExtVal) == kernelIE.end())
                             {
                                 KernelImports.push_back(sExtVal);
                                 kernelIE.insert(sExtVal);
                             }
-                            //}
                         }
                     }
                 }
@@ -528,7 +522,7 @@ namespace TraceAtlas::tik
                         {
                             if (auto outInst = dyn_cast<Instruction>(use))
                             {
-                                if (outInst->getParent() != inst->getParent())
+                                if (outInst->getParent() != inst->getParent()) // && scopedBlocks.find(inst->getParent()) == scopedBlocks.end() )
                                 {
                                     auto sExtVal = GetValueID(inst);
                                     if (kernelIE.find(sExtVal) == kernelIE.end())
@@ -600,18 +594,6 @@ namespace TraceAtlas::tik
                                 if (phi->getIncomingValue(j) == operand)
                                 {
                                     // check associated block to be either within the kernel or an entrance
-                                    /*if( scopedBlocks.find(phi->getIncomingBlock(j)) != scopedBlocks.end() )
-                                    {
-                                        auto sExtVal = GetValueID(operand);
-                                        if (kernelIE.find(sExtVal) == kernelIE.end())
-                                        {
-                                            PrintVal(operand);
-                                            KernelImports.push_back(sExtVal);
-                                            kernelIE.insert(sExtVal);
-                                        }
-                                    }*/
-                                    //else
-                                    //{
                                     if (Entrances.find(GetBlockID(phi->getIncomingBlock(j))) != Entrances.end())
                                     {
                                         auto sExtVal = GetValueID(operand);
@@ -621,7 +603,21 @@ namespace TraceAtlas::tik
                                             kernelIE.insert(sExtVal);
                                         }
                                     }
-                                    //}
+                                    else
+                                    {
+                                        for (auto succ : successors(phi->getIncomingBlock(j)))
+                                        {
+                                            if (Entrances.find(GetBlockID(succ)) != Entrances.end() && scopedBlocks.find(phi->getIncomingBlock(j)) == scopedBlocks.end())
+                                            {
+                                                auto sExtVal = GetValueID(operand);
+                                                if (kernelIE.find(sExtVal) == kernelIE.end())
+                                                {
+                                                    KernelImports.push_back(sExtVal);
+                                                    kernelIE.insert(sExtVal);
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
