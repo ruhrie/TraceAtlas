@@ -382,12 +382,30 @@ namespace TraceAtlas::tik
                     for (auto bi = block->begin(); bi != block->end(); bi++)
                     {
                         auto inst = cast<Instruction>(bi);
-                        // don't replace embedded call args
+                        // only imports of embedded kernels should be replaced
                         if (auto calli = dyn_cast<CallInst>(inst))
                         {
                             if (KfMap.find(calli->getCalledFunction()) != KfMap.end())
                             {
-                                continue;
+                                bool replace = false;
+                                auto kernObj = KfMap[calli->getCalledFunction()];
+                                for (auto key : kernObj->ArgumentMap)
+                                {
+                                    if (auto parArg = dyn_cast<Argument>(ptr))
+                                    {
+                                        if (ArgumentMap[parArg] == key.second)
+                                        {
+                                            if (key.first->getName()[0] == 'i')
+                                            {
+                                                replace = true;
+                                            }
+                                        }
+                                    }
+                                }
+                                if (!replace)
+                                {
+                                    continue;
+                                }
                             }
                         }
                         // also, skip stores to the exports
@@ -473,6 +491,33 @@ namespace TraceAtlas::tik
         set<int64_t> kernelIE;
         for (const auto block : scopedBlocks)
         {
+            // check for an embedded kernel here
+            for (auto embeddedKern : embeddedKernels)
+            {
+                auto subKernel = KfMap[embeddedKern];
+                if (subKernel->Entrances.find(GetBlockID(block)) != subKernel->Entrances.end())
+                {
+                    for (auto key : subKernel->ArgumentMap)
+                    {
+                        // just look at imports
+                        if (key.first->getName()[0] == 'i')
+                        {
+                            auto importVal = IDToValue[key.second];
+                            if (auto importInst = dyn_cast<Instruction>(importVal))
+                            {
+                                if (scopedBlocks.find(importInst->getParent()) == scopedBlocks.end())
+                                {
+                                    if (kernelIE.find(key.second) == kernelIE.end())
+                                    {
+                                        KernelImports.push_back(key.second);
+                                        kernelIE.insert(key.second);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             for (auto BI = block->begin(), BE = block->end(); BI != BE; ++BI)
             {
                 auto *inst = cast<Instruction>(BI);
@@ -483,27 +528,15 @@ namespace TraceAtlas::tik
                     {
                         if (scopedBlocks.find(useInst->getParent()) == scopedBlocks.end())
                         {
-                            auto sExtVal = GetValueID(inst);
-                            if (kernelIE.find(sExtVal) == kernelIE.end())
+                            // may belong to a subkernel, which is not an export
+                            if (embeddedKernels.find(useInst->getParent()->getParent()) == embeddedKernels.end())
                             {
-                                KernelExports.push_back(sExtVal);
-                                kernelIE.insert(sExtVal);
-                            }
-                        }
-                    }
-                }
-                if (auto *ci = dyn_cast<CallInst>(inst))
-                {
-                    if (embeddedKernels.find(ci->getCalledFunction()) != embeddedKernels.end())
-                    {
-                        auto subKernel = *(embeddedKernels.find(ci->getCalledFunction()));
-                        for (auto arg = subKernel->arg_begin(); arg < subKernel->arg_end(); arg++)
-                        {
-                            auto sExtVal = KfMap[subKernel]->ArgumentMap[arg];
-                            if (kernelIE.find(sExtVal) == kernelIE.end())
-                            {
-                                KernelImports.push_back(sExtVal);
-                                kernelIE.insert(sExtVal);
+                                auto sExtVal = GetValueID(inst);
+                                if (kernelIE.find(sExtVal) == kernelIE.end())
+                                {
+                                    KernelExports.push_back(sExtVal);
+                                    kernelIE.insert(sExtVal);
+                                }
                             }
                         }
                     }
@@ -592,28 +625,15 @@ namespace TraceAtlas::tik
                             {
                                 if (phi->getIncomingValue(j) == operand)
                                 {
-                                    // check associated block to be either within the kernel or an entrance
-                                    if (Entrances.find(GetBlockID(phi->getIncomingBlock(j))) != Entrances.end())
+                                    for (auto succ : successors(phi->getIncomingBlock(j)))
                                     {
-                                        auto sExtVal = GetValueID(operand);
-                                        if (kernelIE.find(sExtVal) == kernelIE.end())
+                                        if (succ != phi->getIncomingBlock(j) && Entrances.find(GetBlockID(succ)) != Entrances.end() && scopedBlocks.find(phi->getIncomingBlock(j)) == scopedBlocks.end())
                                         {
-                                            KernelImports.push_back(sExtVal);
-                                            kernelIE.insert(sExtVal);
-                                        }
-                                    }
-                                    else
-                                    {
-                                        for (auto succ : successors(phi->getIncomingBlock(j)))
-                                        {
-                                            if (Entrances.find(GetBlockID(succ)) != Entrances.end() && scopedBlocks.find(phi->getIncomingBlock(j)) == scopedBlocks.end())
+                                            auto sExtVal = GetValueID(operand);
+                                            if (kernelIE.find(sExtVal) == kernelIE.end())
                                             {
-                                                auto sExtVal = GetValueID(operand);
-                                                if (kernelIE.find(sExtVal) == kernelIE.end())
-                                                {
-                                                    KernelImports.push_back(sExtVal);
-                                                    kernelIE.insert(sExtVal);
-                                                }
+                                                KernelImports.push_back(sExtVal);
+                                                kernelIE.insert(sExtVal);
                                             }
                                         }
                                     }
@@ -1067,10 +1087,21 @@ namespace TraceAtlas::tik
                                 if (dyn_cast<Argument>(kCall->getArgOperand(i)) == nullptr && dyn_cast<Constant>(kCall->getArgOperand(i)) == nullptr)
                                 {
                                     // must not be mapped to a parent kern func arg or a value within the parent
-                                    auto newAlloc = initBuilder.CreateAlloca(kCall->getArgOperand(i)->getType());
-                                    uint64_t newId = (uint64_t)IDState::Artificial;
-                                    SetValueIDs(newAlloc, newId);
-                                    VMap[kCall->getArgOperand(i)] = newAlloc;
+                                    // if export, make alloca for it, if import, leave it
+                                    auto kernFunc = KfMap[kCall->getCalledFunction()];
+                                    for (auto key : kernFunc->ArgumentMap)
+                                    {
+                                        if (key.second == GetValueID(kCall->getArgOperand(i)))
+                                        {
+                                            if (key.first->getName()[0] == 'e')
+                                            {
+                                                auto newAlloc = initBuilder.CreateAlloca(kCall->getArgOperand(i)->getType());
+                                                uint64_t newId = (uint64_t)IDState::Artificial;
+                                                SetValueIDs(newAlloc, newId);
+                                                VMap[kCall->getArgOperand(i)] = newAlloc;
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
