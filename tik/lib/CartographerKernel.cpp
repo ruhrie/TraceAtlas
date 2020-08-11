@@ -242,7 +242,6 @@ namespace TraceAtlas::tik
             int entranceId = 0;
             for (auto e : ent)
             {
-                PrintVal(e);
                 Entrances.insert(make_shared<KernelInterface>(entranceId++, GetBlockID(e)));
             }
             map<Value *, GlobalObject *> GlobalMap;
