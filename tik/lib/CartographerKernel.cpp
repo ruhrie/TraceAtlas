@@ -380,7 +380,6 @@ namespace TraceAtlas::tik
                                             uint64_t newId = (uint64_t)IDState::Artificial;
                                             SetValueIDs(al, newId);
                                             useInst->replaceUsesOfWith(IDToValue[embKey.second], al);
-                                            PrintVal(useInst);
                                             VMap[IDToValue[embKey.second]] = al;
                                             useFound = true;
                                         }
@@ -685,9 +684,31 @@ namespace TraceAtlas::tik
                             {
                                 if (phi->getIncomingValue(j) == operand)
                                 {
+                                    bool farAway = true;
+                                    bool import = false;
                                     for (auto succ : successors(phi->getIncomingBlock(j)))
                                     {
                                         if (succ != phi->getIncomingBlock(j) && Entrances.find(GetBlockID(succ)) != Entrances.end() && scopedBlocks.find(phi->getIncomingBlock(j)) == scopedBlocks.end())
+                                        {
+                                            import = true;
+                                            auto sExtVal = GetValueID(operand);
+                                            if (kernelIE.find(sExtVal) == kernelIE.end())
+                                            {
+                                                KernelImports.push_back(sExtVal);
+                                                kernelIE.insert(sExtVal);
+                                            }
+                                        }
+                                        else if (scopedBlocks.find(succ) != scopedBlocks.end())
+                                        {
+                                            farAway = false;
+                                        }
+                                    }
+                                    // the above code does not capture imports in phi nodes from far away blocks
+                                    // this below condition is a patch to capture imports that come from arbitrary depth of the predecessor hierarchy of entrances
+                                    // if you are from a far away block, you will have no successors within the kernel blocks
+                                    if (!import)
+                                    {
+                                        if (scopedBlocks.find(operand->getParent()) == scopedBlocks.end() && Entrances.find(GetBlockID(phi->getIncomingBlock(j))) != Entrances.end())
                                         {
                                             auto sExtVal = GetValueID(operand);
                                             if (kernelIE.find(sExtVal) == kernelIE.end())
@@ -696,8 +717,6 @@ namespace TraceAtlas::tik
                                                 kernelIE.insert(sExtVal);
                                             }
                                         }
-                                        // the above code does not capture imports in phi nodes from far away blocks
-                                        // this below condition is a patch to capture imports that come from arbitrary depth of the predecessor hierarchy of entrances
                                     }
                                 }
                             }
@@ -1280,9 +1299,7 @@ namespace TraceAtlas::tik
 
     void CartographerKernel::BuildExit()
     {
-        //PrintVal(Exit, false); //another sacrifice
         IRBuilder<> exitBuilder(Exit);
-
         int exitId = 0;
         auto ex = GetExits(KernelFunction);
         map<BasicBlock *, BasicBlock *> exitMap;
