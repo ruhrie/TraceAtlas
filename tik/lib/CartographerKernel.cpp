@@ -367,10 +367,11 @@ namespace TraceAtlas::tik
                                 {
                                     if (auto useInst = dyn_cast<Instruction>(use))
                                     {
-                                        if (scopedBlocks.find(useInst->getParent()) != scopedBlocks.end())
+                                        if (blocks.find(useInst->getParent()) != blocks.end())
                                         {
-                                            if (VMap.find(embKey.first) != VMap.end())
+                                            if (VMap.find(IDToValue[embKey.second]) != VMap.end())
                                             {
+                                                useInst->replaceUsesOfWith(IDToValue[embKey.second], VMap[IDToValue[embKey.second]]);
                                                 continue;
                                             }
                                             // build an alloca for the embedded kernel export in the Init block
@@ -378,7 +379,9 @@ namespace TraceAtlas::tik
                                             auto al = allocBuilder.CreateAlloca(IDToValue[embKey.second]->getType());
                                             uint64_t newId = (uint64_t)IDState::Artificial;
                                             SetValueIDs(al, newId);
-                                            VMap[embKey.first] = al;
+                                            useInst->replaceUsesOfWith(IDToValue[embKey.second], al);
+                                            PrintVal(useInst);
+                                            VMap[IDToValue[embKey.second]] = al;
                                             useFound = true;
                                         }
                                     }
@@ -817,7 +820,7 @@ namespace TraceAtlas::tik
                                             {
                                                 // don't set the value yet, it will be remapped to the dereferences alloca of the export or a parent arg
                                                 phi->addIncoming(phi->getIncomingValue(i), intermediateBlock);
-                                                VMap[phi->getIncomingValue(i)] = VMap[key.first];
+                                                phi->replaceUsesOfWith(phi->getIncomingValue(i), key.first);
                                                 found = true;
                                             }
                                         }
