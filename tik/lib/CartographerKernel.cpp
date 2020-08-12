@@ -314,30 +314,88 @@ namespace TraceAtlas::tik
                 a->setName("e" + to_string(j));
                 ArgumentMap[a] = KernelExports[j];
             }
-            // now we have to find embedded kernel args that map to the parent args
-            for (auto parentArg : ArgumentMap)
+            for (auto key : ArgumentMap)
             {
-                if (parentArg.first == KernelFunction->arg_begin())
-                {
-                    continue;
-                }
-                VMap[IDToValue[parentArg.second]] = parentArg.first;
-                for (const auto func : embeddedKernels)
-                {
-                    auto embKern = KfMap[func];
-                    for (auto eKernArg : embKern->ArgumentMap)
-                    {
-                        if (parentArg.second == eKernArg.second)
-                        {
-                            VMap[eKernArg.first] = parentArg.first;
-                        }
-                    }
-                }
+                VMap[IDToValue[key.second]] = key.first;
             }
             //create the artificial blocks
             Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
             Exit = BasicBlock::Create(TikModule->getContext(), "Exit", KernelFunction);
             Exception = BasicBlock::Create(TikModule->getContext(), "Exception", KernelFunction);
+            // now we have to find embedded kernel args that map to the parent args
+            for (auto embKernFunc : embeddedKernels)
+            {
+                for (auto embKey : KfMap[embKernFunc]->ArgumentMap)
+                {
+                    bool found = false;
+                    for (auto parKey : ArgumentMap)
+                    {
+                        if (embKey.second == parKey.second)
+                        {
+                            if (found)
+                            {
+                                throw AtlasException("Child argument maps to multiple parent arguments!");
+                            }
+                            VMap[embKey.first] = parKey.first;
+                            found = true;
+                        }
+                    }
+                    if (!found)
+                    {
+                        if (embKey.first->getName()[0] == 'i')
+                        {
+                            // has to be within our parent context or else this value is unresolved
+                            if (auto parInst = dyn_cast<Instruction>(IDToValue[embKey.second]))
+                            {
+                                if (scopedBlocks.find(parInst->getParent()) == scopedBlocks.end())
+                                {
+                                    throw AtlasException("Could not find embedded kernel import in the parent context!");
+                                }
+                                else
+                                {
+                                    VMap[embKey.first] = parInst;
+                                }
+                            }
+                        }
+                        else if (embKey.first->getName()[0] == 'e')
+                        {
+                            // has to export to the parent context or its unresolved
+                            if (auto embInst = dyn_cast<Instruction>(IDToValue[embKey.second]))
+                            {
+                                bool useFound = false;
+                                for (auto use : embInst->users())
+                                {
+                                    if (auto useInst = dyn_cast<Instruction>(use))
+                                    {
+                                        if (scopedBlocks.find(useInst->getParent()) != scopedBlocks.end())
+                                        {
+                                            if (VMap.find(embKey.first) != VMap.end())
+                                            {
+                                                continue;
+                                            }
+                                            // build an alloca for the embedded kernel export in the Init block
+                                            IRBuilder<> allocBuilder(Init);
+                                            auto al = allocBuilder.CreateAlloca(IDToValue[embKey.second]->getType());
+                                            uint64_t newId = (uint64_t)IDState::Artificial;
+                                            SetValueIDs(al, newId);
+                                            VMap[embKey.first] = al;
+                                            useFound = true;
+                                        }
+                                    }
+                                }
+                                if (!useFound)
+                                {
+                                    throw AtlasException("Embedded kernel trying to export a value to the parent with no uses!");
+                                }
+                            }
+                        }
+                        else
+                        {
+                            throw AtlasException("Embedded kernel arg did not have a valid name.");
+                        }
+                    }
+                }
+            }
 
             BuildKernelFromBlocks(VMap, blocks);
 
@@ -351,6 +409,7 @@ namespace TraceAtlas::tik
 
             //remap and repipe
             Remap(VMap);
+
             PatchPhis(VMap);
 
             // collect all values that need to be loaded from (kernel function exports and allocas form embedded kernel exports)
@@ -465,8 +524,6 @@ namespace TraceAtlas::tik
             Remap(VMap);
 
             BuildExit();
-
-            //PatchPhis(VMap);
 
             FixInvokes();
 
@@ -705,8 +762,6 @@ namespace TraceAtlas::tik
                     {
                         // values to go into arg operands of callinst
                         std::vector<llvm::Value *> inargs;
-                        // exports from child to be loaded into parent context. <Val, Ptr>
-                        set<pair<Value *, Value *>> exportVals;
                         for (auto ai = nestedKernel->KernelFunction->arg_begin(); ai < nestedKernel->KernelFunction->arg_end(); ai++)
                         {
                             if (ai == nestedKernel->KernelFunction->arg_begin())
@@ -722,28 +777,6 @@ namespace TraceAtlas::tik
                                 else
                                 {
                                     inargs.push_back(IDToValue[nestedKernel->ArgumentMap[ai]]);
-                                }
-                            }
-                            // check if the arg is an export
-                            string argName = ai->getName();
-                            if (argName[0] == 'e')
-                            {
-                                // check if the arg is an export of our own
-                                auto parentVal = IDToValue[nestedKernel->ArgumentMap[ai]];
-                                for (auto use : parentVal->users())
-                                {
-                                    if (auto inst = dyn_cast<Instruction>(use))
-                                    {
-                                        if (blocks.find(inst->getParent()) != blocks.end())
-                                        {
-                                            // needs to have a pair of values: the pointer used in the callinst and the value used in the parent
-                                            auto val = cast<Value>(use);
-                                            Value *ptr;
-                                            ptr = VMap[ai];
-                                            exportVals.insert(pair(val, ptr));
-                                            break;
-                                        }
-                                    }
                                 }
                             }
                         }
@@ -899,218 +932,10 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::InlineFunctionsFromBlocks(std::set<int64_t> &blocks)
-    {
-        bool change = true;
-        while (change)
-        {
-            change = false;
-            for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
-            {
-                auto baseBlock = cast<BasicBlock>(fi);
-                auto id = GetBlockID(baseBlock);
-                if (blocks.find(id) == blocks.end())
-                {
-                    continue;
-                }
-                for (auto bi = fi->begin(); bi != fi->end(); bi++)
-                {
-                    if (auto ci = dyn_cast<CallBase>(bi))
-                    {
-                        if (auto debug = ci->getMetadata("KernelCall"))
-                        {
-                            continue;
-                        }
-                        auto id = GetBlockID(baseBlock);
-                        auto info = InlineFunctionInfo();
-                        auto r = InlineFunction(ci, info);
-                        SetBlockID(baseBlock, id);
-                        blocks.insert(id);
-                        if (r)
-                        {
-                            change = true;
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-        //erase null blocks here
-        auto blockList = &KernelFunction->getBasicBlockList();
-        vector<Function::iterator> toRemove;
-
-        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
-        {
-            if (auto b = dyn_cast<BasicBlock>(fi))
-            {
-                //do nothing
-            }
-            else
-            {
-                toRemove.push_back(fi);
-            }
-        }
-
-        for (auto r : toRemove)
-        {
-            blockList->erase(r);
-        }
-
-        //now that everything is inlined we need to remove invalid blocks
-        //although some blocks are now an amalgamation of multiple,
-        //as a rule we don't need to worry about those.
-        //simple successors are enough
-        vector<BasicBlock *> bToRemove;
-        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
-        {
-            auto block = cast<BasicBlock>(fi);
-            int64_t id = GetBlockID(block);
-            if (blocks.find(id) == blocks.end() && block != Exit && block != Init && block != Exception && id >= 0)
-            {
-                for (auto user : block->users())
-                {
-                    if (auto *phi = dyn_cast<PHINode>(user))
-                    {
-                        phi->removeIncomingValue(block);
-                    }
-                }
-                bToRemove.push_back(block);
-            }
-        }
-    }
-
-    void CartographerKernel::RemapNestedKernels(llvm::ValueToValueMapTy &VMap)
-    {
-        // Now find all calls to the embedded kernel functions in the body, if any, and change their arguments to the new ones
-        std::map<Argument *, Value *> embeddedCallArgs;
-        for (auto &bf : *(KernelFunction))
-        {
-            for (BasicBlock::iterator i = bf.begin(), BE = bf.end(); i != BE; ++i)
-            {
-                if (auto *callInst = dyn_cast<CallInst>(i))
-                {
-                    auto calledFunc = callInst->getCalledFunction();
-                    auto subK = KfMap[calledFunc];
-                    if (subK != nullptr)
-                    {
-                        for (auto eCArg = calledFunc->arg_begin(); eCArg < calledFunc->arg_end(); eCArg++)
-                        {
-                            auto argMapID = subK->ArgumentMap[eCArg];
-                            for (auto it = KernelFunction->arg_begin(); it != KernelFunction->arg_end(); it++)
-                            {
-                                auto parArg = cast<Argument>(it);
-                                if (GetValueID(parArg) == argMapID)
-                                {
-                                    embeddedCallArgs[eCArg] = parArg;
-                                }
-                                else
-                                {
-                                    for (auto &b : *(KernelFunction))
-                                    {
-                                        for (BasicBlock::iterator j = b.begin(), BE2 = b.end(); j != BE2; ++j)
-                                        {
-                                            auto inst = cast<Instruction>(j);
-                                            if (argMapID == GetValueID(inst))
-                                            {
-                                                embeddedCallArgs[eCArg] = inst;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        auto limit = callInst->getNumArgOperands();
-                        for (uint32_t k = 1; k < limit; k++)
-                        {
-                            Value *op = callInst->getArgOperand(k);
-                            if (auto *arg = dyn_cast<Argument>(op))
-                            {
-                                if (embeddedCallArgs.find(arg) == embeddedCallArgs.end())
-                                {
-                                    throw AtlasException("Failed to find nested argument");
-                                }
-                                auto newArg = embeddedCallArgs[arg];
-                                callInst->setArgOperand(k, newArg);
-                            }
-                            else
-                            {
-                                throw AtlasException("Unexpected value passed to function");
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    void CartographerKernel::CopyGlobals(llvm::ValueToValueMapTy &VMap)
-    {
-        for (auto &fi : *(KernelFunction))
-        {
-            for (auto bi = fi.begin(); bi != fi.end(); bi++)
-            {
-                auto inst = cast<Instruction>(bi);
-                if (auto cv = dyn_cast<CallBase>(inst))
-                {
-                    for (auto i = cv->arg_begin(); i < cv->arg_end(); i++)
-                    {
-                        if (auto user = dyn_cast<User>(i))
-                        {
-                            CopyOperand(user, VMap);
-                        }
-                    }
-                }
-                else
-                {
-                    CopyOperand(inst, VMap);
-                }
-            }
-        }
-    }
-
     void CartographerKernel::BuildInit(llvm::ValueToValueMapTy &VMap, vector<int64_t> &KernelExports)
     {
         IRBuilder<> initBuilder(Init);
-        // if embedded kernels exist, alloca for all the exports that aren't present in the parent function args
-        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
-        {
-            auto parentBlock = cast<BasicBlock>(fi);
-            for (auto bi = parentBlock->begin(); bi != parentBlock->end(); bi++)
-            {
-                auto parentInst = cast<Instruction>(bi);
-                if (auto kCall = dyn_cast<CallInst>(parentInst))
-                {
-                    if (KfMap.find(kCall->getCalledFunction()) != KfMap.end())
-                    {
-                        for (unsigned int i = 0; i < kCall->getNumArgOperands(); i++)
-                        {
-                            if (VMap.find(kCall->getArgOperand(i)) == VMap.end())
-                            {
-                                if (dyn_cast<Argument>(kCall->getArgOperand(i)) == nullptr && dyn_cast<Constant>(kCall->getArgOperand(i)) == nullptr)
-                                {
-                                    // must not be mapped to a parent kern func arg or a value within the parent
-                                    // if export, make alloca for it, if import, leave it
-                                    auto kernFunc = KfMap[kCall->getCalledFunction()];
-                                    for (auto key : kernFunc->ArgumentMap)
-                                    {
-                                        if (key.second == GetValueID(kCall->getArgOperand(i)))
-                                        {
-                                            if (key.first->getName()[0] == 'e')
-                                            {
-                                                auto newAlloc = initBuilder.CreateAlloca(kCall->getArgOperand(i)->getType());
-                                                uint64_t newId = (uint64_t)IDState::Artificial;
-                                                SetValueIDs(newAlloc, newId);
-                                                VMap[kCall->getArgOperand(i)] = newAlloc;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+
         auto initSwitch = initBuilder.CreateSwitch(KernelFunction->arg_begin(), Exception, (uint32_t)Entrances.size());
         uint64_t i = 0;
         for (const auto &ent : Entrances)
@@ -1125,141 +950,6 @@ namespace TraceAtlas::tik
                 throw AtlasException("Unimplemented");
             }
             i++;
-        }
-    }
-
-    void CartographerKernel::BuildExit()
-    {
-        //PrintVal(Exit, false); //another sacrifice
-        IRBuilder<> exitBuilder(Exit);
-
-        int exitId = 0;
-        auto ex = GetExits(KernelFunction);
-        map<BasicBlock *, BasicBlock *> exitMap;
-        for (auto exit : ex)
-        {
-            Exits.insert(make_shared<KernelInterface>(exitId++, GetBlockID(exit)));
-            BasicBlock *tmp = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
-            IRBuilder<> builder(tmp);
-            builder.CreateBr(Exit);
-            exitMap[exit] = tmp;
-        }
-
-        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
-        {
-            auto block = cast<BasicBlock>(fi);
-            auto term = block->getTerminator();
-            if (term != nullptr)
-            {
-                for (uint32_t i = 0; i < term->getNumSuccessors(); i++)
-                {
-                    auto suc = term->getSuccessor(i);
-                    if (suc->getParent() != KernelFunction)
-                    {
-                        //we have an exit
-                        term->setSuccessor(i, exitMap[suc]);
-                    }
-                }
-            }
-        }
-
-        auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), (uint32_t)Exits.size());
-        for (const auto &exit : Exits)
-        {
-            if (exitMap.find(IDToBlock[exit->Block]) == exitMap.end())
-            {
-                throw AtlasException("Block not found in Exit Map!");
-            }
-            phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), exitMap[IDToBlock[exit->Block]]);
-        }
-        exitBuilder.CreateRet(phi);
-
-        IRBuilder<> exceptionBuilder(Exception);
-        exceptionBuilder.CreateRet(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)IDState::Artificial));
-    }
-
-    void CartographerKernel::PatchPhis(ValueToValueMapTy &VMap)
-    {
-        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
-        {
-            auto b = cast<BasicBlock>(fi);
-
-            vector<Instruction *> phisToRemove;
-            for (auto &phi : b->phis())
-            {
-                vector<BasicBlock *> valuesToRemove;
-                for (uint32_t i = 0; i < phi.getNumIncomingValues(); i++)
-                {
-                    auto block = phi.getIncomingBlock(i);
-                    BasicBlock *rblock;
-                    if (VMap.find(phi.getIncomingBlock(i)) != VMap.end())
-                    {
-                        rblock = cast<BasicBlock>(VMap[phi.getIncomingBlock(i)]);
-                    }
-                    else
-                    {
-                        rblock = block;
-                    }
-                    if (block->getParent() != KernelFunction && rblock->getParent() != KernelFunction)
-                    {
-                        valuesToRemove.push_back(block);
-                    }
-                    else
-                    {
-                        bool isPred = false;
-                        for (auto pred : predecessors(b))
-                        {
-                            if (pred == block)
-                            {
-                                isPred = true;
-                            }
-                        }
-                        if (!isPred)
-                        {
-                            valuesToRemove.push_back(block);
-                            continue;
-                        }
-                    }
-                }
-                for (auto toR : valuesToRemove)
-                {
-                    phi.removeIncomingValue(toR, false);
-                }
-                if (phi.getNumIncomingValues() == 0)
-                {
-                    phisToRemove.push_back(&phi);
-                    for (auto user : phi.users())
-                    {
-                        if (auto br = dyn_cast<BranchInst>(user))
-                        {
-                            if (br->isConditional())
-                            {
-                                auto b0 = br->getSuccessor(0);
-                                auto b1 = br->getSuccessor(1);
-                                if (b0 != b1)
-                                {
-                                    throw AtlasException("Phi successors don't match");
-                                }
-                                IRBuilder<> ib(br);
-                                ib.CreateBr(b0);
-                                phisToRemove.push_back(br);
-                            }
-                            else
-                            {
-                                throw AtlasException("Malformed phi user");
-                            }
-                        }
-                        else
-                        {
-                            throw AtlasException("Unexpected phi user");
-                        }
-                    }
-                }
-            }
-            for (auto phi : phisToRemove)
-            {
-                phi->eraseFromParent();
-            }
         }
     }
 
@@ -1395,6 +1085,246 @@ namespace TraceAtlas::tik
         }
     }
 
+    void CartographerKernel::InlineFunctionsFromBlocks(std::set<int64_t> &blocks)
+    {
+        bool change = true;
+        while (change)
+        {
+            change = false;
+            for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+            {
+                auto baseBlock = cast<BasicBlock>(fi);
+                auto id = GetBlockID(baseBlock);
+                if (blocks.find(id) == blocks.end())
+                {
+                    continue;
+                }
+                for (auto bi = fi->begin(); bi != fi->end(); bi++)
+                {
+                    if (auto ci = dyn_cast<CallBase>(bi))
+                    {
+                        if (auto debug = ci->getMetadata("KernelCall"))
+                        {
+                            continue;
+                        }
+                        auto id = GetBlockID(baseBlock);
+                        auto info = InlineFunctionInfo();
+                        auto r = InlineFunction(ci, info);
+                        SetBlockID(baseBlock, id);
+                        blocks.insert(id);
+                        if (r)
+                        {
+                            change = true;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        //erase null blocks here
+        auto blockList = &KernelFunction->getBasicBlockList();
+        vector<Function::iterator> toRemove;
+
+        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+        {
+            if (auto b = dyn_cast<BasicBlock>(fi))
+            {
+                //do nothing
+            }
+            else
+            {
+                toRemove.push_back(fi);
+            }
+        }
+
+        for (auto r : toRemove)
+        {
+            blockList->erase(r);
+        }
+
+        //now that everything is inlined we need to remove invalid blocks
+        //although some blocks are now an amalgamation of multiple,
+        //as a rule we don't need to worry about those.
+        //simple successors are enough
+        vector<BasicBlock *> bToRemove;
+        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+        {
+            auto block = cast<BasicBlock>(fi);
+            int64_t id = GetBlockID(block);
+            if (blocks.find(id) == blocks.end() && block != Exit && block != Init && block != Exception && id >= 0)
+            {
+                for (auto user : block->users())
+                {
+                    if (auto *phi = dyn_cast<PHINode>(user))
+                    {
+                        phi->removeIncomingValue(block);
+                    }
+                }
+                bToRemove.push_back(block);
+            }
+        }
+    }
+
+    void CartographerKernel::CopyGlobals(llvm::ValueToValueMapTy &VMap)
+    {
+        for (auto &fi : *(KernelFunction))
+        {
+            for (auto bi = fi.begin(); bi != fi.end(); bi++)
+            {
+                auto inst = cast<Instruction>(bi);
+                if (auto cv = dyn_cast<CallBase>(inst))
+                {
+                    for (auto i = cv->arg_begin(); i < cv->arg_end(); i++)
+                    {
+                        if (auto user = dyn_cast<User>(i))
+                        {
+                            CopyOperand(user, VMap);
+                        }
+                    }
+                }
+                else
+                {
+                    CopyOperand(inst, VMap);
+                }
+            }
+        }
+    }
+
+    void CartographerKernel::PatchPhis(ValueToValueMapTy &VMap)
+    {
+        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+        {
+            auto b = cast<BasicBlock>(fi);
+
+            vector<Instruction *> phisToRemove;
+            for (auto &phi : b->phis())
+            {
+                vector<BasicBlock *> valuesToRemove;
+                for (uint32_t i = 0; i < phi.getNumIncomingValues(); i++)
+                {
+                    auto block = phi.getIncomingBlock(i);
+                    BasicBlock *rblock;
+                    if (VMap.find(phi.getIncomingBlock(i)) != VMap.end())
+                    {
+                        rblock = cast<BasicBlock>(VMap[phi.getIncomingBlock(i)]);
+                    }
+                    else
+                    {
+                        rblock = block;
+                    }
+                    if (block->getParent() != KernelFunction && rblock->getParent() != KernelFunction)
+                    {
+                        valuesToRemove.push_back(block);
+                    }
+                    else
+                    {
+                        bool isPred = false;
+                        for (auto pred : predecessors(b))
+                        {
+                            if (pred == block)
+                            {
+                                isPred = true;
+                            }
+                        }
+                        if (!isPred)
+                        {
+                            valuesToRemove.push_back(block);
+                            continue;
+                        }
+                    }
+                }
+                for (auto toR : valuesToRemove)
+                {
+                    phi.removeIncomingValue(toR, false);
+                }
+                if (phi.getNumIncomingValues() == 0)
+                {
+                    phisToRemove.push_back(&phi);
+                    for (auto user : phi.users())
+                    {
+                        if (auto br = dyn_cast<BranchInst>(user))
+                        {
+                            if (br->isConditional())
+                            {
+                                auto b0 = br->getSuccessor(0);
+                                auto b1 = br->getSuccessor(1);
+                                if (b0 != b1)
+                                {
+                                    throw AtlasException("Phi successors don't match");
+                                }
+                                IRBuilder<> ib(br);
+                                ib.CreateBr(b0);
+                                phisToRemove.push_back(br);
+                            }
+                            else
+                            {
+                                throw AtlasException("Malformed phi user");
+                            }
+                        }
+                        else
+                        {
+                            throw AtlasException("Unexpected phi user");
+                        }
+                    }
+                }
+            }
+            for (auto phi : phisToRemove)
+            {
+                phi->eraseFromParent();
+            }
+        }
+    }
+
+    void CartographerKernel::BuildExit()
+    {
+        //PrintVal(Exit, false); //another sacrifice
+        IRBuilder<> exitBuilder(Exit);
+
+        int exitId = 0;
+        auto ex = GetExits(KernelFunction);
+        map<BasicBlock *, BasicBlock *> exitMap;
+        for (auto exit : ex)
+        {
+            Exits.insert(make_shared<KernelInterface>(exitId++, GetBlockID(exit)));
+            BasicBlock *tmp = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
+            IRBuilder<> builder(tmp);
+            builder.CreateBr(Exit);
+            exitMap[exit] = tmp;
+        }
+
+        for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+        {
+            auto block = cast<BasicBlock>(fi);
+            auto term = block->getTerminator();
+            if (term != nullptr)
+            {
+                for (uint32_t i = 0; i < term->getNumSuccessors(); i++)
+                {
+                    auto suc = term->getSuccessor(i);
+                    if (suc->getParent() != KernelFunction)
+                    {
+                        //we have an exit
+                        term->setSuccessor(i, exitMap[suc]);
+                    }
+                }
+            }
+        }
+
+        auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), (uint32_t)Exits.size());
+        for (const auto &exit : Exits)
+        {
+            if (exitMap.find(IDToBlock[exit->Block]) == exitMap.end())
+            {
+                throw AtlasException("Block not found in Exit Map!");
+            }
+            phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), exitMap[IDToBlock[exit->Block]]);
+        }
+        exitBuilder.CreateRet(phi);
+
+        IRBuilder<> exceptionBuilder(Exception);
+        exceptionBuilder.CreateRet(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)IDState::Artificial));
+    }
+
     void CartographerKernel::FixInvokes()
     {
         auto F = TikModule->getOrInsertFunction("__gxx_personality_v0", Type::getInt32Ty(TikModule->getContext()));
@@ -1424,4 +1354,69 @@ namespace TraceAtlas::tik
             }
         }
     }
+
+    void CartographerKernel::RemapNestedKernels(llvm::ValueToValueMapTy &VMap)
+    {
+        // Now find all calls to the embedded kernel functions in the body, if any, and change their arguments to the new ones
+        std::map<Argument *, Value *> embeddedCallArgs;
+        for (auto &bf : *(KernelFunction))
+        {
+            for (BasicBlock::iterator i = bf.begin(), BE = bf.end(); i != BE; ++i)
+            {
+                if (auto *callInst = dyn_cast<CallInst>(i))
+                {
+                    auto calledFunc = callInst->getCalledFunction();
+                    auto subK = KfMap[calledFunc];
+                    if (subK != nullptr)
+                    {
+                        for (auto eCArg = calledFunc->arg_begin(); eCArg < calledFunc->arg_end(); eCArg++)
+                        {
+                            auto argMapID = subK->ArgumentMap[eCArg];
+                            for (auto it = KernelFunction->arg_begin(); it != KernelFunction->arg_end(); it++)
+                            {
+                                auto parArg = cast<Argument>(it);
+                                if (GetValueID(parArg) == argMapID)
+                                {
+                                    embeddedCallArgs[eCArg] = parArg;
+                                }
+                                else
+                                {
+                                    for (auto &b : *(KernelFunction))
+                                    {
+                                        for (BasicBlock::iterator j = b.begin(), BE2 = b.end(); j != BE2; ++j)
+                                        {
+                                            auto inst = cast<Instruction>(j);
+                                            if (argMapID == GetValueID(inst))
+                                            {
+                                                embeddedCallArgs[eCArg] = inst;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        auto limit = callInst->getNumArgOperands();
+                        for (uint32_t k = 1; k < limit; k++)
+                        {
+                            Value *op = callInst->getArgOperand(k);
+                            if (auto *arg = dyn_cast<Argument>(op))
+                            {
+                                if (embeddedCallArgs.find(arg) == embeddedCallArgs.end())
+                                {
+                                    throw AtlasException("Failed to find nested argument");
+                                }
+                                auto newArg = embeddedCallArgs[arg];
+                                callInst->setArgOperand(k, newArg);
+                            }
+                            else
+                            {
+                                throw AtlasException("Unexpected value passed to function");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 } // namespace TraceAtlas::tik
