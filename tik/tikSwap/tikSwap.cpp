@@ -251,6 +251,27 @@ int main(int argc, char *argv[])
         ind->eraseFromParent();
     }
 
+    // now verify that phis only contain valid entries
+    for (auto &fi : *sourceBitcode)
+    {
+        for (auto bi = fi.begin(); bi != fi.end(); bi++)
+        {
+            for (auto it = bi->begin(); it != bi->end(); it++)
+            {
+                if (auto phi = dyn_cast<PHINode>(it))
+                {
+                    for (unsigned int i = 0; i < phi->getNumIncomingValues(); i++)
+                    {
+                        if (find(predecessors(phi->getParent()).begin(), predecessors(phi->getParent()).end(), phi->getIncomingBlock(i)) == predecessors(phi->getParent()).end())
+                        {
+                            phi->removeIncomingValue(i);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     //verify the module
     std::string str;
     llvm::raw_string_ostream rso(str);
