@@ -188,6 +188,7 @@ namespace TraceAtlas::tik
 
     CartographerKernel::CartographerKernel(std::vector<int64_t> basicBlocks, std::string name)
     {
+        // Validate input
         llvm::ValueToValueMapTy VMap;
         auto blockSet = set<int64_t>(basicBlocks.begin(), basicBlocks.end());
         set<BasicBlock *> blocks;
@@ -338,7 +339,6 @@ namespace TraceAtlas::tik
             Exit = BasicBlock::Create(TikModule->getContext(), "Exit", KernelFunction);
             Exception = BasicBlock::Create(TikModule->getContext(), "Exception", KernelFunction);
 
-            //copy the appropriate blocks
             BuildKernelFromBlocks(VMap, blocks);
 
             BuildInit(VMap, KernelExports);
@@ -1172,18 +1172,6 @@ namespace TraceAtlas::tik
             }
             phi->addIncoming(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), exitMap[IDToBlock[exit->Block]]);
         }
-
-        // find all exports that need to be stored before exit
-        for (auto it = Init->begin(); it != Init->end(); it++)
-        {
-            auto inst = cast<Instruction>(it);
-            if (auto ld = dyn_cast<LoadInst>(inst))
-            {
-                // must map to an export
-                exitBuilder.CreateStore(ld, ld->getPointerOperand());
-            }
-        }
-
         exitBuilder.CreateRet(phi);
 
         IRBuilder<> exceptionBuilder(Exception);
