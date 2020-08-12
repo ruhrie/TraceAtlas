@@ -320,6 +320,7 @@ namespace TraceAtlas::tik
                 {
                     continue;
                 }
+                VMap[IDToValue[parentArg.second]] = parentArg.first;
                 for (const auto func : embeddedKernels)
                 {
                     auto embKern = KfMap[func];
@@ -331,7 +332,6 @@ namespace TraceAtlas::tik
                         }
                     }
                 }
-                VMap[IDToValue[parentArg.second]] = parentArg.first;
             }
             //create the artificial blocks
             Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
@@ -636,6 +636,8 @@ namespace TraceAtlas::tik
                                                 kernelIE.insert(sExtVal);
                                             }
                                         }
+                                        // the above code does not capture imports in phi nodes from far away blocks
+                                        // this below condition is a patch to capture imports that come from arbitrary depth of the predecessor hierarchy of entrances
                                     }
                                 }
                             }
@@ -780,9 +782,9 @@ namespace TraceAtlas::tik
                                         {
                                             if (key.second == GetValueID(phi->getIncomingValue(i)))
                                             {
-                                                // don't set the value yet, it will be remapped to the dereferences alloca of the export
+                                                // don't set the value yet, it will be remapped to the dereferences alloca of the export or a parent arg
                                                 phi->addIncoming(phi->getIncomingValue(i), intermediateBlock);
-                                                VMap[phi->getIncomingValue(i)] = key.first;
+                                                VMap[phi->getIncomingValue(i)] = VMap[key.first];
                                                 found = true;
                                             }
                                         }
