@@ -676,7 +676,7 @@ namespace TraceAtlas::tik
                     }
                     else if (auto *operand = dyn_cast<Instruction>(op))
                     {
-                        // if this operand is being used in a phi, this may be an incoming values that is from a block that is not an entrance
+                        // if this operand is being used in a phi, this may be an incoming values through a side door (a phi that once had many predecessors, but now has fewer because of the kernel partition)
                         // these values should be ignored
                         if (auto phi = dyn_cast<PHINode>(inst))
                         {
@@ -684,7 +684,7 @@ namespace TraceAtlas::tik
                             {
                                 if (phi->getIncomingValue(j) == operand)
                                 {
-                                    bool farAway = true;
+                                    // below captures values who are used in phi nodes that are one level away from our entrances
                                     bool import = false;
                                     for (auto succ : successors(phi->getIncomingBlock(j)))
                                     {
@@ -698,17 +698,11 @@ namespace TraceAtlas::tik
                                                 kernelIE.insert(sExtVal);
                                             }
                                         }
-                                        else if (scopedBlocks.find(succ) != scopedBlocks.end())
-                                        {
-                                            farAway = false;
-                                        }
                                     }
-                                    // the above code does not capture imports in phi nodes from far away blocks
-                                    // this below condition is a patch to capture imports that come from arbitrary depth of the predecessor hierarchy of entrances
-                                    // if you are from a far away block, you will have no successors within the kernel blocks
+                                    // below captures values who come from far away places and enter through the front door
                                     if (!import)
                                     {
-                                        if (scopedBlocks.find(operand->getParent()) == scopedBlocks.end() && Entrances.find(GetBlockID(phi->getIncomingBlock(j))) != Entrances.end())
+                                        if (scopedBlocks.find(operand->getParent()) == scopedBlocks.end() && (Entrances.find(GetBlockID(phi->getIncomingBlock(j))) != Entrances.end() || scopedBlocks.find(phi->getIncomingBlock(j)) != scopedBlocks.end()))
                                         {
                                             auto sExtVal = GetValueID(operand);
                                             if (kernelIE.find(sExtVal) == kernelIE.end())
