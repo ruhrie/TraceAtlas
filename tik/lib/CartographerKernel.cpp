@@ -314,90 +314,18 @@ namespace TraceAtlas::tik
                 a->setName("e" + to_string(j));
                 ArgumentMap[a] = KernelExports[j];
             }
+            // map our imports
             for (auto key : ArgumentMap)
             {
-                VMap[IDToValue[key.second]] = key.first;
+                if (key.first->getName()[0] == 'i')
+                {
+                    VMap[IDToValue[key.second]] = key.first;
+                }
             }
             //create the artificial blocks
             Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
             Exit = BasicBlock::Create(TikModule->getContext(), "Exit", KernelFunction);
             Exception = BasicBlock::Create(TikModule->getContext(), "Exception", KernelFunction);
-            // now we have to find embedded kernel args that map to the parent args
-            for (auto embKernFunc : embeddedKernels)
-            {
-                for (auto embKey : KfMap[embKernFunc]->ArgumentMap)
-                {
-                    bool found = false;
-                    for (auto parKey : ArgumentMap)
-                    {
-                        if (embKey.second == parKey.second)
-                        {
-                            if (found)
-                            {
-                                throw AtlasException("Child argument maps to multiple parent arguments!");
-                            }
-                            VMap[embKey.first] = parKey.first;
-                            found = true;
-                        }
-                    }
-                    if (!found)
-                    {
-                        if (embKey.first->getName()[0] == 'i')
-                        {
-                            // has to be within our parent context or else this value is unresolved
-                            if (auto parInst = dyn_cast<Instruction>(IDToValue[embKey.second]))
-                            {
-                                if (scopedBlocks.find(parInst->getParent()) == scopedBlocks.end())
-                                {
-                                    throw AtlasException("Could not find embedded kernel import in the parent context!");
-                                }
-                                else
-                                {
-                                    VMap[embKey.first] = parInst;
-                                }
-                            }
-                        }
-                        else if (embKey.first->getName()[0] == 'e')
-                        {
-                            // has to export to the parent context or its unresolved
-                            if (auto embInst = dyn_cast<Instruction>(IDToValue[embKey.second]))
-                            {
-                                bool useFound = false;
-                                for (auto use : embInst->users())
-                                {
-                                    if (auto useInst = dyn_cast<Instruction>(use))
-                                    {
-                                        if (blocks.find(useInst->getParent()) != blocks.end())
-                                        {
-                                            if (VMap.find(IDToValue[embKey.second]) != VMap.end())
-                                            {
-                                                useInst->replaceUsesOfWith(IDToValue[embKey.second], VMap[IDToValue[embKey.second]]);
-                                                continue;
-                                            }
-                                            // build an alloca for the embedded kernel export in the Init block
-                                            IRBuilder<> allocBuilder(Init);
-                                            auto al = allocBuilder.CreateAlloca(IDToValue[embKey.second]->getType());
-                                            uint64_t newId = (uint64_t)IDState::Artificial;
-                                            SetValueIDs(al, newId);
-                                            useInst->replaceUsesOfWith(IDToValue[embKey.second], al);
-                                            VMap[IDToValue[embKey.second]] = al;
-                                            useFound = true;
-                                        }
-                                    }
-                                }
-                                if (!useFound)
-                                {
-                                    throw AtlasException("Embedded kernel trying to export a value to the parent with no uses!");
-                                }
-                            }
-                        }
-                        else
-                        {
-                            throw AtlasException("Embedded kernel arg did not have a valid name.");
-                        }
-                    }
-                }
-            }
 
             BuildKernelFromBlocks(VMap, blocks);
 
@@ -414,90 +342,133 @@ namespace TraceAtlas::tik
 
             PatchPhis(VMap);
 
-            // collect all values that need to be loaded from (kernel function exports and allocas form embedded kernel exports)
-            set<Value *> valuesToReplace;
-            for (auto it = Init->begin(); it != Init->end(); it++)
+            // replace parent export uses in embedded kernel call instructions
+            for (auto parKey : ArgumentMap)
             {
-                if (auto alloc = dyn_cast<AllocaInst>(it))
+                if (parKey.first->getName()[0] == 'e')
                 {
-                    if (GetValueID(alloc) == IDState::Artificial)
+                    // check each user for possible remapping
+                    for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
                     {
-                        valuesToReplace.insert(alloc);
+                        for (auto it = bi->begin(); it != bi->end(); it++)
+                        {
+                            for (unsigned int i = 0; i < it->getNumOperands(); i++)
+                            {
+                                if (GetValueID(it->getOperand(i)) == parKey.second)
+                                {
+                                    if (auto callInst = dyn_cast<CallInst>(it))
+                                    {
+                                        if (embeddedKernels.find(callInst->getCalledFunction()) != embeddedKernels.end())
+                                        {
+                                            callInst->replaceUsesOfWith(IDToValue[parKey.second], parKey.first);
+                                        }
+                                        else
+                                        {
+                                            IRBuilder<> ldBuilder(callInst->getParent());
+                                            auto ld = ldBuilder.CreateLoad(parKey.first);
+                                            ld->moveBefore(callInst);
+                                            callInst->replaceUsesOfWith(IDToValue[parKey.second], ld);
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
-            for (auto key : ArgumentMap)
+
+            for (auto embedded : embeddedKernels)
             {
-                string name = key.first->getName();
-                if (name[0] == 'e')
+                auto kernFunc = KfMap[embedded];
+                for (auto embExp : kernFunc->ArgumentMap)
                 {
-                    valuesToReplace.insert(key.first);
-                }
-            }
-            // now replace all users of our exports and allocas with loads from the alloca or export pointer
-            for (const auto ptr : valuesToReplace)
-            {
-                for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
-                {
-                    auto block = cast<BasicBlock>(fi);
-                    for (auto bi = block->begin(); bi != block->end(); bi++)
+                    if (embExp.first->getName()[0] == 'e')
                     {
-                        auto inst = cast<Instruction>(bi);
-                        // only imports of embedded kernels should be replaced
-                        if (auto calli = dyn_cast<CallInst>(inst))
+                        bool found = false;
+                        // check to see if this value does not map to a parent export
+                        for (auto parArg : ArgumentMap)
                         {
-                            if (KfMap.find(calli->getCalledFunction()) != KfMap.end())
+                            if (parArg.second == embExp.second)
                             {
-                                bool replace = false;
-                                auto kernObj = KfMap[calli->getCalledFunction()];
-                                for (auto key : kernObj->ArgumentMap)
+                                found = true;
+                            }
+                        }
+                        if (!found)
+                        {
+                            // this is an export to the parent, make sure the parent has a use for it first
+                            bool useFound = false;
+                            for (auto use : IDToValue[embExp.second]->users())
+                            {
+                                if (auto useInst = dyn_cast<Instruction>(use))
                                 {
-                                    if (auto parArg = dyn_cast<Argument>(ptr))
+                                    if (blocks.find(useInst->getParent()) != blocks.end())
                                     {
-                                        if (ArgumentMap[parArg] == key.second)
+                                        useFound = true;
+                                    }
+                                }
+                            }
+                            if (!useFound)
+                            {
+                                throw AtlasException("Child export to parent has no uses!");
+                            }
+                            // make an alloc for it in Init
+                            IRBuilder alBuilder(Init);
+                            auto sel = Init->getTerminator();
+                            auto al = alBuilder.CreateAlloca(IDToValue[embExp.second]->getType());
+                            al->moveBefore(sel);
+                            // now replace all uses of the export value with loads or references to the alloca
+                            for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
+                            {
+                                for (auto it = bi->begin(); it != bi->end(); it++)
+                                {
+                                    for (unsigned int i = 0; i < it->getNumOperands(); i++)
+                                    {
+                                        if (embExp.second == GetValueID(it->getOperand(i)))
                                         {
-                                            if (key.first->getName()[0] == 'i')
+                                            if (auto st = dyn_cast<StoreInst>(it))
                                             {
-                                                replace = true;
+                                                continue;
+                                            }
+                                            else if (auto callInst = dyn_cast<CallInst>(it))
+                                            {
+                                                if (embeddedKernels.find(callInst->getCalledFunction()) != embeddedKernels.end())
+                                                {
+                                                    callInst->replaceUsesOfWith(IDToValue[embExp.second], al);
+                                                }
+                                                else
+                                                {
+                                                    IRBuilder<> ldBuilder(callInst->getParent());
+                                                    auto ld = ldBuilder.CreateLoad(al);
+                                                    ld->moveBefore(callInst);
+                                                    callInst->replaceUsesOfWith(IDToValue[embExp.second], ld);
+                                                }
+                                            }
+                                            else if (auto phi = dyn_cast<PHINode>(it))
+                                            {
+                                                // inject loads into the predecessor of our user
+                                                for (unsigned int j = 0; j < phi->getNumIncomingValues(); j++)
+                                                {
+                                                    if (phi->getIncomingValue(j) == IDToValue[embExp.second])
+                                                    {
+                                                        auto predBlock = phi->getIncomingBlock(j);
+                                                        auto term = predBlock->getTerminator();
+                                                        IRBuilder<> ldBuilder(predBlock);
+                                                        auto ld = ldBuilder.CreateLoad(al);
+                                                        ld->moveBefore(term);
+                                                        phi->replaceUsesOfWith(IDToValue[embExp.second], ld);
+                                                    }
+                                                }
+                                            }
+                                            else if (auto useInst = dyn_cast<Instruction>(it))
+                                            {
+                                                IRBuilder<> ldBuilder(useInst->getParent());
+                                                auto ld = ldBuilder.CreateLoad(al);
+                                                useInst->replaceUsesOfWith(IDToValue[embExp.second], ld);
+                                                ld->moveBefore(useInst);
                                             }
                                         }
                                     }
                                 }
-                                if (!replace)
-                                {
-                                    continue;
-                                }
-                            }
-                        }
-                        // also, skip stores to the exports
-                        else if (auto st = dyn_cast<StoreInst>(inst))
-                        {
-                            continue;
-                        }
-                        else if (auto phi = dyn_cast<PHINode>(inst))
-                        {
-                            for (unsigned int i = 0; i < phi->getNumIncomingValues(); i++)
-                            {
-                                if (phi->getIncomingValue(i) == ptr)
-                                {
-                                    auto predBlock = phi->getIncomingBlock(i);
-                                    auto term = predBlock->getTerminator();
-                                    IRBuilder<> ldBuilder(predBlock);
-                                    auto ld = ldBuilder.CreateLoad(ptr);
-                                    ld->moveBefore(term);
-                                    phi->replaceUsesOfWith(ptr, ld);
-                                }
-                            }
-                            continue;
-                        }
-                        for (unsigned int i = 0; i < inst->getNumOperands(); i++)
-                        {
-                            if (inst->getOperand(i) == cast<Value>(ptr))
-                            {
-                                IRBuilder<> ldBuilder(inst->getParent());
-                                auto ld = ldBuilder.CreateLoad(ptr);
-                                ld->moveBefore(inst);
-                                inst->replaceUsesOfWith(ptr, ld);
                             }
                         }
                     }
