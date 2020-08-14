@@ -1362,6 +1362,7 @@ namespace TraceAtlas::tik
                     auto a = ii->getLandingPadInst();
                     if (isa<BranchInst>(a))
                     {
+                        throw AtlasException("Exception handling is not supported");
                         auto unwind = ii->getUnwindDest();
                         auto term = unwind->getTerminator();
                         IRBuilder<> builder(term);
