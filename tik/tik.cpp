@@ -333,7 +333,7 @@ int main(int argc, char *argv[])
     }
     if (error)
     {
-        return EXIT_FAILURE;
+        spdlog::error("Exported module does not contain all cartographer kernels.");
     }
     return EXIT_SUCCESS;
 }
