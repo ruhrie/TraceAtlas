@@ -340,6 +340,81 @@ namespace TraceAtlas::tik
             //remap and repipe
             Remap(VMap);
 
+            // Evaluate embedded kernel exits for export ambiguities
+            for (auto embfunc : embeddedKernels)
+            {
+                for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
+                {
+                    for (auto it = bi->begin(); it != bi->end(); it++)
+                    {
+                        if (auto callInst = dyn_cast<CallInst>(it))
+                        {
+                            if (callInst->getCalledFunction() == embfunc)
+                            {
+                                // found an embedded kernel, evaluate its exits
+                                auto sw = cast<SwitchInst>(bi->getTerminator());
+                                //for( unsigned int i = 0; i < sw->getNumSuccessors(); i++ )
+                                //{
+                                //auto destBlock = sw->getSuccessor(i);
+                                for (auto succ : successors(sw->getParent()))
+                                {
+                                    auto destBlock = succ;
+                                    for (auto ii = destBlock->begin(); ii != destBlock->end(); ii++)
+                                    {
+                                        // look for a phi node in the successor that has exports in it
+                                        if (auto phi = dyn_cast<PHINode>(ii))
+                                        {
+                                            // set of exit index and argument pairs to consolidate to one value and map to the needing phi
+                                            set<pair<int64_t, int64_t>> exportsToMap;
+                                            // if an incoming value maps to an export of the embedded kernel, we need to map the associated block to an embedded kernel exit
+                                            for (unsigned int j = 0; j < phi->getNumIncomingValues(); j++)
+                                            {
+                                                auto embKern = KfMap[embfunc];
+                                                for (auto embKey : embKern->ArgumentMap)
+                                                {
+                                                    if (GetValueID(phi->getIncomingValue(j)) == embKey.second)
+                                                    {
+                                                        auto embKernExit = embKern->Exits.find(GetBlockID(phi->getIncomingBlock(j)));
+                                                        if (embKernExit != embKern->Exits.end())
+                                                        {
+                                                            exportsToMap.insert(pair((*embKernExit)->Index, embKey.second));
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            if (!exportsToMap.empty())
+                                            {
+                                                throw AtlasException("Cannot map multiple embedded kernel exports to a single successor!");
+                                                // now create a switch instruction to export the correct value to the phi
+                                                IRBuilder<> seBuilder(sw->getParent());
+                                                Value *prevSel = IDToValue[exportsToMap.begin()->second];
+                                                for (const auto exit : exportsToMap)
+                                                {
+                                                    auto cmp = seBuilder.CreateICmpEQ(ConstantInt::get(Type::getInt8Ty(callInst->getContext()), (uint64_t)exit.first), callInst);
+                                                    cast<CmpInst>(cmp)->moveBefore(sw);
+                                                    auto sel = seBuilder.CreateSelect(cmp, IDToValue[exit.second], prevSel);
+                                                    cast<SelectInst>(sel)->moveBefore(sw);
+                                                    prevSel = sel;
+                                                }
+                                                for (unsigned int j = 0; j < phi->getNumIncomingValues(); j++)
+                                                {
+                                                    if (phi->getIncomingBlock(j) == sw->getParent())
+                                                    {
+                                                        phi->removeIncomingValue(j);
+                                                    }
+                                                }
+                                                phi->addIncoming(prevSel, sw->getParent());
+                                                PrintVal(phi);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             PatchPhis(VMap);
 
             // replace parent export uses in embedded kernel call instructions
@@ -377,6 +452,7 @@ namespace TraceAtlas::tik
                 }
             }
 
+            // replace child exports to parent with loads from those exports
             for (auto embedded : embeddedKernels)
             {
                 auto kernFunc = KfMap[embedded];
@@ -779,42 +855,6 @@ namespace TraceAtlas::tik
                         for (const auto &exit : nestedKernel->Exits)
                         {
                             sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), IDToBlock[exit->Block]);
-                            // for each successor of each exit, have to check the preds and change/add an entry to the phi if necessary
-                            if (IDToBlock[exit->Block]->hasNPredecessorsOrMore(2))
-                            {
-                                BasicBlock *trueExit;
-                                if (VMap.find(IDToBlock[exit->Block]) != VMap.end())
-                                {
-                                    trueExit = cast<BasicBlock>(VMap[IDToBlock[exit->Block]]);
-                                }
-                                else
-                                {
-                                    trueExit = IDToBlock[exit->Block];
-                                }
-                                if (auto phi = dyn_cast<PHINode>(trueExit->begin()))
-                                {
-                                    bool found = false;
-                                    auto numVals = phi->getNumIncomingValues();
-                                    for (unsigned int i = 0; i < numVals; i++)
-                                    {
-                                        // the only way a phi is dependent on our exit is if it's using an export
-                                        for (auto key : nestedKernel->ArgumentMap)
-                                        {
-                                            if (key.second == GetValueID(phi->getIncomingValue(i)))
-                                            {
-                                                // don't set the value yet, it will be remapped to the dereferences alloca of the export or a parent arg
-                                                phi->addIncoming(phi->getIncomingValue(i), intermediateBlock);
-                                                phi->replaceUsesOfWith(phi->getIncomingValue(i), key.first);
-                                                found = true;
-                                            }
-                                        }
-                                    }
-                                    if (!found)
-                                    {
-                                        throw AtlasException("Could not remap phi entry to embedded kernel call");
-                                    }
-                                }
-                            }
                         }
                         VMap[block] = intermediateBlock;
                     }
