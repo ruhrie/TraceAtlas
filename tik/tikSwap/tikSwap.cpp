@@ -120,6 +120,37 @@ int main(int argc, char *argv[])
         {
             try
             {
+                // check the exits of this kernel at this entrance
+                // look for successors of exits that are not expecting this predecessor
+                auto enterBlock = IDToBlock[e->Block];
+                for (auto exit : kernel->Exits)
+                {
+                    auto succ = IDToBlock[exit->Block];
+                    if (find(predecessors(succ).begin(), predecessors(succ).end(), enterBlock) == predecessors(succ).end())
+                    {
+                        // have to evaluate if the block is dependent on its predecessors
+                        // 1.) the block contains a phi that evaluates all predecessors
+                        for (auto it = succ->begin(); it != succ->end(); it++)
+                        {
+                            if (auto phi = dyn_cast<PHINode>(it))
+                            {
+                                bool found = false;
+                                for (unsigned int k = 0; k < phi->getNumIncomingValues(); k++)
+                                {
+                                    if (phi->getIncomingBlock(k) == succ)
+                                    {
+                                        found = true;
+                                    }
+                                }
+                                if (!found)
+                                {
+                                    // we have a phi that is not expecting us as an incoming value. Which export should it receive?
+                                    throw AtlasException("Kernel exit is an unexpected phi predecessor!");
+                                }
+                            }
+                        }
+                    }
+                }
                 // list of values that directly map to the list of kernel function args
                 vector<Value *> mappedVals;
                 vector<Type *> argTypes;
