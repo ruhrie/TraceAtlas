@@ -290,18 +290,34 @@ int main(int argc, char *argv[])
     {
         for (auto bi = fi.begin(); bi != fi.end(); bi++)
         {
+            // very weird phenomenon here, but essentially we have to collect all entries to delete per phi per basic block, then delete them
+            // when all phi entries are deleted, llvm deletes the phi, so to avoid segfault we can't remove until we're done with the block
+            vector<pair<PHINode *, unsigned int>> remInd;
             for (auto it = bi->begin(); it != bi->end(); it++)
             {
-                if (auto phi = dyn_cast<PHINode>(it))
+                if (it.getNodePtr() != nullptr)
                 {
-                    for (unsigned int i = 0; i < phi->getNumIncomingValues(); i++)
+                    if (auto phi = dyn_cast<PHINode>(it))
                     {
-                        if (find(predecessors(phi->getParent()).begin(), predecessors(phi->getParent()).end(), phi->getIncomingBlock(i)) == predecessors(phi->getParent()).end())
+                        // each index to remove has to be the index that results after all previous entries to remove are out
+                        unsigned int j = 0;
+                        for (unsigned int i = 0; i < phi->getNumIncomingValues(); i++)
                         {
-                            phi->removeIncomingValue(i);
+                            if (find(predecessors(phi->getParent()).begin(), predecessors(phi->getParent()).end(), phi->getIncomingBlock(i)) == predecessors(phi->getParent()).end())
+                            {
+                                remInd.push_back(pair(phi, j));
+                            }
+                            else
+                            {
+                                j++;
+                            }
                         }
                     }
                 }
+            }
+            for (auto ind : remInd)
+            {
+                ind.first->removeIncomingValue(ind.second);
             }
         }
     }
