@@ -183,7 +183,8 @@ int main(int argc, char *argv[])
                 {
                     auto block = IDToBlock[e->Block];
                     // create the call instruction to kernel
-                    IRBuilder iBuilder(block->getTerminator());
+                    auto origterm = block->getTerminator();
+                    IRBuilder iBuilder(block);
                     auto baseFuncInst = cast<Function>(sourceBitcode->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
                     CallInst *KInst = iBuilder.CreateCall(baseFuncInst, mappedVals);
                     MDNode *callNode = MDNode::get(KInst->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(KInst->getContext()), (uint64_t)IDState::Artificial)));
@@ -209,15 +210,17 @@ int main(int argc, char *argv[])
                         }
                     }
                     // remove the old BB terminator
-                    toRemove.insert(block->getTerminator());
+                    toRemove.insert(origterm);
                     // now alloc export pointers in the entrance context and insert loads wherever they're used
                     for (auto key : kernel->ArgumentMap)
                     {
                         string name = key.first->getName();
                         if (name[0] == 'e')
                         {
+                            // have to generate alloca in the first basic block of the parent function
+                            auto insertion = sw->getParent()->getParent()->getEntryBlock().getTerminator();
+                            IRBuilder<> alBuilder(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt()->getParent());
                             auto alloc = iBuilder.CreateAlloca(IDToValue[key.second]->getType());
-                            auto insertion = cast<Instruction>(block->getFirstInsertionPt());
                             alloc->moveBefore(insertion);
                             set<pair<Value *, Instruction *>> toReplace;
                             for (auto use : IDToValue[key.second]->users())
@@ -245,13 +248,13 @@ int main(int argc, char *argv[])
                                         if (phi->getIncomingValue(i) == pa.first)
                                         {
                                             predBlock = phi->getIncomingBlock(i);
+                                            auto term = predBlock->getTerminator();
+                                            IRBuilder<> ldBuilder(predBlock);
+                                            auto ld = ldBuilder.CreateLoad(alloc);
+                                            ld->moveBefore(term);
+                                            phi->setIncomingValue(i, ld);
                                         }
                                     }
-                                    auto term = predBlock->getTerminator();
-                                    IRBuilder<> ldBuilder(predBlock);
-                                    auto ld = ldBuilder.CreateLoad(alloc);
-                                    ld->moveBefore(term);
-                                    phi->replaceUsesOfWith(pa.first, ld);
                                 }
                                 else if (auto inst = dyn_cast<Instruction>(pa.second))
                                 {
