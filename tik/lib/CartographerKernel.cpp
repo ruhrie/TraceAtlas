@@ -63,6 +63,14 @@ namespace TraceAtlas::tik
                 }
                 findScopedStructures(ci->getCalledFunction(), scopedBlocks, scopedFuncs, embeddedKernels);
             }
+            else if (auto inv = dyn_cast<InvokeInst>(inst))
+            {
+                if (inv->getCalledFunction() == nullptr)
+                {
+                    throw AtlasException("Null invoke call: indirect call");
+                }
+                findScopedStructures(inv->getCalledFunction(), scopedBlocks, scopedFuncs, embeddedKernels);
+            }
         }
         return;
     }
@@ -255,7 +263,10 @@ namespace TraceAtlas::tik
             {
                 findScopedStructures(block, scopedBlocks, scopedFuncs, embeddedKernels);
             }
-
+            for (auto func : scopedFuncs)
+            {
+                cout << func->getName().data() << endl;
+            }
             GetBoundaryValues(scopedBlocks, scopedFuncs, embeddedKernels, KernelImports, KernelExports, VMap);
             //we now have all the information we need
             //start by making the correct function
@@ -404,7 +415,6 @@ namespace TraceAtlas::tik
                                                     }
                                                 }
                                                 phi->addIncoming(prevSel, sw->getParent());
-                                                PrintVal(phi);
                                             }
                                         }
                                     }
