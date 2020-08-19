@@ -11,14 +11,16 @@ namespace WorkingSet
     int64_t timing = 0;
     map<uint64_t,KernelWorkingSet> KernelWorkingSetMap;
     vector<InternaladdressLiving> internalAddressLivingVec;
+
     map<uint64_t,uint64_t> kernelFiringNum;
     map<uint64_t,uint64_t> maxinternalfiring;
     map<uint64_t,vector<uint64_t>> internalTimeStamp;
-    void firstStore(uint64_t addrIndex, int64_t t, bool fromStore, uint64_t kernelIndex,uint64_t dataSize)
+
+
+    map<uint64_t,uint64_t> importantAddrToDatasize;
+    void firstStore(uint64_t addrIndex, int64_t t, bool fromStore, uint64_t kernelIndex)
     {
         // birth from a store inst
-        if(dataSize)
-        {}
         if (fromStore)
         {
             if(KernelWorkingSetMap[kernelIndex].internalAddressIndexMap.find(addrIndex)==KernelWorkingSetMap[kernelIndex].internalAddressIndexMap.end())
@@ -49,7 +51,6 @@ namespace WorkingSet
             if (KernelWorkingSetMap[kernelIndex].inputAddressIndexSet.find(addrIndex) == KernelWorkingSetMap[kernelIndex].inputAddressIndexSet.end())
             {
                 KernelWorkingSetMap[kernelIndex].inputAddressIndexSet.insert(addrIndex);
-                KernelWorkingSetMap[kernelIndex].inputMapSize++;
             }    
         }
     }
@@ -137,35 +138,33 @@ namespace WorkingSet
         {        
             for (auto it: VKernel)
             {
+                addressIndex = stoul(value, nullptr, 0);
                 dataSize = BBMemInstSize[VBlock][instCounter];
-                if (dataSize==0)
-                {
-                    printf("vblock : %lu instcounter: %lu", VBlock,instCounter);
-                }
-                printf("data size : %lu \n",dataSize);
+                importantAddrToDatasize[addressIndex] = dataSize;
                 if (key == "StoreAddress")
                 {
-                    addressIndex = stoul(value, nullptr, 0);
-                    firstStore(addressIndex, timing, true, it, dataSize);
+                    firstStore(addressIndex, timing, true, it);
                 }
                 else if (key == "LoadAddress")
                 {
-                    addressIndex = stoul(value, nullptr, 0);
                     //Update the death time in address struct if the address is already in internal address vector
                     if (KernelWorkingSetMap[it].internalAddressIndexMap.find(addressIndex) != KernelWorkingSetMap[it].internalAddressIndexMap.end())
                     {
                         KernelWorkingSetMap[it].internalAddressLivingVec[KernelWorkingSetMap[it].internalAddressIndexMap[addressIndex]].deathTime = timing;
                         //remove the address from output set, if there is a load corresponding to a store
-                        KernelWorkingSetMap[it].outputAddressIndexSet.erase(addressIndex);
+                        if (KernelWorkingSetMap[it].outputAddressIndexSet.find(addressIndex) !=KernelWorkingSetMap[it].outputAddressIndexSet.end())
+                        {
+                            KernelWorkingSetMap[it].outputAddressIndexSet.erase(addressIndex);
+                        }         
                     }
                     else if (KernelWorkingSetMap[it].inputAddressIndexSet.find(addressIndex) == KernelWorkingSetMap[it].inputAddressIndexSet.end())
                     {
-                        firstStore(addressIndex, timing, false, it, dataSize);
+                        firstStore(addressIndex, timing, false, it);
                     }
                 }
                 if(kernelFiringNum[it]>30000)
                 {
-                    //firingClear(it);
+                    firingClear(it);
                 }
                 instCounter++;
                 timing++;

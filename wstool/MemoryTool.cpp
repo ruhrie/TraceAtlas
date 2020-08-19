@@ -132,7 +132,7 @@ int main(int argc, char **argv)
                 timePoint.first = it.birthTime;
                 timePoint.second = endTimeSet.size();
                 internalTimeStampMap[itout.first].push_back(timePoint);
-                
+                // add internal addresses here
                 if (endTimeSet.size() > maxinternal)
                 {
                     maxinternal = endTimeSet.size();
@@ -143,10 +143,27 @@ int main(int argc, char **argv)
         {
             maxinternal = maxinternalfiring[itout.first];
         }
-        maxInput = itout.second.inputMapSize;
+        maxInput = itout.second.inputAddressIndexSet.size();
         maxOutput = itout.second.outputAddressIndexSet.size();
-        printf("maxInput: %lu \n maxinternal: %lu \n maxOutput: %lu \n", maxInput, maxinternal, maxOutput);
+        printf("maxDataInput: %lu \n maxinternal: %lu \n maxOutput: %lu \n", maxInput, maxinternal, maxOutput);
     }
+
+    //calculate intersections here
+    for (auto it1:kernelMap)
+    {
+        for (auto it2:kernelMap)
+        {
+            if (it1 == it2)
+            {
+                continue;
+            }
+            
+
+        }
+    }
+
+
+    // output liveness address number here
     string   fileName;
     for (auto &it: internalTimeStampMap)
     {
