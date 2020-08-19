@@ -25,7 +25,7 @@ namespace TraceAtlas::tik
         /// @param embeddedKernels Set of functions that are embedded kernel calls
         /// @param KernelImports   Value IDs that represent all imports of the kernel
         /// @param KernelExports   Value IDs representing all kernel exports.
-        void GetBoundaryValues(std::set<llvm::BasicBlock *> &scopedBlocks, std::set<llvm::Function *> &scopedFuncs, std::set<llvm::Function *> &embeddedKernels, std::vector<int64_t> &KernelImports, std::vector<int64_t> &KernelExports, llvm::ValueToValueMapTy &VMap);
+        void GetBoundaryValues(std::set<llvm::BasicBlock *> &scopedBlocks, std::set<llvm::Function *> &scopedFuncs, std::set<llvm::Function *> &embeddedKernels, std::vector<int64_t> &KernelImports, std::vector<int64_t> &KernelExports);
 
         /// @brief Constructs kernel function from only kernel blocks
         ///
@@ -37,16 +37,13 @@ namespace TraceAtlas::tik
         ///
         /// When embedded kernels export to the parent, their pointers are allocated here.
         /// The entrance of the kernel is handled here.
-        void BuildInit(llvm::ValueToValueMapTy &VMap, std::vector<int64_t> &KernelExports);
+        void BuildInit(llvm::ValueToValueMapTy &VMap);
 
         /// @brief Inlines all functions that can possibly be inlined
         ///
         /// Only functions that are internally defined are inlined.
         /// When the original bitcode is compiled, some functions (from libc and STL, for example) are external references.
         void InlineFunctionsFromBlocks(std::set<int64_t> &blocks);
-
-        /// Not used anymore
-        void RemapNestedKernels(llvm::ValueToValueMapTy &VMap);
 
         /// @brief Moves all global definitions internal to the source bitcode into the tik module
         ///
@@ -73,5 +70,8 @@ namespace TraceAtlas::tik
 
         /// @brief Attempts to replicate exception handling from the original bitcode.
         void FixInvokes();
+
+        /// Not used anymore
+        void RemapNestedKernels(llvm::ValueToValueMapTy &VMap);
     };
 } // namespace TraceAtlas::tik

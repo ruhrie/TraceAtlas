@@ -23,6 +23,10 @@ namespace TraceAtlas::tik
     {
         if (auto func = dyn_cast<Function>(val))
         {
+            if (scopedFuncs.find(func) != scopedFuncs.end())
+            {
+                return;
+            }
             scopedFuncs.insert(func);
             for (auto it = func->begin(); it != func->end(); it++)
             {
@@ -263,11 +267,8 @@ namespace TraceAtlas::tik
             {
                 findScopedStructures(block, scopedBlocks, scopedFuncs, embeddedKernels);
             }
-            for (auto func : scopedFuncs)
-            {
-                cout << func->getName().data() << endl;
-            }
-            GetBoundaryValues(scopedBlocks, scopedFuncs, embeddedKernels, KernelImports, KernelExports, VMap);
+
+            GetBoundaryValues(scopedBlocks, scopedFuncs, embeddedKernels, KernelImports, KernelExports);
             //we now have all the information we need
             //start by making the correct function
             vector<Type *> inputArgs;
@@ -340,7 +341,7 @@ namespace TraceAtlas::tik
 
             BuildKernelFromBlocks(VMap, blocks);
 
-            BuildInit(VMap, KernelExports);
+            BuildInit(VMap);
 
             Remap(VMap); //we need to remap before inlining
 
@@ -351,6 +352,21 @@ namespace TraceAtlas::tik
             //remap and repipe
             Remap(VMap);
 
+            // patch work here. Sometimes when an export lies on a function boundary, llvm will inject the block terminator before the store
+            for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
+            {
+                if (auto st = dyn_cast<StoreInst>(prev(fi->end())))
+                {
+                    // have to find the true terminator
+                    for (auto bi = fi->begin(); bi != fi->end(); bi++)
+                    {
+                        if (bi->isTerminator())
+                        {
+                            bi->moveAfter(st);
+                        }
+                    }
+                }
+            }
             // Evaluate embedded kernel exits for export ambiguities
             for (auto embfunc : embeddedKernels)
             {
@@ -364,9 +380,6 @@ namespace TraceAtlas::tik
                             {
                                 // found an embedded kernel, evaluate its exits
                                 auto sw = cast<SwitchInst>(bi->getTerminator());
-                                //for( unsigned int i = 0; i < sw->getNumSuccessors(); i++ )
-                                //{
-                                //auto destBlock = sw->getSuccessor(i);
                                 for (auto succ : successors(sw->getParent()))
                                 {
                                     auto destBlock = succ;
@@ -602,7 +615,7 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &scopedBlocks, set<Function *> &scopedFuncs, set<Function *> &embeddedKernels, vector<int64_t> &KernelImports, vector<int64_t> &KernelExports, ValueToValueMapTy &VMap)
+    void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &scopedBlocks, set<Function *> &scopedFuncs, set<Function *> &embeddedKernels, vector<int64_t> &KernelImports, vector<int64_t> &KernelExports)
     {
         set<int64_t> kernelIE;
         for (const auto block : scopedBlocks)
@@ -969,7 +982,7 @@ namespace TraceAtlas::tik
         }
     }
 
-    void CartographerKernel::BuildInit(llvm::ValueToValueMapTy &VMap, vector<int64_t> &KernelExports)
+    void CartographerKernel::BuildInit(llvm::ValueToValueMapTy &VMap)
     {
         IRBuilder<> initBuilder(Init);
 
@@ -1390,7 +1403,7 @@ namespace TraceAtlas::tik
             }
         }
     }
-
+    /*
     void CartographerKernel::RemapNestedKernels(llvm::ValueToValueMapTy &VMap)
     {
         // Now find all calls to the embedded kernel functions in the body, if any, and change their arguments to the new ones
@@ -1454,5 +1467,5 @@ namespace TraceAtlas::tik
             }
         }
     }
-
+    */
 } // namespace TraceAtlas::tik
