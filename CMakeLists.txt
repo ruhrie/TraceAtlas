@@ -30,6 +30,12 @@ find_package(nlohmann_json CONFIG REQUIRED) #nlohmann_json
 find_package(spdlog CONFIG REQUIRED) #spdlog
 find_package(indicators CONFIG REQUIRED) #indicators
 
+function(MakeIR target)
+    set_target_properties(LINK_OPTIONS "-Wl,--plugin-opt=emit-llvm")
+endfunction()
+
+set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld-9")
+
 #clang-tidy options
 option(ENABLE_LINTER "Run linter" OFF)
 if(${ENABLE_LINTER})
@@ -64,6 +70,7 @@ add_subdirectory("tik")
 add_subdirectory("deat")
 add_subdirectory("kar")
 add_subdirectory("Utilities")
+add_subdirectory("wstool")
 
 #repsonsible for injecting the tracer. Fairly fragile so be careful
 function(InjectTracer tar)
@@ -82,6 +89,24 @@ function(InjectTracer tar)
     add_executable(${tar}-trace opt.bc)
     set_target_properties(${tar}-trace PROPERTIES LINKER_LANGUAGE CXX)
     target_link_libraries(${tar}-trace PRIVATE AtlasBackend)
+endfunction()
+
+function(InjectMemoryTracer tarMem)
+    add_custom_command(OUTPUT optMem.bc
+        COMMAND ${tarMem}-trace
+        COMMAND cartographer -i ${CMAKE_CURRENT_BINARY_DIR}/raw.trc -b $<TARGET_FILE:${tarMem}> -k ${CMAKE_CURRENT_BINARY_DIR}/kernel.json
+        COMMAND opt-9 -load $<TARGET_FILE:AtlasPasses> -EncodedTraceMemory $<TARGET_FILE:${tarMem}> -o optMem.bc -k ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -ki 0 -always-inline 
+        DEPENDS $<TARGET_FILE:${tarMem}>
+    )
+    set_source_files_properties(
+        optMem.bc
+        PROPERTIES
+        EXTERNAL_OBJECT true
+        GENERATED true
+    )
+    add_executable(${tarMem}-memory-trace optMem.bc)
+    set_target_properties(${tarMem}-memory-trace PROPERTIES LINKER_LANGUAGE CXX)
+    target_link_libraries(${tarMem}-memory-trace PRIVATE AtlasBackend)
 endfunction()
 
 #our unit tests

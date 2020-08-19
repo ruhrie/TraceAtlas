@@ -11,3 +11,7 @@ set_tests_properties(1DBlur_tik PROPERTIES DEPENDS 1DBlur_cartographer)
 
 add_test(NAME 1DBlur_dag COMMAND dagExtractor -t ${CMAKE_CURRENT_BINARY_DIR}/raw.trc -o ${CMAKE_CURRENT_BINARY_DIR}/dag.json -k ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
 set_tests_properties(1DBlur_dag PROPERTIES DEPENDS 1DBlur_cartographer)
+
+InjectMemoryTracer(1DBlur)
+add_test(NAME 1DBlur_memory_Trace COMMAND 1DBlur-memory-trace)
+add_test(NAME 1DBlur_working_set COMMAND wstool -i ./raw.trc)
