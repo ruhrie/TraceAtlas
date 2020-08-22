@@ -441,6 +441,7 @@ namespace TraceAtlas::tik
             PatchPhis(VMap);
 
             // replace parent export uses in embedded kernel call instructions
+            // and replace parent export uses in the parent context
             for (auto parKey : ArgumentMap)
             {
                 if (parKey.first->getName()[0] == 'e')
@@ -466,6 +467,31 @@ namespace TraceAtlas::tik
                                             auto ld = ldBuilder.CreateLoad(parKey.first);
                                             ld->moveBefore(callInst);
                                             callInst->replaceUsesOfWith(IDToValue[parKey.second], ld);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        // its possible for a child kernel to export to both the parent and the parent's parent
+                                        // this will be an export of both the child and parent, the value will not be born in the parent, and there will be uses in the parent
+                                        if (auto useInst = dyn_cast<Instruction>(it->getOperand(i)))
+                                        {
+                                            if (useInst->getParent()->getParent() != KernelFunction)
+                                            {
+                                                for (const auto child : embeddedKernels)
+                                                {
+                                                    for (auto childArg : KfMap[child]->ArgumentMap)
+                                                    {
+                                                        if (parKey.second == childArg.second && childArg.first->getName()[0] == 'e')
+                                                        {
+                                                            // inject a load for the export and replace this operand
+                                                            IRBuilder<> ldBuilder(it->getParent());
+                                                            auto ld = ldBuilder.CreateLoad(parKey.first);
+                                                            ld->moveBefore(cast<Instruction>(it));
+                                                            cast<Instruction>(it)->replaceUsesOfWith(IDToValue[parKey.second], ld);
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -900,11 +926,11 @@ namespace TraceAtlas::tik
                 }
 
                 //fix the phis
-                int rescheduled = 0; //the number of blocks we rescheduled
                 for (auto bi = cb->begin(); bi != cb->end(); bi++)
                 {
                     if (auto *p = dyn_cast<PHINode>(bi))
                     {
+                        int replaced = 0;
                         for (auto pred : p->blocks())
                         {
                             if (blocks.find(pred) == blocks.end())
@@ -916,7 +942,7 @@ namespace TraceAtlas::tik
                                     if (IDToBlock[ent->Block] == block)
                                     {
                                         p->replaceIncomingBlockWith(pred, Init);
-                                        rescheduled++;
+                                        replaced++;
                                         found = true;
                                         break;
                                     }
@@ -931,15 +957,16 @@ namespace TraceAtlas::tik
                                 }
                             }
                         }
+                        if (replaced > 1)
+                        {
+                            // We don't support multiple entrances
+                            throw AtlasException("Init replaced more than one phi predecessor!");
+                        }
                     }
                     else
                     {
                         break;
                     }
-                }
-                if (rescheduled > 1)
-                {
-                    spdlog::warn("Rescheduled more than one phi predecessor"); //basically this is a band aid. Needs some more help
                 }
             }
         }
