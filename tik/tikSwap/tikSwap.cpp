@@ -283,10 +283,40 @@ int main(int argc, char *argv[])
             }
         }
     }
+
+    set<Instruction *> badInst;
     // remove blocks if any
     for (auto ind : toRemove)
     {
+        // if the successors of this instruction only have this block as a pred, any uses of the successors values will be unresolved
+        if (auto br = dyn_cast<BranchInst>(ind))
+        {
+            for (unsigned int i = 0; i < br->getNumSuccessors(); i++)
+            {
+                auto succ = br->getSuccessor(i);
+                if (succ->hasNPredecessors(1))
+                {
+                    for (auto it = succ->begin(); it != succ->end(); it++)
+                    {
+                        for (auto use : it->users())
+                        {
+                            if (auto useInst = dyn_cast<Instruction>(use))
+                            {
+                                if (useInst->hasNUses(0) && !useInst->isTerminator())
+                                {
+                                    badInst.insert(useInst);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         ind->eraseFromParent();
+    }
+    for (auto inst : badInst)
+    {
+        inst->eraseFromParent();
     }
 
     // now verify that phis only contain valid entries
@@ -294,7 +324,7 @@ int main(int argc, char *argv[])
     {
         for (auto bi = fi.begin(); bi != fi.end(); bi++)
         {
-            // very weird phenomenon here, but essentially we have to collect all entries to delete per phi per basic block, then delete them
+            // very weird phenomenon here, but essentially we have to collect all phi entries to delete per basic block, then delete them
             // when all phi entries are deleted, llvm deletes the phi, so to avoid segfault we can't remove until we're done with the block
             vector<pair<PHINode *, unsigned int>> remInd;
             for (auto it = bi->begin(); it != bi->end(); it++)
