@@ -471,7 +471,7 @@ namespace TraceAtlas::tik
                                     }
                                     else
                                     {
-                                        // its possible for a child kernel to export to both the parent and the parent's parent
+                                        // it's possible for a child kernel to export to both the parent and the parent's parent
                                         // this will be an export of both the child and parent, the value will not be born in the parent, and there will be uses in the parent
                                         if (auto useInst = dyn_cast<Instruction>(it->getOperand(i)))
                                         {
@@ -904,6 +904,31 @@ namespace TraceAtlas::tik
                         for (const auto &exit : nestedKernel->Exits)
                         {
                             sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), IDToBlock[exit->Block]);
+                            // now remap any phis that exist in this exit
+                            for (auto it = IDToBlock[exit->Block]->begin(); it != IDToBlock[exit->Block]->end(); it++)
+                            {
+                                if (auto phi = dyn_cast<PHINode>(it))
+                                {
+                                    // if we remap more than one to the same exit we're in trouble
+                                    int remapped = 0;
+                                    for (unsigned int i = 0; i < phi->getNumIncomingValues(); i++)
+                                    {
+                                        // look at the incoming values of the phi, if they map to child kernel exports, their incoming blocks are definitely the callinst parent
+                                        for (auto childKey : nestedKernel->ArgumentMap)
+                                        {
+                                            if (childKey.first->getName()[0] == 'e' && GetValueID(phi->getIncomingValue(i)) == childKey.second)
+                                            {
+                                                phi->setIncomingBlock(i, intermediateBlock);
+                                                remapped++;
+                                            }
+                                        }
+                                    }
+                                    if (remapped > 1)
+                                    {
+                                        throw AtlasException("Phi node has multiple child kernel exports!");
+                                    }
+                                }
+                            }
                         }
                         VMap[block] = intermediateBlock;
                     }
