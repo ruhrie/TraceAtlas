@@ -263,6 +263,12 @@ namespace TraceAtlas::tik
             set<BasicBlock *> scopedBlocks = blocks;
             set<Function *> scopedFuncs;
             set<Function *> embeddedKernels;
+            /*auto exs = GetExits(scopedBlocks);
+            int exId = 0;
+            for (auto ex : exs )
+            {
+                Exits.insert(make_shared<KernelInterface>(exId++, GetBlockID(ex)));
+            }*/
             for (auto block : blocks)
             {
                 findScopedStructures(block, scopedBlocks, scopedFuncs, embeddedKernels);

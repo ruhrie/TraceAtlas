@@ -517,4 +517,23 @@ namespace TraceAtlas::tik
         }
         return result;
     }
+
+    set<BasicBlock *> GetExits(set<BasicBlock *> &s)
+    {
+        set<BasicBlock *> result;
+        for (auto block : s)
+        {
+            for (unsigned int i = 0; i < block->getTerminator()->getNumSuccessors(); i++)
+            {
+                if (auto br = dyn_cast<BranchInst>(block->getTerminator()->getSuccessor(i)))
+                {
+                    if (s.find(br->getParent()) == s.end())
+                    {
+                        result.insert(br->getParent());
+                    }
+                }
+            }
+        }
+        return result;
+    }
 } // namespace TraceAtlas::tik
