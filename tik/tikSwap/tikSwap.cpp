@@ -7,6 +7,7 @@
 #include "tik/Util.h"
 #include <fstream>
 #include <iostream>
+#include <llvm/Analysis/CFG.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/CFG.h>
@@ -34,7 +35,7 @@ int main(int argc, char *argv[])
 {
     cl::ParseCommandLineOptions(argc, argv);
     spdlog::info("Starting tikSwap.");
-    //load the original bitcode
+    // load the original bitcode
     LLVMContext OContext;
     SMDiagnostic Osmerror;
     unique_ptr<Module> sourceBitcode;
@@ -65,7 +66,7 @@ int main(int argc, char *argv[])
             F.setLinkage(GlobalValue::ExternalLinkage);
         }
     }
-    /// Initialize our IDtoX maps
+    // Initialize our IDtoX maps
     InitializeIDMaps(sourceBitcode.get());
 
     // load the tik IR
@@ -120,7 +121,6 @@ int main(int argc, char *argv[])
         {
             try
             {
-                // check the exits of this kernel at this entrance
                 // look for exits that are not expecting this predecessor
                 for (auto pred : predecessors(IDToBlock[e->Block]))
                 {
@@ -294,7 +294,7 @@ int main(int argc, char *argv[])
     // remove blocks if any
     for (auto ind : toRemove)
     {
-        // if the successors of this instruction only have this block as a pred, any uses of the successors values will be unresolved
+        // if the successors of this terminator only have the terminator parent as a pred, any uses of the successors values will be unresolved
         if (auto br = dyn_cast<BranchInst>(ind))
         {
             for (unsigned int i = 0; i < br->getNumSuccessors(); i++)
@@ -302,15 +302,20 @@ int main(int argc, char *argv[])
                 auto succ = br->getSuccessor(i);
                 if (succ->hasNPredecessors(1))
                 {
+                    // for each inst in the now predecessor-less block
                     for (auto it = succ->begin(); it != succ->end(); it++)
                     {
                         for (auto use : it->users())
                         {
                             if (auto useInst = dyn_cast<Instruction>(use))
                             {
-                                if (useInst->hasNUses(0) && !useInst->isTerminator())
+                                if (!useInst->isTerminator())
                                 {
-                                    badInst.insert(useInst);
+                                    // if this unresolved use is not a terminator and has no uses, it can be trivially deleted
+                                    if (useInst->hasNUses(0))
+                                    {
+                                        badInst.insert(useInst);
+                                    }
                                 }
                             }
                         }

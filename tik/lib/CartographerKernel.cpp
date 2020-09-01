@@ -252,6 +252,10 @@ namespace TraceAtlas::tik
             }
 
             auto ent = GetEntrances(blocks);
+            if (ent.empty())
+            {
+                throw AtlasException("Kernel has 0 body entrances.");
+            }
             int entranceId = 0;
             for (auto e : ent)
             {
@@ -358,7 +362,7 @@ namespace TraceAtlas::tik
             //remap and repipe
             Remap(VMap);
 
-            // patch work here. Sometimes when an export lies on a function boundary, llvm will inject the block terminator before the store
+            // patch work here. Sometimes when inlining, llvm will inject the block terminator before the store
             for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
             {
                 if (auto st = dyn_cast<StoreInst>(prev(fi->end())))
@@ -548,6 +552,7 @@ namespace TraceAtlas::tik
                             auto al = alBuilder.CreateAlloca(IDToValue[embExp.second]->getType());
                             al->moveBefore(sel);
                             // now replace all uses of the export value with loads or references to the alloca
+                            bool found = false;
                             for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
                             {
                                 for (auto it = bi->begin(); it != bi->end(); it++)
@@ -556,6 +561,7 @@ namespace TraceAtlas::tik
                                     {
                                         if (embExp.second == GetValueID(it->getOperand(i)))
                                         {
+                                            found = true;
                                             if (auto st = dyn_cast<StoreInst>(it))
                                             {
                                                 continue;
@@ -601,6 +607,32 @@ namespace TraceAtlas::tik
                                     }
                                 }
                             }
+                            /*if( !found )
+                            {
+                                // must be a child export that isn't used in the final parent context
+                                // this is allowable under the dead code export patch
+                                // this fix here is to prevent the wrong value from being mapped to the export arg in the embedded kernel callinst
+                                for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
+                                {
+                                    for (auto it = bi->begin(); it != bi->end(); it++)
+                                    {
+                                        for (unsigned int i = 0; i < it->getNumOperands(); i++)
+                                        {
+                                            if (auto callInst = dyn_cast<CallInst>(it))
+                                            {
+                                                if (embeddedKernels.find(callInst->getCalledFunction()) != embeddedKernels.end())
+                                                {
+                                                    PrintVal(IDToValue[embExp.second]);
+                                                    PrintVal(callInst);
+                                                    callInst->replaceUsesOfWith(IDToValue[embExp.second], al);
+                                                    PrintVal(callInst);
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }*/
                         }
                     }
                 }
@@ -650,6 +682,65 @@ namespace TraceAtlas::tik
     void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &scopedBlocks, set<Function *> &scopedFuncs, set<Function *> &embeddedKernels, vector<int64_t> &KernelImports, vector<int64_t> &KernelExports)
     {
         set<int64_t> kernelIE;
+        // hack for tikswapping (does not apply to child kernels)
+        // it is possible for an export to only have uses within the kernel
+        // when the kernel is swapped into the original bitcode, the successors of the entrance block have their CFG edges cut. If they only had the entrance as a pred, they will be out of the CFG altogether, making all their values unresolved
+        // if the values within these blocks, which are now orphaned, have uses that only exist in the kernel, they will not be detected as exports
+        // but, it is possible that the kernel will have an exit to the original bitcode before the execution of those uses. if that exit can lead to those in-kernel uses, the value will be unresolved (since the kernel function is not exporting that value, and the value has been orphaned by the swap)
+        // this is theorized to be due to dead code
+        // to fix this, a pass is done on these entrance successors here
+        for (auto en : Entrances)
+        {
+            // if a successor of this terminator only has the kernel entrance as a pred, each use of each instruction of the successor has to be evaluated for possible export
+            if (auto br = dyn_cast<BranchInst>(IDToBlock[en->Block]->getTerminator()))
+            {
+                for (unsigned int i = 0; i < br->getNumSuccessors(); i++)
+                {
+                    auto succ = br->getSuccessor(i);
+                    if (scopedBlocks.find(succ) != scopedBlocks.end() && succ->hasNPredecessors(1) && succ != br->getParent())
+                    {
+                        for (auto it = succ->begin(); it != succ->end(); it++)
+                        {
+                            if (auto inst = dyn_cast<Instruction>(it))
+                            {
+                                if (inst->getType()->getTypeID() != Type::VoidTyID)
+                                {
+                                    // if the instruction only has uses within the kernel, and the parent of those uses has predecessors outside the kernel, it could possibly be an export
+                                    // this is an imperfect filter because we don't know if an exit can lead to this value, but detecting exits without the kernel function at the moment is too hard
+                                    for (auto use : inst->users())
+                                    {
+                                        if (auto useInst = dyn_cast<Instruction>(use))
+                                        {
+                                            if (scopedBlocks.find(useInst->getParent()) != scopedBlocks.end())
+                                            {
+                                                // now evaluate whether or not an exit prior to this use can reach the use
+                                                for (auto pred : predecessors(useInst->getParent()))
+                                                {
+                                                    if (scopedBlocks.find(pred) == scopedBlocks.end())
+                                                    {
+                                                        // may belong to a subkernel, which is not an export
+                                                        //if (embeddedKernels.find(useInst->getParent()->getParent()) == embeddedKernels.end())
+                                                        //{
+                                                        auto sExtVal = GetValueID(inst);
+                                                        if (kernelIE.find(sExtVal) == kernelIE.end())
+                                                        {
+                                                            KernelExports.push_back(sExtVal);
+                                                            kernelIE.insert(sExtVal);
+                                                            break;
+                                                        }
+                                                        //}
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         for (const auto block : scopedBlocks)
         {
             // check for an embedded kernel here
@@ -832,10 +923,6 @@ namespace TraceAtlas::tik
                     }
                 }
             }
-        }
-        if (Entrances.empty())
-        {
-            throw AtlasException("Kernel Exception: tik requires a body entrance");
         }
     }
 
@@ -1055,7 +1142,7 @@ namespace TraceAtlas::tik
             }
             else
             {
-                throw AtlasException("Unimplemented");
+                throw AtlasException("Entrance block not mapped.");
             }
             i++;
         }
