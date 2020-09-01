@@ -122,36 +122,39 @@ int main(int argc, char *argv[])
             {
                 // check the exits of this kernel at this entrance
                 // look for exits that are not expecting this predecessor
-                auto enterBlock = IDToBlock[e->Block];
-                for (auto exit : kernel->Exits)
+                for (auto pred : predecessors(IDToBlock[e->Block]))
                 {
-                    auto succ = IDToBlock[exit->Block];
-                    if (find(predecessors(succ).begin(), predecessors(succ).end(), enterBlock) == predecessors(succ).end())
+                    auto enterBlock = pred;
+                    for (auto exit : kernel->Exits)
                     {
-                        // have to evaluate if the block is dependent on its predecessors
-                        // search for a phi
-                        bool found = true;
-                        if (succ->hasNPredecessorsOrMore(2))
+                        auto succ = IDToBlock[exit->Block];
+                        if (find(predecessors(succ).begin(), predecessors(succ).end(), enterBlock) == predecessors(succ).end())
                         {
-                            for (auto it = succ->begin(); it != succ->end(); it++)
+                            // have to evaluate if the block is dependent on its predecessors
+                            // search for a phi
+                            bool found = true;
+                            if (succ->hasNPredecessorsOrMore(2))
                             {
-                                if (auto phi = dyn_cast<PHINode>(it))
+                                for (auto it = succ->begin(); it != succ->end(); it++)
                                 {
-                                    found = false;
-                                    for (unsigned int k = 0; k < phi->getNumIncomingValues(); k++)
+                                    if (auto phi = dyn_cast<PHINode>(it))
                                     {
-                                        if (phi->getIncomingBlock(k) == succ)
+                                        found = false;
+                                        for (unsigned int k = 0; k < phi->getNumIncomingValues(); k++)
                                         {
-                                            found = true;
+                                            if (phi->getIncomingBlock(k) == succ)
+                                            {
+                                                found = true;
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                        if (!found)
-                        {
-                            // we have a phi that is not expecting us as an incoming value. Which export should it receive?
-                            throw AtlasException("Kernel exit is an unexpected phi predecessor!");
+                            if (!found)
+                            {
+                                // we have a phi that is not expecting us as an incoming value. Which export should it receive?
+                                throw AtlasException("Kernel exit is an unexpected phi predecessor!");
+                            }
                         }
                     }
                 }
@@ -182,90 +185,93 @@ int main(int argc, char *argv[])
                 auto FuTy = FunctionType::get(Type::getInt8Ty(sourceBitcode->getContext()), argTypes, false);
                 auto newFunc = Function::Create(FuTy, kernel->KernelFunction->getLinkage(), kernel->KernelFunction->getAddressSpace(), "", sourceBitcode.get());
                 newFunc->setName(kernel->KernelFunction->getName());
-                // get our entrance block and swap tik
+                // get our entrance predecessor blocks and swap tik
                 if (IDToBlock.find(e->Block) != IDToBlock.end())
                 {
-                    auto block = IDToBlock[e->Block];
-                    // create the call instruction to kernel
-                    auto origterm = block->getTerminator();
-                    IRBuilder iBuilder(block);
-                    auto baseFuncInst = cast<Function>(sourceBitcode->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
-                    CallInst *KInst = iBuilder.CreateCall(baseFuncInst, mappedVals);
-                    MDNode *callNode = MDNode::get(KInst->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(KInst->getContext()), (uint64_t)IDState::Artificial)));
-                    KInst->setMetadata("ValueID", callNode);
-                    // create switch case to process retval from kernel callinst
-                    KernelInterface a(IDState::Artificial, IDState::Artificial);
-                    for (auto &j : kernel->Exits)
+                    for (auto pred : predecessors(IDToBlock[e->Block]))
                     {
-                        if (j->Index == 0)
+                        auto block = pred; //IDToBlock[e->Block];
+                        // create the call instruction to kernel
+                        auto origterm = block->getTerminator();
+                        IRBuilder iBuilder(block);
+                        auto baseFuncInst = cast<Function>(sourceBitcode->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
+                        CallInst *KInst = iBuilder.CreateCall(baseFuncInst, mappedVals);
+                        MDNode *callNode = MDNode::get(KInst->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(KInst->getContext()), (uint64_t)IDState::Artificial)));
+                        KInst->setMetadata("ValueID", callNode);
+                        // create switch case to process retval from kernel callinst
+                        KernelInterface a(IDState::Artificial, IDState::Artificial);
+                        for (auto &j : kernel->Exits)
                         {
-                            a.Block = j->Block;
-                            a.Index = j->Index;
-                        }
-                    }
-                    auto sw = iBuilder.CreateSwitch(cast<Value>(KInst), IDToBlock[a.Block], (unsigned int)kernel->Exits.size());
-                    MDNode *swNode = MDNode::get(sw->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(sw->getContext()), (uint64_t)IDState::Artificial)));
-                    sw->setMetadata("ValueID", swNode);
-                    for (auto &j : kernel->Exits)
-                    {
-                        if (j->Index != 0)
-                        {
-                            sw->addCase(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)j->Index), IDToBlock[j->Block]);
-                        }
-                    }
-                    // remove the old BB terminator
-                    toRemove.insert(origterm);
-                    // now alloc export pointers in the entrance context and insert loads wherever they're used
-                    for (auto key : kernel->ArgumentMap)
-                    {
-                        string name = key.first->getName();
-                        if (name[0] == 'e')
-                        {
-                            // have to generate alloca in the first basic block of the parent function
-                            auto insertion = sw->getParent()->getParent()->getEntryBlock().getTerminator();
-                            IRBuilder<> alBuilder(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt()->getParent());
-                            auto alloc = iBuilder.CreateAlloca(IDToValue[key.second]->getType());
-                            alloc->moveBefore(insertion);
-                            set<pair<Value *, Instruction *>> toReplace;
-                            for (auto use : IDToValue[key.second]->users())
+                            if (j->Index == 0)
                             {
-                                if (auto inst = dyn_cast<Instruction>(use))
-                                {
-                                    if (auto calli = dyn_cast<CallInst>(inst))
-                                    {
-                                        if (calli->getCalledFunction() == baseFuncInst)
-                                        {
-                                            continue;
-                                        }
-                                    }
-                                    toReplace.insert(pair(IDToValue[key.second], inst));
-                                }
+                                a.Block = j->Block;
+                                a.Index = j->Index;
                             }
-                            KInst->replaceUsesOfWith(IDToValue[key.second], alloc);
-                            for (auto pa : toReplace)
+                        }
+                        auto sw = iBuilder.CreateSwitch(cast<Value>(KInst), IDToBlock[a.Block], (unsigned int)kernel->Exits.size());
+                        MDNode *swNode = MDNode::get(sw->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(sw->getContext()), (uint64_t)IDState::Artificial)));
+                        sw->setMetadata("ValueID", swNode);
+                        for (auto &j : kernel->Exits)
+                        {
+                            if (j->Index != 0)
                             {
-                                if (auto phi = dyn_cast<PHINode>(pa.second))
+                                sw->addCase(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)j->Index), IDToBlock[j->Block]);
+                            }
+                        }
+                        // remove the old BB terminator
+                        toRemove.insert(origterm);
+                        // now alloc export pointers in the entrance context and insert loads wherever they're used
+                        for (auto key : kernel->ArgumentMap)
+                        {
+                            string name = key.first->getName();
+                            if (name[0] == 'e')
+                            {
+                                // have to generate alloca in the first basic block of the parent function
+                                auto insertion = cast<Instruction>(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt());
+                                IRBuilder<> alBuilder(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt()->getParent());
+                                auto alloc = iBuilder.CreateAlloca(IDToValue[key.second]->getType());
+                                alloc->moveBefore(insertion);
+                                set<pair<Value *, Instruction *>> toReplace;
+                                for (auto use : IDToValue[key.second]->users())
                                 {
-                                    BasicBlock *predBlock;
-                                    for (unsigned int i = 0; i < phi->getNumIncomingValues(); i++)
+                                    if (auto inst = dyn_cast<Instruction>(use))
                                     {
-                                        if (phi->getIncomingValue(i) == pa.first)
+                                        if (auto calli = dyn_cast<CallInst>(inst))
                                         {
-                                            predBlock = phi->getIncomingBlock(i);
-                                            auto term = predBlock->getTerminator();
-                                            IRBuilder<> ldBuilder(predBlock);
-                                            auto ld = ldBuilder.CreateLoad(alloc);
-                                            ld->moveBefore(term);
-                                            phi->setIncomingValue(i, ld);
+                                            if (calli->getCalledFunction() == baseFuncInst)
+                                            {
+                                                continue;
+                                            }
                                         }
+                                        toReplace.insert(pair(IDToValue[key.second], inst));
                                     }
                                 }
-                                else if (auto inst = dyn_cast<Instruction>(pa.second))
+                                KInst->replaceUsesOfWith(IDToValue[key.second], alloc);
+                                for (auto pa : toReplace)
                                 {
-                                    IRBuilder<> ldBuilder(inst->getParent());
-                                    auto ld = ldBuilder.CreateLoad(alloc);
-                                    ld->moveBefore(inst);
-                                    inst->replaceUsesOfWith(pa.first, ld);
+                                    if (auto phi = dyn_cast<PHINode>(pa.second))
+                                    {
+                                        BasicBlock *predBlock;
+                                        for (unsigned int i = 0; i < phi->getNumIncomingValues(); i++)
+                                        {
+                                            if (phi->getIncomingValue(i) == pa.first)
+                                            {
+                                                predBlock = phi->getIncomingBlock(i);
+                                                auto term = predBlock->getTerminator();
+                                                IRBuilder<> ldBuilder(predBlock);
+                                                auto ld = ldBuilder.CreateLoad(alloc);
+                                                ld->moveBefore(term);
+                                                phi->setIncomingValue(i, ld);
+                                            }
+                                        }
+                                    }
+                                    else if (auto inst = dyn_cast<Instruction>(pa.second))
+                                    {
+                                        IRBuilder<> ldBuilder(inst->getParent());
+                                        auto ld = ldBuilder.CreateLoad(alloc);
+                                        ld->moveBefore(inst);
+                                        inst->replaceUsesOfWith(pa.first, ld);
+                                    }
                                 }
                             }
                         }
