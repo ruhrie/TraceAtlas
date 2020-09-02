@@ -4,6 +4,7 @@
 #include "AtlasUtil/Print.h"
 #include "tik/Util.h"
 #include "tik/libtik.h"
+#include <llvm/Analysis/CFG.h>
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instructions.h>
@@ -267,12 +268,6 @@ namespace TraceAtlas::tik
             set<BasicBlock *> scopedBlocks = blocks;
             set<Function *> scopedFuncs;
             set<Function *> embeddedKernels;
-            /*auto exs = GetExits(scopedBlocks);
-            int exId = 0;
-            for (auto ex : exs )
-            {
-                Exits.insert(make_shared<KernelInterface>(exId++, GetBlockID(ex)));
-            }*/
             for (auto block : blocks)
             {
                 findScopedStructures(block, scopedBlocks, scopedFuncs, embeddedKernels);
@@ -552,7 +547,7 @@ namespace TraceAtlas::tik
                             auto al = alBuilder.CreateAlloca(IDToValue[embExp.second]->getType());
                             al->moveBefore(sel);
                             // now replace all uses of the export value with loads or references to the alloca
-                            bool found = false;
+                            bool instFound = false;
                             for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
                             {
                                 for (auto it = bi->begin(); it != bi->end(); it++)
@@ -561,7 +556,7 @@ namespace TraceAtlas::tik
                                     {
                                         if (embExp.second == GetValueID(it->getOperand(i)))
                                         {
-                                            found = true;
+                                            instFound = true;
                                             if (auto st = dyn_cast<StoreInst>(it))
                                             {
                                                 continue;
@@ -607,32 +602,26 @@ namespace TraceAtlas::tik
                                     }
                                 }
                             }
-                            /*if( !found )
+                            if (!instFound)
                             {
-                                // must be a child export that isn't used in the final parent context
-                                // this is allowable under the dead code export patch
-                                // this fix here is to prevent the wrong value from being mapped to the export arg in the embedded kernel callinst
+                                // this is a child export that was suppposed to export for dead code
+                                // therefore, the export has no use in the parent context, and was never caught by the above for loops
+                                // the use in the callinst needs to be replaced with the alloc pointer, and
                                 for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
                                 {
                                     for (auto it = bi->begin(); it != bi->end(); it++)
                                     {
-                                        for (unsigned int i = 0; i < it->getNumOperands(); i++)
+                                        if (auto callInst = dyn_cast<CallInst>(it))
                                         {
-                                            if (auto callInst = dyn_cast<CallInst>(it))
+                                            if (embeddedKernels.find(callInst->getCalledFunction()) != embeddedKernels.end())
                                             {
-                                                if (embeddedKernels.find(callInst->getCalledFunction()) != embeddedKernels.end())
-                                                {
-                                                    PrintVal(IDToValue[embExp.second]);
-                                                    PrintVal(callInst);
-                                                    callInst->replaceUsesOfWith(IDToValue[embExp.second], al);
-                                                    PrintVal(callInst);
-                                                    break;
-                                                }
+                                                callInst->setArgOperand(embExp.first->getArgNo(), al);
+                                                break;
                                             }
                                         }
                                     }
                                 }
-                            }*/
+                            }
                         }
                     }
                 }
@@ -689,9 +678,10 @@ namespace TraceAtlas::tik
         // but, it is possible that the kernel will have an exit to the original bitcode before the execution of those uses. if that exit can lead to those in-kernel uses, the value will be unresolved (since the kernel function is not exporting that value, and the value has been orphaned by the swap)
         // this is theorized to be due to dead code
         // to fix this, a pass is done on these entrance successors here
+        auto exits = GetExits(scopedBlocks);
         for (auto en : Entrances)
         {
-            // if a successor of this terminator only has the kernel entrance as a pred, each use of each instruction of the successor has to be evaluated for possible export
+            // if the entrance successors only has the kernel entrance as a pred, each use of each instruction of the successor has to be evaluated for possible export
             if (auto br = dyn_cast<BranchInst>(IDToBlock[en->Block]->getTerminator()))
             {
                 for (unsigned int i = 0; i < br->getNumSuccessors(); i++)
@@ -705,30 +695,26 @@ namespace TraceAtlas::tik
                             {
                                 if (inst->getType()->getTypeID() != Type::VoidTyID)
                                 {
-                                    // if the instruction only has uses within the kernel, and the parent of those uses has predecessors outside the kernel, it could possibly be an export
-                                    // this is an imperfect filter because we don't know if an exit can lead to this value, but detecting exits without the kernel function at the moment is too hard
+                                    // if the instruction only has uses within the kernel, it won't be detected as an export
+                                    // this is an imperfect filter because there are exits evaluated here that don't make it into the final kernel
                                     for (auto use : inst->users())
                                     {
                                         if (auto useInst = dyn_cast<Instruction>(use))
                                         {
                                             if (scopedBlocks.find(useInst->getParent()) != scopedBlocks.end())
                                             {
-                                                // now evaluate whether or not an exit prior to this use can reach the use
-                                                for (auto pred : predecessors(useInst->getParent()))
+                                                // evaluate if this use is reachable by any of the exits
+                                                for (auto exit : exits)
                                                 {
-                                                    if (scopedBlocks.find(pred) == scopedBlocks.end())
+                                                    // if it is reachable from exit to value, this value will be unresolved after tikSwap
+                                                    if (isPotentiallyReachable(exit, useInst->getParent()))
                                                     {
-                                                        // may belong to a subkernel, which is not an export
-                                                        //if (embeddedKernels.find(useInst->getParent()->getParent()) == embeddedKernels.end())
-                                                        //{
                                                         auto sExtVal = GetValueID(inst);
                                                         if (kernelIE.find(sExtVal) == kernelIE.end())
                                                         {
                                                             KernelExports.push_back(sExtVal);
                                                             kernelIE.insert(sExtVal);
-                                                            break;
                                                         }
-                                                        //}
                                                     }
                                                 }
                                             }
@@ -743,6 +729,38 @@ namespace TraceAtlas::tik
         }
         for (const auto block : scopedBlocks)
         {
+            // now check its proximity to all other exits
+            // if this value is defined in a block that occurs before an exit, the values within the block can be used in the source code later
+            // but all uses of the value are not guaranteed to be resolved once we're back in the original bitcode
+            // so export each value whose parent cannot be reached by any of the kernel exits
+            // see opencv_projects/kalman example K31
+            for (auto it = block->begin(); it != block->end(); it++)
+            {
+                if (auto inst = dyn_cast<Instruction>(it))
+                {
+                    if (inst->getType()->getTypeID() != Type::VoidTyID)
+                    {
+                        for (auto use : inst->users())
+                        {
+                            if (auto useInst = dyn_cast<Instruction>(use))
+                            {
+                                for (auto ex : exits)
+                                {
+                                    if (isPotentiallyReachable(ex, useInst->getParent()))
+                                    {
+                                        auto sExtVal = GetValueID(inst);
+                                        if (kernelIE.find(sExtVal) == kernelIE.end())
+                                        {
+                                            KernelExports.push_back(sExtVal);
+                                            kernelIE.insert(sExtVal);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             // check for an embedded kernel here
             for (auto embeddedKern : embeddedKernels)
             {
