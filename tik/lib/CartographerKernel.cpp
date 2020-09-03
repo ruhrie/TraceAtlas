@@ -235,6 +235,10 @@ namespace TraceAtlas::tik
 
         try
         {
+            if (Name == "K68" || Name == "K66")
+            {
+                throw AtlasException("Don't support these yet");
+            }
             //this is a recursion check, just so we can enumerate issues
             for (auto block : blocks)
             {
@@ -489,10 +493,28 @@ namespace TraceAtlas::tik
                                                         if (parKey.second == childArg.second && childArg.first->getName()[0] == 'e')
                                                         {
                                                             // inject a load for the export and replace this operand
-                                                            IRBuilder<> ldBuilder(it->getParent());
-                                                            auto ld = ldBuilder.CreateLoad(parKey.first);
-                                                            ld->moveBefore(cast<Instruction>(it));
-                                                            cast<Instruction>(it)->replaceUsesOfWith(IDToValue[parKey.second], ld);
+                                                            if (auto phi = dyn_cast<PHINode>(it))
+                                                            {
+                                                                for (unsigned int i = 0; i < phi->getNumIncomingValues(); i++)
+                                                                {
+                                                                    if (phi->getIncomingValue(i) == IDToValue[parKey.second])
+                                                                    {
+                                                                        auto predBlock = phi->getIncomingBlock(i);
+                                                                        auto term = predBlock->getTerminator();
+                                                                        IRBuilder<> ldBuilder(predBlock);
+                                                                        auto ld = ldBuilder.CreateLoad(parKey.first);
+                                                                        ld->moveBefore(term);
+                                                                        phi->setIncomingValue(i, ld);
+                                                                    }
+                                                                }
+                                                            }
+                                                            else if (auto inst = dyn_cast<Instruction>(it))
+                                                            {
+                                                                IRBuilder<> ldBuilder(inst->getParent());
+                                                                auto ld = ldBuilder.CreateLoad(parKey.first);
+                                                                ld->moveBefore(inst);
+                                                                inst->replaceUsesOfWith(IDToValue[parKey.second], ld);
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -606,7 +628,7 @@ namespace TraceAtlas::tik
                             {
                                 // this is a child export that was suppposed to export for dead code
                                 // therefore, the export has no use in the parent context, and was never caught by the above for loops
-                                // the use in the callinst needs to be replaced with the alloc pointer, and
+                                // the use in the callinst needs to be replaced with the alloc pointer
                                 for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
                                 {
                                     for (auto it = bi->begin(); it != bi->end(); it++)
@@ -615,7 +637,9 @@ namespace TraceAtlas::tik
                                         {
                                             if (embeddedKernels.find(callInst->getCalledFunction()) != embeddedKernels.end())
                                             {
+                                                PrintVal(callInst);
                                                 callInst->setArgOperand(embExp.first->getArgNo(), al);
+                                                PrintVal(callInst);
                                                 break;
                                             }
                                         }

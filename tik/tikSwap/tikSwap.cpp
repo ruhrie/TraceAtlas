@@ -240,6 +240,11 @@ int main(int argc, char *argv[])
                                             continue;
                                         }
                                     }
+                                    // skip the exports that exist in different contexts
+                                    if (inst->getParent()->getParent() != KInst->getParent()->getParent())
+                                    {
+                                        continue;
+                                    }
                                     toReplace.push_back(pair(IDToValue[key.second], inst));
                                 }
                             }
