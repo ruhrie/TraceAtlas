@@ -428,37 +428,6 @@ namespace TraceAtlas::tik
         return IsReachable(base, base, validBlocks);
     }
 
-    set<BasicBlock *> GetExits(set<BasicBlock *> blocks)
-    {
-        set<BasicBlock *> Exits;
-        for (auto block : blocks)
-        {
-            for (auto suc : successors(block))
-            {
-                if (blocks.find(suc) == blocks.end())
-                {
-                    Exits.insert(suc);
-                }
-            }
-            auto term = block->getTerminator();
-            if (auto retInst = dyn_cast<ReturnInst>(term))
-            {
-                Function *base = block->getParent();
-                for (auto user : base->users())
-                {
-                    if (auto v = dyn_cast<Instruction>(user))
-                    {
-                        auto parentBlock = v->getParent();
-                        if (blocks.find(parentBlock) == blocks.end())
-                        {
-                            Exits.insert(parentBlock);
-                        }
-                    }
-                }
-            }
-        }
-        return Exits;
-    }
     set<BasicBlock *> GetConditionals(const set<BasicBlock *> &blocks, const set<int64_t> &validBlocks)
     {
         set<BasicBlock *> result;
@@ -518,7 +487,39 @@ namespace TraceAtlas::tik
         return result;
     }
 
-    set<BasicBlock *> GetExits(set<BasicBlock *> &s)
+    set<BasicBlock *> GetExits(set<BasicBlock *> blocks)
+    {
+        set<BasicBlock *> Exits;
+        for (auto block : blocks)
+        {
+            for (auto suc : successors(block))
+            {
+                if (blocks.find(suc) == blocks.end())
+                {
+                    Exits.insert(suc);
+                }
+            }
+            auto term = block->getTerminator();
+            if (auto retInst = dyn_cast<ReturnInst>(term))
+            {
+                Function *base = block->getParent();
+                for (auto user : base->users())
+                {
+                    if (auto v = dyn_cast<Instruction>(user))
+                    {
+                        auto parentBlock = v->getParent();
+                        if (blocks.find(parentBlock) == blocks.end())
+                        {
+                            Exits.insert(parentBlock);
+                        }
+                    }
+                }
+            }
+        }
+        return Exits;
+    }
+
+    set<BasicBlock *> GetExits(set<BasicBlock *> &s, BasicBlock *entrance)
     {
         set<BasicBlock *> result;
         for (auto block : s)
@@ -529,7 +530,10 @@ namespace TraceAtlas::tik
                 {
                     if (s.find(br->getParent()) == s.end())
                     {
-                        result.insert(br->getParent());
+                        if (br->getParent()->getParent() == entrance->getParent())
+                        {
+                            result.insert(br->getParent());
+                        }
                     }
                 }
             }

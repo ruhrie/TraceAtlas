@@ -694,97 +694,12 @@ namespace TraceAtlas::tik
 
     void CartographerKernel::GetBoundaryValues(set<BasicBlock *> &scopedBlocks, set<Function *> &scopedFuncs, set<Function *> &embeddedKernels, vector<int64_t> &KernelImports, vector<int64_t> &KernelExports)
     {
+        // here we always check for imports first
+        // since its possible for exports to only exist in the kernel, they qualify as imports first
+        // if an import is deemed an export, this can lead to bad memory accesses
         set<int64_t> kernelIE;
-        // hack for tikswapping (does not apply to child kernels)
-        // it is possible for an export to only have uses within the kernel
-        // when the kernel is swapped into the original bitcode, the successors of the entrance block have their CFG edges cut. If they only had the entrance as a pred, they will be out of the CFG altogether, making all their values unresolved
-        // if the values within these blocks, which are now orphaned, have uses that only exist in the kernel, they will not be detected as exports
-        // but, it is possible that the kernel will have an exit to the original bitcode before the execution of those uses. if that exit can lead to those in-kernel uses, the value will be unresolved (since the kernel function is not exporting that value, and the value has been orphaned by the swap)
-        // this is theorized to be due to dead code
-        // to fix this, a pass is done on these entrance successors here
-        auto exits = GetExits(scopedBlocks);
-        for (auto en : Entrances)
-        {
-            // if the entrance successors only has the kernel entrance as a pred, each use of each instruction of the successor has to be evaluated for possible export
-            if (auto br = dyn_cast<BranchInst>(IDToBlock[en->Block]->getTerminator()))
-            {
-                for (unsigned int i = 0; i < br->getNumSuccessors(); i++)
-                {
-                    auto succ = br->getSuccessor(i);
-                    if (scopedBlocks.find(succ) != scopedBlocks.end() && succ->hasNPredecessors(1) && succ != br->getParent())
-                    {
-                        for (auto it = succ->begin(); it != succ->end(); it++)
-                        {
-                            if (auto inst = dyn_cast<Instruction>(it))
-                            {
-                                if (inst->getType()->getTypeID() != Type::VoidTyID)
-                                {
-                                    // if the instruction only has uses within the kernel, it won't be detected as an export
-                                    // this is an imperfect filter because there are exits evaluated here that don't make it into the final kernel
-                                    for (auto use : inst->users())
-                                    {
-                                        if (auto useInst = dyn_cast<Instruction>(use))
-                                        {
-                                            if (scopedBlocks.find(useInst->getParent()) != scopedBlocks.end())
-                                            {
-                                                // evaluate if this use is reachable by any of the exits
-                                                for (auto exit : exits)
-                                                {
-                                                    // if it is reachable from exit to value, this value will be unresolved after tikSwap
-                                                    if (isPotentiallyReachable(exit, useInst->getParent()))
-                                                    {
-                                                        auto sExtVal = GetValueID(inst);
-                                                        if (kernelIE.find(sExtVal) == kernelIE.end())
-                                                        {
-                                                            KernelExports.push_back(sExtVal);
-                                                            kernelIE.insert(sExtVal);
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
         for (const auto block : scopedBlocks)
         {
-            // now check its proximity to all other exits
-            // if this value is defined in a block that occurs before an exit, the values within the block can be used in the source code later
-            // but all uses of the value are not guaranteed to be resolved once we're back in the original bitcode
-            // so export each value whose parent cannot be reached by any of the kernel exits
-            // see opencv_projects/kalman example K31
-            for (auto it = block->begin(); it != block->end(); it++)
-            {
-                if (auto inst = dyn_cast<Instruction>(it))
-                {
-                    if (inst->getType()->getTypeID() != Type::VoidTyID)
-                    {
-                        for (auto use : inst->users())
-                        {
-                            if (auto useInst = dyn_cast<Instruction>(use))
-                            {
-                                for (auto ex : exits)
-                                {
-                                    if (isPotentiallyReachable(ex, useInst->getParent()))
-                                    {
-                                        auto sExtVal = GetValueID(inst);
-                                        if (kernelIE.find(sExtVal) == kernelIE.end())
-                                        {
-                                            KernelExports.push_back(sExtVal);
-                                            kernelIE.insert(sExtVal);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
             // check for an embedded kernel here
             for (auto embeddedKern : embeddedKernels)
             {
@@ -815,52 +730,6 @@ namespace TraceAtlas::tik
             for (auto BI = block->begin(), BE = block->end(); BI != BE; ++BI)
             {
                 auto *inst = cast<Instruction>(BI);
-                // check its uses
-                for (auto use : inst->users())
-                {
-                    if (auto useInst = dyn_cast<Instruction>(use))
-                    {
-                        if (scopedBlocks.find(useInst->getParent()) == scopedBlocks.end())
-                        {
-                            // may belong to a subkernel, which is not an export
-                            if (embeddedKernels.find(useInst->getParent()->getParent()) == embeddedKernels.end())
-                            {
-                                auto sExtVal = GetValueID(inst);
-                                if (kernelIE.find(sExtVal) == kernelIE.end())
-                                {
-                                    KernelExports.push_back(sExtVal);
-                                    kernelIE.insert(sExtVal);
-                                }
-                            }
-                        }
-                    }
-                }
-                // now we have to check the block successors
-                // if this block can exit the kernel, that means we are replacing a block in the source bitcode that may be left with no predecessors
-                // but there may still be users of its values. So they need to be exported
-                for (auto succ : successors(block))
-                {
-                    if (scopedBlocks.find(succ) == scopedBlocks.end())
-                    {
-                        // this block can exit
-                        // if the value uses extend beyond this block, export it
-                        for (auto use : inst->users())
-                        {
-                            if (auto outInst = dyn_cast<Instruction>(use))
-                            {
-                                if (outInst->getParent() != inst->getParent()) // && scopedBlocks.find(inst->getParent()) == scopedBlocks.end() )
-                                {
-                                    auto sExtVal = GetValueID(inst);
-                                    if (kernelIE.find(sExtVal) == kernelIE.end())
-                                    {
-                                        KernelExports.push_back(sExtVal);
-                                        kernelIE.insert(sExtVal);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
                 for (uint32_t i = 0; i < inst->getNumOperands(); i++)
                 {
                     Value *op = inst->getOperand(i);
@@ -959,6 +828,143 @@ namespace TraceAtlas::tik
                                 {
                                     KernelImports.push_back(sExtVal);
                                     kernelIE.insert(sExtVal);
+                                }
+                            }
+                        }
+                    }
+                }
+                // check thee instructions uses
+                for (auto use : inst->users())
+                {
+                    if (auto useInst = dyn_cast<Instruction>(use))
+                    {
+                        if (scopedBlocks.find(useInst->getParent()) == scopedBlocks.end())
+                        {
+                            // may belong to a subkernel, which is not an export
+                            if (embeddedKernels.find(useInst->getParent()->getParent()) == embeddedKernels.end())
+                            {
+                                auto sExtVal = GetValueID(inst);
+                                if (kernelIE.find(sExtVal) == kernelIE.end())
+                                {
+                                    KernelExports.push_back(sExtVal);
+                                    kernelIE.insert(sExtVal);
+                                }
+                            }
+                        }
+                    }
+                }
+                // now we have to check the block successors
+                // if this block can exit the kernel, that means we are replacing a block in the source bitcode that may be left with no predecessors
+                // but there may still be users of its values. So they need to be exported
+                for (auto succ : successors(block))
+                {
+                    if (scopedBlocks.find(succ) == scopedBlocks.end())
+                    {
+                        // this block can exit
+                        // if the value uses extend beyond this block, export it
+                        for (auto use : inst->users())
+                        {
+                            if (auto outInst = dyn_cast<Instruction>(use))
+                            {
+                                if (outInst->getParent() != inst->getParent()) // && scopedBlocks.find(inst->getParent()) == scopedBlocks.end() )
+                                {
+                                    auto sExtVal = GetValueID(inst);
+                                    if (kernelIE.find(sExtVal) == kernelIE.end())
+                                    {
+                                        KernelExports.push_back(sExtVal);
+                                        kernelIE.insert(sExtVal);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // hack for tikswapping (does not apply to child kernels)
+        // it is possible for an export to only have uses within the kernel
+        // when the kernel is swapped into the original bitcode, the successors of the entrance block have their CFG edges cut. If they only had the entrance as a pred, they will be out of the CFG altogether, making all their values unresolved
+        // if the values within these blocks, which are now orphaned, have uses that only exist in the kernel, they will not be detected as exports
+        // but, it is possible that the kernel will have an exit to the original bitcode before the execution of those uses. if that exit can lead to those in-kernel uses, the value will be unresolved (since the kernel function is not exporting that value, and the value has been orphaned by the swap)
+        // this is theorized to be due to dead code
+        // to fix this, a pass is done on these entrance successors here
+        auto exits = GetExits(scopedBlocks, IDToBlock[Entrances.begin()->get()->Block]);
+        for (auto en : Entrances)
+        {
+            // if the entrance successors only has the kernel entrance as a pred, each use of each instruction of the successor has to be evaluated for possible export
+            if (auto br = dyn_cast<BranchInst>(IDToBlock[en->Block]->getTerminator()))
+            {
+                for (unsigned int i = 0; i < br->getNumSuccessors(); i++)
+                {
+                    auto succ = br->getSuccessor(i);
+                    if (scopedBlocks.find(succ) != scopedBlocks.end() && succ->hasNPredecessors(1) && succ != br->getParent())
+                    {
+                        for (auto it = succ->begin(); it != succ->end(); it++)
+                        {
+                            if (auto inst = dyn_cast<Instruction>(it))
+                            {
+                                if (inst->getType()->getTypeID() != Type::VoidTyID)
+                                {
+                                    // if the instruction only has uses within the kernel, it won't be detected as an export
+                                    // this is an imperfect filter because there are exits evaluated here that don't make it into the final kernel
+                                    for (auto use : inst->users())
+                                    {
+                                        if (auto useInst = dyn_cast<Instruction>(use))
+                                        {
+                                            if (scopedBlocks.find(useInst->getParent()) != scopedBlocks.end())
+                                            {
+                                                // evaluate if this use is reachable by any of the exits
+                                                for (auto exit : exits)
+                                                {
+                                                    // if it is reachable from exit to value, this value will be unresolved after tikSwap
+                                                    if (isPotentiallyReachable(exit, useInst->getParent()))
+                                                    {
+                                                        auto sExtVal = GetValueID(inst);
+                                                        if (kernelIE.find(sExtVal) == kernelIE.end())
+                                                        {
+                                                            KernelExports.push_back(sExtVal);
+                                                            kernelIE.insert(sExtVal);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for (const auto block : scopedBlocks)
+        {
+            // now check its proximity to all other exits
+            // if this value is defined in a block that occurs before an exit, the values within the block can be used in the source code later
+            // but all uses of the value are not guaranteed to be resolved once we're back in the original bitcode
+            // so export each value whose parent cannot be reached by any of the kernel exits
+            // see opencv_projects/kalman example K31
+            for (auto it = block->begin(); it != block->end(); it++)
+            {
+                if (auto inst = dyn_cast<Instruction>(it))
+                {
+                    if (inst->getType()->getTypeID() != Type::VoidTyID)
+                    {
+                        for (auto use : inst->users())
+                        {
+                            if (auto useInst = dyn_cast<Instruction>(use))
+                            {
+                                for (auto ex : exits)
+                                {
+                                    if (isPotentiallyReachable(ex, useInst->getParent()))
+                                    {
+                                        auto sExtVal = GetValueID(inst);
+                                        if (kernelIE.find(sExtVal) == kernelIE.end())
+                                        {
+                                            KernelExports.push_back(sExtVal);
+                                            kernelIE.insert(sExtVal);
+                                        }
+                                    }
                                 }
                             }
                         }
