@@ -210,11 +210,14 @@ int main(int argc, char **argv)
     // apply label to instance map if one exists
     for (const auto &id : j["Kernels"].items())
     {
-        int index = stoi(id.key());
-        string label = id.value()["Label"];
-        if (!label.empty() && kernelIdMap.find(index) != kernelIdMap.end())
+        if (id.value().find("Label") != id.value().end())
         {
-            kernelIdMap[index] = label;
+            int index = stoi(id.key());
+            string label = id.value()["Label"];
+            if (!label.empty() && kernelIdMap.find(index) != kernelIdMap.end())
+            {
+                kernelIdMap[index] = label;
+            }
         }
     }
 
