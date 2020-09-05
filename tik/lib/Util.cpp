@@ -524,15 +524,25 @@ namespace TraceAtlas::tik
         set<BasicBlock *> result;
         for (auto block : s)
         {
-            for (unsigned int i = 0; i < block->getTerminator()->getNumSuccessors(); i++)
+            for (auto suc : successors(block))
             {
-                if (auto br = dyn_cast<BranchInst>(block->getTerminator()->getSuccessor(i)))
+                if (s.find(suc) == s.end() && suc->getParent() == entrance->getParent())
                 {
-                    if (s.find(br->getParent()) == s.end())
+                    result.insert(suc);
+                }
+            }
+            auto term = block->getTerminator();
+            if (auto retInst = dyn_cast<ReturnInst>(term))
+            {
+                Function *base = block->getParent();
+                for (auto user : base->users())
+                {
+                    if (auto v = dyn_cast<Instruction>(user))
                     {
-                        if (br->getParent()->getParent() == entrance->getParent())
+                        auto parentBlock = v->getParent();
+                        if (s.find(parentBlock) == s.end() && parentBlock->getParent() == entrance->getParent())
                         {
-                            result.insert(br->getParent());
+                            result.insert(parentBlock);
                         }
                     }
                 }

@@ -235,10 +235,10 @@ namespace TraceAtlas::tik
 
         try
         {
-            if (Name == "K68" || Name == "K66")
+            /*if (Name == "K68" || Name == "K66")
             {
                 throw AtlasException("Don't support these yet");
-            }
+            }*/
             //this is a recursion check, just so we can enumerate issues
             for (auto block : blocks)
             {
@@ -833,7 +833,7 @@ namespace TraceAtlas::tik
                         }
                     }
                 }
-                // check thee instructions uses
+                // check the instructions uses
                 for (auto use : inst->users())
                 {
                     if (auto useInst = dyn_cast<Instruction>(use))
@@ -848,6 +848,10 @@ namespace TraceAtlas::tik
                                 {
                                     KernelExports.push_back(sExtVal);
                                     kernelIE.insert(sExtVal);
+                                }
+                                else if (find(KernelImports.begin(), KernelImports.end(), sExtVal) != KernelImports.end())
+                                {
+                                    throw AtlasException("Import needs to be an export!");
                                 }
                             }
                         }
@@ -873,6 +877,10 @@ namespace TraceAtlas::tik
                                     {
                                         KernelExports.push_back(sExtVal);
                                         kernelIE.insert(sExtVal);
+                                    }
+                                    else if (find(KernelImports.begin(), KernelImports.end(), sExtVal) != KernelImports.end())
+                                    {
+                                        throw AtlasException("Import needs to be an export!");
                                     }
                                 }
                             }
@@ -925,6 +933,10 @@ namespace TraceAtlas::tik
                                                             KernelExports.push_back(sExtVal);
                                                             kernelIE.insert(sExtVal);
                                                         }
+                                                        else if (find(KernelImports.begin(), KernelImports.end(), sExtVal) != KernelImports.end())
+                                                        {
+                                                            throw AtlasException("Import needs to be an export!");
+                                                        }
                                                     }
                                                 }
                                             }
@@ -963,6 +975,10 @@ namespace TraceAtlas::tik
                                         {
                                             KernelExports.push_back(sExtVal);
                                             kernelIE.insert(sExtVal);
+                                        }
+                                        else if (find(KernelImports.begin(), KernelImports.end(), sExtVal) != KernelImports.end())
+                                        {
+                                            throw AtlasException("Import needs to be an export!");
                                         }
                                     }
                                 }

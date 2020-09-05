@@ -245,6 +245,11 @@ int main(int argc, char *argv[])
                                     {
                                         continue;
                                     }
+                                    // do not do memory operations in the entrance block, unless the user is a phi
+                                    if (inst->getParent() == IDToBlock[e->Block] && dyn_cast<PHINode>(inst) == nullptr)
+                                    {
+                                        continue;
+                                    }
                                     toReplace.push_back(pair(IDToValue[key.second], inst));
                                 }
                             }
