@@ -455,6 +455,11 @@ namespace TraceAtlas::tik
             {
                 if (parKey.first->getName()[0] == 'e')
                 {
+                    // its possible that this parent export only exists in the child
+                    // therefore, we will not find this value in the parent context
+                    // the below for loops will only replace the improper value in the child kernel call if it finds one, this will not work in this case
+                    // to resolve this, we keep track of whether the value is ever found, if it is not, we manually replace the use in the child kernel call
+                    bool found = false;
                     // check each user for possible remapping
                     for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
                     {
@@ -464,6 +469,7 @@ namespace TraceAtlas::tik
                             {
                                 if (GetValueID(it->getOperand(i)) == parKey.second)
                                 {
+                                    found = true;
                                     if (auto callInst = dyn_cast<CallInst>(it))
                                     {
                                         if (embeddedKernels.find(callInst->getCalledFunction()) != embeddedKernels.end())
@@ -517,6 +523,35 @@ namespace TraceAtlas::tik
                                                             }
                                                         }
                                                     }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if( !found )
+                    {
+                        // this value must be only present in the child
+                        // map this parent export to the correct child function callinst
+                        // see srsLTE/eNodeB_Tx/K66 and K68 for an example
+                        for (const auto child : embeddedKernels)
+                        {
+                            for (auto childArg : KfMap[child]->ArgumentMap)
+                            {
+                                if (parKey.second == childArg.second && childArg.first->getName()[0] == 'e')
+                                {
+                                    // we found the child kernel that has this value, find its callinst and replace the argOperand with this parent export
+                                    for( auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++ )
+                                    {
+                                        for( auto it = bi->begin(); it != bi->end(); it++ )
+                                        {
+                                            if( auto ci = dyn_cast<CallInst>(it) )
+                                            {
+                                                if( child == ci->getCalledFunction() )
+                                                {
+                                                    ci->setArgOperand(childArg.first->getArgNo(), parKey.first);
                                                 }
                                             }
                                         }
