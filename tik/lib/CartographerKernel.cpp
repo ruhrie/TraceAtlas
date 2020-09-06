@@ -123,12 +123,12 @@ namespace TraceAtlas::tik
                     //for some reason if we don't do this first the verifier fails
                     //we do absolutely nothing with it and it doesn't even end up in our output
                     //its technically a memory leak, but its an acceptable sacrifice
-                    auto *newVar = new GlobalVariable(
+                    /*auto *newVar = new GlobalVariable(
                         gv->getValueType(),
                         gv->isConstant(), gv->getLinkage(), nullptr, "",
                         gv->getThreadLocalMode(),
                         gv->getType()->getAddressSpace());
-                    newVar->copyAttributesFrom(gv);
+                    newVar->copyAttributesFrom(gv);*/
                     //end of the sacrifice
                     auto newGlobal = cast<GlobalVariable>(TikModule->getOrInsertGlobal(gv->getName(), gv->getType()->getPointerElementType()));
                     newGlobal->setConstant(gv->isConstant());
