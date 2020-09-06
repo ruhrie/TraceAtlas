@@ -1,3 +1,5 @@
+#include "AtlasUtil/Format.h"
+#include "tik/Util.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instruction.h"
@@ -19,6 +21,7 @@
 using namespace llvm;
 using json = nlohmann::json;
 using namespace std;
+using namespace TraceAtlas::tik;
 
 cl::opt<std::string> InputFilename("i", cl::desc("Specify input bitcode"), cl::value_desc("bitcode filename"), cl::Required);
 cl::opt<std::string> OutputFilename("o", cl::desc("Specify output json"), cl::value_desc("output filename"));
@@ -40,18 +43,12 @@ int main(int argc, char **argv)
     LLVMContext context;
     SMDiagnostic smerror;
     std::unique_ptr<Module> mptr = parseIRFile(InputFilename, smerror, context);
-    Module *M = mptr.get();
 
-    map<int, BasicBlock *> blockMap;
+    // Annotate its bitcodes and values
+    CleanModule(mptr.get());
+    Format(mptr.get());
 
-    for (auto &F : *M)
-    {
-        for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
-        {
-            auto *b = cast<BasicBlock>(BB);
-            blockMap[UID++] = b;
-        }
-    }
+    InitializeIDMaps(mptr.get());
 
     ifstream inputJson;
     nlohmann::json j;
@@ -78,7 +75,7 @@ int main(int argc, char **argv)
         vector<string> blockStrings;
         for (int block : blocks)
         {
-            BasicBlock *toConvert = blockMap[block];
+            BasicBlock *toConvert = IDToBlock[block];
             valueId = 0;
             string blockStr;
             vector<Value *> namedVals;

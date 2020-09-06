@@ -67,7 +67,7 @@ add_subdirectory("Utilities")
 add_subdirectory("WorkingSet")
 add_subdirectory("hydra")
 
-#repsonsible for injecting the tracer. Fairly fragile so be careful
+#responsible for injecting the tracer. Fairly fragile so be careful
 function(InjectTracer tar)
     target_compile_options(${tar} PRIVATE "-flto")
     set_target_properties(${tar} PROPERTIES LINK_FLAGS "-fuse-ld=lld -Wl,--plugin-opt=emit-llvm")
@@ -101,7 +101,7 @@ if(DOXYGEN_FOUND)
     add_custom_target(doc COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile)
 endif(DOXYGEN_FOUND)
 
-#stollen from https://github.com/ttroy50/cmake-examples/blob/master/04-static-analysis/clang-format/cmake/modules/clang-format.cmake
+#stolen from https://github.com/ttroy50/cmake-examples/blob/master/04-static-analysis/clang-format/cmake/modules/clang-format.cmake
 #used to run clang-format on the entire source tree
 find_program(FORMAT NAMES clang-format-9 clang-format)
 if(${FORMAT} STREQUAL "FORMAT-NOTFOUND")
@@ -127,4 +127,3 @@ else()
         ${ALL_SOURCE_FILES}
     )
 endif()
-
