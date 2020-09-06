@@ -15,6 +15,8 @@ namespace TraceAtlas::tik
     private:
         CartographerKernel();
 
+        void ConstructFunctionSignature(const std::set<llvm::BasicBlock *> &, std::set<llvm::Function *> &, llvm::ValueToValueMapTy &, const std::string &);
+
         /// @brief Finds all imports and exports of the kernel
         ///
         /// Imports are instructions from outside the kernel blocks whose value is used within the kernel.
@@ -68,8 +70,12 @@ namespace TraceAtlas::tik
         /// This function must be called before and after inlining.
         void Remap(llvm::ValueToValueMapTy &VMap);
 
+        void CheckChildExits(std::set<llvm::Function *> &embeddedKernels);
+
         /// @brief Attempts to replicate exception handling from the original bitcode.
         void FixInvokes();
+
+        void MapFunctionExports(std::set<llvm::BasicBlock *> &, std::set<llvm::Function *> &);
 
         /// Not used anymore
         void RemapNestedKernels(llvm::ValueToValueMapTy &VMap);

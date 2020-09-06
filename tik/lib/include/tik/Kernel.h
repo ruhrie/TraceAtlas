@@ -52,7 +52,7 @@ namespace TraceAtlas::tik
 
     protected:
         Kernel();
-        void ApplyMetadata(std::map<llvm::Value *, llvm::GlobalObject *> &GlobalMap);
+        void ApplyMetadata();
 
     private:
         Kernel(const Kernel &) = delete;

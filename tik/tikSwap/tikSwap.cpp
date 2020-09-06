@@ -373,7 +373,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    //verify the module
+    // verify the module
     std::string str;
     llvm::raw_string_ostream rso(str);
     bool broken = verifyModule(*sourceBitcode, &rso);

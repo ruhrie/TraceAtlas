@@ -29,7 +29,7 @@ namespace TraceAtlas::tik
     std::set<llvm::BasicBlock *> GetReachable(llvm::BasicBlock *base, std::set<int64_t> validBlocks);
     bool IsSelfReachable(llvm::BasicBlock *base, const std::set<int64_t> &validBlocks);
     bool IsReachable(llvm::BasicBlock *base, llvm::BasicBlock *target, const std::set<int64_t> &validBlocks);
-    std::set<llvm::BasicBlock *> GetEntrances(std::set<llvm::BasicBlock *> &blocks);
+    std::set<llvm::BasicBlock *> GetEntrances(const std::set<llvm::BasicBlock *> &);
     std::set<llvm::BasicBlock *> GetExits(std::set<llvm::BasicBlock *> &, llvm::BasicBlock *);
     std::set<llvm::BasicBlock *> GetExits(std::set<llvm::BasicBlock *>);
     std::set<llvm::BasicBlock *> GetExits(llvm::Function *);

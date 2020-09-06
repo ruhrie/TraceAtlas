@@ -224,7 +224,7 @@ namespace TraceAtlas::tik
         }
         return checked;
     }
-    set<BasicBlock *> GetEntrances(set<BasicBlock *> &blocks)
+    set<BasicBlock *> GetEntrances(const set<BasicBlock *> &blocks)
     {
         set<BasicBlock *> Entrances;
         for (auto block : blocks)

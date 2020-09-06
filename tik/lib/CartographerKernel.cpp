@@ -118,18 +118,6 @@ namespace TraceAtlas::tik
                             CopyOperand(internal, VMap);
                         }
                     }
-                    //and not already in the vmap
-
-                    //for some reason if we don't do this first the verifier fails
-                    //we do absolutely nothing with it and it doesn't even end up in our output
-                    //its technically a memory leak, but its an acceptable sacrifice
-                    /*auto *newVar = new GlobalVariable(
-                        gv->getValueType(),
-                        gv->isConstant(), gv->getLinkage(), nullptr, "",
-                        gv->getThreadLocalMode(),
-                        gv->getType()->getAddressSpace());
-                    newVar->copyAttributesFrom(gv);*/
-                    //end of the sacrifice
                     auto newGlobal = cast<GlobalVariable>(TikModule->getOrInsertGlobal(gv->getName(), gv->getType()->getPointerElementType()));
                     newGlobal->setConstant(gv->isConstant());
                     newGlobal->setLinkage(gv->getLinkage());
@@ -213,32 +201,9 @@ namespace TraceAtlas::tik
             }
             blocks.insert(IDToBlock[id]);
         }
-        string Name;
-        if (name.empty())
-        {
-            Name = "Kernel_" + to_string(KernelUID++);
-        }
-        else if (name.front() >= '0' && name.front() <= '9')
-        {
-            Name = "K" + name;
-        }
-        else
-        {
-            Name = name;
-        }
-        if (reservedNames.find(Name) != reservedNames.end())
-        {
-            throw AtlasException("Kernel Error: Kernel names must be unique!");
-        }
-        spdlog::debug("Started converting kernel {0}", Name);
-        reservedNames.insert(Name);
 
         try
         {
-            /*if (Name == "K68" || Name == "K66")
-            {
-                throw AtlasException("Don't support these yet");
-            }*/
             //this is a recursion check, just so we can enumerate issues
             for (auto block : blocks)
             {
@@ -256,93 +221,9 @@ namespace TraceAtlas::tik
                 }
             }
 
-            auto ent = GetEntrances(blocks);
-            if (ent.empty())
-            {
-                throw AtlasException("Kernel has 0 body entrances.");
-            }
-            int entranceId = 0;
-            for (auto e : ent)
-            {
-                Entrances.insert(make_shared<KernelInterface>(entranceId++, GetBlockID(e)));
-            }
-            map<Value *, GlobalObject *> GlobalMap;
-            vector<int64_t> KernelImports;
-            vector<int64_t> KernelExports;
-            set<BasicBlock *> scopedBlocks = blocks;
-            set<Function *> scopedFuncs;
             set<Function *> embeddedKernels;
-            for (auto block : blocks)
-            {
-                findScopedStructures(block, scopedBlocks, scopedFuncs, embeddedKernels);
-            }
+            ConstructFunctionSignature(blocks, embeddedKernels, VMap, name);
 
-            GetBoundaryValues(scopedBlocks, scopedFuncs, embeddedKernels, KernelImports, KernelExports);
-            //we now have all the information we need
-            //start by making the correct function
-            vector<Type *> inputArgs;
-            // First arg is always the Entrance index
-            inputArgs.push_back(Type::getInt8Ty(TikModule->getContext()));
-            for (auto inst : KernelImports)
-            {
-                if (IDToValue.find(inst) != IDToValue.end())
-                {
-                    inputArgs.push_back(IDToValue[inst]->getType());
-                }
-                else if (IDToBlock.find(inst) != IDToBlock.end())
-                {
-                    throw AtlasException("Tried pushing an import of type void into kernel function args!");
-                }
-                else
-                {
-                    throw AtlasException("Tried to push a nullptr into the inputArgs when parsing imports.");
-                }
-            }
-            for (auto inst : KernelExports)
-            {
-                if (IDToValue.find(inst) != IDToValue.end())
-                {
-                    inputArgs.push_back(IDToValue[inst]->getType()->getPointerTo());
-                }
-                else if (IDToBlock.find(inst) != IDToBlock.end())
-                {
-                    throw AtlasException("Tried pushing an export of type void into kernel function args!");
-                }
-                else
-                {
-                    throw AtlasException("Tried to push a nullptr into the inputArgs when parsing imports.");
-                }
-            }
-            FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
-            KernelFunction = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
-            for (auto arg = KernelFunction->arg_begin(); arg != KernelFunction->arg_end(); arg++)
-            {
-                uint64_t newId = (uint64_t)(prev(IDToValue.end())->first + 1);
-                SetValueIDs(arg, newId);
-                IDToValue[(int64_t)newId] = arg;
-            }
-            uint64_t i;
-            for (i = 0; i < KernelImports.size(); i++)
-            {
-                auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i);
-                a->setName("i" + to_string(i));
-                ArgumentMap[a] = KernelImports[i];
-            }
-            uint64_t j;
-            for (j = 0; j < KernelExports.size(); j++)
-            {
-                auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i + j);
-                a->setName("e" + to_string(j));
-                ArgumentMap[a] = KernelExports[j];
-            }
-            // map our imports
-            for (auto key : ArgumentMap)
-            {
-                if (key.first->getName()[0] == 'i')
-                {
-                    VMap[IDToValue[key.second]] = key.first;
-                }
-            }
             //create the artificial blocks
             Init = BasicBlock::Create(TikModule->getContext(), "Init", KernelFunction);
             Exit = BasicBlock::Create(TikModule->getContext(), "Exit", KernelFunction);
@@ -376,334 +257,12 @@ namespace TraceAtlas::tik
                     }
                 }
             }
-            // Evaluate embedded kernel exits for export ambiguities
-            for (auto embfunc : embeddedKernels)
-            {
-                for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
-                {
-                    for (auto it = bi->begin(); it != bi->end(); it++)
-                    {
-                        if (auto callInst = dyn_cast<CallInst>(it))
-                        {
-                            if (callInst->getCalledFunction() == embfunc)
-                            {
-                                // found an embedded kernel, evaluate its exits
-                                auto sw = cast<SwitchInst>(bi->getTerminator());
-                                for (auto succ : successors(sw->getParent()))
-                                {
-                                    auto destBlock = succ;
-                                    for (auto ii = destBlock->begin(); ii != destBlock->end(); ii++)
-                                    {
-                                        // look for a phi node in the successor that has exports in it
-                                        if (auto phi = dyn_cast<PHINode>(ii))
-                                        {
-                                            // set of exit index and argument pairs to consolidate to one value and map to the needing phi
-                                            set<pair<int64_t, int64_t>> exportsToMap;
-                                            // if an incoming value maps to an export of the embedded kernel, we need to map the associated block to an embedded kernel exit
-                                            for (unsigned int j = 0; j < phi->getNumIncomingValues(); j++)
-                                            {
-                                                auto embKern = KfMap[embfunc];
-                                                for (auto embKey : embKern->ArgumentMap)
-                                                {
-                                                    if (GetValueID(phi->getIncomingValue(j)) == embKey.second)
-                                                    {
-                                                        auto embKernExit = embKern->Exits.find(GetBlockID(phi->getIncomingBlock(j)));
-                                                        if (embKernExit != embKern->Exits.end())
-                                                        {
-                                                            exportsToMap.insert(pair((*embKernExit)->Index, embKey.second));
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            if (!exportsToMap.empty())
-                                            {
-                                                throw AtlasException("Cannot map multiple embedded kernel exports to a single successor!");
-                                                // now create a switch instruction to export the correct value to the phi
-                                                IRBuilder<> seBuilder(sw->getParent());
-                                                Value *prevSel = IDToValue[exportsToMap.begin()->second];
-                                                for (const auto exit : exportsToMap)
-                                                {
-                                                    auto cmp = seBuilder.CreateICmpEQ(ConstantInt::get(Type::getInt8Ty(callInst->getContext()), (uint64_t)exit.first), callInst);
-                                                    cast<CmpInst>(cmp)->moveBefore(sw);
-                                                    auto sel = seBuilder.CreateSelect(cmp, IDToValue[exit.second], prevSel);
-                                                    cast<SelectInst>(sel)->moveBefore(sw);
-                                                    prevSel = sel;
-                                                }
-                                                for (unsigned int j = 0; j < phi->getNumIncomingValues(); j++)
-                                                {
-                                                    if (phi->getIncomingBlock(j) == sw->getParent())
-                                                    {
-                                                        phi->removeIncomingValue(j);
-                                                    }
-                                                }
-                                                phi->addIncoming(prevSel, sw->getParent());
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+
+            CheckChildExits(embeddedKernels);
 
             PatchPhis(VMap);
 
-            // replace parent export uses in embedded kernel call instructions
-            // and replace parent export uses in the parent context
-            for (auto parKey : ArgumentMap)
-            {
-                if (parKey.first->getName()[0] == 'e')
-                {
-                    // its possible that this parent export only exists in the child
-                    // therefore, we will not find this value in the parent context
-                    // the below for loops will only replace the improper value in the child kernel call if it finds one, this will not work in this case
-                    // to resolve this, we keep track of whether the value is ever found, if it is not, we manually replace the use in the child kernel call
-                    bool found = false;
-                    // check each user for possible remapping
-                    for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
-                    {
-                        for (auto it = bi->begin(); it != bi->end(); it++)
-                        {
-                            for (unsigned int i = 0; i < it->getNumOperands(); i++)
-                            {
-                                if (GetValueID(it->getOperand(i)) == parKey.second)
-                                {
-                                    found = true;
-                                    if (auto callInst = dyn_cast<CallInst>(it))
-                                    {
-                                        if (embeddedKernels.find(callInst->getCalledFunction()) != embeddedKernels.end())
-                                        {
-                                            callInst->replaceUsesOfWith(IDToValue[parKey.second], parKey.first);
-                                        }
-                                        else
-                                        {
-                                            IRBuilder<> ldBuilder(callInst->getParent());
-                                            auto ld = ldBuilder.CreateLoad(parKey.first);
-                                            ld->moveBefore(callInst);
-                                            callInst->replaceUsesOfWith(IDToValue[parKey.second], ld);
-                                        }
-                                    }
-                                    else
-                                    {
-                                        // it's possible for a child kernel to export to both the parent and the parent's parent
-                                        // this will be an export of both the child and parent, the value will not be born in the parent, and there will be uses in the parent
-                                        if (auto useInst = dyn_cast<Instruction>(it->getOperand(i)))
-                                        {
-                                            if (useInst->getParent()->getParent() != KernelFunction)
-                                            {
-                                                for (const auto child : embeddedKernels)
-                                                {
-                                                    for (auto childArg : KfMap[child]->ArgumentMap)
-                                                    {
-                                                        if (parKey.second == childArg.second && childArg.first->getName()[0] == 'e')
-                                                        {
-                                                            // inject a load for the export and replace this operand
-                                                            if (auto phi = dyn_cast<PHINode>(it))
-                                                            {
-                                                                for (unsigned int i = 0; i < phi->getNumIncomingValues(); i++)
-                                                                {
-                                                                    if (phi->getIncomingValue(i) == IDToValue[parKey.second])
-                                                                    {
-                                                                        auto predBlock = phi->getIncomingBlock(i);
-                                                                        auto term = predBlock->getTerminator();
-                                                                        IRBuilder<> ldBuilder(predBlock);
-                                                                        auto ld = ldBuilder.CreateLoad(parKey.first);
-                                                                        ld->moveBefore(term);
-                                                                        phi->setIncomingValue(i, ld);
-                                                                    }
-                                                                }
-                                                            }
-                                                            else if (auto inst = dyn_cast<Instruction>(it))
-                                                            {
-                                                                IRBuilder<> ldBuilder(inst->getParent());
-                                                                auto ld = ldBuilder.CreateLoad(parKey.first);
-                                                                ld->moveBefore(inst);
-                                                                inst->replaceUsesOfWith(IDToValue[parKey.second], ld);
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (!found)
-                    {
-                        // this value must be only present in the child
-                        // map this parent export to the correct child function callinst
-                        // see srsLTE/eNodeB_Tx/K66 and K68 for an example
-                        for (const auto child : embeddedKernels)
-                        {
-                            for (auto childArg : KfMap[child]->ArgumentMap)
-                            {
-                                if (parKey.second == childArg.second && childArg.first->getName()[0] == 'e')
-                                {
-                                    // we found the child kernel that has this value, find its callinst and replace the argOperand with this parent export
-                                    for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
-                                    {
-                                        for (auto it = bi->begin(); it != bi->end(); it++)
-                                        {
-                                            if (auto ci = dyn_cast<CallInst>(it))
-                                            {
-                                                if (child == ci->getCalledFunction())
-                                                {
-                                                    ci->setArgOperand(childArg.first->getArgNo(), parKey.first);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // replace child exports to parent with loads from those exports
-            for (auto embedded : embeddedKernels)
-            {
-                auto kernFunc = KfMap[embedded];
-                for (auto embExp : kernFunc->ArgumentMap)
-                {
-                    if (embExp.first->getName()[0] == 'e')
-                    {
-                        bool found = false;
-                        // check to see if this value does not map to a parent export
-                        for (auto parArg : ArgumentMap)
-                        {
-                            if (parArg.second == embExp.second)
-                            {
-                                found = true;
-                            }
-                        }
-                        if (!found)
-                        {
-                            // this is an export to the parent, make sure the parent has a use for it first
-                            bool useFound = false;
-                            for (auto use : IDToValue[embExp.second]->users())
-                            {
-                                if (auto useInst = dyn_cast<Instruction>(use))
-                                {
-                                    if (blocks.find(useInst->getParent()) != blocks.end())
-                                    {
-                                        useFound = true;
-                                    }
-                                }
-                            }
-                            if (!useFound)
-                            {
-                                throw AtlasException("Child export to parent has no uses!");
-                            }
-                            // make an alloc for it in Init
-                            IRBuilder alBuilder(Init);
-                            auto sel = Init->getTerminator();
-                            auto al = alBuilder.CreateAlloca(IDToValue[embExp.second]->getType());
-                            al->moveBefore(sel);
-                            // now replace all uses of the export value with loads or references to the alloca
-                            bool instFound = false;
-                            for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
-                            {
-                                for (auto it = bi->begin(); it != bi->end(); it++)
-                                {
-                                    for (unsigned int i = 0; i < it->getNumOperands(); i++)
-                                    {
-                                        if (embExp.second == GetValueID(it->getOperand(i)))
-                                        {
-                                            instFound = true;
-                                            if (auto st = dyn_cast<StoreInst>(it))
-                                            {
-                                                continue;
-                                            }
-                                            else if (auto callInst = dyn_cast<CallInst>(it))
-                                            {
-                                                if (embeddedKernels.find(callInst->getCalledFunction()) != embeddedKernels.end())
-                                                {
-                                                    callInst->replaceUsesOfWith(IDToValue[embExp.second], al);
-                                                }
-                                                else
-                                                {
-                                                    IRBuilder<> ldBuilder(callInst->getParent());
-                                                    auto ld = ldBuilder.CreateLoad(al);
-                                                    ld->moveBefore(callInst);
-                                                    callInst->replaceUsesOfWith(IDToValue[embExp.second], ld);
-                                                }
-                                            }
-                                            else if (auto phi = dyn_cast<PHINode>(it))
-                                            {
-                                                // inject loads into the predecessor of our user
-                                                for (unsigned int j = 0; j < phi->getNumIncomingValues(); j++)
-                                                {
-                                                    if (phi->getIncomingValue(j) == IDToValue[embExp.second])
-                                                    {
-                                                        auto predBlock = phi->getIncomingBlock(j);
-                                                        auto term = predBlock->getTerminator();
-                                                        IRBuilder<> ldBuilder(predBlock);
-                                                        auto ld = ldBuilder.CreateLoad(al);
-                                                        ld->moveBefore(term);
-                                                        phi->replaceUsesOfWith(IDToValue[embExp.second], ld);
-                                                    }
-                                                }
-                                            }
-                                            else if (auto useInst = dyn_cast<Instruction>(it))
-                                            {
-                                                IRBuilder<> ldBuilder(useInst->getParent());
-                                                auto ld = ldBuilder.CreateLoad(al);
-                                                useInst->replaceUsesOfWith(IDToValue[embExp.second], ld);
-                                                ld->moveBefore(useInst);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            if (!instFound)
-                            {
-                                // this is a child export that was suppposed to export for dead code
-                                // therefore, the export has no use in the parent context, and was never caught by the above for loops
-                                // the use in the callinst needs to be replaced with the alloc pointer
-                                for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
-                                {
-                                    for (auto it = bi->begin(); it != bi->end(); it++)
-                                    {
-                                        if (auto callInst = dyn_cast<CallInst>(it))
-                                        {
-                                            if (embeddedKernels.find(callInst->getCalledFunction()) != embeddedKernels.end())
-                                            {
-                                                PrintVal(callInst);
-                                                callInst->setArgOperand(embExp.first->getArgNo(), al);
-                                                PrintVal(callInst);
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // replace external function calls with tik declarations
-            for (auto &bi : *(KernelFunction))
-            {
-                for (auto inst = bi.begin(); inst != bi.end(); inst++)
-                {
-                    if (auto callBase = dyn_cast<CallBase>(inst))
-                    {
-                        Function *f = callBase->getCalledFunction();
-                        if (f == nullptr)
-                        {
-                            throw AtlasException("Null function call (indirect call)");
-                        }
-                        auto *funcDec = cast<Function>(TikModule->getOrInsertFunction(callBase->getCalledFunction()->getName(), callBase->getCalledFunction()->getFunctionType()).getCallee());
-                        funcDec->setAttributes(callBase->getCalledFunction()->getAttributes());
-                        callBase->setCalledFunction(funcDec);
-                    }
-                }
-            }
+            MapFunctionExports(blocks, embeddedKernels);
 
             Remap(VMap);
 
@@ -712,7 +271,7 @@ namespace TraceAtlas::tik
             FixInvokes();
 
             //apply metadata
-            ApplyMetadata(GlobalMap);
+            ApplyMetadata();
 
             //and set a flag that we succeeded
             Valid = true;
@@ -1021,6 +580,121 @@ namespace TraceAtlas::tik
                         }
                     }
                 }
+            }
+        }
+    }
+
+    void CartographerKernel::ConstructFunctionSignature(const set<BasicBlock *> &blocks, set<Function *> &embeddedKernels, ValueToValueMapTy &VMap, const string &name)
+    {
+        // Function name
+        string Name;
+        if (name.empty())
+        {
+            Name = "Kernel_" + to_string(KernelUID++);
+        }
+        else if (name.front() >= '0' && name.front() <= '9')
+        {
+            Name = "K" + name;
+        }
+        else
+        {
+            Name = name;
+        }
+        if (reservedNames.find(Name) != reservedNames.end())
+        {
+            throw AtlasException("Kernel Error: Kernel names must be unique!");
+        }
+        spdlog::debug("Started converting kernel {0}", Name);
+        reservedNames.insert(Name);
+
+        // Find entrances
+        auto ent = GetEntrances(blocks);
+        if (ent.empty())
+        {
+            throw AtlasException("Kernel has 0 body entrances.");
+        }
+        int entranceId = 0;
+        for (auto e : ent)
+        {
+            Entrances.insert(make_shared<KernelInterface>(entranceId++, GetBlockID(e)));
+        }
+        vector<int64_t> KernelImports;
+        vector<int64_t> KernelExports;
+        set<BasicBlock *> scopedBlocks = blocks;
+        set<Function *> scopedFuncs;
+        for (auto block : blocks)
+        {
+            findScopedStructures(block, scopedBlocks, scopedFuncs, embeddedKernels);
+        }
+
+        // Find values that need to be arguments
+        GetBoundaryValues(scopedBlocks, scopedFuncs, embeddedKernels, KernelImports, KernelExports);
+
+        // Construct kernel function object
+        // First arg is always the Entrance index
+        vector<Type *> inputArgs;
+        inputArgs.push_back(Type::getInt8Ty(TikModule->getContext()));
+        for (auto inst : KernelImports)
+        {
+            if (IDToValue.find(inst) != IDToValue.end())
+            {
+                inputArgs.push_back(IDToValue[inst]->getType());
+            }
+            else if (IDToBlock.find(inst) != IDToBlock.end())
+            {
+                throw AtlasException("Tried pushing an import of type void into kernel function args!");
+            }
+            else
+            {
+                throw AtlasException("Tried to push a nullptr into the inputArgs when parsing imports.");
+            }
+        }
+        for (auto inst : KernelExports)
+        {
+            if (IDToValue.find(inst) != IDToValue.end())
+            {
+                inputArgs.push_back(IDToValue[inst]->getType()->getPointerTo());
+            }
+            else if (IDToBlock.find(inst) != IDToBlock.end())
+            {
+                throw AtlasException("Tried pushing an export of type void into kernel function args!");
+            }
+            else
+            {
+                throw AtlasException("Tried to push a nullptr into the inputArgs when parsing imports.");
+            }
+        }
+        FunctionType *funcType = FunctionType::get(Type::getInt8Ty(TikModule->getContext()), inputArgs, false);
+        KernelFunction = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
+
+        // Map our kernel function to IDs
+        for (auto arg = KernelFunction->arg_begin(); arg != KernelFunction->arg_end(); arg++)
+        {
+            uint64_t newId = (uint64_t)(prev(IDToValue.end())->first + 1);
+            SetValueIDs(arg, newId);
+            IDToValue[(int64_t)newId] = arg;
+        }
+        uint64_t i;
+        for (i = 0; i < KernelImports.size(); i++)
+        {
+            auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i);
+            a->setName("i" + to_string(i));
+            ArgumentMap[a] = KernelImports[i];
+        }
+        uint64_t j;
+        for (j = 0; j < KernelExports.size(); j++)
+        {
+            auto *a = cast<Argument>(KernelFunction->arg_begin() + 1 + i + j);
+            a->setName("e" + to_string(j));
+            ArgumentMap[a] = KernelExports[j];
+        }
+
+        // Finally, map only imports because they can be directly remapped
+        for (auto key : ArgumentMap)
+        {
+            if (key.first->getName()[0] == 'i')
+            {
+                VMap[IDToValue[key.second]] = key.first;
             }
         }
     }
@@ -1379,6 +1053,80 @@ namespace TraceAtlas::tik
         }
     }
 
+    void CartographerKernel::CheckChildExits(set<Function *> &embeddedKernels)
+    {
+        // Evaluate embedded kernel exits for export ambiguities
+        for (auto embfunc : embeddedKernels)
+        {
+            for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
+            {
+                for (auto it = bi->begin(); it != bi->end(); it++)
+                {
+                    if (auto callInst = dyn_cast<CallInst>(it))
+                    {
+                        if (callInst->getCalledFunction() == embfunc)
+                        {
+                            // found an embedded kernel, evaluate its exits
+                            auto sw = cast<SwitchInst>(bi->getTerminator());
+                            for (auto succ : successors(sw->getParent()))
+                            {
+                                auto destBlock = succ;
+                                for (auto ii = destBlock->begin(); ii != destBlock->end(); ii++)
+                                {
+                                    // look for a phi node in the successor that has exports in it
+                                    if (auto phi = dyn_cast<PHINode>(ii))
+                                    {
+                                        // set of exit index and argument pairs to consolidate to one value and map to the needing phi
+                                        set<pair<int64_t, int64_t>> exportsToMap;
+                                        // if an incoming value maps to an export of the embedded kernel, we need to map the associated block to an embedded kernel exit
+                                        for (unsigned int j = 0; j < phi->getNumIncomingValues(); j++)
+                                        {
+                                            auto embKern = KfMap[embfunc];
+                                            for (auto embKey : embKern->ArgumentMap)
+                                            {
+                                                if (GetValueID(phi->getIncomingValue(j)) == embKey.second)
+                                                {
+                                                    auto embKernExit = embKern->Exits.find(GetBlockID(phi->getIncomingBlock(j)));
+                                                    if (embKernExit != embKern->Exits.end())
+                                                    {
+                                                        exportsToMap.insert(pair((*embKernExit)->Index, embKey.second));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        if (!exportsToMap.empty())
+                                        {
+                                            throw AtlasException("Cannot map multiple embedded kernel exports to a single successor!");
+                                            // now create a switch instruction to export the correct value to the phi
+                                            IRBuilder<> seBuilder(sw->getParent());
+                                            Value *prevSel = IDToValue[exportsToMap.begin()->second];
+                                            for (const auto exit : exportsToMap)
+                                            {
+                                                auto cmp = seBuilder.CreateICmpEQ(ConstantInt::get(Type::getInt8Ty(callInst->getContext()), (uint64_t)exit.first), callInst);
+                                                cast<CmpInst>(cmp)->moveBefore(sw);
+                                                auto sel = seBuilder.CreateSelect(cmp, IDToValue[exit.second], prevSel);
+                                                cast<SelectInst>(sel)->moveBefore(sw);
+                                                prevSel = sel;
+                                            }
+                                            for (unsigned int j = 0; j < phi->getNumIncomingValues(); j++)
+                                            {
+                                                if (phi->getIncomingBlock(j) == sw->getParent())
+                                                {
+                                                    phi->removeIncomingValue(j);
+                                                }
+                                            }
+                                            phi->addIncoming(prevSel, sw->getParent());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     void CartographerKernel::InlineFunctionsFromBlocks(std::set<int64_t> &blocks)
     {
         bool change = true;
@@ -1565,6 +1313,266 @@ namespace TraceAtlas::tik
             for (auto phi : phisToRemove)
             {
                 phi->eraseFromParent();
+            }
+        }
+    }
+
+    void CartographerKernel::MapFunctionExports(set<BasicBlock *> &blocks, set<Function *> &embeddedKernels)
+    {
+
+        // replace parent export uses in embedded kernel call instructions
+        // and replace parent export uses in the parent context
+        for (auto parKey : ArgumentMap)
+        {
+            if (parKey.first->getName()[0] == 'e')
+            {
+                // its possible that this parent export only exists in the child
+                // therefore, we will not find this value in the parent context
+                // the below for loops will only replace the improper value in the child kernel call if it finds one, this will not work in this case
+                // to resolve this, we keep track of whether the value is ever found, if it is not, we manually replace the use in the child kernel call
+                bool found = false;
+                // check each user for possible remapping
+                for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
+                {
+                    for (auto it = bi->begin(); it != bi->end(); it++)
+                    {
+                        for (unsigned int i = 0; i < it->getNumOperands(); i++)
+                        {
+                            if (GetValueID(it->getOperand(i)) == parKey.second)
+                            {
+                                found = true;
+                                if (auto callInst = dyn_cast<CallInst>(it))
+                                {
+                                    if (embeddedKernels.find(callInst->getCalledFunction()) != embeddedKernels.end())
+                                    {
+                                        callInst->replaceUsesOfWith(IDToValue[parKey.second], parKey.first);
+                                    }
+                                    else
+                                    {
+                                        IRBuilder<> ldBuilder(callInst->getParent());
+                                        auto ld = ldBuilder.CreateLoad(parKey.first);
+                                        ld->moveBefore(callInst);
+                                        callInst->replaceUsesOfWith(IDToValue[parKey.second], ld);
+                                    }
+                                }
+                                else
+                                {
+                                    // it's possible for a child kernel to export to both the parent and the parent's parent
+                                    // this will be an export of both the child and parent, the value will not be born in the parent, and there will be uses in the parent
+                                    if (auto useInst = dyn_cast<Instruction>(it->getOperand(i)))
+                                    {
+                                        if (useInst->getParent()->getParent() != KernelFunction)
+                                        {
+                                            for (const auto child : embeddedKernels)
+                                            {
+                                                for (auto childArg : KfMap[child]->ArgumentMap)
+                                                {
+                                                    if (parKey.second == childArg.second && childArg.first->getName()[0] == 'e')
+                                                    {
+                                                        // inject a load for the export and replace this operand
+                                                        if (auto phi = dyn_cast<PHINode>(it))
+                                                        {
+                                                            for (unsigned int i = 0; i < phi->getNumIncomingValues(); i++)
+                                                            {
+                                                                if (phi->getIncomingValue(i) == IDToValue[parKey.second])
+                                                                {
+                                                                    auto predBlock = phi->getIncomingBlock(i);
+                                                                    auto term = predBlock->getTerminator();
+                                                                    IRBuilder<> ldBuilder(predBlock);
+                                                                    auto ld = ldBuilder.CreateLoad(parKey.first);
+                                                                    ld->moveBefore(term);
+                                                                    phi->setIncomingValue(i, ld);
+                                                                }
+                                                            }
+                                                        }
+                                                        else if (auto inst = dyn_cast<Instruction>(it))
+                                                        {
+                                                            IRBuilder<> ldBuilder(inst->getParent());
+                                                            auto ld = ldBuilder.CreateLoad(parKey.first);
+                                                            ld->moveBefore(inst);
+                                                            inst->replaceUsesOfWith(IDToValue[parKey.second], ld);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (!found)
+                {
+                    // this value must be only present in the child
+                    // map this parent export to the correct child function callinst
+                    // see srsLTE/eNodeB_Tx/K66 and K68 for an example
+                    for (const auto child : embeddedKernels)
+                    {
+                        for (auto childArg : KfMap[child]->ArgumentMap)
+                        {
+                            if (parKey.second == childArg.second && childArg.first->getName()[0] == 'e')
+                            {
+                                // we found the child kernel that has this value, find its callinst and replace the argOperand with this parent export
+                                for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
+                                {
+                                    for (auto it = bi->begin(); it != bi->end(); it++)
+                                    {
+                                        if (auto ci = dyn_cast<CallInst>(it))
+                                        {
+                                            if (child == ci->getCalledFunction())
+                                            {
+                                                ci->setArgOperand(childArg.first->getArgNo(), parKey.first);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // replace child exports to parent with loads from those exports
+        for (auto embedded : embeddedKernels)
+        {
+            auto kernFunc = KfMap[embedded];
+            for (auto embExp : kernFunc->ArgumentMap)
+            {
+                if (embExp.first->getName()[0] == 'e')
+                {
+                    bool found = false;
+                    // check to see if this value does not map to a parent export
+                    for (auto parArg : ArgumentMap)
+                    {
+                        if (parArg.second == embExp.second)
+                        {
+                            found = true;
+                        }
+                    }
+                    if (!found)
+                    {
+                        // this is an export to the parent, make sure the parent has a use for it first
+                        bool useFound = false;
+                        for (auto use : IDToValue[embExp.second]->users())
+                        {
+                            if (auto useInst = dyn_cast<Instruction>(use))
+                            {
+                                if (blocks.find(useInst->getParent()) != blocks.end())
+                                {
+                                    useFound = true;
+                                }
+                            }
+                        }
+                        if (!useFound)
+                        {
+                            throw AtlasException("Child export to parent has no uses!");
+                        }
+                        // make an alloc for it in Init
+                        IRBuilder alBuilder(Init);
+                        auto sel = Init->getTerminator();
+                        auto al = alBuilder.CreateAlloca(IDToValue[embExp.second]->getType());
+                        al->moveBefore(sel);
+                        // now replace all uses of the export value with loads or references to the alloca
+                        bool instFound = false;
+                        for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
+                        {
+                            for (auto it = bi->begin(); it != bi->end(); it++)
+                            {
+                                for (unsigned int i = 0; i < it->getNumOperands(); i++)
+                                {
+                                    if (embExp.second == GetValueID(it->getOperand(i)))
+                                    {
+                                        instFound = true;
+                                        if (auto st = dyn_cast<StoreInst>(it))
+                                        {
+                                            continue;
+                                        }
+                                        else if (auto callInst = dyn_cast<CallInst>(it))
+                                        {
+                                            if (embeddedKernels.find(callInst->getCalledFunction()) != embeddedKernels.end())
+                                            {
+                                                callInst->replaceUsesOfWith(IDToValue[embExp.second], al);
+                                            }
+                                            else
+                                            {
+                                                IRBuilder<> ldBuilder(callInst->getParent());
+                                                auto ld = ldBuilder.CreateLoad(al);
+                                                ld->moveBefore(callInst);
+                                                callInst->replaceUsesOfWith(IDToValue[embExp.second], ld);
+                                            }
+                                        }
+                                        else if (auto phi = dyn_cast<PHINode>(it))
+                                        {
+                                            // inject loads into the predecessor of our user
+                                            for (unsigned int j = 0; j < phi->getNumIncomingValues(); j++)
+                                            {
+                                                if (phi->getIncomingValue(j) == IDToValue[embExp.second])
+                                                {
+                                                    auto predBlock = phi->getIncomingBlock(j);
+                                                    auto term = predBlock->getTerminator();
+                                                    IRBuilder<> ldBuilder(predBlock);
+                                                    auto ld = ldBuilder.CreateLoad(al);
+                                                    ld->moveBefore(term);
+                                                    phi->replaceUsesOfWith(IDToValue[embExp.second], ld);
+                                                }
+                                            }
+                                        }
+                                        else if (auto useInst = dyn_cast<Instruction>(it))
+                                        {
+                                            IRBuilder<> ldBuilder(useInst->getParent());
+                                            auto ld = ldBuilder.CreateLoad(al);
+                                            useInst->replaceUsesOfWith(IDToValue[embExp.second], ld);
+                                            ld->moveBefore(useInst);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (!instFound)
+                        {
+                            // this is a child export that was suppposed to export for dead code
+                            // therefore, the export has no use in the parent context, and was never caught by the above for loops
+                            // the use in the callinst needs to be replaced with the alloc pointer
+                            for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
+                            {
+                                for (auto it = bi->begin(); it != bi->end(); it++)
+                                {
+                                    if (auto callInst = dyn_cast<CallInst>(it))
+                                    {
+                                        if (embeddedKernels.find(callInst->getCalledFunction()) != embeddedKernels.end())
+                                        {
+                                            PrintVal(callInst);
+                                            callInst->setArgOperand(embExp.first->getArgNo(), al);
+                                            PrintVal(callInst);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // replace external function calls with tik declarations
+        for (auto &bi : *(KernelFunction))
+        {
+            for (auto inst = bi.begin(); inst != bi.end(); inst++)
+            {
+                if (auto callBase = dyn_cast<CallBase>(inst))
+                {
+                    Function *f = callBase->getCalledFunction();
+                    if (f == nullptr)
+                    {
+                        throw AtlasException("Null function call (indirect call)");
+                    }
+                    auto *funcDec = cast<Function>(TikModule->getOrInsertFunction(callBase->getCalledFunction()->getName(), callBase->getCalledFunction()->getFunctionType()).getCallee());
+                    funcDec->setAttributes(callBase->getCalledFunction()->getAttributes());
+                    callBase->setCalledFunction(funcDec);
+                }
             }
         }
     }

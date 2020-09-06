@@ -86,7 +86,7 @@ namespace TraceAtlas::tik
         return headerString;
     }
 
-    void Kernel::ApplyMetadata(std::map<llvm::Value *, llvm::GlobalObject *> &GlobalMap)
+    void Kernel::ApplyMetadata()
     {
         //first we will clean the current instructions
         for (auto &fi : *KernelFunction)
@@ -187,10 +187,6 @@ namespace TraceAtlas::tik
             MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t) static_cast<int>(ex->Index))));
             KernelFunction->setMetadata("Ex" + to_string(i), newNode);
             i++;
-        }
-        for (auto global : GlobalMap)
-        {
-            global.second->setMetadata("KernelName", kernelNode);
         }
         //annotate the conditional, has to happen after body since conditional is a part of the body
         MDNode *condNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::Conditional))));
