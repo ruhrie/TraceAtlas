@@ -82,7 +82,6 @@ namespace DashTracer::Passes
     {
         AU.addRequired<DashTracer::Passes::EncodedAnnotate>();
         AU.addRequired<DashTracer::Passes::TraceIO>();
-        AU.setPreservesCFG();
     }
 
     char EncodedTrace::ID = 0;

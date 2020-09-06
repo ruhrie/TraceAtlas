@@ -3,12 +3,6 @@
 #include <llvm/IR/Function.h>
 #include <llvm/Pass.h>
 using namespace llvm;
-
-namespace DashTracer
-{
-    void Annotate(Function *F);
-}
-
 namespace DashTracer
 {
     namespace Passes

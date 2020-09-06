@@ -10,6 +10,7 @@ using namespace llvm;
 namespace TypeTwo
 {
     uint64_t blockCount = 0;
+    int32_t openIndicator = -1;
 
     int *openCount = nullptr;
     set<int64_t> *finalBlocks = nullptr;
@@ -17,6 +18,8 @@ namespace TypeTwo
     set<int64_t> openBlocks;
     int *kernelStarts = nullptr;
     set<int64_t> *blocks = nullptr;
+
+    std::set<int32_t> *blockCaller = nullptr;
 
     bool blocksLabeled = false;
     vector<string> currentKernel;
@@ -38,10 +41,12 @@ namespace TypeTwo
         kernelStarts = (int *)calloc(sizeof(int), kernels.size());                  // map of a kernel index to the first block seen
         blocks = (set<int64_t> *)calloc(sizeof(set<int64_t>), kernels.size());      // temporary kernel blocks
         kernelMap = (set<int> *)calloc(sizeof(set<int>), blockCount);
+        blockCaller = (set<int32_t> *)calloc(sizeof(set<int32_t>), blockCount);
         for (uint32_t i = 0; i < blockCount; i++)
         {
             kernelMap[i] = set<int>();
             openCount[i] = 0;
+            blockCaller[i] = set<int32_t>();
         }
         for (uint32_t i = 0; i < kernels.size(); i++)
         {
@@ -63,9 +68,15 @@ namespace TypeTwo
     {
         if (key == "BBEnter")
         {
-            int block = stoi(value, nullptr, 0);
+            int32_t block = stoi(value, nullptr, 0);
             openCount[block]++; //mark this block as being entered
             openBlocks.insert(block);
+
+            if (openIndicator != -1)
+            {
+                blockCaller[openIndicator].insert(block);
+            }
+            openIndicator = block;
 
             for (uint64_t i = 0; i < kernels.size(); i++)
             {
@@ -110,6 +121,7 @@ namespace TypeTwo
             {
                 openBlocks.erase(block);
             }
+            openIndicator = -1;
         }
         else if (key == "KernelEnter")
         {

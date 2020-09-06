@@ -62,8 +62,11 @@ add_subdirectory("cartographer")
 add_subdirectory("TraceInfrastructure")
 add_subdirectory("tik")
 add_subdirectory("deat")
+add_subdirectory("kar")
 add_subdirectory("Utilities")
 add_subdirectory("WorkingSet")
+add_subdirectory("hydra")
+
 #repsonsible for injecting the tracer. Fairly fragile so be careful
 function(InjectTracer tar)
     target_compile_options(${tar} PRIVATE "-flto")

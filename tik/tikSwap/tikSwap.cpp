@@ -1,6 +1,6 @@
 #include "tikSwap/tikSwap.h"
-#include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
+#include "AtlasUtil/Format.h"
 #include "AtlasUtil/Print.h"
 #include "tik/Kernel.h"
 #include "tik/TikKernel.h"
@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
     }
     // Annotate its bitcodes and values
     CleanModule(sourceBitcode.get());
-    Annotate(sourceBitcode.get());
+    Format(sourceBitcode.get());
     // change all non-external function definitions to default linkage type
     for (auto &F : *sourceBitcode)
     {

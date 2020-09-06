@@ -531,7 +531,7 @@ namespace TraceAtlas::tik
                             }
                         }
                     }
-                    if( !found )
+                    if (!found)
                     {
                         // this value must be only present in the child
                         // map this parent export to the correct child function callinst
@@ -543,13 +543,13 @@ namespace TraceAtlas::tik
                                 if (parKey.second == childArg.second && childArg.first->getName()[0] == 'e')
                                 {
                                     // we found the child kernel that has this value, find its callinst and replace the argOperand with this parent export
-                                    for( auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++ )
+                                    for (auto bi = KernelFunction->begin(); bi != KernelFunction->end(); bi++)
                                     {
-                                        for( auto it = bi->begin(); it != bi->end(); it++ )
+                                        for (auto it = bi->begin(); it != bi->end(); it++)
                                         {
-                                            if( auto ci = dyn_cast<CallInst>(it) )
+                                            if (auto ci = dyn_cast<CallInst>(it))
                                             {
-                                                if( child == ci->getCalledFunction() )
+                                                if (child == ci->getCalledFunction())
                                                 {
                                                     ci->setArgOperand(childArg.first->getArgNo(), parKey.first);
                                                 }
