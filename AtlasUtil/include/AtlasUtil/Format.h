@@ -1,6 +1,6 @@
 #pragma once
-#include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Split.h"
+#include "AtlasUtil/Annotate.h"
 
 inline void Format(llvm::Module *M)
 {

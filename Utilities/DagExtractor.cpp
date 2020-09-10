@@ -110,13 +110,6 @@ int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
 
-    auto f = ifstream(InputFilename);
-    if (!f)
-    {
-        spdlog::critical("Input trace file not found!");
-        return EXIT_FAILURE;
-    }
-
     if (!LogFile.empty())
     {
         auto file_logger = spdlog::basic_logger_mt("dag_logger", LogFile);
@@ -206,20 +199,6 @@ int main(int argc, char **argv)
     }
 
     ProcessTrace(InputFilename, Process, "Generating DAG", noBar);
-
-    // apply label to instance map if one exists
-    for (const auto &id : j["Kernels"].items())
-    {
-        if (id.value().find("Label") != id.value().end())
-        {
-            int index = stoi(id.key());
-            string label = id.value()["Label"];
-            if (!label.empty() && kernelIdMap.find(index) != kernelIdMap.end())
-            {
-                kernelIdMap[index] = label;
-            }
-        }
-    }
 
     nlohmann::json jOut;
     jOut["KernelInstanceMap"] = kernelIdMap;

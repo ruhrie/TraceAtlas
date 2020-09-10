@@ -178,8 +178,7 @@ int main(int argc, char *argv[])
     //annotate it with the same algorithm used in the tracer
     Format(base);
 
-    /// Initialize our IDtoX maps
-    InitializeIDMaps(base);
+    PopulateIdMap(base);
 
     TikModule = new Module(InputFile, context);
     TikModule->setDataLayout(base->getDataLayout());
@@ -202,7 +201,7 @@ int main(int argc, char *argv[])
             if (childParentMapping.find(kernel.first) == childParentMapping.end())
             {
                 //this kernel has no unexplained parents
-                auto kern = make_shared<CartographerKernel>(kernel.second, kernel.first);
+                auto kern = make_shared<CartographerKernel>(kernel.second, base, kernel.first);
                 if (!kern->Valid)
                 {
                     failedKernels.insert(kernel.second);
@@ -288,7 +287,7 @@ int main(int argc, char *argv[])
     {
 #ifdef DEBUG
         auto err = rso.str();
-        spdlog::critical("Tik Module Corrupted:\n" + err);
+        spdlog::critical("Tik Module Corrupted: " + err);
         error = true;
 #else
         spdlog::critical("Tik Module Corrupted");
@@ -333,7 +332,7 @@ int main(int argc, char *argv[])
     }
     if (error)
     {
-        spdlog::error("Exported module does not contain all cartographer kernels.");
+        return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
 }

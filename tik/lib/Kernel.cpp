@@ -86,7 +86,7 @@ namespace TraceAtlas::tik
         return headerString;
     }
 
-    void Kernel::ApplyMetadata()
+    void Kernel::ApplyMetadata(std::map<llvm::Value *, llvm::GlobalObject *> &GlobalMap)
     {
         //first we will clean the current instructions
         for (auto &fi : *KernelFunction)
@@ -155,16 +155,9 @@ namespace TraceAtlas::tik
         metadata += "]\n\t},\n\t\"Arguments\": [";
         for (auto arg = KernelFunction->arg_begin(); arg != KernelFunction->arg_end(); arg++)
         {
-            // if this is not the first argument, its a value that comes from the bitcode
             if (arg != KernelFunction->arg_begin())
             {
                 metadata += ", ";
-            }
-            else
-            {
-                // This is the first argument, which is always a constant injected by us. Signify to tikSwap this doesn't need to be mapped
-                metadata += to_string(IDState::Artificial);
-                continue;
             }
             auto argVal = ArgumentMap[arg];
             metadata += to_string(argVal);
@@ -187,6 +180,10 @@ namespace TraceAtlas::tik
             MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t) static_cast<int>(ex->Index))));
             KernelFunction->setMetadata("Ex" + to_string(i), newNode);
             i++;
+        }
+        for (auto global : GlobalMap)
+        {
+            global.second->setMetadata("KernelName", kernelNode);
         }
         //annotate the conditional, has to happen after body since conditional is a part of the body
         MDNode *condNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::Conditional))));

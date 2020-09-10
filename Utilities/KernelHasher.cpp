@@ -1,5 +1,3 @@
-#include "AtlasUtil/Format.h"
-#include "tik/Util.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instruction.h"
@@ -14,14 +12,11 @@
 #include <iostream>
 #include <map>
 #include <nlohmann/json.hpp>
-#include <set>
 #include <unordered_map>
 #include <vector>
-
 using namespace llvm;
 using json = nlohmann::json;
 using namespace std;
-using namespace TraceAtlas::tik;
 
 cl::opt<std::string> InputFilename("i", cl::desc("Specify input bitcode"), cl::value_desc("bitcode filename"), cl::Required);
 cl::opt<std::string> OutputFilename("o", cl::desc("Specify output json"), cl::value_desc("output filename"));
@@ -43,39 +38,34 @@ int main(int argc, char **argv)
     LLVMContext context;
     SMDiagnostic smerror;
     std::unique_ptr<Module> mptr = parseIRFile(InputFilename, smerror, context);
+    Module *M = mptr.get();
 
-    // Annotate its bitcodes and values
-    CleanModule(mptr.get());
-    Format(mptr.get());
+    map<int, BasicBlock *> blockMap;
 
-    InitializeIDMaps(mptr.get());
+    for (auto &F : *M)
+    {
+        for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
+        {
+            auto *b = cast<BasicBlock>(BB);
+            blockMap[UID++] = b;
+        }
+    }
 
-    ifstream inputJson;
+    ifstream inputJson(KernelFilename);
     nlohmann::json j;
-    try
-    {
-        inputJson.open(KernelFilename);
-        inputJson >> j;
-        inputJson.close();
-    }
-    catch (exception &e)
-    {
-        std::cerr << "Couldn't open input json file: " << KernelFilename << "\n";
-        std::cerr << e.what() << '\n';
-        return EXIT_FAILURE;
-    }
+    inputJson >> j;
+    inputJson.close();
 
-    map<string, std::set<uint64_t>> blockHash;
-    map<string, uint64_t> kernelHash;
+    map<string, uint64_t> outputMap;
     hash<string> hasher;
-    for (auto &[key, value] : j["Kernels"].items())
+    for (auto &[key, value] : j.items())
     {
-        vector<int> blocks = value["Blocks"];
+        vector<int> blocks = value;
         std::sort(blocks.begin(), blocks.end());
         vector<string> blockStrings;
         for (int block : blocks)
         {
-            BasicBlock *toConvert = IDToBlock[block];
+            BasicBlock *toConvert = blockMap[block];
             valueId = 0;
             string blockStr;
             vector<Value *> namedVals;
@@ -106,9 +96,6 @@ int main(int argc, char **argv)
             namedVals.clear();
             blockStr += "\n";
             blockStrings.push_back(blockStr);
-
-            std::sort(blockStr.begin(), blockStr.end());
-            blockHash[key].insert(hasher(blockStr));
         }
 
         std::sort(blockStrings.begin(), blockStrings.begin());
@@ -120,17 +107,10 @@ int main(int argc, char **argv)
         }
 
         uint64_t hashed = hasher(toHash);
-        kernelHash[key] = hashed;
+        outputMap[key] = hashed;
     }
 
-    //map<string,
-
-    json j_map;
-    for (const auto &key : kernelHash)
-    {
-        j_map[key.first]["Kernel"] = key.second;
-        j_map[key.first]["Blocks"] = vector<uint64_t>(blockHash[key.first].begin(), blockHash[key.first].end());
-    }
+    json j_map(outputMap);
     if (!OutputFilename.empty())
     {
         std::ofstream file;

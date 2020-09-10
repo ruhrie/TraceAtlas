@@ -11,9 +11,8 @@ add_executable(kernelHasher KernelHasher.cpp)
 
 set_target_properties(kernelHasher PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 target_compile_definitions(kernelHasher PUBLIC ${LLVM_DEFINITIONS})
-target_link_libraries(kernelHasher ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json libtik AtlasUtil)
+target_link_libraries(kernelHasher ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json)
 target_include_directories(kernelHasher SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
-target_include_directories(kernelHasher PRIVATE "${PROJECT_SOURCE_DIR}/tik/lib/include/")
 
 install(TARGETS kernelHasher RUNTIME DESTINATION bin)
 

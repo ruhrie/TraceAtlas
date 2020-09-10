@@ -4,10 +4,8 @@
 #include "AtlasUtil/Print.h"
 #include "tik/Kernel.h"
 #include "tik/TikKernel.h"
-#include "tik/Util.h"
 #include <fstream>
 #include <iostream>
-#include <llvm/Analysis/CFG.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/CFG.h>
@@ -34,8 +32,7 @@ cl::opt<bool> ASCIIFormat("S", cl::desc("output json as human-readable ASCII tex
 int main(int argc, char *argv[])
 {
     cl::ParseCommandLineOptions(argc, argv);
-    spdlog::info("Starting tikSwap.");
-    // load the original bitcode
+    //load the original bitcode
     LLVMContext OContext;
     SMDiagnostic Osmerror;
     unique_ptr<Module> sourceBitcode;
@@ -43,31 +40,45 @@ int main(int argc, char *argv[])
     {
         sourceBitcode = parseIRFile(OriginalBitcode, Osmerror, OContext);
     }
-    // if the file was not found
     catch (exception &e)
     {
-        spdlog::critical("Failed to open source bitcode file: " + OriginalBitcode);
+        std::cerr << "Couldn't open input bitcode file: " << OriginalBitcode << "\n";
+        std::cerr << e.what() << '\n';
+        spdlog::critical("Failed to open source bitcode: " + OriginalBitcode);
         return EXIT_FAILURE;
     }
-    // if the parsing failed
     if (sourceBitcode == nullptr)
     {
-        spdlog::critical("Couldn't parse source bitcode: " + OriginalBitcode);
+        std::cerr << "Couldn't open input bitcode file: " << OriginalBitcode << "\n";
+        spdlog::critical("Failed to open source bitcode: " + OriginalBitcode);
         return EXIT_FAILURE;
     }
     // Annotate its bitcodes and values
-    CleanModule(sourceBitcode.get());
-    Format(sourceBitcode.get());
-    // change all non-external function definitions to default linkage type
-    for (auto &F : *sourceBitcode)
+    Module *base = sourceBitcode.get();
+    CleanModule(base);
+    Format(base);
+    // create a map for its block and value IDs
+    map<int64_t, BasicBlock *> baseBlockMap;
+    for (auto &F : *base)
     {
-        if (!F.hasExternalLinkage())
+        for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
         {
-            F.setLinkage(GlobalValue::ExternalLinkage);
+            auto block = cast<BasicBlock>(BB);
+            MDNode *md;
+            if (block->getFirstInsertionPt()->hasMetadataOtherThanDebugLoc())
+            {
+                md = block->getFirstInsertionPt()->getMetadata("BlockID");
+                if (md->getNumOperands() > 0)
+                {
+                    if (auto con = mdconst::dyn_extract<ConstantInt>(md->getOperand(0)))
+                    {
+                        int64_t blockID = con->getSExtValue();
+                        baseBlockMap[blockID] = block;
+                    }
+                }
+            }
         }
     }
-    // Initialize our IDtoX maps
-    InitializeIDMaps(sourceBitcode.get());
 
     // load the tik IR
     LLVMContext tikContext;
@@ -77,40 +88,44 @@ int main(int argc, char *argv[])
     {
         tikBitcode = parseIRFile(InputFile, tikSmerror, tikContext);
     }
-    // if the file was not found
     catch (exception &e)
     {
-        spdlog::critical("Failed to open tik bitcode file: " + InputFile);
+        std::cerr << "Couldn't open input bitcode file: " << InputFile << "\n";
+        std::cerr << e.what() << '\n';
+        spdlog::critical("Failed to open source bitcode: " + InputFile);
         return EXIT_FAILURE;
     }
-    // if the parsing failed
     if (tikBitcode == nullptr)
     {
-        string err;
-        raw_string_ostream rso(err);
-        tikSmerror.print(InputFile.data(), rso);
-        spdlog::critical("Couldn't parse tik bitcode:\n" + rso.str());
+        std::cerr << "Couldn't open input bitcode file: " << InputFile << "\n";
+        spdlog::critical("Failed to open source bitcode: " + InputFile);
         return EXIT_FAILURE;
     }
+    Module *tikModule = tikBitcode.get();
 
     // grab all kernel functions in the tik bitcode and construct objects from them
-    vector<TikKernel *> kernels;
-    for (auto &func : *tikBitcode)
+    vector<Function *> kernelFuncs;
+    for (auto &func : *tikModule)
     {
-        if (func.hasMetadata("Boundaries"))
+        string funcName = func.getName();
+        if (funcName == "K" + to_string(kernelFuncs.size()))
         {
-            auto kern = new TikKernel(tikBitcode->getFunction(func.getName()));
-            if (kern->Valid)
-            {
-                kernels.push_back(kern);
-            }
-            else
-            {
-                delete kern;
-            }
+            kernelFuncs.push_back(tikModule->getFunction(funcName));
         }
     }
-    spdlog::info("Found " + to_string(kernels.size()) + " valid kernels in the tik file.");
+    vector<TikKernel *> kernels;
+    for (auto func : kernelFuncs)
+    {
+        auto kern = new TikKernel(func);
+        if (kern->Valid)
+        {
+            kernels.push_back(kern);
+        }
+        else
+        {
+            delete kern;
+        }
+    }
 
     // set that holds any branch instructions that need to be removed
     std::set<Instruction *> toRemove;
@@ -119,264 +134,150 @@ int main(int argc, char *argv[])
     {
         for (auto &e : kernel->Entrances)
         {
-            try
+            // make a copy of the kernel function for the base module context
+            // we have to get the arg types from the source values first before we can make the function signature (to align context)
+            vector<Value *> newArgs;
+            for (auto &a : kernel->ArgumentMap)
             {
-                // look for exits that are not expecting this predecessor
-                auto enterBlock = IDToBlock[e->Block];
-                for (const auto &exit : kernel->Exits)
+                // set the first arg to the entrance index
+                if (a.second == 0)
                 {
-                    auto succ = IDToBlock[exit->Block];
-                    if (find(predecessors(succ).begin(), predecessors(succ).end(), enterBlock) == predecessors(succ).end())
-                    {
-                        // have to evaluate if the block is dependent on its predecessors
-                        // search for a phi
-                        bool found = true;
-                        if (succ->hasNPredecessorsOrMore(2))
-                        {
-                            for (auto it = succ->begin(); it != succ->end(); it++)
-                            {
-                                if (auto phi = dyn_cast<PHINode>(it))
-                                {
-                                    found = false;
-                                    for (unsigned int k = 0; k < phi->getNumIncomingValues(); k++)
-                                    {
-                                        if (phi->getIncomingBlock(k) == succ)
-                                        {
-                                            found = true;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if (!found)
-                        {
-                            // we have a phi that is not expecting us as an incoming value. Which export should it receive?
-                            throw AtlasException("Kernel exit is an unexpected phi predecessor!");
-                        }
-                    }
+                    newArgs.push_back(ConstantInt::get(Type::getInt8Ty(base->getContext()), (uint64_t)e->Index));
+                    continue;
                 }
-                // list of values that directly map to the list of kernel function args
-                vector<Value *> mappedVals;
-                vector<Type *> argTypes;
-                // initialize the entrance index arg
-                mappedVals.push_back(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)e->Index));
-                argTypes.push_back(mappedVals[0]->getType());
-                for (auto it = next(kernel->ArgumentMap.begin()); it != kernel->ArgumentMap.end(); it++)
+                for (auto &F : *base)
                 {
-                    if (IDToValue.find(it->second) == IDToValue.end())
+                    for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
                     {
-                        throw AtlasException("Could not map arg back to source bitcode.");
-                    }
-                    mappedVals.push_back(IDToValue[it->second]);
-                    if (it->first->getName()[0] == 'e')
-                    {
-                        auto ptr = IDToValue[it->second]->getType()->getPointerTo();
-                        argTypes.push_back(cast<Type>(ptr));
-                    }
-                    else
-                    {
-                        argTypes.push_back(IDToValue[it->second]->getType());
-                    }
-                }
-                // create function signature to swap for this entrance
-                auto FuTy = FunctionType::get(Type::getInt8Ty(sourceBitcode->getContext()), argTypes, false);
-                auto newFunc = Function::Create(FuTy, kernel->KernelFunction->getLinkage(), kernel->KernelFunction->getAddressSpace(), "", sourceBitcode.get());
-                newFunc->setName(kernel->KernelFunction->getName());
-                // get our entrance predecessor blocks and swap tik
-                if (IDToBlock.find(e->Block) != IDToBlock.end())
-                {
-                    auto block = IDToBlock[e->Block];
-                    // create the call instruction to kernel
-                    auto origterm = block->getTerminator();
-                    IRBuilder iBuilder(block);
-                    auto baseFuncInst = cast<Function>(sourceBitcode->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
-                    CallInst *KInst = iBuilder.CreateCall(baseFuncInst, mappedVals);
-                    MDNode *callNode = MDNode::get(KInst->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(KInst->getContext()), (uint64_t)IDState::Artificial)));
-                    KInst->setMetadata("ValueID", callNode);
-                    // create switch case to process retval from kernel callinst
-                    KernelInterface a(IDState::Artificial, IDState::Artificial);
-                    for (auto &j : kernel->Exits)
-                    {
-                        if (j->Index == 0)
+                        auto block = cast<BasicBlock>(BB);
+                        // get our value from the source bitcode
+                        for (auto in = block->begin(), ine = block->end(); in != ine; in++)
                         {
-                            a.Block = j->Block;
-                            a.Index = j->Index;
-                        }
-                    }
-                    auto sw = iBuilder.CreateSwitch(cast<Value>(KInst), IDToBlock[a.Block], (unsigned int)kernel->Exits.size());
-                    MDNode *swNode = MDNode::get(sw->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(sw->getContext()), (uint64_t)IDState::Artificial)));
-                    sw->setMetadata("ValueID", swNode);
-                    for (auto &j : kernel->Exits)
-                    {
-                        if (j->Index != 0)
-                        {
-                            sw->addCase(ConstantInt::get(Type::getInt8Ty(sourceBitcode->getContext()), (uint64_t)j->Index), IDToBlock[j->Block]);
-                        }
-                    }
-                    // remove the old BB terminator
-                    toRemove.insert(origterm);
-                    // now alloc export pointers in the entrance context and insert loads wherever they're used
-                    for (auto key : kernel->ArgumentMap)
-                    {
-                        string name = key.first->getName();
-                        if (name[0] == 'e')
-                        {
-                            // have to generate alloca in the first basic block of the parent function
-                            auto insertion = cast<Instruction>(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt());
-                            IRBuilder<> alBuilder(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt()->getParent());
-                            auto alloc = iBuilder.CreateAlloca(IDToValue[key.second]->getType());
-                            alloc->moveBefore(insertion);
-                            vector<pair<Value *, Instruction *>> toReplace;
-                            // create a load and replace the old value for every use of this export
-                            for (auto use : IDToValue[key.second]->users())
+                            auto inst = cast<Instruction>(in);
+                            MDNode *mv = nullptr;
+                            if (inst->hasMetadataOtherThanDebugLoc())
                             {
-                                if (auto inst = dyn_cast<Instruction>(use))
-                                {
-                                    // skip the kernel calls
-                                    if (auto calli = dyn_cast<CallInst>(inst))
-                                    {
-                                        if (calli->getCalledFunction() == baseFuncInst)
-                                        {
-                                            continue;
-                                        }
-                                    }
-                                    // skip the exports that exist in different contexts
-                                    if (inst->getParent()->getParent() != KInst->getParent()->getParent())
-                                    {
-                                        continue;
-                                    }
-                                    // do not do memory operations in the entrance block, unless the user is a phi
-                                    if (inst->getParent() == IDToBlock[e->Block] && dyn_cast<PHINode>(inst) == nullptr)
-                                    {
-                                        continue;
-                                    }
-                                    toReplace.emplace_back(pair(IDToValue[key.second], inst));
-                                }
-                            }
-                            KInst->replaceUsesOfWith(IDToValue[key.second], alloc);
-                            for (auto pa : toReplace)
-                            {
-                                if (auto phi = dyn_cast<PHINode>(pa.second))
-                                {
-                                    BasicBlock *predBlock;
-                                    for (unsigned int i = 0; i < phi->getNumIncomingValues(); i++)
-                                    {
-                                        if (phi->getIncomingValue(i) == pa.first)
-                                        {
-                                            predBlock = phi->getIncomingBlock(i);
-                                            auto term = predBlock->getTerminator();
-                                            IRBuilder<> ldBuilder(predBlock);
-                                            auto ld = ldBuilder.CreateLoad(alloc);
-                                            ld->moveBefore(term);
-                                            phi->setIncomingValue(i, ld);
-                                        }
-                                    }
-                                }
-                                else if (auto inst = dyn_cast<Instruction>(pa.second))
-                                {
-                                    IRBuilder<> ldBuilder(inst->getParent());
-                                    auto ld = ldBuilder.CreateLoad(alloc);
-                                    ld->moveBefore(inst);
-                                    inst->replaceUsesOfWith(pa.first, ld);
-                                }
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    throw AtlasException("Could not swap entrance " + to_string(e->Index) + " of kernel " + kernel->Name + " to source bitcode.");
-                }
-                spdlog::info("Successfully swapped entrance " + to_string(e->Index) + " of kernel: " + kernel->Name);
-            }
-            catch (AtlasException &e)
-            {
-                spdlog::error(e.what());
-            }
-        }
-    }
-
-    set<Instruction *> badInst;
-    // remove blocks if any
-    for (auto ind : toRemove)
-    {
-        // if the successors of this terminator only have the terminator parent as a pred, any uses of the successors values will be unresolved
-        if (auto br = dyn_cast<BranchInst>(ind))
-        {
-            for (unsigned int i = 0; i < br->getNumSuccessors(); i++)
-            {
-                auto succ = br->getSuccessor(i);
-                if (succ->hasNPredecessors(1))
-                {
-                    // for each inst in the now predecessor-less block
-                    for (auto &it : *succ)
-                    {
-                        for (auto use : it.users())
-                        {
-                            if (auto useInst = dyn_cast<Instruction>(use))
-                            {
-                                if (!useInst->isTerminator())
-                                {
-                                    // if this unresolved use is not a terminator and has no uses, it can be trivially deleted
-                                    if (useInst->hasNUses(0))
-                                    {
-                                        badInst.insert(useInst);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        ind->eraseFromParent();
-    }
-    for (auto inst : badInst)
-    {
-        inst->eraseFromParent();
-    }
-
-    // now verify that phis only contain valid entries
-    for (auto &fi : *sourceBitcode)
-    {
-        for (auto &bi : fi)
-        {
-            // very weird phenomenon here, but essentially we have to collect all phi entries to delete first, then delete them
-            // when all phi entries are deleted, llvm deletes the phi, so to avoid segfault we can't remove until we're done with the block
-            vector<pair<PHINode *, unsigned int>> remInd;
-            for (auto it = bi.begin(); it != bi.end(); it++)
-            {
-                if (it.getNodePtr() != nullptr)
-                {
-                    if (auto phi = dyn_cast<PHINode>(it))
-                    {
-                        // each index to remove has to be the index that results after all previous entries to remove are out
-                        unsigned int j = 0;
-                        for (unsigned int i = 0; i < phi->getNumIncomingValues(); i++)
-                        {
-                            if (find(predecessors(phi->getParent()).begin(), predecessors(phi->getParent()).end(), phi->getIncomingBlock(i)) == predecessors(phi->getParent()).end())
-                            {
-                                remInd.emplace_back(pair(phi, j));
+                                mv = inst->getMetadata("ValueID");
                             }
                             else
                             {
-                                j++;
+                                spdlog::warn("Value in source bitcode has no ValueID.");
+                                continue;
+                            }
+                            int64_t ValueID = 0;
+                            if (mv->getNumOperands() > 1)
+                            {
+                                spdlog::warn("Value in source bitcode has more than one ID. Only looking at the first.");
+                            }
+                            else if (mv->getNumOperands() == 0)
+                            {
+                                continue;
+                            }
+                            if (auto ID = mdconst::dyn_extract<ConstantInt>(mv->getOperand(0)))
+                            {
+                                ValueID = ID->getSExtValue();
+                            }
+                            else
+                            {
+                                ValueID = -1;
+                                spdlog::warn("Couldn't extract ValueID from source bitcode. Skipping...");
+                            }
+                            // now see if this value matches, and if so add it (in order)
+                            if (a.second == ValueID)
+                            {
+                                newArgs.push_back(cast<Value>(inst));
                             }
                         }
                     }
                 }
             }
-            for (auto ind : remInd)
+            vector<Type *> argTypes;
+            argTypes.reserve(newArgs.size());
+            for (auto arg : newArgs)
             {
-                ind.first->removeIncomingValue(ind.second);
+                argTypes.push_back(arg->getType());
+            }
+            auto FuTy = FunctionType::get(Type::getInt8Ty(base->getContext()), argTypes, false);
+            auto newFunc = Function::Create(FuTy, kernel->KernelFunction->getLinkage(), kernel->KernelFunction->getAddressSpace(), "", base);
+            newFunc->setName(kernel->KernelFunction->getName());
+            for (auto &F : *base)
+            {
+                for (auto BB = F.begin(), BBe = F.end(); BB != BBe; BB++)
+                {
+                    auto block = cast<BasicBlock>(BB);
+                    // get the block ID
+                    MDNode *md = nullptr;
+                    if (block->getFirstInsertionPt()->hasMetadataOtherThanDebugLoc())
+                    {
+                        md = block->getFirstInsertionPt()->getMetadata("BlockID");
+                    }
+                    else
+                    {
+                        spdlog::warn("Source code basic block has no metadata.");
+                        continue;
+                    }
+                    int64_t BBID = 0;
+                    if (md->getNumOperands() > 1)
+                    {
+                        spdlog::warn("BB in source bitcode has more than one ID. Only looking at the first.");
+                    }
+                    if (auto ID = mdconst::dyn_extract<ConstantInt>(md->getOperand(0)))
+                    {
+                        BBID = ID->getSExtValue();
+                    }
+                    else
+                    {
+                        BBID = -1;
+                        spdlog::warn("Couldn't extract BBID from source bitcode. Skipping...");
+                    }
+                    // if this is our entrance block, swap tik
+                    if (BBID == e->Block)
+                    {
+                        IRBuilder iBuilder(block->getTerminator());
+                        auto baseFuncInst = cast<Function>(base->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
+                        CallInst *KInst = iBuilder.CreateCall(baseFuncInst, newArgs);
+                        for (int i = 0; i < (int)KInst->getNumArgOperands(); i++)
+                        {
+                            if (e->Index != 0)
+                            {
+                                newArgs[0] = ConstantInt::get(Type::getInt8Ty(base->getContext()), (uint64_t)e->Index);
+                            }
+                            KInst->setArgOperand((unsigned int)i, newArgs[(size_t)i]);
+                        }
+                        KernelInterface a(-1, -1);
+                        for (auto &j : kernel->Exits)
+                        {
+                            if (j->Index == 0)
+                            {
+                                a.Block = j->Block;
+                                a.Index = j->Index;
+                            }
+                        }
+                        auto sw = iBuilder.CreateSwitch(cast<Value>(KInst), baseBlockMap[a.Block], (unsigned int)kernel->Exits.size());
+                        for (auto &j : kernel->Exits)
+                        {
+                            if (j->Index != 0)
+                            {
+                                sw->addCase(ConstantInt::get(Type::getInt8Ty(base->getContext()), (uint64_t)j->Index), baseBlockMap[j->Block]);
+                            }
+                        }
+                        // remember to remove the old terminator
+                        toRemove.insert(block->getTerminator());
+                    }
+                }
             }
         }
     }
+    // remove blocks if any
+    for (auto ind : toRemove)
+    {
+        ind->eraseFromParent();
+    }
 
-    // verify the module
+    //verify the module
     std::string str;
     llvm::raw_string_ostream rso(str);
-    bool broken = verifyModule(*sourceBitcode, &rso);
+    bool broken = verifyModule(*base, &rso);
     if (broken)
     {
         auto err = rso.str();
@@ -394,7 +295,7 @@ int main(int argc, char *argv[])
             llvm::raw_string_ostream rso(str);
             std::filebuf f0;
             f0.open(OutputFile, std::ios::out);
-            sourceBitcode->print(rso, write);
+            base->print(rso, write);
             std::ostream readableStream(&f0);
             readableStream << str;
             f0.close();
@@ -406,9 +307,9 @@ int main(int argc, char *argv[])
             f.open(OutputFile, std::ios::out);
             std::ostream rawStream(&f);
             raw_os_ostream raw_stream(rawStream);
-            WriteBitcodeToFile(*sourceBitcode, raw_stream);
+            WriteBitcodeToFile(*base, raw_stream);
         }
-        spdlog::info("Successfully wrote tikSwap to file");
+        spdlog::info("Successfully wrote tik to file");
     }
     catch (exception &e)
     {

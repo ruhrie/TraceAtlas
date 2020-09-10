@@ -28,6 +28,7 @@ int main(int argc, char *argv[])
     int *in = get_input(SIZE);
 
     // bubble sort
+    KernelEnter("bubbleSort");
     int swap;
     for (int i = 0; i < SIZE; i++)
     {
@@ -41,6 +42,7 @@ int main(int argc, char *argv[])
             }
         }
     }
+    KernelExit("bubbleSort");
 
     printf("\nSorting Done");
     free(in);

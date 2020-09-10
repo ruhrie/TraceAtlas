@@ -1,7 +1,6 @@
 #include "tik/Util.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
-#include "AtlasUtil/Print.h"
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/Instructions.h>
@@ -14,91 +13,24 @@ using namespace llvm;
 
 namespace TraceAtlas::tik
 {
+
     std::map<int64_t, llvm::BasicBlock *> IDToBlock;
     std::map<int64_t, llvm::Value *> IDToValue;
-    void RecurseThroughOperands(Value *val)
-    {
-        if (auto inst = dyn_cast<Instruction>(val))
-        {
-            if (GetValueID(inst) < 0)
-            {
-                throw AtlasException("Found an instruction that did not have a ValueID.");
-            }
-            if (IDToValue.find(GetValueID(val)) == IDToValue.end())
-            {
-                IDToValue[GetValueID(val)] = val;
-            }
-            else
-            {
-                return;
-            }
-            for (unsigned int i = 0; i < inst->getNumOperands(); i++)
-            {
-                if (auto subVal = dyn_cast<Value>(inst->getOperand(i)))
-                {
-                    RecurseThroughOperands(subVal);
-                }
-            }
-        }
-        else if (auto go = dyn_cast<GlobalObject>(val))
-        {
-            if (GetValueID(go) < 0)
-            {
-                PrintVal(go);
-                throw AtlasException("Found a global object that did not have a ValueID.");
-            }
-            if (IDToValue.find(GetValueID(val)) == IDToValue.end())
-            {
-                IDToValue[GetValueID(go)] = val;
-            }
-            else
-            {
-                return;
-            }
-            for (unsigned int i = 0; i < go->getNumOperands(); i++)
-            {
-                if (auto subVal = dyn_cast<Value>(go->getOperand(i)))
-                {
-                    RecurseThroughOperands(subVal);
-                }
-            }
-        }
-        else if (auto arg = dyn_cast<Argument>(val))
-        {
-            if (GetValueID(arg) < 0)
-            {
-                PrintVal(arg);
-                throw AtlasException("Found a global object that did not have a ValueID.");
-            }
-            if (IDToValue.find(GetValueID(val)) == IDToValue.end())
-            {
-                IDToValue[GetValueID(arg)] = val;
-            }
-            else
-            {
-                return;
-            }
-        }
-    }
 
-    void InitializeIDMaps(llvm::Module *M)
+    void PopulateIdMap(llvm::Module *M)
     {
-        set<BasicBlock *> wholeBitcode;
-        for (auto &F : *M)
+        for (auto mi = M->begin(); mi != M->end(); mi++)
         {
-            for (auto BB = F.begin(); BB != F.end(); BB++)
+            for (auto fi = mi->begin(); fi != mi->end(); fi++)
             {
-                auto *block = cast<BasicBlock>(BB);
-                if ((GetBlockID(block) >= 0) && (IDToBlock[GetBlockID(block)] == nullptr))
+                for (auto bi = fi->begin(); bi != fi->end(); bi++)
                 {
-                    IDToBlock[GetBlockID(block)] = block;
-                }
-                for (auto it = block->begin(); it != block->end(); it++)
-                {
-                    auto inst = cast<Instruction>(it);
-                    if (auto val = dyn_cast<Value>(inst))
+                    auto inst = cast<Instruction>(bi);
+                    uint32_t numOps = inst->getNumOperands();
+                    for (uint32_t i = 0; i < numOps; i++)
                     {
-                        RecurseThroughOperands(val);
+                        Value *op = inst->getOperand(i);
+                        IDToValue[GetValueID(op)] = op;
                     }
                 }
             }
@@ -224,7 +156,7 @@ namespace TraceAtlas::tik
         }
         return checked;
     }
-    set<BasicBlock *> GetEntrances(const set<BasicBlock *> &blocks)
+    set<BasicBlock *> GetEntrances(set<BasicBlock *> &blocks)
     {
         set<BasicBlock *> Entrances;
         for (auto block : blocks)
@@ -428,6 +360,37 @@ namespace TraceAtlas::tik
         return IsReachable(base, base, validBlocks);
     }
 
+    set<BasicBlock *> GetExits(set<BasicBlock *> blocks)
+    {
+        set<BasicBlock *> Exits;
+        for (auto block : blocks)
+        {
+            for (auto suc : successors(block))
+            {
+                if (blocks.find(suc) == blocks.end())
+                {
+                    Exits.insert(suc);
+                }
+            }
+            auto term = block->getTerminator();
+            if (auto retInst = dyn_cast<ReturnInst>(term))
+            {
+                Function *base = block->getParent();
+                for (auto user : base->users())
+                {
+                    if (auto v = dyn_cast<Instruction>(user))
+                    {
+                        auto parentBlock = v->getParent();
+                        if (blocks.find(parentBlock) == blocks.end())
+                        {
+                            Exits.insert(parentBlock);
+                        }
+                    }
+                }
+            }
+        }
+        return Exits;
+    }
     set<BasicBlock *> GetConditionals(const set<BasicBlock *> &blocks, const set<int64_t> &validBlocks)
     {
         set<BasicBlock *> result;
@@ -481,70 +444,6 @@ namespace TraceAtlas::tik
                 if (suc->getParent() != F)
                 {
                     result.insert(suc);
-                }
-            }
-        }
-        return result;
-    }
-
-    set<BasicBlock *> GetExits(set<BasicBlock *> blocks)
-    {
-        set<BasicBlock *> Exits;
-        for (auto block : blocks)
-        {
-            for (auto suc : successors(block))
-            {
-                if (blocks.find(suc) == blocks.end())
-                {
-                    Exits.insert(suc);
-                }
-            }
-            auto term = block->getTerminator();
-            if (auto retInst = dyn_cast<ReturnInst>(term))
-            {
-                Function *base = block->getParent();
-                for (auto user : base->users())
-                {
-                    if (auto v = dyn_cast<Instruction>(user))
-                    {
-                        auto parentBlock = v->getParent();
-                        if (blocks.find(parentBlock) == blocks.end())
-                        {
-                            Exits.insert(parentBlock);
-                        }
-                    }
-                }
-            }
-        }
-        return Exits;
-    }
-
-    set<BasicBlock *> GetExits(set<BasicBlock *> &s, BasicBlock *entrance)
-    {
-        set<BasicBlock *> result;
-        for (auto block : s)
-        {
-            for (auto suc : successors(block))
-            {
-                if (s.find(suc) == s.end() && suc->getParent() == entrance->getParent())
-                {
-                    result.insert(suc);
-                }
-            }
-            auto term = block->getTerminator();
-            if (auto retInst = dyn_cast<ReturnInst>(term))
-            {
-                Function *base = block->getParent();
-                for (auto user : base->users())
-                {
-                    if (auto v = dyn_cast<Instruction>(user))
-                    {
-                        auto parentBlock = v->getParent();
-                        if (s.find(parentBlock) == s.end() && parentBlock->getParent() == entrance->getParent())
-                        {
-                            result.insert(parentBlock);
-                        }
-                    }
                 }
             }
         }
