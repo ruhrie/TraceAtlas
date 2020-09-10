@@ -3,7 +3,7 @@
 
 void HydraInit();
 
-void HydraExecute(char* function);
+void HydraExecute(char *function);
 
 void HydraLock(int code);
 
