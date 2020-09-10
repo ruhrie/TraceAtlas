@@ -123,7 +123,7 @@ int main(int argc, char *argv[])
             {
                 // look for exits that are not expecting this predecessor
                 auto enterBlock = IDToBlock[e->Block];
-                for (auto exit : kernel->Exits)
+                for (const auto &exit : kernel->Exits)
                 {
                     auto succ = IDToBlock[exit->Block];
                     if (find(predecessors(succ).begin(), predecessors(succ).end(), enterBlock) == predecessors(succ).end())
@@ -250,7 +250,7 @@ int main(int argc, char *argv[])
                                     {
                                         continue;
                                     }
-                                    toReplace.push_back(pair(IDToValue[key.second], inst));
+                                    toReplace.emplace_back(pair(IDToValue[key.second], inst));
                                 }
                             }
                             KInst->replaceUsesOfWith(IDToValue[key.second], alloc);
@@ -309,9 +309,9 @@ int main(int argc, char *argv[])
                 if (succ->hasNPredecessors(1))
                 {
                     // for each inst in the now predecessor-less block
-                    for (auto it = succ->begin(); it != succ->end(); it++)
+                    for (auto &it : *succ)
                     {
-                        for (auto use : it->users())
+                        for (auto use : it.users())
                         {
                             if (auto useInst = dyn_cast<Instruction>(use))
                             {
@@ -339,12 +339,12 @@ int main(int argc, char *argv[])
     // now verify that phis only contain valid entries
     for (auto &fi : *sourceBitcode)
     {
-        for (auto bi = fi.begin(); bi != fi.end(); bi++)
+        for (auto &bi : fi)
         {
-            // very weird phenomenon here, but essentially we have to collect all phi entries to delete per basic block, then delete them
+            // very weird phenomenon here, but essentially we have to collect all phi entries to delete first, then delete them
             // when all phi entries are deleted, llvm deletes the phi, so to avoid segfault we can't remove until we're done with the block
             vector<pair<PHINode *, unsigned int>> remInd;
-            for (auto it = bi->begin(); it != bi->end(); it++)
+            for (auto it = bi.begin(); it != bi.end(); it++)
             {
                 if (it.getNodePtr() != nullptr)
                 {
@@ -356,7 +356,7 @@ int main(int argc, char *argv[])
                         {
                             if (find(predecessors(phi->getParent()).begin(), predecessors(phi->getParent()).end(), phi->getIncomingBlock(i)) == predecessors(phi->getParent()).end())
                             {
-                                remInd.push_back(pair(phi, j));
+                                remInd.emplace_back(pair(phi, j));
                             }
                             else
                             {

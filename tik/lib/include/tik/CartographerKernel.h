@@ -10,7 +10,7 @@ namespace TraceAtlas::tik
     class CartographerKernel : public Kernel
     {
     public:
-        CartographerKernel(std::vector<int64_t> basicBlocks, std::string name = "");
+        CartographerKernel(std::vector<int64_t> basicBlocks, const std::string &name = "");
 
     private:
         CartographerKernel();
