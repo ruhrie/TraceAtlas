@@ -113,7 +113,9 @@ int main(int argc, char *argv[])
     spdlog::info("Found " + to_string(kernels.size()) + " valid kernels in the tik file.");
 
     // set that holds any branch instructions that need to be removed
-    std::set<Instruction *> toRemove;
+    set<Instruction *> toRemove;
+    // container of all exports that have been mapped to a pointer
+    map<Value *, AllocaInst *> mappedExports;
     // tikSwap
     for (auto &kernel : kernels)
     {
@@ -222,10 +224,19 @@ int main(int argc, char *argv[])
                         if (name[0] == 'e')
                         {
                             // have to generate alloca in the first basic block of the parent function
-                            auto insertion = cast<Instruction>(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt());
-                            IRBuilder<> alBuilder(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt()->getParent());
-                            auto alloc = iBuilder.CreateAlloca(IDToValue[key.second]->getType());
-                            alloc->moveBefore(insertion);
+                            AllocaInst* alloc;
+                            if( mappedExports.find(IDToValue[key.second]) == mappedExports.end() )
+                            {
+                                auto insertion = cast<Instruction>(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt());
+                                IRBuilder<> alBuilder(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt()->getParent());
+                                alloc = iBuilder.CreateAlloca(IDToValue[key.second]->getType());
+                                alloc->moveBefore(insertion);
+                                mappedExports[IDToValue[key.second]] = alloc;
+                            }
+                            else
+                            {
+                                alloc = mappedExports[IDToValue[key.second]];
+                            }
                             vector<pair<Value *, Instruction *>> toReplace;
                             // create a load and replace the old value for every use of this export
                             for (auto use : IDToValue[key.second]->users())
