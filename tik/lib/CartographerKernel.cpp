@@ -1318,7 +1318,6 @@ namespace TraceAtlas::tik
 
     void CartographerKernel::MapFunctionExports(set<BasicBlock *> &blocks, set<Function *> &embeddedKernels)
     {
-
         // replace parent export uses in embedded kernel call instructions
         // and replace parent export uses in the parent context
         for (auto parKey : ArgumentMap)
