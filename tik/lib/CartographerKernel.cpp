@@ -232,16 +232,16 @@ namespace TraceAtlas::tik
 
             BuildInit(VMap);
 
-            Remap(VMap); //we need to remap before inlining
+            // we need to remap before inlining
+            Remap(VMap);
 
             InlineFunctionsFromBlocks(blockSet);
 
             CopyGlobals(VMap);
 
-            //remap and repipe
             Remap(VMap);
 
-            // patch work here. Sometimes when inlining, llvm will inject the block terminator before the store
+            // patch work here. Sometimes when inlining, llvm will inject the block terminator before an export store
             for (auto &fi : *KernelFunction)
             {
                 if (auto st = dyn_cast<StoreInst>(prev(fi.end())))
@@ -269,10 +269,8 @@ namespace TraceAtlas::tik
 
             FixInvokes();
 
-            //apply metadata
             ApplyMetadata();
 
-            //and set a flag that we succeeded
             Valid = true;
         }
         catch (AtlasException &e)
@@ -842,6 +840,7 @@ namespace TraceAtlas::tik
                                     auto a = p->getBasicBlockIndex(pred);
                                     if (a >= 0)
                                     {
+                                        DeadCode = true;
                                         p->removeIncomingValue(pred);
                                     }
                                 }
@@ -1236,7 +1235,6 @@ namespace TraceAtlas::tik
         for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
         {
             auto b = cast<BasicBlock>(fi);
-
             vector<Instruction *> phisToRemove;
             for (auto &phi : b->phis())
             {
@@ -1276,6 +1274,7 @@ namespace TraceAtlas::tik
                 }
                 for (auto toR : valuesToRemove)
                 {
+                    DeadCode = true;
                     phi.removeIncomingValue(toR, false);
                 }
                 if (phi.getNumIncomingValues() == 0)
@@ -1311,6 +1310,7 @@ namespace TraceAtlas::tik
             }
             for (auto phi : phisToRemove)
             {
+                DeadCode = true;
                 phi->eraseFromParent();
             }
         }
@@ -1653,69 +1653,4 @@ namespace TraceAtlas::tik
             }
         }
     }
-    /*
-    void CartographerKernel::RemapNestedKernels(llvm::ValueToValueMapTy &VMap)
-    {
-        // Now find all calls to the embedded kernel functions in the body, if any, and change their arguments to the new ones
-        std::map<Argument *, Value *> embeddedCallArgs;
-        for (auto &bf : *(KernelFunction))
-        {
-            for (BasicBlock::iterator i = bf.begin(), BE = bf.end(); i != BE; ++i)
-            {
-                if (auto *callInst = dyn_cast<CallInst>(i))
-                {
-                    auto calledFunc = callInst->getCalledFunction();
-                    auto subK = KfMap[calledFunc];
-                    if (subK != nullptr)
-                    {
-                        for (auto eCArg = calledFunc->arg_begin(); eCArg < calledFunc->arg_end(); eCArg++)
-                        {
-                            auto argMapID = subK->ArgumentMap[eCArg];
-                            for (auto it = KernelFunction->arg_begin(); it != KernelFunction->arg_end(); it++)
-                            {
-                                auto parArg = cast<Argument>(it);
-                                if (GetValueID(parArg) == argMapID)
-                                {
-                                    embeddedCallArgs[eCArg] = parArg;
-                                }
-                                else
-                                {
-                                    for (auto &b : *(KernelFunction))
-                                    {
-                                        for (BasicBlock::iterator j = b.begin(), BE2 = b.end(); j != BE2; ++j)
-                                        {
-                                            auto inst = cast<Instruction>(j);
-                                            if (argMapID == GetValueID(inst))
-                                            {
-                                                embeddedCallArgs[eCArg] = inst;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        auto limit = callInst->getNumArgOperands();
-                        for (uint32_t k = 1; k < limit; k++)
-                        {
-                            Value *op = callInst->getArgOperand(k);
-                            if (auto *arg = dyn_cast<Argument>(op))
-                            {
-                                if (embeddedCallArgs.find(arg) == embeddedCallArgs.end())
-                                {
-                                    throw AtlasException("Failed to find nested argument");
-                                }
-                                auto newArg = embeddedCallArgs[arg];
-                                callInst->setArgOperand(k, newArg);
-                            }
-                            else
-                            {
-                                throw AtlasException("Unexpected value passed to function");
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    */
 } // namespace TraceAtlas::tik

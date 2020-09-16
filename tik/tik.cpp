@@ -245,6 +245,10 @@ int main(int argc, char *argv[])
                     //and remove it from kernels
                     auto it = find(kernels.begin(), kernels.end(), kernel);
                     kernels.erase(it);
+                    if (kern->DeadCode)
+                    {
+                        spdlog::warn("Kernel " + kernel.first + " contains code suspected to be dead.");
+                    }
                     spdlog::info("Successfully converted kernel: " + kernel.first);
                     //and restart the iterator to ensure cohesion
                     break;

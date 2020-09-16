@@ -224,8 +224,8 @@ int main(int argc, char *argv[])
                         if (name[0] == 'e')
                         {
                             // have to generate alloca in the first basic block of the parent function
-                            AllocaInst* alloc;
-                            if( mappedExports.find(IDToValue[key.second]) == mappedExports.end() )
+                            AllocaInst *alloc;
+                            if (mappedExports.find(IDToValue[key.second]) == mappedExports.end())
                             {
                                 auto insertion = cast<Instruction>(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt());
                                 IRBuilder<> alBuilder(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt()->getParent());

@@ -47,6 +47,7 @@ namespace TraceAtlas::tik
         llvm::BasicBlock *Exit = nullptr;
         llvm::BasicBlock *Exception = nullptr;
         llvm::Function *KernelFunction = nullptr;
+        bool DeadCode = false;
         bool Valid = false;
         std::map<llvm::Argument *, int64_t> ArgumentMap;
 
