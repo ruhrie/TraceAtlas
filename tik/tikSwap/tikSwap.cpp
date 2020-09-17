@@ -29,7 +29,8 @@ using namespace TraceAtlas::tik;
 cl::opt<string> InputFile("t", cl::Required, cl::desc("<input tik bitcode>"), cl::init("tik.bc"));
 cl::opt<string> OriginalBitcode("b", cl::Required, cl::desc("<input original bitcode>"), cl::init("a.bc"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"), cl::init("tikSwap.bc"));
-cl::opt<bool> ASCIIFormat("S", cl::desc("output json as human-readable ASCII text"));
+cl::opt<bool> ASCIIFormat("S", cl::desc("Output json as human-readable ASCII text"));
+cl::opt<bool> Debug("d", cl::desc("Inject debugging symbols into output bitcode"));
 
 int main(int argc, char *argv[])
 {
@@ -395,7 +396,10 @@ int main(int argc, char *argv[])
     }
 
     // annotate with debug info
-    DebugExports(sourceBitcode.get(), IDToValue);
+    if( Debug )
+    {
+        DebugExports(sourceBitcode.get(), IDToValue);
+    }
 
     // writing part
     try
