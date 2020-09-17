@@ -394,6 +394,9 @@ int main(int argc, char *argv[])
         spdlog::critical("Tik Module Corrupted: \n" + err);
     }
 
+    // annotate with debug info
+    DebugExports(sourceBitcode.get(), IDToValue);
+
     // writing part
     try
     {

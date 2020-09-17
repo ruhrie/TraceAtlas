@@ -1,11 +1,13 @@
 #pragma once
 #include <llvm/IR/Constants.h>
+#include <llvm/IR/DIBuilder.h>
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/Metadata.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Operator.h>
-#include <llvm/IR/DIBuilder.h>
+#include <map>
+#include <set>
 
 /// @brief Enumerate the different states of ValueID and BlockID
 ///
@@ -112,10 +114,10 @@ inline void SetValueIDs(llvm::Value *val, uint64_t &i)
     }
 }
 
-inline int64_t SetIDAndMap(llvm::Value* val, std::map<int64_t, llvm::Value*>& IDToValue, bool artificial=false)
+inline int64_t SetIDAndMap(llvm::Value *val, std::map<int64_t, llvm::Value *> &IDToValue, bool artificial = false)
 {
     int64_t newID;
-    if( artificial )
+    if (artificial)
     {
         newID = IDState::Artificial;
     }
@@ -123,9 +125,10 @@ inline int64_t SetIDAndMap(llvm::Value* val, std::map<int64_t, llvm::Value*>& ID
     {
         newID = std::prev(IDToValue.end())->first + 1;
     }
-    if( auto inst = llvm::dyn_cast<llvm::Instruction>(val) )
+    if (auto inst = llvm::dyn_cast<llvm::Instruction>(val))
     {
         llvm::MDNode *newMD = llvm::MDNode::get(inst->getParent()->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(inst->getParent()->getContext()), (uint64_t)newID)));
+        inst->setMetadata("ValueID", newMD);
         IDToValue[newID] = val;
         return newID;
     }
@@ -272,51 +275,66 @@ inline int64_t GetValueID(llvm::Value *val)
 
 // the exports here represent the alloca mapped to an export
 // therefore the debug information will capture the pointer operations
-/*
-inline void DebugExports(llvm::Module* mod, std::set<llvm::Value*> exports)
+inline void DebugExports(llvm::Module *mod, std::map<int64_t, llvm::Value *> &IDToValue)
 {
+    auto DBuild = llvm::DIBuilder(*mod);
+    auto ModMDN = llvm::MDNode::get(mod->getContext(), llvm::MDString::get(mod->getContext(), "TikSwapBitcode"));
     unsigned int lineNo = 0;
-    for( auto& f : *mod )
+    unsigned int newTag = 0;
+    for (auto &f : *mod)
     {
-        for( auto& b : f )
+        llvm::MDNode *FMDN;
+        if (f.hasMetadata("KernelName"))
         {
-            for( auto it = b.begin(); it != b.end(); it++ )
+            FMDN = f.getMetadata("KernelName");
+        }
+        else
+        {
+            FMDN = llvm::MDNode::get(f.getContext(), llvm::MDString::get(f.getContext(), f.getName()));
+        }
+        for (auto b = f.begin(); b != f.end(); b++)
+        {
+            for (auto it = b->begin(); it != b->end(); it++)
             {
-                auto DBuild = llvm::DIBuilder(*mod);
-                llvm::MDNode* MDN;
-                std::string metaString;
-                uint64_t ID;
-                if( it->hasMetadata() )
+                if (auto inst = llvm::dyn_cast<llvm::Instruction>(it))
                 {
-                    MDN = it->getMetadata("ValueID");
-                    if (auto mstring = dyn_cast<MDString>(MDN->getOperand(0)))
+                    if (inst->getType()->getTypeID() != llvm::Type::VoidTyID)
                     {
-                        metaString = mstring->getString();
-                        ID = std::stol(metaString);
+                        llvm::MDNode *MDN;
+                        std::string metaString;
+                        int64_t ID;
+                        if (it->getMetadata("ValueID") != nullptr)
+                        {
+                            MDN = it->getMetadata("ValueID");
+                            if (auto mstring = llvm::dyn_cast<llvm::MDString>(MDN->getOperand(0)))
+                            {
+                                metaString = mstring->getString();
+                                ID = std::stol(metaString);
+                                if (ID == IDState::Artificial)
+                                {
+                                    ID = SetIDAndMap(llvm::cast<llvm::Value>(it), IDToValue);
+                                }
+                            }
+                            else
+                            {
+                                ID = SetIDAndMap(llvm::cast<llvm::Value>(it), IDToValue);
+                            }
+                        }
+                        else
+                        {
+                            ID = SetIDAndMap(llvm::cast<llvm::Value>(it), IDToValue);
+                            MDN = llvm::MDNode::get(f.getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt8Ty(f.getContext()), (uint64_t)ID)));
+                        }
+                        auto DScope = llvm::DILexicalBlock::get(f.getContext(), FMDN, ModMDN, lineNo++, 0);
+                        auto DFile = llvm::DIFile::get(f.getContext(), "TikSwapBitcode", "TestDir");
+                        auto DType = llvm::DIBasicType::get(f.getContext(), newTag++, it->getName());
+                        auto DV = DBuild.createAutoVariable(DScope, it->getName(), DFile, lineNo, DType);
+                        auto DE = llvm::DIExpression::get(f.getContext(), 0);
+                        auto DI = llvm::DILocation::get(f.getContext(), lineNo, 0, DScope);
+                        DBuild.insertDeclare(llvm::cast<llvm::Value>(it), DV, DE, DI, llvm::cast<llvm::Instruction>(it));
                     }
-                    else
-                    {
-                        AtlasException("Could not convert metadata into string.");
-                        ID = std::prev(IDToValue.end())->first + 1;
-                    }
                 }
-                else
-                {
-                    MDN = llvm::MDNode::get(f.getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt8Ty(f.getContext()), ID)));
-                }
-                if (auto mstring = dyn_cast<MDString>(MDN->getOperand(0)))
-                {
-                    metaString = mstring->getString();
-                }
-                else
-                {
-                    AtlasException("Could not convert metadata into string.");
-                }
-                auto DScope = llvm::DILexicalBlock::get(f.getContext(), MDN, MDN, lineNo++, 0);
-                auto DV = DBuild.createAutoVariable()
-                DBuild.insertDeclare(it, )
             }
         }
     }
 }
-*/
