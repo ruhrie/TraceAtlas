@@ -50,6 +50,7 @@ void Process(string &key, string &value)
 //kernel instance detection
     if (key == "BBEnter")
     {
+        // block represents current processed block id in the trace
         int block = stoi(value, nullptr, 0);
         if (currentKernel == "-1" || kernelMap[currentKernel].find(block) == kernelMap[currentKernel].end())
         {
@@ -65,7 +66,9 @@ void Process(string &key, string &value)
             currentKernel = innerKernel;
             if (innerKernel != "-1")
             {
+                // uid represents the current kernel instance id
                 currentUid = UID;
+                // kernelIdMap records the map from kernel instance id to kernel id
                 kernelIdMap[UID++] = currentKernel;
             }
         }
@@ -73,6 +76,7 @@ void Process(string &key, string &value)
     else if (key == "StoreAddress")
     {
         uint64_t address = stoul(value, nullptr, 0);
+        //Maintain a write-map that maps from the addresses that are stored to
         writeMap[address] = currentUid;
         int prodUid;
 
@@ -85,7 +89,8 @@ void Process(string &key, string &value)
             prodUid = -1;
         }
         if (prodUid != -1 && prodUid != currentUid)
-        { 
+        {
+            //former kernel instances that I load from 
             myFormerInput[currentUid].insert(prodUid);
         }
         else if (prodUid == currentUid)
@@ -96,6 +101,7 @@ void Process(string &key, string &value)
     else if (key == "LoadAddress")
     {
         uint64_t address = stoul(value, nullptr, 0);
+        //Maintain a read-map that maps from the addresses that are loaded from
         readMap[address] = currentUid;
         int prodUid;
         if (writeMap.find(address) != writeMap.end())
@@ -106,10 +112,9 @@ void Process(string &key, string &value)
         {
             prodUid = -1;
         }
-
-
         if (prodUid != -1 && prodUid != currentUid)
         {
+            //former kernel instances that I load from
             myFormerOutput[currentUid].insert(prodUid);
         }
         else if (prodUid == currentUid)
