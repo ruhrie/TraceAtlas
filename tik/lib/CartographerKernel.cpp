@@ -667,9 +667,7 @@ namespace TraceAtlas::tik
         // Map our kernel function to IDs
         for (auto arg = KernelFunction->arg_begin(); arg != KernelFunction->arg_end(); arg++)
         {
-            uint64_t newId = (uint64_t)(prev(IDToValue.end())->first + 1);
-            SetValueIDs(arg, newId);
-            IDToValue[(int64_t)newId] = arg;
+            SetIDAndMap(arg, IDToValue, true);
         }
         uint64_t i;
         for (i = 0; i < KernelImports.size(); i++)
@@ -893,8 +891,7 @@ namespace TraceAtlas::tik
             {
                 st->moveAfter(inst.first);
             }
-            auto newId = (uint64_t)IDState::Artificial;
-            SetValueIDs(st, newId);
+            SetIDAndMap(st, IDToValue, true);
         }
     }
 

@@ -27,7 +27,7 @@ namespace TraceAtlas::tik
         /// @param embeddedKernels Set of functions that are embedded kernel calls
         /// @param KernelImports   Value IDs that represent all imports of the kernel
         /// @param KernelExports   Value IDs representing all kernel exports.
-        void GetBoundaryValues(std::set<llvm::BasicBlock *> &scopedBlocks, std::set<llvm::Function *> &scopedFuncs, std::set<llvm::Function *> &embeddedKernels, std::vector<int64_t> &KernelImports, std::vector<int64_t> &KernelExports);
+        void GetBoundaryValues(std::set<llvm::BasicBlock *> &, std::set<llvm::Function *> &, std::set<llvm::Function *> &, std::vector<int64_t> &, std::vector<int64_t> &);
 
         /// @brief Constructs kernel function from only kernel blocks
         ///

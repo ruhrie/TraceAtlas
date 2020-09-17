@@ -5,6 +5,7 @@
 #include <llvm/IR/Metadata.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Operator.h>
+#include <llvm/IR/DIBuilder.h>
 
 /// @brief Enumerate the different states of ValueID and BlockID
 ///
@@ -109,6 +110,26 @@ inline void SetValueIDs(llvm::Value *val, uint64_t &i)
             return;
         }
     }
+}
+
+inline int64_t SetIDAndMap(llvm::Value* val, std::map<int64_t, llvm::Value*>& IDToValue, bool artificial=false)
+{
+    int64_t newID;
+    if( artificial )
+    {
+        newID = IDState::Artificial;
+    }
+    else
+    {
+        newID = std::prev(IDToValue.end())->first + 1;
+    }
+    if( auto inst = llvm::dyn_cast<llvm::Instruction>(val) )
+    {
+        llvm::MDNode *newMD = llvm::MDNode::get(inst->getParent()->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(inst->getParent()->getContext()), (uint64_t)newID)));
+        IDToValue[newID] = val;
+        return newID;
+    }
+    return IDState::Uninitialized;
 }
 
 inline void Annotate(llvm::Function *F, uint64_t &startingIndex, uint64_t &valIndex)
@@ -248,3 +269,54 @@ inline int64_t GetValueID(llvm::Value *val)
     }
     return result;
 }
+
+// the exports here represent the alloca mapped to an export
+// therefore the debug information will capture the pointer operations
+/*
+inline void DebugExports(llvm::Module* mod, std::set<llvm::Value*> exports)
+{
+    unsigned int lineNo = 0;
+    for( auto& f : *mod )
+    {
+        for( auto& b : f )
+        {
+            for( auto it = b.begin(); it != b.end(); it++ )
+            {
+                auto DBuild = llvm::DIBuilder(*mod);
+                llvm::MDNode* MDN;
+                std::string metaString;
+                uint64_t ID;
+                if( it->hasMetadata() )
+                {
+                    MDN = it->getMetadata("ValueID");
+                    if (auto mstring = dyn_cast<MDString>(MDN->getOperand(0)))
+                    {
+                        metaString = mstring->getString();
+                        ID = std::stol(metaString);
+                    }
+                    else
+                    {
+                        AtlasException("Could not convert metadata into string.");
+                        ID = std::prev(IDToValue.end())->first + 1;
+                    }
+                }
+                else
+                {
+                    MDN = llvm::MDNode::get(f.getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt8Ty(f.getContext()), ID)));
+                }
+                if (auto mstring = dyn_cast<MDString>(MDN->getOperand(0)))
+                {
+                    metaString = mstring->getString();
+                }
+                else
+                {
+                    AtlasException("Could not convert metadata into string.");
+                }
+                auto DScope = llvm::DILexicalBlock::get(f.getContext(), MDN, MDN, lineNo++, 0);
+                auto DV = DBuild.createAutoVariable()
+                DBuild.insertDeclare(it, )
+            }
+        }
+    }
+}
+*/
