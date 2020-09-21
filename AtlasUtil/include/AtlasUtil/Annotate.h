@@ -1,4 +1,5 @@
 #pragma once
+#include <filesystem>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DIBuilder.h>
 #include <llvm/IR/Instruction.h>
@@ -8,7 +9,6 @@
 #include <llvm/IR/Operator.h>
 #include <map>
 #include <set>
-#include <filesystem>
 
 /// @brief Enumerate the different states of ValueID and BlockID
 ///
@@ -276,17 +276,15 @@ inline int64_t GetValueID(llvm::Value *val)
 
 // the exports here represent the alloca mapped to an export
 // therefore the debug information will capture the pointer operations
-inline void DebugExports(llvm::Module *mod, std::map<int64_t, llvm::Value *> &IDToValue)
+inline void DebugExports(llvm::Module *mod)
 {
-    mod->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
+    //mod->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
     auto DBuild = llvm::DIBuilder(*mod);
-    std::string cwd = "test";//std::filesystem::current_path();
-    auto uType = DBuild.createBasicType("debug", 8, 0);
+    std::string cwd = "test"; //std::filesystem::current_path();
+    auto uType = DBuild.createBasicType("export", 64, llvm::dwarf::DW_ATE_address, llvm::DINode::DIFlags::FlagArtificial);
     auto DFile = DBuild.createFile(mod->getSourceFileName(), cwd);
     //auto CompUnit = DBuild.createCompileUnit(llvm::dwarf::DW_LANG_C, DFile, "clang", false, ".", 0);
-    auto ModMDN = llvm::MDNode::get(mod->getContext(), llvm::MDString::get(mod->getContext(), "TikSwapBitcode"));
     unsigned int lineNo = 0;
-    //unsigned int newTag = 0;
     for (auto &f : *mod)
     {
         llvm::MDNode *FMDN;
@@ -298,59 +296,55 @@ inline void DebugExports(llvm::Module *mod, std::map<int64_t, llvm::Value *> &ID
         {
             FMDN = llvm::MDNode::get(f.getContext(), llvm::MDString::get(f.getContext(), f.getName()));
         }
-        std::vector<llvm::Metadata*> ElTys;
-        for( unsigned int i = 0; i < f.getNumOperands(); i++)
+        std::vector<llvm::Metadata *> ElTys;
+        for (unsigned int i = 0; i < f.getNumOperands(); i++)
         {
             ElTys.push_back(uType);
         }
         auto ElTypeArray = DBuild.getOrCreateTypeArray(ElTys);
         auto SubTy = DBuild.createSubroutineType(ElTypeArray);
-        auto SP = DBuild.createFunction(DFile, f.getName(), llvm::StringRef(), DFile, lineNo++, SubTy, 0);
+        auto FContext = DFile;
+        auto SP = DBuild.createFunction(FContext, f.getName(), llvm::StringRef(), DFile, lineNo, SubTy, lineNo, llvm::DINode::DIFlags::FlagPrototyped, llvm::DISubprogram::DISPFlags::SPFlagMainSubprogram);
+        f.setSubprogram(SP);
         for (auto b = f.begin(); b != f.end(); b++)
         {
+            auto LS = DBuild.createLexicalBlock(SP, DFile, lineNo++, 0);
             for (auto it = b->begin(); it != b->end(); it++)
             {
                 if (auto inst = llvm::dyn_cast<llvm::Instruction>(it))
                 {
                     if (inst->getType()->getTypeID() != llvm::Type::VoidTyID)
                     {
-                        /*llvm::MDNode *MDN;
-                        std::string metaString;
-                        int64_t ID;
-                        if (it->getMetadata("ValueID") != nullptr)
+                        if (auto al = llvm::dyn_cast<llvm::AllocaInst>(inst))
                         {
-                            MDN = it->getMetadata("ValueID");
-                            if (auto mstring = llvm::dyn_cast<llvm::MDString>(MDN->getOperand(0)))
+                            std::string metaString;
+                            if (it->getMetadata("ValueID") != nullptr)
                             {
-                                metaString = mstring->getString();
-                                ID = std::stol(metaString);
-                                if (ID == IDState::Artificial)
+                                auto MDN = it->getMetadata("ValueID");
+                                if (auto mstring = llvm::dyn_cast<llvm::MDString>(MDN->getOperand(0)))
                                 {
-                                    ID = SetIDAndMap(llvm::cast<llvm::Value>(it), IDToValue);
+                                    metaString = mstring->getString();
+                                    int64_t ID = std::stol(metaString);
+                                    if (ID == IDState::Artificial)
+                                    {
+                                        auto DL = llvm::DebugLoc::get(lineNo++, 5, LS);
+                                        auto D = DBuild.createAutoVariable(LS, al->getName(), DFile, lineNo, uType);
+                                        auto C = DBuild.insertDeclare(al, D, DBuild.createExpression(), DL, al);
+                                        C->setDebugLoc(DL);
+                                    }
                                 }
-                            }
-                            else
-                            {
-                                ID = SetIDAndMap(llvm::cast<llvm::Value>(it), IDToValue);
                             }
                         }
                         else
                         {
-                            ID = SetIDAndMap(llvm::cast<llvm::Value>(it), IDToValue);
-                            MDN = llvm::MDNode::get(f.getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt8Ty(f.getContext()), (uint64_t)ID)));
+                            auto DL = llvm::DebugLoc::get(lineNo++, 5, LS);
+                            inst->setDebugLoc(DL);
                         }
-                        //llvm::DISubprogram::get(f.getContext(), FMDN, f.getName(), "test", )
-                        //auto DScope = llvm::DILocalScope::get(f.getContext(), FMDN, ModMDN, lineNo++, 0);
-                        auto DScope = llvm::DILocalScope::get(f.getContext(), FMDN);
-                        auto DType = llvm::DIBasicType::get(f.getContext(), newTag++, it->getName());
-                        //auto DV = DBuild.createAutoVariable(DScope, it->getName(), DFile, lineNo, DType);
-                        auto DE = llvm::DIExpression::get(f.getContext(), 0);*/
-                        auto DI = llvm::DILocation::get(f.getContext(), lineNo++, 0, SP);
-                        inst->setDebugLoc(DI);
-                        //DBuild.insertDeclare(llvm::cast<llvm::Value>(it), DV, DE, DI, llvm::cast<llvm::Instruction>(it));
                     }
                 }
             }
         }
+        DBuild.finalizeSubprogram(SP);
     }
+    DBuild.finalize();
 }

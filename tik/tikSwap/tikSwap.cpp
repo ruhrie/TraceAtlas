@@ -30,7 +30,7 @@ cl::opt<string> InputFile("t", cl::Required, cl::desc("<input tik bitcode>"), cl
 cl::opt<string> OriginalBitcode("b", cl::Required, cl::desc("<input original bitcode>"), cl::init("a.bc"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"), cl::init("tikSwap.bc"));
 cl::opt<bool> ASCIIFormat("S", cl::desc("Output json as human-readable ASCII text"));
-cl::opt<bool> Debug("d", cl::desc("Inject debugging symbols into output bitcode"));
+cl::opt<bool> Debug("g", cl::desc("Inject debugging symbols into output bitcode"));
 
 int main(int argc, char *argv[])
 {
@@ -231,6 +231,7 @@ int main(int argc, char *argv[])
                                 auto insertion = cast<Instruction>(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt());
                                 IRBuilder<> alBuilder(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt()->getParent());
                                 alloc = iBuilder.CreateAlloca(IDToValue[key.second]->getType());
+                                SetIDAndMap(alloc, IDToValue, true);
                                 alloc->moveBefore(insertion);
                                 mappedExports[IDToValue[key.second]] = alloc;
                             }
@@ -396,9 +397,9 @@ int main(int argc, char *argv[])
     }
 
     // annotate with debug info
-    if( Debug )
+    if (Debug)
     {
-        DebugExports(sourceBitcode.get(), IDToValue);
+        DebugExports(sourceBitcode.get());
     }
 
     // writing part
