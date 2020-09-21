@@ -8,6 +8,7 @@
 #include <llvm/IR/Operator.h>
 #include <map>
 #include <set>
+#include <filesystem>
 
 /// @brief Enumerate the different states of ValueID and BlockID
 ///
@@ -277,10 +278,15 @@ inline int64_t GetValueID(llvm::Value *val)
 // therefore the debug information will capture the pointer operations
 inline void DebugExports(llvm::Module *mod, std::map<int64_t, llvm::Value *> &IDToValue)
 {
+    mod->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
     auto DBuild = llvm::DIBuilder(*mod);
+    std::string cwd = "test";//std::filesystem::current_path();
+    auto uType = DBuild.createBasicType("debug", 8, 0);
+    auto DFile = DBuild.createFile(mod->getSourceFileName(), cwd);
+    //auto CompUnit = DBuild.createCompileUnit(llvm::dwarf::DW_LANG_C, DFile, "clang", false, ".", 0);
     auto ModMDN = llvm::MDNode::get(mod->getContext(), llvm::MDString::get(mod->getContext(), "TikSwapBitcode"));
     unsigned int lineNo = 0;
-    unsigned int newTag = 0;
+    //unsigned int newTag = 0;
     for (auto &f : *mod)
     {
         llvm::MDNode *FMDN;
@@ -292,6 +298,14 @@ inline void DebugExports(llvm::Module *mod, std::map<int64_t, llvm::Value *> &ID
         {
             FMDN = llvm::MDNode::get(f.getContext(), llvm::MDString::get(f.getContext(), f.getName()));
         }
+        std::vector<llvm::Metadata*> ElTys;
+        for( unsigned int i = 0; i < f.getNumOperands(); i++)
+        {
+            ElTys.push_back(uType);
+        }
+        auto ElTypeArray = DBuild.getOrCreateTypeArray(ElTys);
+        auto SubTy = DBuild.createSubroutineType(ElTypeArray);
+        auto SP = DBuild.createFunction(DFile, f.getName(), llvm::StringRef(), DFile, lineNo++, SubTy, 0);
         for (auto b = f.begin(); b != f.end(); b++)
         {
             for (auto it = b->begin(); it != b->end(); it++)
@@ -300,7 +314,7 @@ inline void DebugExports(llvm::Module *mod, std::map<int64_t, llvm::Value *> &ID
                 {
                     if (inst->getType()->getTypeID() != llvm::Type::VoidTyID)
                     {
-                        llvm::MDNode *MDN;
+                        /*llvm::MDNode *MDN;
                         std::string metaString;
                         int64_t ID;
                         if (it->getMetadata("ValueID") != nullptr)
@@ -325,13 +339,15 @@ inline void DebugExports(llvm::Module *mod, std::map<int64_t, llvm::Value *> &ID
                             ID = SetIDAndMap(llvm::cast<llvm::Value>(it), IDToValue);
                             MDN = llvm::MDNode::get(f.getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt8Ty(f.getContext()), (uint64_t)ID)));
                         }
-                        auto DScope = llvm::DILexicalBlock::get(f.getContext(), FMDN, ModMDN, lineNo++, 0);
-                        auto DFile = llvm::DIFile::get(f.getContext(), "TikSwapBitcode", "TestDir");
+                        //llvm::DISubprogram::get(f.getContext(), FMDN, f.getName(), "test", )
+                        //auto DScope = llvm::DILocalScope::get(f.getContext(), FMDN, ModMDN, lineNo++, 0);
+                        auto DScope = llvm::DILocalScope::get(f.getContext(), FMDN);
                         auto DType = llvm::DIBasicType::get(f.getContext(), newTag++, it->getName());
-                        auto DV = DBuild.createAutoVariable(DScope, it->getName(), DFile, lineNo, DType);
-                        auto DE = llvm::DIExpression::get(f.getContext(), 0);
-                        auto DI = llvm::DILocation::get(f.getContext(), lineNo, 0, DScope);
-                        DBuild.insertDeclare(llvm::cast<llvm::Value>(it), DV, DE, DI, llvm::cast<llvm::Instruction>(it));
+                        //auto DV = DBuild.createAutoVariable(DScope, it->getName(), DFile, lineNo, DType);
+                        auto DE = llvm::DIExpression::get(f.getContext(), 0);*/
+                        auto DI = llvm::DILocation::get(f.getContext(), lineNo++, 0, SP);
+                        inst->setDebugLoc(DI);
+                        //DBuild.insertDeclare(llvm::cast<llvm::Value>(it), DV, DE, DI, llvm::cast<llvm::Instruction>(it));
                     }
                 }
             }
