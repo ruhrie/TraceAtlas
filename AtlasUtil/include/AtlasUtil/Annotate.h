@@ -283,68 +283,73 @@ inline void DebugExports(llvm::Module *mod)
     std::string cwd = "test"; //std::filesystem::current_path();
     auto uType = DBuild.createBasicType("export", 64, llvm::dwarf::DW_ATE_address, llvm::DINode::DIFlags::FlagArtificial);
     auto DFile = DBuild.createFile(mod->getSourceFileName(), cwd);
-    //auto CompUnit = DBuild.createCompileUnit(llvm::dwarf::DW_LANG_C, DFile, "clang", false, ".", 0);
+    DBuild.createCompileUnit(llvm::dwarf::DW_LANG_C, DFile, "clang", false, ".", 0);
     unsigned int lineNo = 0;
     for (auto &f : *mod)
     {
-        llvm::MDNode *FMDN;
-        if (f.hasMetadata("KernelName"))
+        if (f.hasExactDefinition())
         {
-            FMDN = f.getMetadata("KernelName");
-        }
-        else
-        {
-            FMDN = llvm::MDNode::get(f.getContext(), llvm::MDString::get(f.getContext(), f.getName()));
-        }
-        std::vector<llvm::Metadata *> ElTys;
-        for (unsigned int i = 0; i < f.getNumOperands(); i++)
-        {
-            ElTys.push_back(uType);
-        }
-        auto ElTypeArray = DBuild.getOrCreateTypeArray(ElTys);
-        auto SubTy = DBuild.createSubroutineType(ElTypeArray);
-        auto FContext = DFile;
-        auto SP = DBuild.createFunction(FContext, f.getName(), llvm::StringRef(), DFile, lineNo, SubTy, lineNo, llvm::DINode::DIFlags::FlagPrototyped, llvm::DISubprogram::DISPFlags::SPFlagMainSubprogram);
-        f.setSubprogram(SP);
-        for (auto b = f.begin(); b != f.end(); b++)
-        {
-            auto LS = DBuild.createLexicalBlock(SP, DFile, lineNo++, 0);
-            for (auto it = b->begin(); it != b->end(); it++)
+            llvm::MDNode *FMDN;
+            if (f.hasMetadata("KernelName"))
             {
-                if (auto inst = llvm::dyn_cast<llvm::Instruction>(it))
+                FMDN = f.getMetadata("KernelName");
+            }
+            else
+            {
+                FMDN = llvm::MDNode::get(f.getContext(), llvm::MDString::get(f.getContext(), f.getName()));
+            }
+            std::vector<llvm::Metadata *> ElTys;
+            ElTys.push_back(uType);
+            for (unsigned int i = 0; i < f.getNumOperands(); i++)
+            {
+                ElTys.push_back(uType);
+            }
+            auto ElTypeArray = DBuild.getOrCreateTypeArray(ElTys);
+            auto SubTy = DBuild.createSubroutineType(ElTypeArray);
+            auto FContext = DFile;
+            auto SP = DBuild.createFunction(FContext, f.getName(), llvm::StringRef(), DFile, lineNo, SubTy, lineNo, llvm::DINode::FlagZero, llvm::DISubprogram::DISPFlags::SPFlagDefinition);
+            f.setSubprogram(SP);
+            auto LS = DBuild.createLexicalBlock(SP, DFile, lineNo++, 0);
+            for (auto b = f.begin(); b != f.end(); b++)
+            {
+                for (auto it = b->begin(); it != b->end(); it++)
                 {
-                    if (inst->getType()->getTypeID() != llvm::Type::VoidTyID)
+                    if (auto inst = llvm::dyn_cast<llvm::Instruction>(it))
                     {
-                        if (auto al = llvm::dyn_cast<llvm::AllocaInst>(inst))
+                        if (inst->getType()->getTypeID() != llvm::Type::VoidTyID)
                         {
-                            std::string metaString;
-                            if (it->getMetadata("ValueID") != nullptr)
+                            if (auto al = llvm::dyn_cast<llvm::AllocaInst>(inst))
                             {
-                                auto MDN = it->getMetadata("ValueID");
-                                if (auto mstring = llvm::dyn_cast<llvm::MDString>(MDN->getOperand(0)))
+                                std::string metaString;
+                                if (it->getMetadata("ValueID") != nullptr)
                                 {
-                                    metaString = mstring->getString();
-                                    int64_t ID = std::stol(metaString);
-                                    if (ID == IDState::Artificial)
+                                    auto MDN = it->getMetadata("ValueID");
+                                    if (auto mstring = llvm::dyn_cast<llvm::MDString>(MDN->getOperand(0)))
                                     {
-                                        auto DL = llvm::DebugLoc::get(lineNo++, 5, LS);
-                                        auto D = DBuild.createAutoVariable(LS, al->getName(), DFile, lineNo, uType);
-                                        auto C = DBuild.insertDeclare(al, D, DBuild.createExpression(), DL, al);
-                                        C->setDebugLoc(DL);
+                                        metaString = mstring->getString();
+                                        int64_t ID = std::stol(metaString);
+                                        if (ID == IDState::Artificial)
+                                        {
+                                            auto DL = llvm::DILocation::get(LS->getContext(), lineNo, 0, LS);
+                                            auto D = DBuild.createAutoVariable(LS, al->getName(), DFile, lineNo++, uType);
+                                            auto C = DBuild.insertDeclare(al, D, DBuild.createExpression(), DL, al);
+                                            C->setDebugLoc(DL);
+                                        }
                                     }
                                 }
                             }
-                        }
-                        else
-                        {
-                            auto DL = llvm::DebugLoc::get(lineNo++, 5, LS);
-                            inst->setDebugLoc(DL);
+                            else
+                            {
+                                auto DL = llvm::DILocation::get(LS->getContext(), lineNo, 0, LS);
+                                inst->setDebugLoc(DL);
+                            }
                         }
                     }
+                    lineNo++;
                 }
             }
+            DBuild.finalizeSubprogram(SP);
         }
-        DBuild.finalizeSubprogram(SP);
     }
     DBuild.finalize();
 }
