@@ -278,7 +278,7 @@ inline int64_t GetValueID(llvm::Value *val)
 // therefore the debug information will capture the pointer operations
 inline void DebugExports(llvm::Module *mod)
 {
-    //mod->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
+    mod->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
     auto DBuild = llvm::DIBuilder(*mod);
     std::string cwd = "test"; //std::filesystem::current_path();
     auto uType = DBuild.createBasicType("export", 64, llvm::dwarf::DW_ATE_address, llvm::DINode::DIFlags::FlagArtificial);
@@ -316,7 +316,7 @@ inline void DebugExports(llvm::Module *mod)
                 {
                     if (auto inst = llvm::dyn_cast<llvm::Instruction>(it))
                     {
-                        if (inst->getType()->getTypeID() != llvm::Type::VoidTyID)
+                        if (llvm::isa<llvm::CallBase>(inst) || inst->getType()->getTypeID() != llvm::Type::VoidTyID)
                         {
                             if (auto al = llvm::dyn_cast<llvm::AllocaInst>(inst))
                             {
