@@ -43,6 +43,7 @@ int main(int argc, char *argv[])
     try
     {
         sourceBitcode = parseIRFile(OriginalBitcode, Osmerror, OContext);
+        sourceBitcode->setSourceFileName(OriginalBitcode);
     }
     // if the file was not found
     catch (exception &e)
@@ -399,7 +400,9 @@ int main(int argc, char *argv[])
     // annotate with debug info
     if (Debug)
     {
-        DebugExports(sourceBitcode.get());
+        // if it won't be done, output a human-readable tikSwap bitcode
+        ASCIIFormat = true;
+        DebugExports(sourceBitcode.get(), OutputFile);
     }
 
     // writing part

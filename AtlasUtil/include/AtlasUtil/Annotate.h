@@ -1,5 +1,6 @@
 #pragma once
 #include <filesystem>
+#include <iostream>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DIBuilder.h>
 #include <llvm/IR/Instruction.h>
@@ -9,6 +10,7 @@
 #include <llvm/IR/Operator.h>
 #include <map>
 #include <set>
+#include <unistd.h>
 
 /// @brief Enumerate the different states of ValueID and BlockID
 ///
@@ -274,17 +276,67 @@ inline int64_t GetValueID(llvm::Value *val)
     return result;
 }
 
+inline void findLine(const std::vector<std::string> &modLines, const std::string &name, unsigned int &lineNo, bool inst = false)
+{
+    for (unsigned int i = lineNo; i < modLines.size(); i++)
+    {
+        if (inst)
+        {
+            if (modLines[i - 1].find("!BlockID ") != std::string::npos)
+            {
+                lineNo = i;
+                return;
+            }
+            else if (modLines[i - 1].find("Function Attrs") != std::string::npos)
+            {
+                // end of the line, return
+                lineNo = i;
+                return;
+            }
+        }
+        else if ((modLines[i - 1].find("define") != std::string::npos) && (modLines[i - 1].find(name) != std::string::npos))
+        {
+            std::cout << modLines[i - 1] << std::endl;
+            std::cout << i << std::endl;
+            lineNo = i;
+            return;
+        }
+    }
+    // we couldn't find a definition. try again
+    if (inst)
+    {
+        std::cout << "Failed to find the block or function boundary";
+        return;
+    }
+    lineNo = 1;
+    findLine(modLines, name, lineNo);
+}
+
 // the exports here represent the alloca mapped to an export
 // therefore the debug information will capture the pointer operations
-inline void DebugExports(llvm::Module *mod)
+inline void DebugExports(llvm::Module *mod, const std::string &fileName)
 {
-    mod->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
+    if (mod->getModuleFlag("Debug Info Version") == nullptr)
+    {
+        mod->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
+    }
     auto DBuild = llvm::DIBuilder(*mod);
-    std::string cwd = "test"; //std::filesystem::current_path();
+    std::string cwd = get_current_dir_name();
     auto uType = DBuild.createBasicType("export", 64, llvm::dwarf::DW_ATE_address, llvm::DINode::DIFlags::FlagArtificial);
-    auto DFile = DBuild.createFile(mod->getSourceFileName(), cwd);
+    auto DFile = DBuild.createFile(fileName, cwd);
     DBuild.createCompileUnit(llvm::dwarf::DW_LANG_C, DFile, "clang", false, ".", 0);
-    unsigned int lineNo = 0;
+    unsigned int lineNo = 1;
+    std::string strDump;
+    llvm::raw_string_ostream OS(strDump);
+    OS << *mod;
+    OS.flush();
+    std::string line;
+    std::vector<std::string> modLines;
+    auto modStream = std::stringstream(strDump);
+    while (std::getline(modStream, line, '\n'))
+    {
+        modLines.push_back(line);
+    }
     for (auto &f : *mod)
     {
         if (f.hasExactDefinition())
@@ -307,16 +359,18 @@ inline void DebugExports(llvm::Module *mod)
             auto ElTypeArray = DBuild.getOrCreateTypeArray(ElTys);
             auto SubTy = DBuild.createSubroutineType(ElTypeArray);
             auto FContext = DFile;
+            std::string funcName = f.getName();
+            findLine(modLines, funcName, lineNo);
             auto SP = DBuild.createFunction(FContext, f.getName(), llvm::StringRef(), DFile, lineNo, SubTy, lineNo, llvm::DINode::FlagZero, llvm::DISubprogram::DISPFlags::SPFlagDefinition);
             f.setSubprogram(SP);
-            auto LS = DBuild.createLexicalBlock(SP, DFile, lineNo++, 0);
             for (auto b = f.begin(); b != f.end(); b++)
             {
+                findLine(modLines, "", lineNo, true);
                 for (auto it = b->begin(); it != b->end(); it++)
                 {
                     if (auto inst = llvm::dyn_cast<llvm::Instruction>(it))
                     {
-                        if (llvm::isa<llvm::CallBase>(inst) || inst->getType()->getTypeID() != llvm::Type::VoidTyID)
+                        if (llvm::isa<llvm::CallBase>(inst) || llvm::isa<llvm::StoreInst>(inst) || inst->getType()->getTypeID() != llvm::Type::VoidTyID)
                         {
                             if (auto al = llvm::dyn_cast<llvm::AllocaInst>(inst))
                             {
@@ -330,8 +384,8 @@ inline void DebugExports(llvm::Module *mod)
                                         int64_t ID = std::stol(metaString);
                                         if (ID == IDState::Artificial)
                                         {
-                                            auto DL = llvm::DILocation::get(LS->getContext(), lineNo, 0, LS);
-                                            auto D = DBuild.createAutoVariable(LS, al->getName(), DFile, lineNo++, uType);
+                                            auto DL = llvm::DILocation::get(SP->getContext(), lineNo, 0, SP);
+                                            auto D = DBuild.createAutoVariable(SP, al->getName(), DFile, lineNo, uType);
                                             auto C = DBuild.insertDeclare(al, D, DBuild.createExpression(), DL, al);
                                             C->setDebugLoc(DL);
                                         }
@@ -340,7 +394,7 @@ inline void DebugExports(llvm::Module *mod)
                             }
                             else
                             {
-                                auto DL = llvm::DILocation::get(LS->getContext(), lineNo, 0, LS);
+                                auto DL = llvm::DILocation::get(SP->getContext(), lineNo, 0, SP);
                                 inst->setDebugLoc(DL);
                             }
                         }
@@ -349,6 +403,10 @@ inline void DebugExports(llvm::Module *mod)
                 }
             }
             DBuild.finalizeSubprogram(SP);
+        }
+        if (lineNo >= modLines.size())
+        {
+            lineNo = 0;
         }
     }
     DBuild.finalize();
