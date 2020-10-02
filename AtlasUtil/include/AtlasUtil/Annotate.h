@@ -370,26 +370,24 @@ inline void DebugExports(llvm::Module *mod, const std::string &fileName)
                 {
                     if (auto inst = llvm::dyn_cast<llvm::Instruction>(it))
                     {
-                        if (llvm::isa<llvm::CallBase>(inst) || llvm::isa<llvm::StoreInst>(inst) || inst->getType()->getTypeID() != llvm::Type::VoidTyID)
+                        if (auto al = llvm::dyn_cast<llvm::AllocaInst>(inst))
                         {
-                            if (auto al = llvm::dyn_cast<llvm::AllocaInst>(inst))
+                            std::string metaString;
+                            if (it->getMetadata("ValueID") != nullptr)
                             {
-                                std::string metaString;
-                                if (it->getMetadata("ValueID") != nullptr)
+                                auto MDN = it->getMetadata("ValueID");
+                                auto ci = llvm::cast<llvm::ConstantInt>(llvm::cast<llvm::ConstantAsMetadata>(MDN->getOperand(0))->getValue());
+                                int64_t ID = ci->getSExtValue();
+                                if (ID == IDState::Artificial)
                                 {
-                                    auto MDN = it->getMetadata("ValueID");
-                                    if (auto mstring = llvm::dyn_cast<llvm::MDString>(MDN->getOperand(0)))
-                                    {
-                                        metaString = mstring->getString();
-                                        int64_t ID = std::stol(metaString);
-                                        if (ID == IDState::Artificial)
-                                        {
-                                            auto DL = llvm::DILocation::get(SP->getContext(), lineNo, 0, SP);
-                                            auto D = DBuild.createAutoVariable(SP, al->getName(), DFile, lineNo, uType);
-                                            auto C = DBuild.insertDeclare(al, D, DBuild.createExpression(), DL, al);
-                                            C->setDebugLoc(DL);
-                                        }
-                                    }
+                                    /*auto DL = llvm::DILocation::get(SP->getContext(), lineNo, 0, SP);
+                                    modLines.insert(modLines.begin()+lineNo, "");
+                                    lineNo++;
+                                    auto DL2 = llvm::DILocation::get(SP->getContext(), lineNo, 0, SP);
+                                    auto D = DBuild.createAutoVariable(SP, "export_"+std::to_string(lineNo), DFile, lineNo, uType);
+                                    auto C = DBuild.insertDeclare(al, D, DBuild.createExpression(), DL, al);
+                                    //C->setDebugLoc(DL);
+                                    inst->setDebugLoc(DL2);*/
                                 }
                             }
                             else
@@ -397,6 +395,11 @@ inline void DebugExports(llvm::Module *mod, const std::string &fileName)
                                 auto DL = llvm::DILocation::get(SP->getContext(), lineNo, 0, SP);
                                 inst->setDebugLoc(DL);
                             }
+                        }
+                        else
+                        {
+                            auto DL = llvm::DILocation::get(SP->getContext(), lineNo, 0, SP);
+                            inst->setDebugLoc(DL);
                         }
                     }
                     lineNo++;

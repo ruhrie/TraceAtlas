@@ -229,7 +229,7 @@ int main(int argc, char *argv[])
                             AllocaInst *alloc;
                             if (mappedExports.find(IDToValue[key.second]) == mappedExports.end())
                             {
-                                auto insertion = cast<Instruction>(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt());
+                                auto insertion = cast<Instruction>(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt()->getNextNode());
                                 IRBuilder<> alBuilder(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt()->getParent());
                                 alloc = iBuilder.CreateAlloca(IDToValue[key.second]->getType());
                                 SetIDAndMap(alloc, IDToValue, true);
@@ -397,18 +397,10 @@ int main(int argc, char *argv[])
         spdlog::critical("Tik Module Corrupted: \n" + err);
     }
 
-    // annotate with debug info
-    if (Debug)
-    {
-        // if it won't be done, output a human-readable tikSwap bitcode
-        ASCIIFormat = true;
-        DebugExports(sourceBitcode.get(), OutputFile);
-    }
-
     // writing part
     try
     {
-        if (ASCIIFormat)
+        if (ASCIIFormat || Debug)
         {
             // print human readable tik module to file
             auto *write = new llvm::AssemblyAnnotationWriter();
@@ -420,6 +412,18 @@ int main(int argc, char *argv[])
             std::ostream readableStream(&f0);
             readableStream << str;
             f0.close();
+            if( Debug )
+            {
+                DebugExports(sourceBitcode.get(), OutputFile);
+                spdlog::info("Successfully injected debug symbols into tikSwap bitcode.");
+                f0.open(OutputFile, std::ios::out);
+                std::string str2;
+                llvm::raw_string_ostream rso2(str2);
+                sourceBitcode->print(rso2, write);
+                std::ostream final(&f0);
+                final << str2;
+                f0.close();
+            }
         }
         else
         {
