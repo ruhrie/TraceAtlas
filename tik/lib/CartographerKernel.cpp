@@ -425,43 +425,16 @@ namespace TraceAtlas::tik
                     }
                 }
                 // check the instructions uses
-                for (auto use : inst->users())
+                if (!isa<LoadInst>(inst))
                 {
-                    if (auto useInst = dyn_cast<Instruction>(use))
+                    for (auto use : inst->users())
                     {
-                        if (scopedBlocks.find(useInst->getParent()) == scopedBlocks.end())
+                        if (auto useInst = dyn_cast<Instruction>(use))
                         {
-                            // may belong to a subkernel, which is not an export
-                            if (embeddedKernels.find(useInst->getParent()->getParent()) == embeddedKernels.end())
+                            if (scopedBlocks.find(useInst->getParent()) == scopedBlocks.end())
                             {
-                                auto sExtVal = GetValueID(inst);
-                                if (kernelIE.find(sExtVal) == kernelIE.end())
-                                {
-                                    KernelExports.push_back(sExtVal);
-                                    kernelIE.insert(sExtVal);
-                                }
-                                else if (find(KernelImports.begin(), KernelImports.end(), sExtVal) != KernelImports.end())
-                                {
-                                    throw AtlasException("Import needs to be an export!");
-                                }
-                            }
-                        }
-                    }
-                }
-                // now we have to check the block successors
-                // if this block can exit the kernel, that means we are replacing a block in the source bitcode that may be left with no predecessors
-                // but there may still be users of its values. So they need to be exported
-                for (auto succ : successors(block))
-                {
-                    if (scopedBlocks.find(succ) == scopedBlocks.end())
-                    {
-                        // this block can exit
-                        // if the value uses extend beyond this block, export it
-                        for (auto use : inst->users())
-                        {
-                            if (auto outInst = dyn_cast<Instruction>(use))
-                            {
-                                if (outInst->getParent() != inst->getParent()) // && scopedBlocks.find(inst->getParent()) == scopedBlocks.end() )
+                                // may belong to a subkernel, which is not an export
+                                if (embeddedKernels.find(useInst->getParent()->getParent()) == embeddedKernels.end())
                                 {
                                     auto sExtVal = GetValueID(inst);
                                     if (kernelIE.find(sExtVal) == kernelIE.end())
@@ -472,6 +445,36 @@ namespace TraceAtlas::tik
                                     else if (find(KernelImports.begin(), KernelImports.end(), sExtVal) != KernelImports.end())
                                     {
                                         throw AtlasException("Import needs to be an export!");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // now we have to check the block successors
+                    // if this block can exit the kernel, that means we are replacing a block in the source bitcode that may be left with no predecessors
+                    // but there may still be users of its values. So they need to be exported
+                    for (auto succ : successors(block))
+                    {
+                        if (scopedBlocks.find(succ) == scopedBlocks.end())
+                        {
+                            // this block can exit
+                            // if the value uses extend beyond this block, export it
+                            for (auto use : inst->users())
+                            {
+                                if (auto outInst = dyn_cast<Instruction>(use))
+                                {
+                                    if (outInst->getParent() != inst->getParent()) // && scopedBlocks.find(inst->getParent()) == scopedBlocks.end() )
+                                    {
+                                        auto sExtVal = GetValueID(inst);
+                                        if (kernelIE.find(sExtVal) == kernelIE.end())
+                                        {
+                                            KernelExports.push_back(sExtVal);
+                                            kernelIE.insert(sExtVal);
+                                        }
+                                        else if (find(KernelImports.begin(), KernelImports.end(), sExtVal) != KernelImports.end())
+                                        {
+                                            throw AtlasException("Import needs to be an export!");
+                                        }
                                     }
                                 }
                             }
@@ -502,31 +505,34 @@ namespace TraceAtlas::tik
                         {
                             if (auto inst = dyn_cast<Instruction>(it))
                             {
-                                if (inst->getType()->getTypeID() != Type::VoidTyID)
+                                if (!isa<LoadInst>(inst))
                                 {
-                                    // if the instruction only has uses within the kernel, it won't be detected as an export
-                                    // this is an imperfect filter because there are exits evaluated here that don't make it into the final kernel
-                                    for (auto use : inst->users())
+                                    if (inst->getType()->getTypeID() != Type::VoidTyID)
                                     {
-                                        if (auto useInst = dyn_cast<Instruction>(use))
+                                        // if the instruction only has uses within the kernel, it won't be detected as an export
+                                        // this is an imperfect filter because there are exits evaluated here that don't make it into the final kernel
+                                        for (auto use : inst->users())
                                         {
-                                            if (scopedBlocks.find(useInst->getParent()) != scopedBlocks.end())
+                                            if (auto useInst = dyn_cast<Instruction>(use))
                                             {
-                                                // evaluate if this use is reachable by any of the exits
-                                                for (auto exit : exits)
+                                                if (scopedBlocks.find(useInst->getParent()) != scopedBlocks.end())
                                                 {
-                                                    // if it is reachable from exit to value, this value will be unresolved after tikSwap
-                                                    if (isPotentiallyReachable(exit, useInst->getParent()))
+                                                    // evaluate if this use is reachable by any of the exits
+                                                    for (auto exit : exits)
                                                     {
-                                                        auto sExtVal = GetValueID(inst);
-                                                        if (kernelIE.find(sExtVal) == kernelIE.end())
+                                                        // if it is reachable from exit to value, this value will be unresolved after tikSwap
+                                                        if (isPotentiallyReachable(exit, useInst->getParent()))
                                                         {
-                                                            KernelExports.push_back(sExtVal);
-                                                            kernelIE.insert(sExtVal);
-                                                        }
-                                                        else if (find(KernelImports.begin(), KernelImports.end(), sExtVal) != KernelImports.end())
-                                                        {
-                                                            throw AtlasException("Import needs to be an export!");
+                                                            auto sExtVal = GetValueID(inst);
+                                                            if (kernelIE.find(sExtVal) == kernelIE.end())
+                                                            {
+                                                                KernelExports.push_back(sExtVal);
+                                                                kernelIE.insert(sExtVal);
+                                                            }
+                                                            else if (find(KernelImports.begin(), KernelImports.end(), sExtVal) != KernelImports.end())
+                                                            {
+                                                                throw AtlasException("Import needs to be an export!");
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -551,25 +557,28 @@ namespace TraceAtlas::tik
             {
                 if (auto inst = dyn_cast<Instruction>(it))
                 {
-                    if (inst->getType()->getTypeID() != Type::VoidTyID)
+                    if (!isa<LoadInst>(inst))
                     {
-                        for (auto use : inst->users())
+                        if (inst->getType()->getTypeID() != Type::VoidTyID)
                         {
-                            if (auto useInst = dyn_cast<Instruction>(use))
+                            for (auto use : inst->users())
                             {
-                                for (auto ex : exits)
+                                if (auto useInst = dyn_cast<Instruction>(use))
                                 {
-                                    if (isPotentiallyReachable(ex, useInst->getParent()))
+                                    for (auto ex : exits)
                                     {
-                                        auto sExtVal = GetValueID(inst);
-                                        if (kernelIE.find(sExtVal) == kernelIE.end())
+                                        if (isPotentiallyReachable(ex, useInst->getParent()))
                                         {
-                                            KernelExports.push_back(sExtVal);
-                                            kernelIE.insert(sExtVal);
-                                        }
-                                        else if (find(KernelImports.begin(), KernelImports.end(), sExtVal) != KernelImports.end())
-                                        {
-                                            throw AtlasException("Import needs to be an export!");
+                                            auto sExtVal = GetValueID(inst);
+                                            if (kernelIE.find(sExtVal) == kernelIE.end())
+                                            {
+                                                KernelExports.push_back(sExtVal);
+                                                kernelIE.insert(sExtVal);
+                                            }
+                                            else if (find(KernelImports.begin(), KernelImports.end(), sExtVal) != KernelImports.end())
+                                            {
+                                                throw AtlasException("Import needs to be an export!");
+                                            }
                                         }
                                     }
                                 }
@@ -1627,6 +1636,7 @@ namespace TraceAtlas::tik
             {
                 if (auto ii = dyn_cast<InvokeInst>(bi))
                 {
+                    throw AtlasException("Exception handling is not supported");
                     auto a = ii->getLandingPadInst();
                     if (isa<BranchInst>(a))
                     {

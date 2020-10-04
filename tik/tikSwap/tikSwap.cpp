@@ -118,6 +118,8 @@ int main(int argc, char *argv[])
     set<Instruction *> toRemove;
     // container of all exports that have been mapped to a pointer
     map<Value *, AllocaInst *> mappedExports;
+    // set of sites to store to alloc instructions (which are export pointers)
+    set<pair<Instruction *, AllocaInst *>> storeSite;
     // tikSwap
     for (auto &kernel : kernels)
     {
@@ -219,13 +221,13 @@ int main(int argc, char *argv[])
                     }
                     // remove the old BB terminator
                     toRemove.insert(origterm);
-                    // now alloc export pointers in the entrance context and insert loads wherever they're used
+                    // now alloc export pointers in the entrance context and insert loads wherever they're used, and stores wherever the original value appears in the bitcode
                     for (auto key : kernel->ArgumentMap)
                     {
                         string name = key.first->getName();
                         if (name[0] == 'e')
                         {
-                            // have to generate alloca in the first basic block of the parent function
+                            // first, generate alloca in the first basic block of the parent function
                             AllocaInst *alloc;
                             if (mappedExports.find(IDToValue[key.second]) == mappedExports.end())
                             {
@@ -235,13 +237,22 @@ int main(int argc, char *argv[])
                                 SetIDAndMap(alloc, IDToValue, true);
                                 alloc->moveBefore(insertion);
                                 mappedExports[IDToValue[key.second]] = alloc;
+                                if (auto originalInst = dyn_cast<Instruction>(IDToValue[key.second]))
+                                {
+                                    // if the original instruction is not within the kernel function parent, we can't do this
+                                    if (originalInst->getParent()->getParent() == alloc->getParent()->getParent())
+                                    {
+                                        storeSite.insert(pair(originalInst, alloc));
+                                    }
+                                }
                             }
                             else
                             {
                                 alloc = mappedExports[IDToValue[key.second]];
                             }
+                            // next, inject a store to the export pointer right after the original value was used
                             vector<pair<Value *, Instruction *>> toReplace;
-                            // create a load and replace the old value for every use of this export
+                            // finally, create a load and replace the old value for every use of this export
                             for (auto use : IDToValue[key.second]->users())
                             {
                                 if (auto inst = dyn_cast<Instruction>(use))
@@ -347,7 +358,27 @@ int main(int argc, char *argv[])
     }
     for (auto inst : badInst)
     {
+        for (auto pa : storeSite)
+        {
+            if (inst == pa.first)
+            {
+                storeSite.erase(pa);
+            }
+        }
         inst->eraseFromParent();
+    }
+
+    // insert stores at the original export sites
+    for (auto pa : storeSite)
+    {
+        IRBuilder<> stBuilder(pa.first->getParent());
+        auto st = stBuilder.CreateStore(pa.first, pa.second);
+        auto insertion = pa.first;
+        if (auto phi = dyn_cast<PHINode>(pa.first))
+        {
+            insertion = pa.first->getParent()->getFirstNonPHI();
+        }
+        st->moveAfter(insertion);
     }
 
     // now verify that phis only contain valid entries
@@ -412,7 +443,7 @@ int main(int argc, char *argv[])
             std::ostream readableStream(&f0);
             readableStream << str;
             f0.close();
-            if( Debug )
+            if (Debug)
             {
                 DebugExports(sourceBitcode.get(), OutputFile);
                 spdlog::info("Successfully injected debug symbols into tikSwap bitcode.");

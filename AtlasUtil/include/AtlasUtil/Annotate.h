@@ -296,8 +296,6 @@ inline void findLine(const std::vector<std::string> &modLines, const std::string
         }
         else if ((modLines[i - 1].find("define") != std::string::npos) && (modLines[i - 1].find(name) != std::string::npos))
         {
-            std::cout << modLines[i - 1] << std::endl;
-            std::cout << i << std::endl;
             lineNo = i;
             return;
         }
@@ -305,7 +303,6 @@ inline void findLine(const std::vector<std::string> &modLines, const std::string
     // we couldn't find a definition. try again
     if (inst)
     {
-        std::cout << "Failed to find the block or function boundary";
         return;
     }
     lineNo = 1;
@@ -380,20 +377,19 @@ inline void DebugExports(llvm::Module *mod, const std::string &fileName)
                                 int64_t ID = ci->getSExtValue();
                                 if (ID == IDState::Artificial)
                                 {
-                                    /*auto DL = llvm::DILocation::get(SP->getContext(), lineNo, 0, SP);
-                                    modLines.insert(modLines.begin()+lineNo, "");
+                                    auto DL = llvm::DILocation::get(SP->getContext(), lineNo, 0, SP);
+                                    modLines.insert(modLines.begin() + lineNo, "");
                                     lineNo++;
                                     auto DL2 = llvm::DILocation::get(SP->getContext(), lineNo, 0, SP);
-                                    auto D = DBuild.createAutoVariable(SP, "export_"+std::to_string(lineNo), DFile, lineNo, uType);
-                                    auto C = DBuild.insertDeclare(al, D, DBuild.createExpression(), DL, al);
-                                    //C->setDebugLoc(DL);
-                                    inst->setDebugLoc(DL2);*/
+                                    auto D = DBuild.createAutoVariable(SP, "export_" + std::to_string(lineNo), DFile, lineNo, uType);
+                                    DBuild.insertDeclare(al, D, DBuild.createExpression(), DL, al);
+                                    inst->setDebugLoc(DL2);
                                 }
                             }
                             else
                             {
                                 auto DL = llvm::DILocation::get(SP->getContext(), lineNo, 0, SP);
-                                inst->setDebugLoc(DL);
+                                al->setDebugLoc(DL);
                             }
                         }
                         else
