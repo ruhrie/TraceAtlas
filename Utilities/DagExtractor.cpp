@@ -41,7 +41,7 @@ string GenerateGraph(map<int, string> instanceMap, const map<int, set<int>> &con
 
     for (int i = 0; i < instanceMap.size(); i++)
     {
-        result += "\t" + to_string(i) + " [label=" + instanceMap[i] + "]\n";
+        result += "\t" + to_string(i) + " [label=\"" + instanceMap[i] + "\"]\n";
     }
 
     if (instanceMap.size() > 1)
@@ -56,7 +56,7 @@ string GenerateGraph(map<int, string> instanceMap, const map<int, set<int>> &con
     {
         for (auto c : cons.second)
         {
-            result += "\t" + instanceMap[cons.first] + " -> " + to_string(c) + " [style=dashed];\n";
+            result += "\t" + to_string(cons.first) + " -> " + to_string(c) + " [style=dashed];\n";
         }
     }
 
