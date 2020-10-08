@@ -29,7 +29,7 @@ map<int64_t, BasicBlock *> blockMap;
 set<int64_t> ValidBlocks;
 
 llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
-llvm::cl::opt<float> threshold("t", cl::desc("The threshold of block grouping required to complete a kernel."), llvm::cl::value_desc("float"), llvm::cl::init(0.9));
+float threshold = 0;
 llvm::cl::opt<int> hotThreshold("ht", cl::desc("The minimum instance count for a basic block to be a seed."), llvm::cl::init(512));
 llvm::cl::opt<string> kernelFile("k", llvm::cl::desc("Specify output json name"), llvm::cl::value_desc("kernel filename"), llvm::cl::init("kernel.json"));
 llvm::cl::opt<string> profileFile("p", llvm::cl::desc("Specify profile json name"), llvm::cl::value_desc("profile filename"));
@@ -105,6 +105,7 @@ void Dump(const string &dump, Module *M)
 int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
+    threshold = 1.0f - 2.0f / (0.9f * hotThreshold);
     noProgressBar = noBar;
 
     if (!LogFile.empty())

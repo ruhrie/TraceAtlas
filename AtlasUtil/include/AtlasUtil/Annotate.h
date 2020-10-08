@@ -97,7 +97,7 @@ inline void CleanModule(llvm::Module *M)
 inline int64_t GetBlockID(llvm::BasicBlock *BB)
 {
     int64_t result = -1;
-    if (BB->empty())
+    if (BB == nullptr || BB->empty())
     {
         return result;
     }
@@ -120,6 +120,23 @@ inline int64_t GetValueID(llvm::Value *val)
             auto ci = llvm::cast<llvm::ConstantInt>(llvm::cast<llvm::ConstantAsMetadata>(node->getOperand(0))->getValue());
             result = ci->getSExtValue();
         }
+    }
+    return result;
+}
+
+inline void SetFunctionAnnotation(llvm::Function *F, std::string key, int64_t value)
+{
+    llvm::MDNode *idNode = llvm::MDNode::get(F->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(F->getContext()), (uint64_t)value)));
+    F->setMetadata(key, idNode);
+}
+
+inline int64_t GetFunctionAnnotation(llvm::Function *F, std::string key)
+{
+    int64_t result = -1;
+    if (llvm::MDNode *node = F->getMetadata(key))
+    {
+        auto ci = llvm::cast<llvm::ConstantInt>(llvm::cast<llvm::ConstantAsMetadata>(node->getOperand(0))->getValue());
+        result = ci->getSExtValue();
     }
     return result;
 }
