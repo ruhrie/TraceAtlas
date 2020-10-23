@@ -14,14 +14,14 @@ void MarkovInit()
 }
 void MarkovIncrement(uint64_t a)
 {
-    if(markovInit)
+    if (markovInit)
     {
         markovResult[a * MarkovBlockCount + b]++;
-    }    
+    }
     else
     {
         markovInit = true;
-    }    
+    }
     b = a;
 }
 void MarkovExport()

@@ -148,7 +148,7 @@ inline uint64_t GetBlockCount(llvm::Module *M)
     {
         for (auto &fi : *mi)
         {
-            if(isa<llvm::BasicBlock>(fi))
+            if (isa<llvm::BasicBlock>(fi))
             {
                 result++;
             }
