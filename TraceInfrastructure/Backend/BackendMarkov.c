@@ -3,17 +3,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int32_t b = -1;
+uint64_t b;
 uint64_t *markovResult;
-extern int32_t MarkovBlockCount;
+bool markovInit = false;
+extern uint64_t MarkovBlockCount;
 
 void MarkovInit()
 {
-    markovResult = (uint64_t *)calloc(MarkovBlockCount * MarkovBlockCount, sizeof(int32_t));
+    markovResult = (uint64_t *)calloc(MarkovBlockCount * MarkovBlockCount, sizeof(uint64_t));
 }
-void MarkovIncrement(int32_t a)
+void MarkovIncrement(uint64_t a)
 {
-    markovResult[a * MarkovBlockCount + b]++;
+    if(markovInit)
+    {
+        markovResult[a * MarkovBlockCount + b]++;
+    }    
+    else
+    {
+        markovInit = true;
+    }    
     b = a;
 }
 void MarkovExport()
@@ -29,22 +37,22 @@ void MarkovExport()
         fileName = "markov.csv";
     }
     FILE *fp = fopen(fileName, "w");
-    for (int i = 0; i < MarkovBlockCount; i++)
+    for (uint64_t i = 0; i < MarkovBlockCount; i++)
     {
         bool first = true;
-        for (int j = 0; j < MarkovBlockCount; j++)
+        for (uint64_t j = 0; j < MarkovBlockCount; j++)
         {
             if (first)
             {
                 first = false;
+                fprintf(fp, "%lu", markovResult[i * MarkovBlockCount + j]);
             }
             else
             {
-                fprintf(fp, ",");
+                fprintf(fp, ",%lu", markovResult[i * MarkovBlockCount + j]);
             }
-            fprintf(fp, "%lu", markovResult[i * MarkovBlockCount + j]);
         }
         fprintf(fp, "%c", '\n');
     }
-    //fclose(fp);
+    fclose(fp);
 }

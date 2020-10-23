@@ -140,3 +140,19 @@ inline int64_t GetFunctionAnnotation(llvm::Function *F, std::string key)
     }
     return result;
 }
+
+inline uint64_t GetBlockCount(llvm::Module *M)
+{
+    uint64_t result = 0;
+    for (auto mi = M->begin(); mi != M->end(); mi++)
+    {
+        for (auto &fi : *mi)
+        {
+            if(isa<llvm::BasicBlock>(fi))
+            {
+                result++;
+            }
+        }
+    }
+    return result;
+}

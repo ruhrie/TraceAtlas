@@ -1,5 +1,6 @@
 
 #include "Passes/MarkovIO.h"
+#include "AtlasUtil/Annotate.h"
 #include "Passes/Annotate.h"
 #include "Passes/CommandArgs.h"
 #include "Passes/Functions.h"
@@ -23,7 +24,8 @@ namespace DashTracer
         GlobalVariable *tst;
         bool MarkovIO::runOnModule(Module &M)
         {
-            ConstantInt *i = ConstantInt::get(Type::getInt32Ty(M.getContext()), 100);
+            uint64_t blockCount = GetBlockCount(&M);
+            ConstantInt *i = ConstantInt::get(Type::getInt64Ty(M.getContext()), blockCount);
             tst = new GlobalVariable(M, i->getType(), false, llvm::GlobalValue::LinkageTypes::ExternalLinkage, i, "MarkovBlockCount");
             appendToGlobalCtors(M, MarkovOpen, 0);
             appendToGlobalDtors(M, MarkovClose, 0);
