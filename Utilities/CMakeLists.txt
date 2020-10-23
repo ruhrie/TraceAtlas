@@ -69,3 +69,5 @@ set_target_properties(JR
 )
 
 install(TARGETS JR RUNTIME DESTINATION bin)
+
+add_subdirectory(nc)
