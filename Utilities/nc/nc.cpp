@@ -1,4 +1,7 @@
+#include "AtlasUtil/Format.h"
+#include "AtlasUtil/IO.h"
 #include "AtlasUtil/Traces.h"
+#include "Graph.h"
 #include <algorithm>
 #include <fstream>
 #include <llvm/Support/CommandLine.h>
@@ -20,4 +23,10 @@ set<string> currentLabels;
 int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
+    auto M = LoadBitcode(BitcodeFilename);
+    auto csvData = LoadCSV(InputFilename);
+    auto mp = M.get();
+    Format(mp);
+    BuildGraph(mp, csvData);
+    return 0;
 }
