@@ -1,5 +1,5 @@
 #include "profile.h"
-#include "AtlasUtil/Format.h"
+#include "AtlasUtil/Annotate.h"
 #include "TypeOne.h"
 #include <iostream>
 #include <llvm/Support/raw_ostream.h>
@@ -11,8 +11,6 @@ map<string, map<string, map<string, int>>> ProfileKernels(const std::map<int, st
 {
     map<int64_t, map<string, uint64_t>> rMap;  //dictionary which keeps track of the actual information per block
     map<int64_t, map<string, uint64_t>> cpMap; //dictionary which keeps track of the cross product information per block
-    //annotate it with the same algorithm used in the tracer
-    Format(M);
     //start by profiling every basic block
     for (auto &F : *M)
     {

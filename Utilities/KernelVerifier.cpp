@@ -14,6 +14,7 @@ using namespace llvm;
 cl::opt<string> KernelFile(cl::Positional, cl::desc("Specify input kernel json filename"), cl::value_desc("kernel filename"));
 cl::opt<string> BitcodeFile("b", cl::desc("Specify input bitcode filename"), cl::value_desc("bitcode filename"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output json filename"), cl::value_desc("json filename"));
+cl::opt<bool> Preformat("pf", llvm::cl::desc("Bitcode is preformatted"), llvm::cl::value_desc("Bitcode is preformatted"));
 
 int main(int argc, char *argv[])
 {
@@ -22,7 +23,10 @@ int main(int argc, char *argv[])
     SMDiagnostic smerror;
     unique_ptr<Module> sourceBitcode = parseIRFile(BitcodeFile, smerror, context);
     //annotate it with the same algorithm used in the tracer
-    Format(sourceBitcode.get());
+    if (!Preformat)
+    {
+        Format(sourceBitcode.get());
+    }
 
     ifstream inputJson(KernelFile);
     nlohmann::json j;

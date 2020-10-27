@@ -14,6 +14,7 @@ using namespace llvm;
 cl::opt<string> JsonFile("j", cl::desc("Specify input json filename"), cl::value_desc("json filename"));
 cl::opt<string> NameFile("o", cl::desc("Specify output name filename"), cl::value_desc("name filename"));
 cl::opt<string> InputFile(cl::Positional, cl::Required, cl::desc("<input file>"));
+cl::opt<bool> Preformat("pf", llvm::cl::desc("Bitcode is preformatted"), llvm::cl::value_desc("Bitcode is preformatted"));
 
 int main(int argc, char *argv[])
 {
@@ -44,7 +45,10 @@ int main(int argc, char *argv[])
     }
     Module *M = sourceBitcode.get();
     //annotate it with the same algorithm used in the tracer
-    Format(M);
+    if (!Preformat)
+    {
+        Format(M);
+    }
     map<string, set<string>> kernelParents;
     for (Module::iterator F = M->begin(), E = M->end(); F != E; ++F)
     {

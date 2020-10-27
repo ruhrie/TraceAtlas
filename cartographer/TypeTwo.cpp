@@ -1,5 +1,6 @@
 #include "TypeTwo.h"
 #include "AtlasUtil/Exceptions.h"
+#include "AtlasUtil/Annotate.h"
 #include "cartographer.h"
 #include <set>
 #include <string>
@@ -26,11 +27,28 @@ namespace TypeTwo
     std::set<std::set<int64_t>> kernels;
     void Setup(llvm::Module *bitcode, std::set<std::set<int64_t>> k)
     {
+        int64_t maxBlockId = 0;
         for (auto &mi : *bitcode)
         {
             for (auto fi = mi.begin(); fi != mi.end(); fi++)
             {
                 blockCount++;
+                auto b = cast<BasicBlock>(fi);
+                auto id = GetBlockID(b);
+                maxBlockId = max(id, maxBlockId);
+            }
+        }
+
+        for (auto &mi : *bitcode)
+        {
+            for (auto fi = mi.begin(); fi != mi.end(); fi++)
+            {
+                auto b = cast<BasicBlock>(fi);
+                auto id = GetBlockID(b);
+                if (id == -1)
+                {
+                    SetBlockID(b, ++maxBlockId);
+                }
             }
         }
 

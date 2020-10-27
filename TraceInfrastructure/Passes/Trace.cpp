@@ -18,6 +18,7 @@ using namespace llvm;
 
 namespace DashTracer::Passes
 {
+    cl::opt<bool> SkipAnnotation("sa", llvm::cl::desc("Skip annotation pass"), llvm::cl::value_desc("Skip the annotation pass due to a more complex build flow"));
     bool EncodedTrace::runOnFunction(Function &F)
     {
         for (auto fi = F.begin(); fi != F.end(); fi++)
@@ -80,7 +81,10 @@ namespace DashTracer::Passes
 
     void EncodedTrace::getAnalysisUsage(AnalysisUsage &AU) const
     {
-        AU.addRequired<DashTracer::Passes::EncodedAnnotate>();
+        if (!SkipAnnotation)
+        {
+            AU.addRequired<DashTracer::Passes::EncodedAnnotate>();
+        }
         AU.addRequired<DashTracer::Passes::TraceIO>();
     }
 
