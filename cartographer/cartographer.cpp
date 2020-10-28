@@ -156,6 +156,7 @@ int main(int argc, char **argv)
             spdlog::warn("Invalid logging level: " + to_string(LogLevel));
         }
     }
+    spdlog::trace("Set logging level");
 
     LLVMContext context;
     SMDiagnostic smerror;
@@ -163,6 +164,7 @@ int main(int argc, char **argv)
     try
     {
         sourceBitcode = parseIRFile(bitcodeFile, smerror, context);
+        spdlog::trace("Succesfully parsed IR");
     }
     catch (exception &e)
     {
@@ -174,6 +176,11 @@ int main(int argc, char **argv)
     if (!Preformat)
     {
         Format(M);
+        spdlog::trace("Succesfully formatted IR");
+    }
+    else
+    {
+        spdlog::trace("Skipped formatting preannotated IR");
     }
 
     //build the blockMap
@@ -186,6 +193,7 @@ int main(int argc, char **argv)
             blockMap[id] = bb;
         }
     }
+    spdlog::trace("Finished building block map");
 
     try
     {
