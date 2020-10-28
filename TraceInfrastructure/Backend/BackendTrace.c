@@ -21,6 +21,9 @@ unsigned int bufferIndex = 0;
 uint8_t temp_buffer[BUFSIZE];
 uint8_t storeBuffer[BUFSIZE];
 
+bool opened = false;
+bool closed = false;
+
 void WriteStream(char *input)
 {
     size_t size = strlen(input);
@@ -95,48 +98,56 @@ void WriteAddress(char *inst, int line, int block, uint64_t func, char *address)
 
 void OpenFile()
 {
-    char *tcl = getenv("TRACE_COMPRESSION");
-    if (tcl != NULL)
+    if (!opened)
     {
-        int l = atoi(tcl);
-        TraceCompressionLevel = l;
-    }
-    else
-    {
-        TraceCompressionLevel = 5;
-    }
-    strm_DashTracer.zalloc = Z_NULL;
-    strm_DashTracer.zfree = Z_NULL;
-    strm_DashTracer.opaque = Z_NULL;
-    deflateInit(&strm_DashTracer, TraceCompressionLevel);
-    char *tfn = getenv("TRACE_NAME");
-    if (tfn != NULL)
-    {
-        TraceFilename = tfn;
-    }
-    else
-    {
-        TraceFilename = "raw.trc";
-    }
+        char *tcl = getenv("TRACE_COMPRESSION");
+        if (tcl != NULL)
+        {
+            int l = atoi(tcl);
+            TraceCompressionLevel = l;
+        }
+        else
+        {
+            TraceCompressionLevel = 5;
+        }
+        strm_DashTracer.zalloc = Z_NULL;
+        strm_DashTracer.zfree = Z_NULL;
+        strm_DashTracer.opaque = Z_NULL;
+        deflateInit(&strm_DashTracer, TraceCompressionLevel);
+        char *tfn = getenv("TRACE_NAME");
+        if (tfn != NULL)
+        {
+            TraceFilename = tfn;
+        }
+        else
+        {
+            TraceFilename = "raw.trc";
+        }
 
-    myfile = fopen(TraceFilename, "w");
-    WriteStream("TraceVersion:3\n");
+        myfile = fopen(TraceFilename, "w");
+        WriteStream("TraceVersion:3\n");
+        opened = true;
+    }
 }
 
 void CloseFile()
 {
-    strm_DashTracer.next_in = storeBuffer;
-    strm_DashTracer.avail_in = bufferIndex;
-    strm_DashTracer.next_out = temp_buffer;
-    strm_DashTracer.avail_out = BUFSIZE;
-    deflate(&strm_DashTracer, Z_FINISH);
-    for (uint32_t i = 0; i < BUFSIZE - strm_DashTracer.avail_out; i++)
+    if (!closed)
     {
-        fputc(temp_buffer[i], myfile);
-    }
+        strm_DashTracer.next_in = storeBuffer;
+        strm_DashTracer.avail_in = bufferIndex;
+        strm_DashTracer.next_out = temp_buffer;
+        strm_DashTracer.avail_out = BUFSIZE;
+        deflate(&strm_DashTracer, Z_FINISH);
+        for (uint32_t i = 0; i < BUFSIZE - strm_DashTracer.avail_out; i++)
+        {
+            fputc(temp_buffer[i], myfile);
+        }
 
-    deflateEnd(&strm_DashTracer);
-    //fclose(myfile); //breaks occasionally for some reason. Likely a glibc error.
+        deflateEnd(&strm_DashTracer);
+        closed = true;
+        //fclose(myfile); //breaks occasionally for some reason. Likely a glibc error.
+    }
 }
 
 void LoadDump(void *address)
