@@ -145,6 +145,7 @@ int main(int argc, char **argv)
         case 5:
         {
             spdlog::set_level(spdlog::level::debug);
+            break;
         }
         case 6:
         {
