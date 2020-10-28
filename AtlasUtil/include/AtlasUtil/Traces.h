@@ -70,7 +70,6 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
             strm.avail_out = BLOCK_SIZE - 1;            // remaining space in decompressedArray
             ret = inflate(&strm, Z_NO_FLUSH);
             assert(ret != Z_STREAM_ERROR);
-
             // put decompressed data into a string for splitting
             unsigned int have = BLOCK_SIZE - strm.avail_out;
             decompressedArray[have - 1] = '\0';
@@ -113,6 +112,10 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
                 {
                     break;
                 }
+            }
+            if(ret == Z_STREAM_END)
+            {
+                break;
             }
             priorLine = segment;
         }
