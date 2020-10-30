@@ -2,6 +2,7 @@
 #include "AtlasUtil/IO.h"
 #include "AtlasUtil/Traces.h"
 #include "Graph.h"
+#include <One.h>
 #include <algorithm>
 #include <fstream>
 #include <llvm/Support/CommandLine.h>
@@ -31,6 +32,15 @@ int main(int argc, char **argv)
     {
         Format(mp);
     }
-    BuildGraph(mp, csvData);
+
+    nlohmann::json outputJson;
+
+    auto s1 = StepOne(csvData);
+    outputJson["Kernels"] = s1;
+
+    ofstream oStream(OutputFilename);
+    oStream << outputJson;
+    oStream.close();
+
     return 0;
 }

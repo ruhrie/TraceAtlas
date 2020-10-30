@@ -16,7 +16,7 @@ void MarkovIncrement(uint64_t a)
 {
     if (markovInit)
     {
-        markovResult[a * MarkovBlockCount + b]++;
+        markovResult[b * MarkovBlockCount + a]++;
     }
     else
     {
