@@ -1,8 +1,8 @@
 #pragma once
+#include <llvm/IR/Module.h>
 #include <memory>
 #include <stdint.h>
 #include <vector>
-#include <llvm/IR/Module.h>
 
 struct Node
 {

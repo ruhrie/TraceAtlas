@@ -16,20 +16,20 @@ namespace DashTracer::Passes
     cl::opt<uint64_t> TraceAtlasStartValueIndex("tavi", llvm::cl::desc("Initial value index"), llvm::cl::value_desc("Initial value index"));
     bool EncodedAnnotate::runOnModule(Module &M)
     {
-        if(TraceAtlasStartIndex.getNumOccurrences() != 0)
+        if (TraceAtlasStartIndex.getNumOccurrences() != 0)
         {
             TraceAtlasIndex = TraceAtlasStartIndex;
         }
-        if(TraceAtlasStartValueIndex.getNumOccurrences() != 0)
+        if (TraceAtlasStartValueIndex.getNumOccurrences() != 0)
         {
             TraceAtlasValueIndex = TraceAtlasStartValueIndex;
         }
         Format(&M);
-        if(TraceAtlasStartIndex.getNumOccurrences() != 0)
+        if (TraceAtlasStartIndex.getNumOccurrences() != 0)
         {
             std::cout << "Ending TraceAtlas block index: " << TraceAtlasIndex << std::endl;
         }
-        if(TraceAtlasStartValueIndex.getNumOccurrences() != 0)
+        if (TraceAtlasStartValueIndex.getNumOccurrences() != 0)
         {
             std::cout << "Ending TraceAtlas value index: " << TraceAtlasValueIndex << std::endl;
         }

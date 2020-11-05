@@ -1,6 +1,6 @@
 #include "TypeTwo.h"
-#include "AtlasUtil/Exceptions.h"
 #include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Exceptions.h"
 #include "cartographer.h"
 #include <set>
 #include <string>

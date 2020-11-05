@@ -113,8 +113,9 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
                     break;
                 }
             }
-            if(ret == Z_STREAM_END)
+            if (ret == Z_STREAM_END)
             {
+                spdlog::trace("Ending stream at block " + std::to_string(index) + " of " + std::to_string(blocks));
                 break;
             }
             priorLine = segment;

@@ -212,6 +212,12 @@ int main(int argc, char **argv)
             }
         }
 
+        if (type1Kernels.empty())
+        {
+            spdlog::warn("Detected no kernels, exiting");
+            return EXIT_SUCCESS;
+        }
+
         TypeTwo::Setup(M, type1Kernels);
         ProcessTrace(inputTrace, &TypeTwo::Process, "Detecting type 2 kernels", noBar);
         auto type2Kernels = TypeTwo::Get();
