@@ -6,12 +6,12 @@
 /// Writes the input string to the trace buffer.
 /// </summary>
 /// <param name="input">The string to be written</param>
-void WriteStream(char *input);
+void TraceAtlasWriteStream(char *input);
 
 /// <summary>
 /// Compresses the trace buffer and writes it to the destination file.
 /// </summary>
-void BufferData();
+void TraceAtlasBufferData();
 
 /// <summary>
 /// Writes the input instruction and line, block, and function UIDs to the trace buffer.
@@ -20,7 +20,7 @@ void BufferData();
 /// <param name="line">The line UID.</param>
 /// <param name="block">The block UID</param>
 /// <param name="func">The function GUID.</param>
-void Write(char *inst, int line, int block, uint64_t func);
+void TraceAtlasWrite(char *inst, int line, int block, uint64_t func);
 
 /// <summary>
 /// Writes the input instruction, line, block, function UIDs, and the memory address to the trace buffer.
@@ -30,24 +30,22 @@ void Write(char *inst, int line, int block, uint64_t func);
 /// <param name="block">The block UID</param>
 /// <param name="func">The function GUID.</param>
 /// <param name="address">A byte array representing a system pointer.</param>
-void WriteAddress(char *inst, int line, int block, uint64_t func, char *address);
+void TraceAtlasWriteAddress(char *inst, int line, int block, uint64_t func, char *address);
 
 /// <summary>
 /// Opens the trace file for writing and initializes the compression stream.
 /// </summary>
-/// <param name="fileName">The string to be written</param>
-/// <param name="compressionLevel">The zlib compression level to be used.</param>
-void OpenFile();
+void TraceAtlasOpenFile();
 
 /// <summary>
 /// Flushes the compression stream and closes the trace file.
 /// </summary>
-void CloseFile();
+void TraceAtlasCloseFile();
 
-void LoadDump(void *address);
-void DumpLoadValue(void *MemValue, int size);
-void StoreDump(void *address);
-void DumpStoreValue(void *MemValue, int size);
+void TraceAtlasLoadDump(void *address);
+void TraceAtlasDumpLoadValue(void *MemValue, int size);
+void TraceAtlasStoreDump(void *address);
+void TraceAtlasDumpStoreValue(void *MemValue, int size);
 
 void BB_ID_Dump(uint64_t block, bool enter);
 
@@ -55,8 +53,8 @@ void BB_ID_Dump(uint64_t block, bool enter);
 extern "C"
 {
 #endif
-    void KernelEnter(char *label);
-    void KernelExit(char *label);
+    void TraceAtlasKernelEnter(char *label);
+    void TraceAtlasKernelExit(char *label);
 #ifdef __cplusplus
 }
 #endif

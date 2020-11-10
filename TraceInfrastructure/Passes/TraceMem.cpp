@@ -82,10 +82,10 @@ namespace DashTracer::Passes
 
     bool EncodedTraceMemory::doInitialization(Module &M)
     {
-        DumpLoadValue = cast<Function>(M.getOrInsertFunction("DumpLoadValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
-        DumpStoreValue = cast<Function>(M.getOrInsertFunction("DumpStoreValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
-        LoadDump = cast<Function>(M.getOrInsertFunction("LoadDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
-        StoreDump = cast<Function>(M.getOrInsertFunction("StoreDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
+        DumpLoadValue = cast<Function>(M.getOrInsertFunction("TraceAtlasDumpLoadValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
+        DumpStoreValue = cast<Function>(M.getOrInsertFunction("TraceAtlasDumpStoreValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
+        LoadDump = cast<Function>(M.getOrInsertFunction("TraceAtlasLoadDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
+        StoreDump = cast<Function>(M.getOrInsertFunction("TraceAtlasStoreDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
         kernelBlockValue.clear();
         nlohmann::json j;
         std::ifstream inputStream(KernelFilename);
