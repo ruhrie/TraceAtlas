@@ -56,7 +56,8 @@ void TraceAtlasBufferData()
     }
     else
     {
-        fwrite(TraceAtlasTempBuffer, sizeof(char), TraceAtlasBufferIndex, TraceAtlasTraceFile);
+
+        fwrite(TraceAtlasStoreBuffer, sizeof(char), TraceAtlasBufferIndex, TraceAtlasTraceFile);
     }
     TraceAtlasBufferIndex = 0;
 }
@@ -161,7 +162,7 @@ void TraceAtlasCloseFile()
         }
         else
         {
-            fwrite(TraceAtlasTempBuffer, sizeof(Bytef), TraceAtlasBufferIndex, TraceAtlasTraceFile);
+            fwrite(TraceAtlasStoreBuffer, sizeof(Bytef), TraceAtlasBufferIndex, TraceAtlasTraceFile);
         }
 
         TraceAtlasClosed = true;
