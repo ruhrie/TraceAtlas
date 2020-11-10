@@ -1,6 +1,4 @@
-#ifndef FUNCTIONS_H
-#define FUNCTIONS_H
-
+#pragma once
 #include <llvm/IR/Function.h>
 
 using namespace llvm;
@@ -23,5 +21,3 @@ namespace DashTracer
         extern Function *MarkovIncrement;
     } // namespace Passes
 } // namespace DashTracer
-
-#endif

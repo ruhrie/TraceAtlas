@@ -221,6 +221,8 @@ bool HasEpilogue(const std::set<llvm::BasicBlock *> &blocks, const std::set<int6
     return false;
 }
 
+/*
+
 static std::set<llvm::BasicBlock *> GetExits(std::set<llvm::BasicBlock *> blocks)
 {
     std::set<llvm::BasicBlock *> Exits;
@@ -252,6 +254,8 @@ static std::set<llvm::BasicBlock *> GetExits(std::set<llvm::BasicBlock *> blocks
     }
     return Exits;
 }
+
+*/
 
 static std::set<llvm::BasicBlock *> GetEntrances(std::set<llvm::BasicBlock *> &blocks)
 {

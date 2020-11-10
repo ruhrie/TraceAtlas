@@ -1,5 +1,4 @@
 #include "Backend/BackendTrace.h"
-#include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,10 +15,10 @@ char *TraceAtlasTraceFilename;
 /// <summary>
 /// The maximum ammount of bytes to store in a buffer before flushing it.
 /// </summary>
-#define BUFSIZE 128 * 1024
+const uint32_t TRACEATLASBUFSIZE = 128 * 1024;
 unsigned int TraceAtlasBufferIndex = 0;
-uint8_t TraceAtlasTempBuffer[BUFSIZE];
-uint8_t TraceAtlasStoreBuffer[BUFSIZE];
+uint8_t TraceAtlasTempBuffer[TRACEATLASBUFSIZE];
+uint8_t TraceAtlasStoreBuffer[TRACEATLASBUFSIZE];
 
 bool TraceAtlasOpened = false;
 bool TraceAtlasClosed = false;
@@ -27,7 +26,7 @@ bool TraceAtlasClosed = false;
 void TraceAtlasWriteStream(char *input)
 {
     size_t size = strlen(input);
-    if (TraceAtlasBufferIndex + size >= BUFSIZE)
+    if (TraceAtlasBufferIndex + size >= TRACEATLASBUFSIZE)
     {
         TraceAtlasBufferData();
     }
@@ -45,12 +44,16 @@ void TraceAtlasBufferData()
         while (TraceAtlasStrm.avail_in != 0)
         {
             int defResult = deflate(&TraceAtlasStrm, Z_PARTIAL_FLUSH);
-            assert(defResult == Z_OK);
+            if (defResult != Z_OK)
+            {
+                fprintf(stderr, "Zlib compression error");
+                exit(-1);
+            }
             if (TraceAtlasStrm.avail_out == 0)
             {
-                fwrite(TraceAtlasTempBuffer, sizeof(Bytef), BUFSIZE, TraceAtlasTraceFile);
+                fwrite(TraceAtlasTempBuffer, sizeof(Bytef), TRACEATLASBUFSIZE, TraceAtlasTraceFile);
                 TraceAtlasStrm.next_out = TraceAtlasTempBuffer;
-                TraceAtlasStrm.avail_out = BUFSIZE;
+                TraceAtlasStrm.avail_out = TRACEATLASBUFSIZE;
             }
         }
     }
@@ -113,9 +116,13 @@ void TraceAtlasOpenFile()
             TraceAtlasStrm.zfree = Z_NULL;
             TraceAtlasStrm.opaque = Z_NULL;
             TraceAtlasStrm.next_out = TraceAtlasTempBuffer;
-            TraceAtlasStrm.avail_out = BUFSIZE;
+            TraceAtlasStrm.avail_out = TRACEATLASBUFSIZE;
             int defResult = deflateInit(&TraceAtlasStrm, TraceAtlasTraceCompressionLevel);
-            assert(defResult == Z_OK);
+            if (defResult != Z_OK)
+            {
+                fprintf(stderr, "Zlib compression error");
+                exit(-1);
+            }
         }
         char *tfn = getenv("TRACE_NAME");
         if (tfn != NULL)
@@ -144,19 +151,28 @@ void TraceAtlasCloseFile()
             while (true)
             {
                 int defRes = deflate(&TraceAtlasStrm, Z_FINISH);
-                assert(defRes != Z_BUF_ERROR && defRes != Z_STREAM_ERROR);
+                if (defRes == Z_BUF_ERROR)
+                {
+                    fprintf(stderr, "Zlib buffer error");
+                    exit(-1);
+                }
+                else if (defRes == Z_STREAM_ERROR)
+                {
+                    fprintf(stderr, "Zlib stream error");
+                    exit(-1);
+                }
                 if (TraceAtlasStrm.avail_out == 0)
                 {
-                    fwrite(TraceAtlasTempBuffer, sizeof(Bytef), BUFSIZE, TraceAtlasTraceFile);
+                    fwrite(TraceAtlasTempBuffer, sizeof(Bytef), TRACEATLASBUFSIZE, TraceAtlasTraceFile);
                     TraceAtlasStrm.next_out = TraceAtlasTempBuffer;
-                    TraceAtlasStrm.avail_out = BUFSIZE;
+                    TraceAtlasStrm.avail_out = TRACEATLASBUFSIZE;
                 }
                 if (defRes == Z_STREAM_END)
                 {
                     break;
                 }
             }
-            fwrite(TraceAtlasTempBuffer, sizeof(Bytef), BUFSIZE - TraceAtlasStrm.avail_out, TraceAtlasTraceFile);
+            fwrite(TraceAtlasTempBuffer, sizeof(Bytef), TRACEATLASBUFSIZE - TraceAtlasStrm.avail_out, TraceAtlasTraceFile);
 
             deflateEnd(&TraceAtlasStrm);
         }

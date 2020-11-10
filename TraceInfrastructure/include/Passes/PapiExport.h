@@ -1,5 +1,4 @@
-#ifndef PAPIEXPORT_H
-#define PAPIEXPORT_H
+#pragma once
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/Pass.h>
 
@@ -21,5 +20,3 @@ namespace DashTracer
 
     } // namespace Passes
 } // namespace DashTracer
-
-#endif

@@ -7,9 +7,10 @@
 #include <sstream>
 #include <string>
 #include <zlib.h>
-#define BLOCK_SIZE 4096
 
-static void ProcessTraceBytes(char *message, std::string &priorLine, const std::function<void(std::string &, std::string &)> &LogicFunction, uint64_t length = BLOCK_SIZE)
+const int BLOCK_SIZE = 128 * 1024;
+
+static void ProcessTraceBytes(char *message, std::string &priorLine, const std::function<void(std::string &, std::string &)> &LogicFunction, uint64_t length)
 {
     std::string bufferString(message, length);
     std::stringstream stringStream(bufferString);
