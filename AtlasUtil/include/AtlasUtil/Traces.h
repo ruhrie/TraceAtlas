@@ -87,6 +87,7 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
     int64_t blocks = size / BLOCK_SIZE + 1;
 
     //check the signiture
+    /*
     char firstChar;
     inputTrace.readsome(&firstChar, 1);
     inputTrace.seekg(0, std::ios_base::beg);
@@ -109,6 +110,18 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
     else
     {
         throw AtlasException("Trace signiture malformed");
+    }
+    */
+    if (TraceFile.substr(TraceFile.find_last_of(".") + 1) == "trc")
+    {
+        strm.zalloc = Z_NULL;
+        strm.zfree = Z_NULL;
+        strm.opaque = Z_NULL;
+        strm.next_out = (Bytef *)decompressedArray;
+        strm.avail_out = BLOCK_SIZE;
+        ret = inflateInit(&strm);
+        assert(ret == Z_OK);
+        compressed = true;
     }
 
     if (!inputTrace)

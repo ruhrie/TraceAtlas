@@ -131,7 +131,14 @@ void TraceAtlasOpenFile()
         }
         else
         {
-            TraceAtlasTraceFilename = "raw.trc";
+            if (TraceAtlasTraceCompressionLevel != -2)
+            {
+                TraceAtlasTraceFilename = "raw.trc";
+            }
+            else
+            {
+                TraceAtlasTraceFilename = "raw.trace";
+            }
         }
 
         TraceAtlasTraceFile = fopen(TraceAtlasTraceFilename, "w");
