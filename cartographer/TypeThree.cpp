@@ -4,11 +4,13 @@
 #include <indicators/progress_bar.hpp>
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/Instructions.h>
+#include <spdlog/spdlog.h>
 
 using namespace std;
 using namespace llvm;
 namespace TypeThree
 {
+    set<int64_t> warnedBlocks;
     std::set<std::set<int64_t>> Process(const std::set<std::set<int64_t>> &type25Kernels)
     {
         indicators::ProgressBar bar;
@@ -33,6 +35,15 @@ namespace TypeThree
                 for (auto block : kernel)
                 {
                     BasicBlock *base = blockMap[block];
+                    if (base == nullptr)
+                    {
+                        if(warnedBlocks.find(block) == warnedBlocks.end())
+                        {
+                            spdlog::warn("Failed to find block {} from a kernel in the LLVM IR. Ignoring.", block);
+                            warnedBlocks.insert(block);
+                        }                        
+                        continue;
+                    }
                     Function *F = base->getParent();
                     Instruction *term = base->getTerminator();
                     bool preFound = false;
