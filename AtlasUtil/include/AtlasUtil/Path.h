@@ -71,6 +71,10 @@ static std::set<llvm::BasicBlock *> GetReachable(llvm::BasicBlock *base, std::se
 static bool IsReachable(llvm::BasicBlock *base, llvm::BasicBlock *target, const std::set<int64_t> &validBlocks)
 {
     bool foundTarget = false;
+    if(base == nullptr)
+    {
+        return false;
+    }
     std::queue<llvm::BasicBlock *> toProcess;
     std::set<llvm::BasicBlock *> checked;
     toProcess.push(base);

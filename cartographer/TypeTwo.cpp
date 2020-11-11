@@ -10,7 +10,6 @@ using namespace llvm;
 
 namespace TypeTwo
 {
-    uint64_t blockCount = 0;
     int32_t openIndicator = -1;
 
     int *openCount = nullptr;
@@ -32,35 +31,21 @@ namespace TypeTwo
         {
             for (auto fi = mi.begin(); fi != mi.end(); fi++)
             {
-                blockCount++;
                 auto b = cast<BasicBlock>(fi);
                 auto id = GetBlockID(b);
                 maxBlockId = max(id, maxBlockId);
             }
         }
 
-        for (auto &mi : *bitcode)
-        {
-            for (auto fi = mi.begin(); fi != mi.end(); fi++)
-            {
-                auto b = cast<BasicBlock>(fi);
-                auto id = GetBlockID(b);
-                if (id == -1)
-                {
-                    SetBlockID(b, ++maxBlockId);
-                }
-            }
-        }
-
         kernels = move(k);
 
-        openCount = (int *)calloc(sizeof(int), blockCount);                         // counter to know where we are in the callstack
+        openCount = (int *)calloc(sizeof(int), maxBlockId);                         // counter to know where we are in the callstack
         finalBlocks = (set<int64_t> *)calloc(sizeof(set<int64_t>), kernels.size()); // final kernel definitions
         kernelStarts = (int *)calloc(sizeof(int), kernels.size());                  // map of a kernel index to the first block seen
         blocks = (set<int64_t> *)calloc(sizeof(set<int64_t>), kernels.size());      // temporary kernel blocks
-        kernelMap = (set<int> *)calloc(sizeof(set<int>), blockCount);
-        blockCaller = (set<int32_t> *)calloc(sizeof(set<int32_t>), blockCount);
-        for (uint32_t i = 0; i < blockCount; i++)
+        kernelMap = (set<int> *)calloc(sizeof(set<int>), maxBlockId);
+        blockCaller = (set<int32_t> *)calloc(sizeof(set<int32_t>), maxBlockId);
+        for (uint32_t i = 0; i < maxBlockId; i++)
         {
             kernelMap[i] = set<int>();
             openCount[i] = 0;
