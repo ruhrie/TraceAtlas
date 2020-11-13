@@ -7,16 +7,19 @@
 using namespace std;
 using namespace llvm;
 
-map<string, map<string, map<string, int>>> ProfileKernels(const std::map<int, std::set<int64_t>> &kernels, Module *M)
+map<string, map<string, map<string, int>>> ProfileKernels(const std::map<int, std::set<int64_t>> &kernels, std::vector<Module *> &Ms)
 {
     map<int64_t, map<string, uint64_t>> rMap;  //dictionary which keeps track of the actual information per block
     map<int64_t, map<string, uint64_t>> cpMap; //dictionary which keeps track of the cross product information per block
     //start by profiling every basic block
-    for (auto &F : *M)
+    for (auto &M : Ms)
     {
-        for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
+        for (auto &F : *M)
         {
-            ProfileBlock(cast<BasicBlock>(BB), rMap, cpMap);
+            for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
+            {
+                ProfileBlock(cast<BasicBlock>(BB), rMap, cpMap);
+            }
         }
     }
 

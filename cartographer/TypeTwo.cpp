@@ -24,28 +24,31 @@ namespace TypeTwo
     bool blocksLabeled = false;
     vector<string> currentKernel;
     std::set<std::set<int64_t>> kernels;
-    void Setup(llvm::Module *bitcode, std::set<std::set<int64_t>> k)
+    void Setup(vector<llvm::Module *> &bitcodes, std::set<std::set<int64_t>> k)
     {
         int64_t maxBlockId = 0;
-        for (auto &mi : *bitcode)
+        for (auto &bitcode : bitcodes)
         {
-            for (auto fi = mi.begin(); fi != mi.end(); fi++)
+            for (auto &mi : *bitcode)
             {
-                auto b = cast<BasicBlock>(fi);
-                auto id = GetBlockID(b);
-                maxBlockId = max(id, maxBlockId);
+                for (auto fi = mi.begin(); fi != mi.end(); fi++)
+                {
+                    auto b = cast<BasicBlock>(fi);
+                    auto id = GetBlockID(b);
+                    maxBlockId = max(id, maxBlockId);
+                }
             }
         }
 
         kernels = move(k);
 
-        openCount = (int *)calloc(sizeof(int), maxBlockId);                         // counter to know where we are in the callstack
+        openCount = (int *)calloc(sizeof(int), (uint64_t)maxBlockId + 1);           // counter to know where we are in the callstack
         finalBlocks = (set<int64_t> *)calloc(sizeof(set<int64_t>), kernels.size()); // final kernel definitions
         kernelStarts = (int *)calloc(sizeof(int), kernels.size());                  // map of a kernel index to the first block seen
         blocks = (set<int64_t> *)calloc(sizeof(set<int64_t>), kernels.size());      // temporary kernel blocks
-        kernelMap = (set<int> *)calloc(sizeof(set<int>), maxBlockId);
-        blockCaller = (set<int32_t> *)calloc(sizeof(set<int32_t>), maxBlockId);
-        for (uint32_t i = 0; i < maxBlockId; i++)
+        kernelMap = (set<int> *)calloc(sizeof(set<int>), (uint64_t)maxBlockId + 1);
+        blockCaller = (set<int32_t> *)calloc(sizeof(set<int32_t>), (uint64_t)maxBlockId + 1);
+        for (uint32_t i = 0; i < (uint64_t)maxBlockId + 1; i++)
         {
             kernelMap[i] = set<int>();
             openCount[i] = 0;

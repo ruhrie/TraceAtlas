@@ -1,4 +1,5 @@
 #pragma once
+#include "AtlasUtil/Print.h"
 #include <fstream>
 #include <llvm/IR/Module.h>
 #include <llvm/IRReader/IRReader.h>
@@ -8,12 +9,23 @@
 #include <string>
 #include <vector>
 
+static llvm::LLVMContext context;
+static llvm::SMDiagnostic smerror;
+
 inline std::unique_ptr<llvm::Module> LoadBitcode(const std::string &path)
 {
-    llvm::LLVMContext context;
-    llvm::SMDiagnostic smerror;
     auto sourceBitcode = llvm::parseIRFile(path, smerror, context);
     return sourceBitcode;
+}
+
+inline std::vector<std::unique_ptr<llvm::Module>> LoadBitcodes(const std::vector<std::string> &paths)
+{
+    std::vector<std::unique_ptr<llvm::Module>> result;
+    for (const auto &path : paths)
+    {
+        result.push_back(LoadBitcode(path));
+    }
+    return result;
 }
 
 inline std::vector<std::vector<uint64_t>> LoadCSV(const std::string &path)

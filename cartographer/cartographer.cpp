@@ -1,4 +1,5 @@
 #include "AtlasUtil/Format.h"
+#include "AtlasUtil/IO.h"
 #include "AtlasUtil/Traces.h"
 #include "TypeFour.h"
 #include "TypeOne.h"
@@ -28,14 +29,14 @@ map<int64_t, set<string>> blockLabelMap;
 map<int64_t, BasicBlock *> blockMap;
 set<int64_t> ValidBlocks;
 
-llvm::cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
+cl::opt<string> inputTrace("i", llvm::cl::desc("Specify the input trace filename"), llvm::cl::value_desc("trace filename"));
 float threshold = 0;
-llvm::cl::opt<int> hotThreshold("ht", cl::desc("The minimum instance count for a basic block to be a seed."), llvm::cl::init(512));
-llvm::cl::opt<string> kernelFile("k", llvm::cl::desc("Specify output json name"), llvm::cl::value_desc("kernel filename"), llvm::cl::init("kernel.json"));
-llvm::cl::opt<string> profileFile("p", llvm::cl::desc("Specify profile json name"), llvm::cl::value_desc("profile filename"));
-llvm::cl::opt<string> bitcodeFile("b", llvm::cl::desc("Specify bitcode name"), llvm::cl::value_desc("bitcode filename"), llvm::cl::Required);
-llvm::cl::opt<bool> label("L", llvm::cl::desc("ExportLabel"), llvm::cl::value_desc("Export library label"), cl::init(false));
-llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::value_desc("No progress bar"));
+cl::opt<int> hotThreshold("ht", cl::desc("The minimum instance count for a basic block to be a seed."), llvm::cl::init(512));
+cl::opt<string> kernelFile("k", llvm::cl::desc("Specify output json name"), llvm::cl::value_desc("kernel filename"), llvm::cl::init("kernel.json"));
+cl::opt<string> profileFile("p", llvm::cl::desc("Specify profile json name"), llvm::cl::value_desc("profile filename"));
+cl::list<string> bitcodeFiles("b", llvm::cl::desc("Specify bitcode name"), llvm::cl::value_desc("bitcode filename"), llvm::cl::Required, cl::OneOrMore);
+cl::opt<bool> label("L", llvm::cl::desc("ExportLabel"), llvm::cl::value_desc("Export library label"), cl::init(false));
+cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::value_desc("No progress bar"));
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 cl::opt<string> DotFile("d", cl::desc("Specify dot filename"), cl::value_desc("dot file"));
@@ -43,59 +44,62 @@ cl::opt<string> DumpFile("D", cl::desc("Block relationship file"), cl::value_des
 llvm::cl::opt<bool> Debug("db", llvm::cl::desc("Debug output"), llvm::cl::value_desc("Export debug information to utput file"));
 cl::opt<bool> Preformat("pf", llvm::cl::desc("Bitcode is preformatted"), llvm::cl::value_desc("Bitcode is preformatted"));
 
-void Dump(const string &dump, Module *M)
+void Dump(const string &dump, std::vector<Module *> &Ms)
 {
     nlohmann::json dumpJson;
-    for (auto &mi : *M)
+    for (auto &M : Ms)
     {
-        for (auto &fi : mi)
+        for (auto &mi : *M)
         {
-            auto BB = cast<BasicBlock>(&fi);
-            auto id = GetBlockID(BB);
-            set<int64_t> blocks;
-            for (auto suc : successors(BB))
+            for (auto &fi : mi)
             {
-                blocks.insert(GetBlockID(suc));
-            }
-
-            for (auto &bi : fi)
-            {
-                if (auto i = dyn_cast<CallBase>(&bi))
+                auto BB = cast<BasicBlock>(&fi);
+                auto id = GetBlockID(BB);
+                set<int64_t> blocks;
+                for (auto suc : successors(BB))
                 {
-                    auto F = i->getCalledFunction();
-                    if (F != nullptr && !F->empty())
+                    blocks.insert(GetBlockID(suc));
+                }
+
+                for (auto &bi : fi)
+                {
+                    if (auto i = dyn_cast<CallBase>(&bi))
                     {
-                        auto entry = &F->getEntryBlock();
-                        blocks.insert(GetBlockID(entry));
+                        auto F = i->getCalledFunction();
+                        if (F != nullptr && !F->empty())
+                        {
+                            auto entry = &F->getEntryBlock();
+                            blocks.insert(GetBlockID(entry));
+                        }
                     }
                 }
-            }
 
-            auto term = BB->getTerminator();
-            if (auto ret = dyn_cast<ReturnInst>(term))
-            {
-                auto F = BB->getParent();
-                for (auto user : F->users())
+                auto term = BB->getTerminator();
+                if (auto ret = dyn_cast<ReturnInst>(term))
                 {
-                    if (auto i = dyn_cast<CallBase>(user))
+                    auto F = BB->getParent();
+                    for (auto user : F->users())
                     {
-                        blocks.insert(GetBlockID(i->getParent()));
+                        if (auto i = dyn_cast<CallBase>(user))
+                        {
+                            blocks.insert(GetBlockID(i->getParent()));
+                        }
                     }
                 }
-            }
-            else if (auto res = dyn_cast<ResumeInst>(term))
-            {
-                auto F = BB->getParent();
-                for (auto user : F->users())
+                else if (auto res = dyn_cast<ResumeInst>(term))
                 {
-                    if (auto i = dyn_cast<CallBase>(user))
+                    auto F = BB->getParent();
+                    for (auto user : F->users())
                     {
-                        blocks.insert(GetBlockID(i->getParent()));
+                        if (auto i = dyn_cast<CallBase>(user))
+                        {
+                            blocks.insert(GetBlockID(i->getParent()));
+                        }
                     }
                 }
-            }
 
-            dumpJson[to_string(id)] = blocks;
+                dumpJson[to_string(id)] = blocks;
+            }
         }
     }
     ofstream oStream(dump);
@@ -158,25 +162,19 @@ int main(int argc, char **argv)
         }
     }
     spdlog::trace("Set logging level");
-
-    LLVMContext context;
-    SMDiagnostic smerror;
-    unique_ptr<Module> sourceBitcode;
-    try
+    vector<unique_ptr<Module>> bitcodes = LoadBitcodes(bitcodeFiles);
+    vector<Module *> bitcodePtrs;
+    for (const auto &b : bitcodes)
     {
-        sourceBitcode = parseIRFile(bitcodeFile, smerror, context);
-        spdlog::trace("Succesfully parsed IR");
-    }
-    catch (exception &e)
-    {
-        spdlog::critical("Failed to open bitcode file: " + bitcodeFile);
-        return EXIT_FAILURE;
+        bitcodePtrs.push_back(b.get());
     }
 
-    Module *M = sourceBitcode.get();
     if (!Preformat)
     {
-        Format(M);
+        for (const auto &bitcode : bitcodes)
+        {
+            Format(bitcode.get());
+        }
         spdlog::trace("Succesfully formatted IR");
     }
     else
@@ -185,15 +183,19 @@ int main(int argc, char **argv)
     }
 
     //build the blockMap
-    for (auto &mi : *M)
+    for (auto &M : bitcodes)
     {
-        for (auto fi = mi.begin(); fi != mi.end(); fi++)
+        for (auto &mi : *M)
         {
-            auto *bb = cast<BasicBlock>(fi);
-            int64_t id = GetBlockID(bb);
-            blockMap[id] = bb;
+            for (auto fi = mi.begin(); fi != mi.end(); fi++)
+            {
+                auto *bb = cast<BasicBlock>(fi);
+                int64_t id = GetBlockID(bb);
+                blockMap[id] = bb;
+            }
         }
     }
+
     spdlog::trace("Finished building block map");
 
     try
@@ -218,12 +220,12 @@ int main(int argc, char **argv)
             return EXIT_SUCCESS;
         }
 
-        TypeTwo::Setup(M, type1Kernels);
+        TypeTwo::Setup(bitcodePtrs, type1Kernels);
         ProcessTrace(inputTrace, &TypeTwo::Process, "Detecting type 2 kernels", noBar);
         auto type2Kernels = TypeTwo::Get();
         spdlog::info("Detected " + to_string(type2Kernels.size()) + " type 2 kernels");
 
-        TypeTwo::Setup(M, type2Kernels);
+        TypeTwo::Setup(bitcodePtrs, type2Kernels);
         ProcessTrace(inputTrace, &TypeTwo::Process, "Detecting type 2.5 kernels", noBar);
         auto type25Kernels = TypeTwo::Get();
         spdlog::info("Detected " + to_string(type25Kernels.size()) + " type 2.5 kernels");
@@ -389,7 +391,7 @@ int main(int argc, char **argv)
         oStream.close();
         if (!profileFile.empty())
         {
-            nlohmann::json prof = ProfileKernels(finalResult, sourceBitcode.get());
+            nlohmann::json prof = ProfileKernels(finalResult, bitcodePtrs);
             ofstream pStream(profileFile);
             pStream << prof;
             pStream.close();
@@ -403,7 +405,7 @@ int main(int argc, char **argv)
         }
         if (!DumpFile.empty())
         {
-            Dump(DumpFile, M);
+            Dump(DumpFile, bitcodePtrs);
         }
     }
     catch (AtlasException e)

@@ -37,11 +37,11 @@ namespace TypeThree
                     BasicBlock *base = blockMap[block];
                     if (base == nullptr)
                     {
-                        if(warnedBlocks.find(block) == warnedBlocks.end())
+                        if (warnedBlocks.find(block) == warnedBlocks.end())
                         {
                             spdlog::warn("Failed to find block {} from a kernel in the LLVM IR. Ignoring.", block);
                             warnedBlocks.insert(block);
-                        }                        
+                        }
                         continue;
                     }
                     Function *F = base->getParent();
