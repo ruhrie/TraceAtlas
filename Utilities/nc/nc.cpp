@@ -1,7 +1,9 @@
 #include "AtlasUtil/Format.h"
 #include "AtlasUtil/IO.h"
 #include "AtlasUtil/Traces.h"
+#include "Dijkstra.h"
 #include "Graph.h"
+#include "GraphTransforms.h"
 #include <One.h>
 #include <algorithm>
 #include <fstream>
@@ -30,8 +32,12 @@ int main(int argc, char **argv)
     auto mp = M.get();
     if (!Preformat)
     {
-        Format(mp);
+        Format(M.get());
     }
+
+    auto probabilityGraph = ProbabilityTransform(csvData);
+
+    auto a = Dijkstra(probabilityGraph, 0, 0);
 
     nlohmann::json outputJson;
 
