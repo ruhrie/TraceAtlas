@@ -39,7 +39,8 @@ int main(int argc, char **argv)
     }
     */
 
-    auto probabilityGraph = ProbabilityTransform(csvData);
+    auto baseGraph = ProbabilityTransform(csvData);
+    auto probabilityGraph = baseGraph;
 
     bool change = true;
     set<Kernel> kernels;
@@ -53,7 +54,11 @@ int main(int argc, char **argv)
             auto path = Dijkstra(probabilityGraph, i, i);
             if (!path.empty())
             {
-                auto newKernel = Kernel(path);
+                auto newKernel = Kernel();
+                for(const auto &step : path)
+                {
+                    newKernel.Blocks.insert(probabilityGraph.IndexAlias[step].begin(), probabilityGraph.IndexAlias[step].end());
+                }
                 kernels.insert(newKernel);
                 cout << "hi";
             }
@@ -66,7 +71,7 @@ int main(int argc, char **argv)
         //now that we added new kernels, legalize them
         for (auto &kernel : kernels)
         {
-            if (!kernel.IsLegal(probabilityGraph, kernels))
+            if (!kernel.IsLegal(baseGraph, kernels))
             {
                 throw AtlasException("Unimplemented");
             }
@@ -75,9 +80,12 @@ int main(int argc, char **argv)
         probabilityGraph = GraphCollapse(probabilityGraph, kernels);
     }
 
-    auto a = Dijkstra(probabilityGraph, 0, 0);
-
     nlohmann::json outputJson;
+    int i = 0;
+    for(const auto &kernel : kernels)
+    {
+        outputJson["Kernels"]["K" + to_string(i++)] = kernel.Blocks;
+    }
 
     ofstream oStream(OutputFilename);
     oStream << outputJson;
