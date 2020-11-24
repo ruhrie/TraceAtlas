@@ -11,12 +11,12 @@ Graph<float> ProbabilityTransform(Graph<uint64_t> input)
     {
         vector<float> newRow(input.WeightMatrix.size());
         float sum = 0.0f;
-        
-        for(uint64_t j : input.WeightMatrix[i])
+
+        for (uint64_t j : input.WeightMatrix[i])
         {
             sum += j;
         }
-        
+
         for (int j = 0; j < input.WeightMatrix[i].size(); j++)
         {
             newRow[j] = -1 * log(input.WeightMatrix[i][j] / sum);
@@ -106,6 +106,49 @@ Graph<float> GraphCollapse(Graph<float> base, const set<Kernel> &kernels)
         {
             result.IndexAlias[newId].push_back(pId);
             result.LocationAlias[pId] = newId++;
+        }
+    }
+
+    //now that the dependencies are figured out we can populate the graph weights
+    int popCount = result.IndexAlias.size();
+    for (int i = 0; i < popCount; i++)
+    {
+        result.WeightMatrix.push_back(vector<float>(popCount));
+    }
+
+    //merge the weights
+    for (uint64_t i = 0; i < base.WeightMatrix.size(); i++)
+    {
+        uint64_t x = result.LocationAlias[base.IndexAlias[i].front()];
+        for (uint64_t j = 0; j < base.WeightMatrix[i].size(); j++)
+        {
+            uint64_t y = result.LocationAlias[base.IndexAlias[j].front()];
+            //skip self cycles
+            if (x != y)
+            {
+                result.WeightMatrix[x][y] += exp(-1 * base.WeightMatrix[i][j]);
+            }
+        }
+    }
+    //normalize the probabilities
+    for (uint64_t i = 0; i < result.WeightMatrix.size(); i++)
+    {
+        float sum = 0.0f;
+        for (uint64_t j = 0; j < result.WeightMatrix.size(); j++)
+        {
+            sum += result.WeightMatrix[i][j];
+        }
+        for (uint64_t j = 0; j < result.WeightMatrix.size(); j++)
+        {
+            result.WeightMatrix[i][j] /= sum;
+        }
+    }
+    //relogify them
+    for (uint64_t i = 0; i < result.WeightMatrix.size(); i++)
+    {
+        for (uint64_t j = 0; j < result.WeightMatrix.size(); j++)
+        {
+            result.WeightMatrix[i][j] = -1 * log(result.WeightMatrix[i][j]);
         }
     }
 
