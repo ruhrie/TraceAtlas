@@ -1,7 +1,8 @@
-#include <Dijkstra.h>
+#include "Dijkstra.h"
+#include "AtlasUtil/Exceptions.h"
 #include <algorithm>
+#include <cmath>
 #include <map>
-#include <math.h>
 
 using namespace std;
 
@@ -25,44 +26,40 @@ struct DistanceTuple
 };
 
 //note, we assume this is a digraph
-vector<uint64_t> Dijkstra(vector<vector<float>> graph, uint64_t start, uint64_t end)
+vector<uint64_t> Dijkstra(Graph<float> graph, uint64_t start, uint64_t end)
 {
     vector<uint64_t> result;
 
-    vector<DistanceTuple> distances;
+    vector<DistanceTuple> distances(graph.WeightMatrix.size());
     map<uint64_t, vector<uint64_t>> paths;
     map<uint64_t, bool> visited;
 
     //init the distance graph
-    for (int i = 0; i < graph.size(); i++)
+    for (int i = 0; i < graph.WeightMatrix.size(); i++)
     {
-        distances.push_back(DistanceTuple(i, INFINITY));
+        distances[i] = DistanceTuple(i, INFINITY);
     }
 
     uint64_t current = start;
     bool done = false;
     while (!done)
     {
-        float currentDist;
-        if (current == start)
-        {
-            currentDist = 0;
-        }
-        else
+        float currentDist = 0;
+        if (current != start)
         {
             for (auto &d : distances)
             {
-                if(d.key == current)
+                if (d.key == current)
                 {
                     currentDist = d.distance;
                 }
             }
         }
         auto &currentPath = paths[current];
-        for (int i = 0; i < graph[current].size(); i++)
+        for (int i = 0; i < graph.WeightMatrix[current].size(); i++)
         {
-            float newDist = currentDist + graph[current][i];
-            DistanceTuple *compDistance;
+            float newDist = currentDist + graph.WeightMatrix[current][i];
+            DistanceTuple *compDistance = nullptr;
             for (auto &d : distances)
             {
                 if (d.key == i)
@@ -71,12 +68,15 @@ vector<uint64_t> Dijkstra(vector<vector<float>> graph, uint64_t start, uint64_t 
                     break;
                 }
             }
-
+            if (compDistance == nullptr)
+            {
+                throw AtlasException("Failed to find branch")
+            }
             if (newDist < compDistance->distance)
             {
                 compDistance->distance = newDist;
                 paths[i] = currentPath;
-                if(paths[i].size() == 0)
+                if (paths[i].empty())
                 {
                     paths[i].push_back(start);
                 }

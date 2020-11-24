@@ -1,4 +1,5 @@
 #pragma once
+#include "AtlasUtil/Graph.h"
 #include "AtlasUtil/Print.h"
 #include <fstream>
 #include <llvm/IR/Module.h>
@@ -28,9 +29,9 @@ inline std::vector<std::unique_ptr<llvm::Module>> LoadBitcodes(const std::vector
     return result;
 }
 
-inline std::vector<std::vector<uint64_t>> LoadCSV(const std::string &path)
+inline Graph<uint64_t> LoadCSV(const std::string &path)
 {
-    std::vector<std::vector<uint64_t>> result;
+    Graph<uint64_t> result;
     std::fstream inputFile;
     inputFile.open(path, std::ios::in);
     std::string ln;
@@ -43,8 +44,14 @@ inline std::vector<std::vector<uint64_t>> LoadCSV(const std::string &path)
         {
             lVec.push_back(std::stoull(sub));
         }
-        result.push_back(lVec);
+        result.WeightMatrix.push_back(lVec);
     }
     inputFile.close();
+    //temporary, needs modification for the future
+    for(uint64_t i = 0; i < result.WeightMatrix.size(); i++)
+    {
+        result.IndexAlias[i].push_back(i);
+        result.LocationAlias[i] = i;
+    }
     return result;
 }

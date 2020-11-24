@@ -163,10 +163,11 @@ int main(int argc, char **argv)
     }
     spdlog::trace("Set logging level");
     vector<unique_ptr<Module>> bitcodes = LoadBitcodes(bitcodeFiles);
-    vector<Module *> bitcodePtrs;
+    vector<Module *> bitcodePtrs(bitcodes.size());
+    uint64_t i = 0;
     for (const auto &b : bitcodes)
     {
-        bitcodePtrs.push_back(b.get());
+        bitcodePtrs[i++] = b.get();
     }
 
     if (!Preformat)

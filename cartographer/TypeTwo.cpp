@@ -26,7 +26,7 @@ namespace TypeTwo
     std::set<std::set<int64_t>> kernels;
     void Setup(vector<llvm::Module *> &bitcodes, std::set<std::set<int64_t>> k)
     {
-        int64_t maxBlockId = 0;
+        uint64_t maxBlockId = 0;
         for (auto &bitcode : bitcodes)
         {
             for (auto &mi : *bitcode)
@@ -35,7 +35,10 @@ namespace TypeTwo
                 {
                     auto b = cast<BasicBlock>(fi);
                     auto id = GetBlockID(b);
-                    maxBlockId = max(id, maxBlockId);
+                    if (id != -1)
+                    {
+                        maxBlockId = max((uint64_t)id, maxBlockId);
+                    }
                 }
             }
         }

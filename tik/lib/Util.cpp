@@ -19,11 +19,11 @@ namespace TraceAtlas::tik
 
     void PopulateIdMap(llvm::Module *M)
     {
-        for (auto mi = M->begin(); mi != M->end(); mi++)
+        for (auto & mi : *M)
         {
-            for (auto fi = mi->begin(); fi != mi->end(); fi++)
+            for (auto & fi : mi)
             {
-                for (auto bi = fi->begin(); bi != fi->end(); bi++)
+                for (auto bi = fi.begin(); bi != fi.end(); bi++)
                 {
                     auto inst = cast<Instruction>(bi);
                     uint32_t numOps = inst->getNumOperands();

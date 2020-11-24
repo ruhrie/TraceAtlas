@@ -43,12 +43,12 @@ if(${ENABLE_LINTER})
     set(CMAKE_CXX_CLANG_TIDY 
         ${TIDY};
         --warnings-as-errors=*;
-        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type;
+        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type,-readability-uppercase-literal-suffix;
         )
     set(CMAKE_C_CLANG_TIDY 
         ${TIDY};
         --warnings-as-errors=*;
-        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,-clang-analyzer-security.insecureAPI.*;
+        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,-clang-analyzer-security.insecureAPI.*,-readability-uppercase-literal-suffix;
         )
     add_compile_options(-Werror)
 endif()

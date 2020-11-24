@@ -1,12 +1,14 @@
 #include "AtlasUtil/Format.h"
+#include "AtlasUtil/Graph.h"
 #include "AtlasUtil/IO.h"
 #include "AtlasUtil/Traces.h"
 #include "Dijkstra.h"
-#include "Graph.h"
 #include "GraphTransforms.h"
+#include "Kernel.h"
 #include <One.h>
 #include <algorithm>
 #include <fstream>
+#include <iostream>
 #include <llvm/Support/CommandLine.h>
 #include <map>
 #include <nlohmann/json.hpp>
@@ -27,22 +29,55 @@ set<string> currentLabels;
 int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
-    auto M = LoadBitcode(BitcodeFilename);
     auto csvData = LoadCSV(InputFilename);
+    /*
+    auto M = LoadBitcode(BitcodeFilename);
     auto mp = M.get();
     if (!Preformat)
     {
         Format(M.get());
     }
+    */
 
     auto probabilityGraph = ProbabilityTransform(csvData);
+
+    bool change = true;
+    set<Kernel> kernels;
+    while (change)
+    {
+        change = false;
+        int priorSize = kernels.size();
+        //start by adding new kernels
+        for (int i = 0; i < probabilityGraph.WeightMatrix.size(); i++)
+        {
+            auto path = Dijkstra(probabilityGraph, i, i);
+            if (!path.empty())
+            {
+                auto newKernel = Kernel(path);
+                kernels.insert(newKernel);
+                cout << "hi";
+            }
+        }
+        if (priorSize != kernels.size())
+        {
+            change = true;
+        }
+
+        //now that we added new kernels, legalize them
+        for (auto &kernel : kernels)
+        {
+            if (!kernel.IsLegal(probabilityGraph, kernels))
+            {
+                throw AtlasException("Unimplemented");
+            }
+        }
+        //now rebuild the graph with kernels collapsed
+        probabilityGraph = GraphCollapse(probabilityGraph, kernels);
+    }
 
     auto a = Dijkstra(probabilityGraph, 0, 0);
 
     nlohmann::json outputJson;
-
-    auto s1 = StepOne(csvData);
-    outputJson["Kernels"] = s1;
 
     ofstream oStream(OutputFilename);
     oStream << outputJson;

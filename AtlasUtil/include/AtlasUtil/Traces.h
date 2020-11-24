@@ -135,6 +135,7 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
     while (notDone)
     {
         // read a block size of the trace
+        ret = Z_OK;
         inputTrace.read(dataArray, BLOCK_SIZE);
         int64_t bytesRead = inputTrace.gcount();
         if (compressed)
@@ -160,8 +161,8 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
         }
 
         index++;
-        notDone = (ret != Z_STREAM_END);
-        if (index > blocks)
+        //notDone = (ret != Z_STREAM_END);
+        if (index > blocks || ret == Z_STREAM_END)
         {
             notDone = false;
         }

@@ -6,7 +6,7 @@ using namespace std;
 
 const uint64_t minIteration = 512;
 
-bool isStronglyConnected(const std::vector<std::vector<uint64_t>> &matrix, const set<uint64_t> nodes)
+bool isStronglyConnected(const std::vector<std::vector<uint64_t>> &matrix, const set<uint64_t> &nodes)
 {
     for (auto n : nodes)
     {
@@ -36,13 +36,13 @@ bool isStronglyConnected(const std::vector<std::vector<uint64_t>> &matrix, const
                         }
                     }
                 }
-                if (nextVisit.empty())
+                if (!nextVisit.empty())
                 {
-                    break;
+                    toVisit = nextVisit;
                 }
                 else
                 {
-                    toVisit = nextVisit;
+                    break;
                 }
             }
 
@@ -61,17 +61,19 @@ std::set<std::set<uint64_t>> StepOne(const std::vector<std::vector<uint64_t>> &m
 
     //first get all edges over some arbitrary minimum (for now)
     vector<tuple<uint64_t, uint64_t, uint64_t>> minCounts;
-    for (int i = 0; i < matrix.size(); i++)
+    int i = 0; 
+    int j = 0;
+    for (const auto &row : matrix)
     {
-        auto row = matrix[i];
-        for (int j = 0; j < row.size(); j++)
+        for (const auto &entry : row)
         {
-            auto entry = row[j];
             if (entry >= minIteration)
             {
-                minCounts.push_back({i, j, entry});
+                minCounts.emplace_back(i, j, entry);
             }
+            j++;
         }
+        i++;
     }
 
     sort(minCounts.begin(), minCounts.end(),
@@ -92,21 +94,23 @@ std::set<std::set<uint64_t>> StepOne(const std::vector<std::vector<uint64_t>> &m
             vector<tuple<uint64_t, uint64_t>> potentials;
             for (auto ki : k)
             {
-                for (int i = 0; i < matrix[ki].size(); i++)
+                uint64_t i = 0;
+                for (uint64_t j : matrix[ki])// uint64_t i = 0; i < matrix[ki].size(); i++)
                 {
-                    if (matrix[ki][i] != 0)
+                    if (j != 0)
                     {
-                        potentials.push_back({i, matrix[ki][i]});
+                        potentials.emplace_back(i, matrix[ki][i]);
                     }
+                    i++;
                 }
             }
             sort(potentials.begin(), potentials.end(),
                  [](const tuple<uint64_t, uint64_t> &a, const tuple<uint64_t, uint64_t> &b) -> bool {
                      return get<1>(a) > get<1>(b);
                  });
-            for (int i = 0; i < potentials.size(); i++)
+            for (auto &potential : potentials)
             {
-                auto block = get<0>(potentials[i]);
+                auto block = get<0>(potential);
                 if (k.find(block) == k.end())
                 {
                     k.insert(block);

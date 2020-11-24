@@ -1,5 +1,10 @@
 #pragma once
+#include "AtlasUtil/Graph.h"
+#include "Kernel.h"
+#include <set>
 #include <stdint.h>
 #include <vector>
 
-std::vector<std::vector<float>> ProbabilityTransform(std::vector<std::vector<uint64_t>> input);
+Graph<float> ProbabilityTransform(Graph<uint64_t> input);
+
+Graph<float> GraphCollapse(Graph<float> base, const std::set<Kernel> &kernels);
