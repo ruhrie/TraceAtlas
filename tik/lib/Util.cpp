@@ -19,9 +19,9 @@ namespace TraceAtlas::tik
 
     void PopulateIdMap(llvm::Module *M)
     {
-        for (auto & mi : *M)
+        for (auto &mi : *M)
         {
-            for (auto & fi : mi)
+            for (auto &fi : mi)
             {
                 for (auto bi = fi.begin(); bi != fi.end(); bi++)
                 {

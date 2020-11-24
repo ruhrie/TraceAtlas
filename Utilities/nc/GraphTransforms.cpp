@@ -113,7 +113,7 @@ Graph<float> GraphCollapse(Graph<float> base, const set<Kernel> &kernels)
     int popCount = result.IndexAlias.size();
     for (int i = 0; i < popCount; i++)
     {
-        result.WeightMatrix.push_back(vector<float>(popCount));
+        result.WeightMatrix.emplace_back(popCount);
     }
 
     //merge the weights
