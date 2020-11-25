@@ -70,4 +70,8 @@ set_target_properties(JR
 
 install(TARGETS JR RUNTIME DESTINATION bin)
 
-add_subdirectory(nc)
+OPTION(BUILD_EXPERIMENTAL "Build experimental tools" OFF)
+
+if(${BUILD_EXPERIMENTAL})
+    add_subdirectory(nc)
+endif()

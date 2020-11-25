@@ -19,7 +19,7 @@ struct DistanceTuple
     {
         key = -1;
     }
-    bool operator<(const DistanceTuple &x)
+    bool operator<(const DistanceTuple &x) const
     {
         return distance < x.distance;
     }
