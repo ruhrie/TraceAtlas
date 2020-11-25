@@ -6,8 +6,8 @@
 #include "GraphTransforms.h"
 #include "Kernel.h"
 #include <algorithm>
+#include <cfloat>
 #include <fstream>
-#include <iostream>
 #include <llvm/Support/CommandLine.h>
 #include <map>
 #include <nlohmann/json.hpp>
@@ -49,7 +49,6 @@ int main(int argc, char **argv)
                     newKernel.Blocks.insert(probabilityGraph.IndexAlias[step].begin(), probabilityGraph.IndexAlias[step].end());
                 }
                 kernels.insert(newKernel);
-                cout << "hi";
             }
         }
         if (priorSize != kernels.size())
@@ -57,12 +56,52 @@ int main(int argc, char **argv)
             change = true;
         }
 
-        //now that we added new kernels, legalize them
-        for (auto &kernel : kernels)
+        //now that we added new kernels, legalize them'
+        bool change = true;
+        while (change)
         {
-            if (!kernel.IsLegal(baseGraph, kernels))
+            change = false;
+            Kernel fuseA;
+            Kernel fuseB;
+            for (auto &kernel : kernels)
             {
-                throw AtlasException("Unimplemented");
+                if (!kernel.IsLegal(baseGraph, kernels))
+                {
+                    float minScore = FLT_MAX;
+                    Kernel currentCandidate;
+                    for (const auto &cComp : kernels)
+                    {
+                        if (kernel != cComp)
+                        {
+                            float score = kernel.ScoreSimilarity(cComp, csvData, baseGraph);
+                            if (score != -1 && score < minScore)
+                            {
+                                minScore = score;
+                                currentCandidate = cComp;
+                            }
+                        }
+                    }
+                    if (minScore == FLT_MAX)
+                    {
+                        throw AtlasException("Unimplemented");
+                    }
+                    else
+                    {
+                        fuseA = kernel;
+                        fuseB = currentCandidate;
+                        //kernel.Blocks.insert(currentCandidate.Blocks.begin(), currentCandidate.Blocks.end());
+                        //kernels.erase(currentCandidate);
+                        change = true;
+                        break;
+                    }
+                }
+            }
+            if (change)
+            {
+                kernels.erase(fuseA);
+                kernels.erase(fuseB);
+                fuseA.Blocks.insert(fuseB.Blocks.begin(), fuseB.Blocks.end());
+                kernels.insert(fuseA);
             }
         }
         //now rebuild the graph with kernels collapsed
