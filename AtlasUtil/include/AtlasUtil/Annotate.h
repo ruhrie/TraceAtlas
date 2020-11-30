@@ -1,6 +1,6 @@
 #pragma once
+#include "AtlasUtil/Exceptions.h"
 #include <filesystem>
-#include <iostream>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DIBuilder.h>
 #include <llvm/IR/Instruction.h>
@@ -275,6 +275,92 @@ inline int64_t GetValueID(llvm::Value *val)
         }
     }
     return result;
+}
+
+inline void RecurseThroughOperands(llvm::Value *val, std::map<int64_t, llvm::Value *> &IDToValue)
+{
+    if (auto inst = llvm::dyn_cast<llvm::Instruction>(val))
+    {
+        if (GetValueID(inst) < 0)
+        {
+            throw AtlasException("Found an instruction that did not have a ValueID.");
+        }
+        if (IDToValue.find(GetValueID(val)) == IDToValue.end())
+        {
+            IDToValue[GetValueID(val)] = val;
+        }
+        else
+        {
+            return;
+        }
+        for (unsigned int i = 0; i < inst->getNumOperands(); i++)
+        {
+            if (auto subVal = llvm::dyn_cast<llvm::Value>(inst->getOperand(i)))
+            {
+                RecurseThroughOperands(subVal, IDToValue);
+            }
+        }
+    }
+    else if (auto go = llvm::dyn_cast<llvm::GlobalObject>(val))
+    {
+        if (GetValueID(go) < 0)
+        {
+            throw AtlasException("Found a global object that did not have a ValueID.");
+        }
+        if (IDToValue.find(GetValueID(val)) == IDToValue.end())
+        {
+            IDToValue[GetValueID(go)] = val;
+        }
+        else
+        {
+            return;
+        }
+        for (unsigned int i = 0; i < go->getNumOperands(); i++)
+        {
+            if (auto subVal = llvm::dyn_cast<llvm::Value>(go->getOperand(i)))
+            {
+                RecurseThroughOperands(subVal, IDToValue);
+            }
+        }
+    }
+    else if (auto arg = llvm::dyn_cast<llvm::Argument>(val))
+    {
+        if (GetValueID(arg) < 0)
+        {
+            throw AtlasException("Found a global object that did not have a ValueID.");
+        }
+        if (IDToValue.find(GetValueID(val)) == IDToValue.end())
+        {
+            IDToValue[GetValueID(arg)] = val;
+        }
+        else
+        {
+            return;
+        }
+    }
+}
+
+inline void InitializeIDMaps(llvm::Module *M, std::map<int64_t, llvm::BasicBlock *> &IDToBlock, std::map<int64_t, llvm::Value *> &IDToValue)
+{
+    for (auto &F : *M)
+    {
+        for (auto BB = F.begin(); BB != F.end(); BB++)
+        {
+            auto *block = llvm::cast<llvm::BasicBlock>(BB);
+            if ((GetBlockID(block) >= 0) && (IDToBlock[GetBlockID(block)] == nullptr))
+            {
+                IDToBlock[GetBlockID(block)] = block;
+            }
+            for (auto it = block->begin(); it != block->end(); it++)
+            {
+                auto inst = llvm::cast<llvm::Instruction>(it);
+                if (auto val = llvm::dyn_cast<llvm::Value>(inst))
+                {
+                    RecurseThroughOperands(val, IDToValue);
+                }
+            }
+        }
+    }
 }
 
 inline void findLine(const std::vector<std::string> &modLines, const std::string &name, unsigned int &lineNo, bool inst = false)

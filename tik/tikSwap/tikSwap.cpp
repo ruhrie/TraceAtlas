@@ -75,7 +75,7 @@ int main(int argc, char *argv[])
         }
     }
     // Initialize our IDtoX maps
-    InitializeIDMaps(sourceBitcode.get());
+    InitializeIDMaps(sourceBitcode.get(), IDToBlock, IDToValue);
 
     // load the tik IR
     LLVMContext tikContext;

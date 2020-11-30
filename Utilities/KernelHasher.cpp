@@ -1,5 +1,4 @@
 #include "AtlasUtil/Format.h"
-#include "tik/Util.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instruction.h"
@@ -17,18 +16,17 @@
 #include <set>
 #include <unordered_map>
 #include <vector>
+#include <spdlog/spdlog.h>
 
 using namespace llvm;
 using json = nlohmann::json;
 using namespace std;
-using namespace TraceAtlas::tik;
 
 cl::opt<std::string> InputFilename("i", cl::desc("Specify input bitcode"), cl::value_desc("bitcode filename"), cl::Required);
 cl::opt<std::string> OutputFilename("o", cl::desc("Specify output json"), cl::value_desc("output filename"));
 cl::opt<std::string> KernelFilename("k", cl::desc("Specify kernel json"), cl::value_desc("kernel filename"), cl::Required);
 
 static int UID = 0;
-
 static int valueId = 0;
 
 string getName()
@@ -48,7 +46,9 @@ int main(int argc, char **argv)
     CleanModule(mptr.get());
     Format(mptr.get());
 
-    InitializeIDMaps(mptr.get());
+    map<int64_t, BasicBlock *> IDToBlock;
+    map<int64_t, Value *> IDToValue;
+    InitializeIDMaps(mptr.get(), IDToBlock, IDToValue);
 
     ifstream inputJson;
     nlohmann::json j;
@@ -60,8 +60,8 @@ int main(int argc, char **argv)
     }
     catch (exception &e)
     {
-        std::cerr << "Couldn't open input json file: " << KernelFilename << "\n";
-        std::cerr << e.what() << '\n';
+        spdlog::error("Couldn't open input json file: " + KernelFilename);
+        spdlog::error(e.what());
         return EXIT_FAILURE;
     }
 

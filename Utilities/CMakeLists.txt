@@ -11,9 +11,8 @@ add_executable(kernelHasher KernelHasher.cpp)
 
 set_target_properties(kernelHasher PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 target_compile_definitions(kernelHasher PUBLIC ${LLVM_DEFINITIONS})
-target_link_libraries(kernelHasher ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json libtik AtlasUtil)
+target_link_libraries(kernelHasher ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
 target_include_directories(kernelHasher SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
-target_include_directories(kernelHasher PRIVATE "${PROJECT_SOURCE_DIR}/tik/lib/include/")
 
 install(TARGETS kernelHasher RUNTIME DESTINATION bin)
 
@@ -21,7 +20,7 @@ add_executable(dagExtractor DagExtractor.cpp)
 
 set_target_properties(dagExtractor PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 target_compile_definitions(dagExtractor PUBLIC ${LLVM_DEFINITIONS})
-target_link_libraries(dagExtractor ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json  AtlasUtil)
+target_link_libraries(dagExtractor ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
 target_include_directories(dagExtractor SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
 
 install(TARGETS dagExtractor RUNTIME DESTINATION bin)
@@ -76,3 +75,10 @@ OPTION(BUILD_EXPERIMENTAL "Build experimental tools" OFF)
 if(${BUILD_EXPERIMENTAL})
     add_subdirectory(nc)
 endif()
+
+add_executable(workingSet WorkingSetAnalysis.cpp WorkingSet.cpp)
+set_target_properties(workingSet PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+target_compile_definitions(workingSet PUBLIC ${LLVM_DEFINITIONS})
+target_link_libraries(workingSet ${llvm_libs}  AtlasUtil)
+
+install(TARGETS workingSet RUNTIME DESTINATION bin)

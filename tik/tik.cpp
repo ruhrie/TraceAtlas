@@ -183,7 +183,7 @@ int main(int argc, char *argv[])
     }
 
     /// Initialize our IDtoX maps
-    InitializeIDMaps(base);
+    InitializeIDMaps(base, IDToBlock, IDToValue);
 
     TikModule = new Module(InputFile, context);
     TikModule->setDataLayout(base->getDataLayout());
