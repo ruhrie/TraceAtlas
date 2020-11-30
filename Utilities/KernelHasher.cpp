@@ -14,9 +14,9 @@
 #include <map>
 #include <nlohmann/json.hpp>
 #include <set>
+#include <spdlog/spdlog.h>
 #include <unordered_map>
 #include <vector>
-#include <spdlog/spdlog.h>
 
 using namespace llvm;
 using json = nlohmann::json;

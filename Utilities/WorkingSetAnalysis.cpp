@@ -57,6 +57,7 @@ int main(int argc, char **argv)
         default:
         {
             spdlog::warn("Invalid logging level: " + to_string(LogLevel));
+            break;
         }
     }
 
