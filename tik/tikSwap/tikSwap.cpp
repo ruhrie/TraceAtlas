@@ -31,6 +31,7 @@ cl::opt<string> OriginalBitcode("b", cl::Required, cl::desc("<input original bit
 cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"), cl::init("tikSwap.bc"));
 cl::opt<bool> ASCIIFormat("S", cl::desc("Output json as human-readable ASCII text"));
 cl::opt<bool> Debug("g", cl::desc("Inject debugging symbols into output bitcode"));
+cl::opt<bool> Preformat("pf", llvm::cl::desc("Bitcode is preformatted"), llvm::cl::value_desc("Bitcode is preformatted"));
 
 int main(int argc, char *argv[])
 {
@@ -59,7 +60,12 @@ int main(int argc, char *argv[])
     }
     // Annotate its bitcodes and values
     CleanModule(sourceBitcode.get());
-    Format(sourceBitcode.get());
+    if (!Preformat)
+    {
+        Format(base);
+    }
+    // create a map for its block and value IDs
+    map<int64_t, BasicBlock *> baseBlockMap;
     // change all non-external function definitions to default linkage type
     for (auto &F : *sourceBitcode)
     {

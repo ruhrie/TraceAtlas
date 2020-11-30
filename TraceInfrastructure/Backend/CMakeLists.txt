@@ -1,4 +1,4 @@
-set(SOURCES BackendTrace.c)
+set(SOURCES BackendTrace.c BackendMarkov.c)
 if(NOT WIN32)
     list(APPEND SOURCES BackendPapi.c)
 endif()
@@ -9,7 +9,7 @@ set_target_properties(
     OUTPUT_NAME AtlasBackend
 )
 
-target_link_libraries(AtlasBackend ${llvm_libs} ZLIB::ZLIB)
+target_link_libraries(AtlasBackend ${llvm_libs} ZLIB::ZLIB nlohmann_json nlohmann_json::nlohmann_json)
 target_include_directories(AtlasBackend PUBLIC ${TRACE_INC})
 if(WIN32)
     target_compile_options(AtlasBackend PRIVATE -W3 -Wextra -Wconversion)

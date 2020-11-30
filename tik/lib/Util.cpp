@@ -83,7 +83,6 @@ namespace TraceAtlas::tik
 
     void InitializeIDMaps(llvm::Module *M)
     {
-        set<BasicBlock *> wholeBitcode;
         for (auto &F : *M)
         {
             for (auto BB = F.begin(); BB != F.end(); BB++)

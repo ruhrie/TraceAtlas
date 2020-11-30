@@ -1,15 +1,18 @@
 #pragma once
-#include <llvm/IR/Function.h>
 #include <llvm/Pass.h>
 using namespace llvm;
+
 namespace DashTracer
 {
     namespace Passes
     {
-        struct PapiIO : public ModulePass
+        /// <summary>
+        /// The TraceIO pass inserts file IO instructions to the source bitcode.
+        /// </summary>
+        struct MarkovIO : public ModulePass
         {
             static char ID;
-            PapiIO() : ModulePass(ID) {}
+            MarkovIO() : ModulePass(ID) {}
             bool runOnModule(Module &M) override;
             void getAnalysisUsage(AnalysisUsage &AU) const override;
             bool doInitialization(Module &M) override;

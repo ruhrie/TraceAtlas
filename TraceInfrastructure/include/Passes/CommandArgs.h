@@ -1,5 +1,4 @@
-#ifndef COMMANDARGS_H
-#define COMMANDARGS_H
+#pragma once
 #include <llvm/Support/CommandLine.h>
 #include <string>
 
@@ -19,5 +18,3 @@ extern cl::opt<bool> DumpLoads;
 extern cl::opt<bool> DumpStores;
 
 extern cl::opt<std::string> LibraryName;
-
-#endif

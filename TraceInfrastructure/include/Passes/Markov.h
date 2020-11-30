@@ -1,16 +1,19 @@
 #pragma once
-#include <llvm/IR/Function.h>
 #include <llvm/Pass.h>
+
 using namespace llvm;
+
+#pragma clang diagnostic ignored "-Woverloaded-virtual"
+
 namespace DashTracer
 {
     namespace Passes
     {
-        struct PapiIO : public ModulePass
+        struct Markov : public FunctionPass
         {
             static char ID;
-            PapiIO() : ModulePass(ID) {}
-            bool runOnModule(Module &M) override;
+            Markov() : FunctionPass(ID) {}
+            bool runOnFunction(Function &F) override;
             void getAnalysisUsage(AnalysisUsage &AU) const override;
             bool doInitialization(Module &M) override;
         };

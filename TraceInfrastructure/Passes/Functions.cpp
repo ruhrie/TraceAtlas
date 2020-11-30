@@ -13,4 +13,7 @@ namespace DashTracer::Passes
     Function *DumpLoadValue;
     Function *fullFunc;
     Function *fullAddrFunc;
+    Function *MarkovOpen;
+    Function *MarkovClose;
+    Function *MarkovIncrement;
 } // namespace DashTracer::Passes

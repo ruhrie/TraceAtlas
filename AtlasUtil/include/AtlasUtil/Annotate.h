@@ -151,14 +151,15 @@ inline void Annotate(llvm::Function *F, uint64_t &startingIndex, uint64_t &valIn
     }
 }
 
+inline uint64_t TraceAtlasIndex = 0;
+inline uint64_t TraceAtlasValueIndex = 0;
+
 inline void Annotate(llvm::Module *M)
 {
-    uint64_t index = 0;
-    uint64_t valIndex = 0;
     for (auto mi = M->begin(); mi != M->end(); mi++)
     {
         llvm::Function *F = llvm::cast<llvm::Function>(mi);
-        Annotate(F, index, valIndex);
+        Annotate(F, TraceAtlasIndex, TraceAtlasValueIndex);
     }
 }
 
@@ -409,4 +410,35 @@ inline void DebugExports(llvm::Module *mod, const std::string &fileName)
         }
     }
     DBuild.finalize();
+inline void SetFunctionAnnotation(llvm::Function *F, std::string key, int64_t value)
+{
+    llvm::MDNode *idNode = llvm::MDNode::get(F->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(F->getContext()), (uint64_t)value)));
+    F->setMetadata(key, idNode);
+}
+
+inline int64_t GetFunctionAnnotation(llvm::Function *F, std::string key)
+{
+    int64_t result = -1;
+    if (llvm::MDNode *node = F->getMetadata(key))
+    {
+        auto ci = llvm::cast<llvm::ConstantInt>(llvm::cast<llvm::ConstantAsMetadata>(node->getOperand(0))->getValue());
+        result = ci->getSExtValue();
+    }
+    return result;
+}
+
+inline uint64_t GetBlockCount(llvm::Module *M)
+{
+    uint64_t result = 0;
+    for (auto mi = M->begin(); mi != M->end(); mi++)
+    {
+        for (auto &fi : *mi)
+        {
+            if (llvm::isa<llvm::BasicBlock>(fi))
+            {
+                result++;
+            }
+        }
+    }
+    return result;
 }

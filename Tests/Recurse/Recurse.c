@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#define WIDTH 1024
+const int WIDTH = 1024;
 
 void Recurse(int *input, int *output, int i)
 {
