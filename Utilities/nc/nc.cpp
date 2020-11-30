@@ -101,7 +101,7 @@ int main(int argc, char **argv)
         }
         //step 2: fuse kernels that paritally overlap
         set<Kernel> stepTwoKernels;
-        for (Kernel kernel : stepOneKernels)
+        for (const Kernel &kernel : stepOneKernels)
         {
             while (true)
             {
@@ -116,7 +116,7 @@ int main(int argc, char **argv)
         }
 
         //step 3: sanity check to make sure they are all legal
-        for (Kernel kernel : stepTwoKernels)
+        for (const Kernel &kernel : stepTwoKernels)
         {
             auto legality = kernel.IsLegal(baseGraph, stepTwoKernels, probabilityGraph);
             if (legality != Legality::Legal)

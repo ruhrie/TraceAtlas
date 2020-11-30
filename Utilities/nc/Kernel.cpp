@@ -83,7 +83,7 @@ Legality Kernel::IsLegal(const Graph<float> &graph, const set<Kernel> &kernels, 
                 for (int i = 0; i < probGraph.WeightMatrix.size(); i++)
                 {
                     float weight = probGraph.WeightMatrix[i][blockLoc];
-                    if (weight != std::numeric_limits<float>::infinity() && !isnanf(weight))
+                    if (weight != std::numeric_limits<float>::infinity() && !isnan(weight) )
                     {
                         //this node is a predecessor, if it is an entrance it will not be in kComp
                         auto enterBlocks = probGraph.IndexAlias.at(i);
@@ -132,7 +132,8 @@ float Kernel::ScoreSimilarity(const Kernel &compare, const Graph<uint64_t> &grap
 {
     //first check that they aren't hierarchical (If they are then why bother merging)
     //note that this part is asymetric
-    set<uint64_t> diffA, diffB;
+    set<uint64_t> diffA;
+    set<uint64_t> diffB;
     set_difference(Blocks.begin(), Blocks.end(), compare.Blocks.begin(), compare.Blocks.end(), std::inserter(diffA, diffA.begin()));
     set_difference(compare.Blocks.begin(), compare.Blocks.end(), Blocks.begin(), Blocks.end(), std::inserter(diffB, diffB.begin()));
 
