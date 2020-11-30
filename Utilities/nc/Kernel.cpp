@@ -25,7 +25,7 @@ bool Kernel::operator!=(const Kernel &x) const
     return Blocks != x.Blocks;
 }
 
-bool Kernel::IsLegal(const Graph<float> &graph, const set<Kernel> &kernels, const Graph<float> &probGraph) const
+Legality Kernel::IsLegal(const Graph<float> &graph, const set<Kernel> &kernels, const Graph<float> &probGraph) const
 {
     //requirement 1: is strongly connected
     for (const auto &blockA : Blocks)
@@ -36,23 +36,13 @@ bool Kernel::IsLegal(const Graph<float> &graph, const set<Kernel> &kernels, cons
             if (path.empty())
             {
                 //there is no path
-                return false;
+                return Legality::RuleOne;
             }
         }
     }
     //requirement 2: no partial overlaps
-    for (auto &kComp : kernels)
-    {
-        set<uint64_t> intersection;
-        set_intersection(kComp.Blocks.begin(), kComp.Blocks.end(), Blocks.begin(), Blocks.end(), std::inserter(intersection, intersection.begin()));
-        if (!intersection.empty()) //at least part intersects
-        {
-            if (intersection != Blocks && intersection != kComp.Blocks) //check if a superset or a subset
-            {
-                return false;
-            }
-        }
-    }
+    //check this last
+
     //requirement 3: more probable to stay inside than out
     for (const auto &block : Blocks)
     {
@@ -69,7 +59,7 @@ bool Kernel::IsLegal(const Graph<float> &graph, const set<Kernel> &kernels, cons
         }
         if (find(Blocks.begin(), Blocks.end(), minBlock) == Blocks.end()) //more probable to leave
         {
-            return false;
+            return Legality::RuleThree;
         }
     }
     //requirement 4: a hierarchy must have a distinct entrace
@@ -98,7 +88,7 @@ bool Kernel::IsLegal(const Graph<float> &graph, const set<Kernel> &kernels, cons
                         //this node is a predecessor, if it is an entrance it will not be in kComp
                         auto enterBlocks = probGraph.IndexAlias.at(i);
                         bool external = false;
-                        for(auto entrance : enterBlocks)
+                        for (auto entrance : enterBlocks)
                         {
                             if (kComp.Blocks.find(entrance) == kComp.Blocks.end())
                             {
@@ -106,27 +96,52 @@ bool Kernel::IsLegal(const Graph<float> &graph, const set<Kernel> &kernels, cons
                                 break;
                             }
                         }
-                        if(external)
+                        if (external)
                         {
                             entranceCount += 1;
                         }
                     }
                 }
             }
-            if(entranceCount == 0)
+            if (entranceCount == 0)
             {
-                return false;
+                return Legality::RuleFour;
+            }
+        }
+    }
+
+    //now rule 2
+    for (auto &kComp : kernels)
+    {
+        set<uint64_t> intersection;
+        set_intersection(kComp.Blocks.begin(), kComp.Blocks.end(), Blocks.begin(), Blocks.end(), std::inserter(intersection, intersection.begin()));
+        if (!intersection.empty()) //at least part intersects
+        {
+            if (intersection != Blocks && intersection != kComp.Blocks) //check if a superset or a subset
+            {
+                return Legality::RuleTwo;
             }
         }
     }
 
     //all clear, so is valid
-    return true;
+    return Legality::Legal;
 }
 
 float Kernel::ScoreSimilarity(const Kernel &compare, const Graph<uint64_t> &graph, const Graph<float> &probGraph) const
 {
-    //first check that a fusion is strongly connected
+    //first check that they aren't hierarchical (If they are then why bother merging)
+    //note that this part is asymetric
+    set<uint64_t> diffA, diffB;
+    set_difference(Blocks.begin(), Blocks.end(), compare.Blocks.begin(), compare.Blocks.end(), std::inserter(diffA, diffA.begin()));
+    set_difference(compare.Blocks.begin(), compare.Blocks.end(), Blocks.begin(), Blocks.end(), std::inserter(diffB, diffB.begin()));
+
+    if (diffB.empty())
+    {
+        return -1;
+    }
+
+    //second check that a fusion is strongly connected
     set<uint64_t> fusedSet;
     fusedSet.insert(Blocks.begin(), Blocks.end());
     fusedSet.insert(compare.Blocks.begin(), compare.Blocks.end());

@@ -56,17 +56,26 @@ int main(int argc, char **argv)
             change = true;
         }
 
-        //now that we added new kernels, legalize them'
+        //now that we added new kernels, legalize them
+        //step 1: grow kernels to have the most probable paths
         bool change = true;
+        bool fuse = false;
+        set<Kernel> stepOneKernels;
         while (change)
         {
             change = false;
             Kernel fuseA;
             Kernel fuseB;
-            for (auto &kernel : kernels)
+            bool fuse = false;
+            for (Kernel kernel : kernels)
             {
-                if (!kernel.IsLegal(baseGraph, kernels, probabilityGraph))
+                while (true)
                 {
+                    auto legality = kernel.IsLegal(baseGraph, kernels, probabilityGraph);
+                    if (legality == Legality::Legal || legality == Legality::RuleTwo)
+                    {
+                        break;
+                    }
                     float minScore = FLT_MAX;
                     Kernel currentCandidate;
                     for (const auto &cComp : kernels)
@@ -85,25 +94,41 @@ int main(int argc, char **argv)
                     {
                         throw AtlasException("Unimplemented");
                     }
-                    else
-                    {
-                        fuseA = kernel;
-                        fuseB = currentCandidate;
-                        //kernel.Blocks.insert(currentCandidate.Blocks.begin(), currentCandidate.Blocks.end());
-                        //kernels.erase(currentCandidate);
-                        change = true;
-                        break;
-                    }
+                    kernel.Blocks.insert(currentCandidate.Blocks.begin(), currentCandidate.Blocks.end());
                 }
-            }
-            if (change)
-            {
-                kernels.erase(fuseA);
-                kernels.erase(fuseB);
-                fuseA.Blocks.insert(fuseB.Blocks.begin(), fuseB.Blocks.end());
-                kernels.insert(fuseA);
+                stepOneKernels.insert(kernel);
             }
         }
+        //step 2: fuse kernels that paritally overlap
+        set<Kernel> stepTwoKernels;
+        for (Kernel kernel : stepOneKernels)
+        {
+            while (true)
+            {
+                auto legality = kernel.IsLegal(baseGraph, stepOneKernels, probabilityGraph);
+                if (legality == Legality::Legal)
+                {
+                    break;
+                }
+                throw AtlasException("Unimplemented");
+            }
+            stepTwoKernels.insert(kernel);
+        }
+
+        //step 3: sanity check to make sure they are all legal
+        for (Kernel kernel : stepTwoKernels)
+        {
+            auto legality = kernel.IsLegal(baseGraph, stepTwoKernels, probabilityGraph);
+            if (legality != Legality::Legal)
+            {
+                throw AtlasException("Illegal kernel formed");
+            }
+        }
+
+        //finally replace the prior kernels
+        kernels.clear();
+        kernels.insert(stepTwoKernels.begin(), stepTwoKernels.end());
+
         //now rebuild the graph with kernels collapsed
         probabilityGraph = GraphCollapse(probabilityGraph, kernels);
     }
