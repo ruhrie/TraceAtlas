@@ -410,6 +410,8 @@ inline void DebugExports(llvm::Module *mod, const std::string &fileName)
         }
     }
     DBuild.finalize();
+}
+
 inline void SetFunctionAnnotation(llvm::Function *F, std::string key, int64_t value)
 {
     llvm::MDNode *idNode = llvm::MDNode::get(F->getContext(), llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(llvm::Type::getInt64Ty(F->getContext()), (uint64_t)value)));

@@ -1629,7 +1629,7 @@ namespace TraceAtlas::tik
 
     void CartographerKernel::FixInvokes()
     {
-        auto F = TikModule->getOrInsertFunction("__gxx_personality_v0", Type::getInt32Ty(TikModule->getContext()));
+        TikModule->getOrInsertFunction("__gxx_personality_v0", Type::getInt32Ty(TikModule->getContext()));
         for (auto &fi : *KernelFunction)
         {
             for (auto bi = fi.begin(); bi != fi.end(); bi++)

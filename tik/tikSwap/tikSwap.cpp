@@ -62,7 +62,7 @@ int main(int argc, char *argv[])
     CleanModule(sourceBitcode.get());
     if (!Preformat)
     {
-        Format(base);
+        Format(sourceBitcode.get());
     }
     // create a map for its block and value IDs
     map<int64_t, BasicBlock *> baseBlockMap;
