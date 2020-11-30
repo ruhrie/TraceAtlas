@@ -65,7 +65,7 @@ int main(int argc, char **argv)
             Kernel fuseB;
             for (auto &kernel : kernels)
             {
-                if (!kernel.IsLegal(baseGraph, kernels))
+                if (!kernel.IsLegal(baseGraph, kernels, probabilityGraph))
                 {
                     float minScore = FLT_MAX;
                     Kernel currentCandidate;

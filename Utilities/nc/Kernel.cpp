@@ -25,7 +25,7 @@ bool Kernel::operator!=(const Kernel &x) const
     return Blocks != x.Blocks;
 }
 
-bool Kernel::IsLegal(const Graph<float> &graph, const set<Kernel> &kernels) const
+bool Kernel::IsLegal(const Graph<float> &graph, const set<Kernel> &kernels, const Graph<float> &probGraph) const
 {
     //requirement 1: is strongly connected
     for (const auto &blockA : Blocks)
@@ -72,6 +72,54 @@ bool Kernel::IsLegal(const Graph<float> &graph, const set<Kernel> &kernels) cons
             return false;
         }
     }
+    //requirement 4: a hierarchy must have a distinct entrace
+    //only enforce this on the child kernel, the parent is technically legal already
+    for (auto &kComp : kernels)
+    {
+        set<uint64_t> intersection;
+        set_intersection(kComp.Blocks.begin(), kComp.Blocks.end(), Blocks.begin(), Blocks.end(), std::inserter(intersection, intersection.begin()));
+        if (intersection.empty())
+        {
+            continue;
+        }
+        set<uint64_t> difference;
+        set_difference(kComp.Blocks.begin(), kComp.Blocks.end(), Blocks.begin(), Blocks.end(), std::inserter(difference, difference.begin()));
+        if (!difference.empty()) //there is a hierarchy (we already know it doesn't overlap partially by rule 2)
+        {
+            int entranceCount = 0;
+            for (auto &block : difference)
+            {
+                uint64_t blockLoc = probGraph.LocationAlias.at(block);
+                for (int i = 0; i < probGraph.WeightMatrix.size(); i++)
+                {
+                    float weight = probGraph.WeightMatrix[i][blockLoc];
+                    if (weight != std::numeric_limits<float>::infinity() && !isnanf(weight))
+                    {
+                        //this node is a predecessor, if it is an entrance it will not be in kComp
+                        auto enterBlocks = probGraph.IndexAlias.at(i);
+                        bool external = false;
+                        for(auto entrance : enterBlocks)
+                        {
+                            if (kComp.Blocks.find(entrance) == kComp.Blocks.end())
+                            {
+                                external = true;
+                                break;
+                            }
+                        }
+                        if(external)
+                        {
+                            entranceCount += 1;
+                        }
+                    }
+                }
+            }
+            if(entranceCount == 0)
+            {
+                return false;
+            }
+        }
+    }
+
     //all clear, so is valid
     return true;
 }
