@@ -31,8 +31,8 @@ jobs:
           CC: clang-9
           CXX: clang++-9
           LDFLAGS: -fuse-ld=lld-9
-        uses: lukka/run-cmake@v1
-        id: runcmake
+        uses: lukka/run-cmake@main
+        id: runcmake_cmd
         with:
           cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
           cmakeListsTxtPath: "${{ github.workspace }}/CMakeLists.txt"
