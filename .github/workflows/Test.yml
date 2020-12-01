@@ -11,21 +11,16 @@ jobs:
       - uses: actions/checkout@v1
         with:
           submodules: true
-      - name: Set environment variables
-        env:
-          vcpkgResponseFile: ${{github.workspace}}/vcpkg.txt
-        run: echo "::set-env name=vcpkgResponseFile::$vcpkgResponseFile"
-        shell: bash
       - name: Cache vcpkg artifacts
         uses: actions/cache@v1
         with:
           path: ${{github.workspace}}/vcpkg/
-          key: ${{ hashFiles( env.vcpkgResponseFile ) }}
+          key: ${{ hashFiles( ${{ github.workspace }}/vcpkg.txt ) }}
       - name: Run vcpkg
         uses: lukka/run-vcpkg@v1
         id: runvcpkg
         with:
-          vcpkgArguments: '@${{ env.vcpkgResponseFile }}'
+          vcpkgArguments: '@${{ github.workspace }}/vcpkg.txt'
           vcpkgDirectory: '${{ github.workspace }}/vcpkg'
       - name: Run CMake with Ninja
         env:
@@ -60,21 +55,16 @@ jobs:
       - uses: actions/checkout@v1
         with:
           submodules: true
-      - name: Set environment variables
-        env:
-          vcpkgResponseFile: ${{github.workspace}}/vcpkg.txt
-        run: echo "::set-env name=vcpkgResponseFile::$vcpkgResponseFile"
-        shell: bash
       - name: Cache vcpkg artifacts
         uses: actions/cache@v1
         with:
           path: ${{github.workspace}}/vcpkg/
-          key: ${{ hashFiles( env.vcpkgResponseFile ) }}
+          key: ${{ hashFiles( ${{ github.workspace }}/vcpkg.txt ) }}
       - name: Run vcpkg
         uses: lukka/run-vcpkg@v1
         id: runvcpkg
         with:
-          vcpkgArguments: '@${{ env.vcpkgResponseFile }}'
+          vcpkgArguments: '@${{ github.workspace }}/vcpkg.txt'
           vcpkgDirectory: '${{ github.workspace }}/vcpkg'
       - name: Run CMake with Ninja
         env:
