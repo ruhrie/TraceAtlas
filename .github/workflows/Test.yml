@@ -17,11 +17,10 @@ jobs:
         uses: lukka/run-vcpkg@v6
         id: runvcpkg
         with:
-          setupOnly: true
-          vcpkgDirectory: "${{ github.workspace }}/vcpkg"
-          vcpkgTriplet: 'x64-linux'
+          setupOnly: false
           vcpkgGitCommitId: 'ec6fe06e8da05a8157dc8581fa96b36b571c1bd5'
-          appendedCacheKey: ${{ hashFiles( '**/vcpkg_manifest/vcpkg.json' ) }}
+          appendedCacheKey: ${{ hashFiles( '${{ github.workspace }}/vcpkg.txt' ) }}
+          vcpkgArguments: '@${{ github.workspace }}/vcpkg.txt'
       - name: Run CMake with Ninja
         env:
           CC: clang-9
