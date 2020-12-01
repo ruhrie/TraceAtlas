@@ -7,7 +7,7 @@ jobs:
     steps:
       - name: Install dependencies
         run: sudo apt install libpapi-dev clang-tidy-9
-        shell: bash 
+        shell: bash
       - uses: actions/checkout@v1
         with:
           submodules: true
@@ -25,8 +25,8 @@ jobs:
         uses: lukka/run-vcpkg@v1
         id: runvcpkg
         with:
-          vcpkgArguments: '@${{ env.vcpkgResponseFile }}'
-          vcpkgDirectory: '${{ github.workspace }}/vcpkg'
+          vcpkgArguments: "@${{ env.vcpkgResponseFile }}"
+          vcpkgDirectory: "${{ github.workspace }}/vcpkg"
       - name: Run CMake with Ninja
         env:
           CC: clang-9
@@ -36,11 +36,11 @@ jobs:
         id: runcmake
         with:
           cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
-          cmakeListsTxtPath: '${{ github.workspace }}/CMakeLists.txt'
+          cmakeListsTxtPath: "${{ github.workspace }}/CMakeLists.txt"
           useVcpkgToolchainFile: true
-          buildWithCMakeArgs: '-- -v'
+          buildWithCMakeArgs: "-- -v"
           buildDirectory: ${{github.workspace}}/build
-          cmakeAppendedArgs: '-G Ninja -DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=Debug'
+          cmakeAppendedArgs: "-G Ninja -DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=Debug"
       - name: Run ctest
         run: ctest
         shell: bash
@@ -56,7 +56,7 @@ jobs:
     steps:
       - name: Install dependencies
         run: sudo apt install libpapi-dev clang-tidy-9
-        shell: bash 
+        shell: bash
       - uses: actions/checkout@v1
         with:
           submodules: true
@@ -69,8 +69,8 @@ jobs:
         uses: lukka/run-vcpkg@v1
         id: runvcpkg
         with:
-          vcpkgArguments: '@${{ github.workspace }}/vcpkg.txt'
-          vcpkgDirectory: '${{ github.workspace }}/vcpkg'
+          vcpkgArguments: "@${{ github.workspace }}/vcpkg.txt"
+          vcpkgDirectory: "${{ github.workspace }}/vcpkg"
       - name: Run CMake with Ninja
         env:
           CC: clang-9
@@ -80,11 +80,11 @@ jobs:
         id: runcmake
         with:
           cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
-          cmakeListsTxtPath: '${{ github.workspace }}/CMakeLists.txt'
+          cmakeListsTxtPath: "${{ github.workspace }}/CMakeLists.txt"
           useVcpkgToolchainFile: true
-          buildWithCMakeArgs: '-- -v'
+          buildWithCMakeArgs: "-- -v"
           buildDirectory: ${{github.workspace}}/build
-          cmakeAppendedArgs: '-G Ninja -DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=Release'
+          cmakeAppendedArgs: "-G Ninja -DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=Release"
       - name: Run ctest
         run: ctest
         shell: bash
@@ -95,15 +95,3 @@ jobs:
           rm -rf ${{ github.workspace }}/vcpkg/packages
           rm -rf ${{ github.workspace }}/vcpkg/downloads
         shell: bash
-© 2020 GitHub, Inc.
-Terms
-Privacy
-Security
-Status
-Help
-Contact GitHub
-Pricing
-API
-Training
-Blog
-About
