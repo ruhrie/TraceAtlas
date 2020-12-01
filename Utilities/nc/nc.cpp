@@ -137,7 +137,7 @@ int main(int argc, char **argv)
     int i = 0;
     for (const auto &kernel : kernels)
     {
-        outputJson["Kernels"]["K" + to_string(i++)] = kernel.Blocks;
+        outputJson["Kernels"]["K" + to_string(i++)]["Blocks"] = kernel.Blocks;
     }
 
     ofstream oStream(OutputFilename);
