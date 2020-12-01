@@ -7,86 +7,35 @@ jobs:
     steps:
       - name: Install dependencies
         run: sudo apt install libpapi-dev clang-tidy-9
-        shell: bash 
+        shell: bash
       - uses: actions/checkout@v1
         with:
           submodules: true
-      - name: Cache vcpkg artifacts
-        uses: actions/cache@v1
-        with:
-          path: ${{github.workspace}}/vcpkg/
-          key: ${{ hashFiles( ${{ github.workspace }}/vcpkg.txt ) }}
-      - name: Run vcpkg
-        uses: lukka/run-vcpkg@v1
+      - name: Restore artifacts, or setup vcpkg
+        uses: lukka/run-vcpkg@dev/postcache_on_setuponly
         id: runvcpkg
         with:
-          vcpkgArguments: '@${{ github.workspace }}/vcpkg.txt'
-          vcpkgDirectory: '${{ github.workspace }}/vcpkg'
+          setupOnly: true
+          vcpkgDirectory: "${{ github.workspace }}/vcpkg"
+          vcpkgTriplet: 'x64-linux'
+          vcpkgGitCommitId: 'ec6fe06e8da05a8157dc8581fa96b36b571c1bd5'
+          appendedCacheKey: ${{ hashFiles( '**/vcpkg_manifest/vcpkg.json' ) }}
       - name: Run CMake with Ninja
         env:
           CC: clang-9
           CXX: clang++-9
           LDFLAGS: -fuse-ld=lld-9
-        uses: lukka/run-cmake@v1
-        id: runcmake
+        uses: lukka/run-cmake@v3
+        id: runcmake_cmd
         with:
+          cmakeGenerator: 'Ninja'
           cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
-          cmakeListsTxtPath: '${{ github.workspace }}/CMakeLists.txt'
+          cmakeListsTxtPath: "${{ github.workspace }}/CMakeLists.txt"
           useVcpkgToolchainFile: true
           buildWithCMakeArgs: '-- -v'
           buildDirectory: ${{github.workspace}}/build
-          cmakeAppendedArgs: '-G Ninja -DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=Debug'
+          cmakeAppendedArgs: "-DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=Debug"
       - name: Run ctest
         run: ctest
         shell: bash
         working-directory: ${{github.workspace}}/build
-      - name: Clean vcpkg
-        run: |
-          rm -rf ${{ github.workspace }}/vcpkg/buildtrees
-          rm -rf ${{ github.workspace }}/vcpkg/packages
-          rm -rf ${{ github.workspace }}/vcpkg/downloads
-        shell: bash
-  Release:
-    runs-on: ubuntu-18.04
-    steps:
-      - name: Install dependencies
-        run: sudo apt install libpapi-dev clang-tidy-9
-        shell: bash 
-      - uses: actions/checkout@v1
-        with:
-          submodules: true
-      - name: Cache vcpkg artifacts
-        uses: actions/cache@v1
-        with:
-          path: ${{github.workspace}}/vcpkg/
-          key: ${{ hashFiles( ${{ github.workspace }}/vcpkg.txt ) }}
-      - name: Run vcpkg
-        uses: lukka/run-vcpkg@v1
-        id: runvcpkg
-        with:
-          vcpkgArguments: '@${{ github.workspace }}/vcpkg.txt'
-          vcpkgDirectory: '${{ github.workspace }}/vcpkg'
-      - name: Run CMake with Ninja
-        env:
-          CC: clang-9
-          CXX: clang++-9
-          LDFLAGS: -fuse-ld=lld-9
-        uses: lukka/run-cmake@v1
-        id: runcmake
-        with:
-          cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
-          cmakeListsTxtPath: '${{ github.workspace }}/CMakeLists.txt'
-          useVcpkgToolchainFile: true
-          buildWithCMakeArgs: '-- -v'
-          buildDirectory: ${{github.workspace}}/build
-          cmakeAppendedArgs: '-G Ninja -DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=Release'
-      - name: Run ctest
-        run: ctest
-        shell: bash
-        working-directory: ${{github.workspace}}/build
-      - name: Clean vcpkg
-        run: |
-          rm -rf ${{ github.workspace }}/vcpkg/buildtrees
-          rm -rf ${{ github.workspace }}/vcpkg/packages
-          rm -rf ${{ github.workspace }}/vcpkg/downloads
-        shell: bash
