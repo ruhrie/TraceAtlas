@@ -11,16 +11,6 @@ jobs:
       - uses: actions/checkout@v1
         with:
           submodules: true
-      - name: Set environment variables
-        env:
-          vcpkgResponseFile: ${{github.workspace}}/vcpkg.txt
-        run: echo "::set-env name=vcpkgResponseFile::$vcpkgResponseFile"
-        shell: bash
-      - name: Cache vcpkg artifacts
-        uses: actions/cache@v1
-        with:
-          path: ${{github.workspace}}/vcpkg/
-          key: ${{ hashFiles( env.vcpkgResponseFile ) }}
       - name: Run vcpkg
         uses: lukka/run-vcpkg@v1
         id: runvcpkg
@@ -45,12 +35,6 @@ jobs:
         run: ctest
         shell: bash
         working-directory: ${{github.workspace}}/build
-      - name: Clean vcpkg
-        run: |
-          rm -rf ${{ github.workspace }}/vcpkg/buildtrees
-          rm -rf ${{ github.workspace }}/vcpkg/packages
-          rm -rf ${{ github.workspace }}/vcpkg/downloads
-        shell: bash
   Release:
     runs-on: ubuntu-18.04
     steps:
@@ -60,11 +44,6 @@ jobs:
       - uses: actions/checkout@v1
         with:
           submodules: true
-      - name: Cache vcpkg artifacts
-        uses: actions/cache@v1
-        with:
-          path: ${{github.workspace}}/vcpkg/
-          key: ${{ hashFiles( env.vcpkgResponseFile ) }}
       - name: Run vcpkg
         uses: lukka/run-vcpkg@v1
         id: runvcpkg
@@ -89,9 +68,3 @@ jobs:
         run: ctest
         shell: bash
         working-directory: ${{github.workspace}}/build
-      - name: Clean vcpkg
-        run: |
-          rm -rf ${{ github.workspace }}/vcpkg/buildtrees
-          rm -rf ${{ github.workspace }}/vcpkg/packages
-          rm -rf ${{ github.workspace }}/vcpkg/downloads
-        shell: bash
