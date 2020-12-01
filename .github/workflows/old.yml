@@ -15,7 +15,7 @@ jobs:
         uses: lukka/run-vcpkg@v1
         id: runvcpkg
         with:
-          vcpkgArguments: "@${{ env.vcpkgResponseFile }}"
+          vcpkgArguments: "@${{ github.workspace }}/vcpkg.txt"
           vcpkgDirectory: "${{ github.workspace }}/vcpkg"
       - name: Run CMake with Ninja
         env:
