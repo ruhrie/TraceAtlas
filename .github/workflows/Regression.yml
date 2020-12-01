@@ -25,7 +25,7 @@ jobs:
         with:
           vcpkgArguments: "@${{ github.workspace }}/vcpkg.txt"
           vcpkgDirectory: "${{ github.workspace }}/vcpkg"
-          appendedCacheKey: ${{ hashFiles( '${{ github.workspace }}/vcpkg.txt' ) }}
+          #appendedCacheKey: ${{ hashFiles( '${{ github.workspace }}/vcpkg.txt' ) }}
       - name: Run CMake with Ninja
         env:
           CC: clang-9
