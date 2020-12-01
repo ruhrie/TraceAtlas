@@ -28,12 +28,12 @@ jobs:
           CXX: clang++-9
           LDFLAGS: -fuse-ld=lld-9
         uses: lukka/run-cmake@v3
-        id: runcmake_cmd
         with:
           cmakeGenerator: 'Ninja'
           cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
           cmakeListsTxtPath: "${{ github.workspace }}/CMakeLists.txt"
           useVcpkgToolchainFile: true
+          buildWithCMake: true
           buildWithCMakeArgs: '-- -v'
           buildDirectory: ${{github.workspace}}/build
           cmakeAppendedArgs: "-DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=Debug"
