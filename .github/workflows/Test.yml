@@ -28,7 +28,6 @@ jobs:
           LDFLAGS: -fuse-ld=lld-9
         uses: lukka/run-cmake@v3
         with:
-          cmakeGenerator: 'Ninja'
           cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
           cmakeListsTxtPath: "${{ github.workspace }}/CMakeLists.txt"
           useVcpkgToolchainFile: true
@@ -36,10 +35,6 @@ jobs:
           buildWithCMakeArgs: '-- -v'
           buildDirectory: ${{github.workspace}}/build
           cmakeAppendedArgs: "-DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=Debug"
-      - name: build
-        run: ninja
-        shell: bash
-        working-directory: ${{github.workspace}}/build
       - name: Run ctest
         run: ctest
         shell: bash
