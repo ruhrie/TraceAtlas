@@ -31,7 +31,6 @@ jobs:
           cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
           cmakeListsTxtPath: "${{ github.workspace }}/CMakeLists.txt"
           useVcpkgToolchainFile: true
-          buildWithCMake: true
           buildWithCMakeArgs: '-- -v'
           buildDirectory: ${{github.workspace}}/build
           cmakeAppendedArgs: "-DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=Debug"
