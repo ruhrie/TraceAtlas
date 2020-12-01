@@ -14,6 +14,8 @@ jobs:
       - name: Run vcpkg
         uses: lukka/run-vcpkg@v6
         id: runvcpkg
+        env: 
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: true
         with:
           vcpkgArguments: "@${{ github.workspace }}/vcpkg.txt"
           vcpkgDirectory: "${{ github.workspace }}/vcpkg"
