@@ -3,12 +3,14 @@ on: [pull_request]
 
 jobs:
   Debug:
+    name: 'Debug tests'
     runs-on: ubuntu-18.04
     steps:
       - name: Install dependencies
         run: sudo apt install libpapi-dev clang-tidy-9
         shell: bash
-      - uses: actions/checkout@v1
+      - uses: lukka/get-cmake@latest
+      - uses: actions/checkout@v2
         with:
           submodules: true
       - name: Restore artifacts, or setup vcpkg
