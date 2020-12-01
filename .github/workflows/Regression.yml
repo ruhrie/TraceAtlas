@@ -32,15 +32,15 @@ jobs:
           CXX: clang++-9
           LDFLAGS: -fuse-ld=lld-9
         uses: lukka/run-cmake@main
-        id: runcmake_cmd
+        id: runcmake
         with:
           cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
           cmakeListsTxtPath: "${{ github.workspace }}/CMakeLists.txt"
           useVcpkgToolchainFile: true
           buildWithCMakeArgs: "-- -v"
           buildDirectory: ${{github.workspace}}/build
-          cmakeAppendedArgs: "-DENABLE_LINTER=ON"
-          cmakeBuildType: ${{matrix.Configuration}}
+          cmakeAppendedArgs: -DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=${{matrix.Configuration}}
+          #cmakeBuildType: ${{matrix.Configuration}}
       - name: Run ctest
         run: ctest
         shell: bash
