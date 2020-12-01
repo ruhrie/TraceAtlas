@@ -36,6 +36,10 @@ jobs:
           buildWithCMakeArgs: '-- -v'
           buildDirectory: ${{github.workspace}}/build
           cmakeAppendedArgs: "-DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=Debug"
+      - name: build
+        run: ninja
+        shell: bash
+        working-directory: ${{github.workspace}}/build
       - name: Run ctest
         run: ctest
         shell: bash
