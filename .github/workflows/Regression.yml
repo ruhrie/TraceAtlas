@@ -1,11 +1,12 @@
-name: Old Unit Tests
+name: "Regression Tests"
 on: [pull_request]
 
 jobs:
   job:
-    name: ${{matrix.os}}-${{matrix.Configuration}}-RegressionTests
+    name: ${{matrix.os}}-${{matrix.Configuration}}
     runs-on: ${{matrix.os}}
     strategy:
+      fail-fast: false
       matrix:
         Configuration: ["Debug", "Release"]
         os: ["ubuntu-18.04"]
@@ -19,17 +20,18 @@ jobs:
       - name: Run vcpkg
         uses: lukka/run-vcpkg@v6
         id: runvcpkg
-        env: 
+        env:
           ACTIONS_ALLOW_UNSECURE_COMMANDS: true
         with:
           vcpkgArguments: "@${{ github.workspace }}/vcpkg.txt"
           vcpkgDirectory: "${{ github.workspace }}/vcpkg"
+          appendedCacheKey: ${{ hashFiles( '${{ github.workspace }}/vcpkg.txt' ) }}
       - name: Run CMake with Ninja
         env:
           CC: clang-9
           CXX: clang++-9
           LDFLAGS: -fuse-ld=lld-9
-        uses: lukka/run-cmake@v1
+        uses: lukka/run-cmake@v3
         id: runcmake
         with:
           cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
