@@ -12,11 +12,9 @@
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/Verifier.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/SourceMgr.h>
-#include <llvm/Support/raw_os_ostream.h>
 #include <llvm/Transforms/Utils/Cloning.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
@@ -31,7 +29,7 @@ cl::opt<string> OriginalBitcode("b", cl::Required, cl::desc("<input original bit
 cl::opt<string> OutputFile("o", cl::desc("Specify output filename"), cl::value_desc("output filename"), cl::init("tikSwap.bc"));
 cl::opt<bool> ASCIIFormat("S", cl::desc("Output json as human-readable ASCII text"));
 cl::opt<bool> Debug("g", cl::desc("Inject debugging symbols into output bitcode"));
-cl::opt<bool> Preformat("pf", llvm::cl::desc("Bitcode is preformatted"), llvm::cl::value_desc("Bitcode is preformatted"));
+cl::opt<bool> Preformat("pf", llvm::cl::desc("Split and annotate source bitcode blocks and values before processing."));
 
 int main(int argc, char *argv[])
 {
@@ -425,58 +423,8 @@ int main(int argc, char *argv[])
     }
 
     // verify the module
-    std::string str;
-    llvm::raw_string_ostream rso(str);
-    bool broken = verifyModule(*sourceBitcode, &rso);
-    if (broken)
-    {
-        auto err = rso.str();
-        spdlog::critical("Tik Module Corrupted: \n" + err);
-    }
+    VerifyModule(sourceBitcode.get());
 
-    // writing part
-    try
-    {
-        if (ASCIIFormat || Debug)
-        {
-            // print human readable tik module to file
-            auto *write = new llvm::AssemblyAnnotationWriter();
-            std::string str;
-            llvm::raw_string_ostream rso(str);
-            std::filebuf f0;
-            f0.open(OutputFile, std::ios::out);
-            sourceBitcode->print(rso, write);
-            std::ostream readableStream(&f0);
-            readableStream << str;
-            f0.close();
-            if (Debug)
-            {
-                DebugExports(sourceBitcode.get(), OutputFile);
-                spdlog::info("Successfully injected debug symbols into tikSwap bitcode.");
-                f0.open(OutputFile, std::ios::out);
-                std::string str2;
-                llvm::raw_string_ostream rso2(str2);
-                sourceBitcode->print(rso2, write);
-                std::ostream final(&f0);
-                final << str2;
-                f0.close();
-            }
-        }
-        else
-        {
-            // non-human readable IR
-            std::filebuf f;
-            f.open(OutputFile, std::ios::out);
-            std::ostream rawStream(&f);
-            raw_os_ostream raw_stream(rawStream);
-            WriteBitcodeToFile(*sourceBitcode, raw_stream);
-        }
-        spdlog::info("Successfully wrote tikSwap to file");
-    }
-    catch (exception &e)
-    {
-        spdlog::critical("Failed to open output file: " + OutputFile + ":\n" + e.what() + "\n");
-        return EXIT_FAILURE;
-    }
-    return 0;
+    // write bitcode to file
+    return PrintFile(sourceBitcode.get(), OutputFile, ASCIIFormat, Debug);
 }

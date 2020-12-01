@@ -123,8 +123,6 @@ int main(int argc, char **argv)
         kernelHash[key] = hashed;
     }
 
-    //map<string,
-
     json j_map;
     for (const auto &key : kernelHash)
     {

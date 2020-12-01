@@ -6,18 +6,15 @@
 #include "tik/Util.h"
 #include "tik/libtik.h"
 #include <fstream>
-#include <iostream>
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/Module.h>
-#include <llvm/IR/Verifier.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/SourceMgr.h>
-#include <llvm/Support/raw_os_ostream.h>
 #include <llvm/Support/raw_ostream.h>
 #include <nlohmann/json.hpp>
 #include <set>
@@ -48,7 +45,7 @@ cl::opt<string> OutputType("f", cl::desc("Specify output file format. Can be LLV
 cl::opt<bool> ASCIIFormat("S", cl::desc("output json as human-readable ASCII text"));
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
-cl::opt<bool> Preformat("pf", llvm::cl::desc("Bitcode is preformatted"), llvm::cl::value_desc("Bitcode is preformatted"));
+cl::opt<bool> Preformat("pf", llvm::cl::desc("Split and annotate source bitcode blocks and values before processing."));
 
 int main(int argc, char *argv[])
 {
@@ -304,41 +301,8 @@ int main(int argc, char *argv[])
 #endif
     }
 
-    // writing part
-    try
-    {
-        if (ASCIIFormat)
-        {
-            // print human readable tik module to file
-            auto *write = new llvm::AssemblyAnnotationWriter();
-            std::string str;
-            llvm::raw_string_ostream rso(str);
-            std::filebuf f0;
-            f0.open(OutputFile, std::ios::out);
-            TikModule->print(rso, write);
-            std::ostream readableStream(&f0);
-            readableStream << str;
-            f0.close();
-        }
-        else
-        {
-            // non-human readable IR
-            std::filebuf f;
-            f.open(OutputFile, std::ios::out);
-            std::ostream rawStream(&f);
-            raw_os_ostream raw_stream(rawStream);
-            WriteBitcodeToFile(*TikModule, raw_stream);
-        }
-
-        spdlog::info("Successfully wrote tik to file");
-    }
-    catch (exception &e)
-    {
-        std::cerr << "Failed to open output file: " << OutputFile << "\n";
-        std::cerr << e.what() << '\n';
-        spdlog::critical("Failed to write tik to output file: " + OutputFile);
-        return EXIT_FAILURE;
-    }
+    // write bitcode to file
+    PrintFile(TikModule, OutputFile, ASCIIFormat, false);
     if (error)
     {
         spdlog::error("Exported module does not contain all cartographer kernels.");

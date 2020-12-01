@@ -8,8 +8,10 @@
 #include <llvm/IR/Metadata.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Operator.h>
+#include <llvm/IR/Verifier.h>
 #include <map>
 #include <set>
+#include <spdlog/spdlog.h>
 #include <unistd.h>
 
 /// @brief Enumerate the different states of ValueID and BlockID
@@ -529,4 +531,16 @@ inline uint64_t GetBlockCount(llvm::Module *M)
         }
     }
     return result;
+}
+
+inline void VerifyModule(llvm::Module *M)
+{
+    std::string str;
+    llvm::raw_string_ostream rso(str);
+    bool broken = verifyModule(*M, &rso);
+    if (broken)
+    {
+        auto err = rso.str();
+        spdlog::critical("Tik Module Corrupted: \n" + err);
+    }
 }
