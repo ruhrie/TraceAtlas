@@ -1,4 +1,0 @@
-zlib:x64-linux
-nlohmann-json:x64-linux
-spdlog:x64-linux
-indicators:x64-linux
