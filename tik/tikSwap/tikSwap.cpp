@@ -100,19 +100,19 @@ int main(int argc, char *argv[])
     }
 
     // grab all kernel functions in the tik bitcode and construct objects from them
-    vector<TikKernel *> kernels;
+    vector<shared_ptr<TikKernel>> kernels;
     for (auto &func : *tikBitcode)
     {
         if (func.hasMetadata("Boundaries"))
         {
-            auto kern = new TikKernel(tikBitcode->getFunction(func.getName()));
+            auto kern = make_shared<TikKernel>(tikBitcode->getFunction(func.getName()));
             if (kern->Valid)
             {
                 kernels.push_back(kern);
             }
             else
             {
-                delete kern;
+                spdlog::error("Kernel function " + kern->Name + " was not a valid TikKernel.");
             }
         }
     }
