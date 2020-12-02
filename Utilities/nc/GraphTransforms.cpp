@@ -56,7 +56,7 @@ Graph<float> GraphCollapse(Graph<float> base, const set<Kernel> &kernels)
                 continue;
             }
             set<uint64_t> difference;
-            set_difference(k1.begin(), k1.end(), k2.begin(), k2.end(), std::inserter(difference, difference.begin()));
+            set_difference(k2.begin(), k2.end(), k1.begin(), k1.end(), std::inserter(difference, difference.begin()));
             if (difference.empty())
             {
                 toRemove.insert(k2);

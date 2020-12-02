@@ -2,6 +2,15 @@
 #include "AtlasUtil/Graph.h"
 #include <set>
 #include <vector>
+
+enum class Legality
+{
+    Legal,
+    RuleOne,
+    RuleTwo,
+    RuleThree,
+    RuleFour
+};
 class Kernel
 {
 public:
@@ -10,7 +19,7 @@ public:
     Kernel() = default;
     bool operator<(const Kernel &x) const;
     bool operator!=(const Kernel &x) const;
-    bool IsLegal(const Graph<float> &graph, const std::set<Kernel> &kernels) const;
+    Legality IsLegal(const Graph<float> &graph, const std::set<Kernel> &kernels, const Graph<float> &probGraph) const;
     std::set<uint64_t> Blocks;
     float ScoreSimilarity(const Kernel &compare, const Graph<uint64_t> &graph, const Graph<float> &probGraph) const;
 };
