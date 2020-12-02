@@ -83,7 +83,7 @@ Legality Kernel::IsLegal(const Graph<float> &graph, const set<Kernel> &kernels, 
                 for (int i = 0; i < probGraph.WeightMatrix.size(); i++)
                 {
                     float weight = probGraph.WeightMatrix[i][blockLoc];
-                    if (weight != std::numeric_limits<float>::infinity() && !isnan(weight) )
+                    if (weight != std::numeric_limits<float>::infinity() && !isnan(weight))
                     {
                         //this node is a predecessor, if it is an entrance it will not be in kComp
                         auto enterBlocks = probGraph.IndexAlias.at(i);
