@@ -39,7 +39,7 @@ jobs:
           useVcpkgToolchainFile: true
           buildWithCMakeArgs: "-- -v"
           buildDirectory: ${{github.workspace}}/build
-          cmakeAppendedArgs: "-G Ninja -DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=Debug"
+          cmakeAppendedArgs: -G Ninja -DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=${{matrix.Configuration}}
       - name: Run ctest
         run: ctest
         shell: bash
