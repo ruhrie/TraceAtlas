@@ -360,16 +360,21 @@ int main(int argc, char *argv[])
         }
         ind->eraseFromParent();
     }
+    vector<pair<Instruction *, AllocaInst *>> badPair;
     for (auto inst : badInst)
     {
         for (auto pa : storeSite)
         {
             if (inst == pa.first)
             {
-                storeSite.erase(pa);
+                badPair.push_back(pa);
             }
         }
         inst->eraseFromParent();
+    }
+    for( const auto& rm : badPair )
+    {
+        storeSite.erase(rm);
     }
 
     // insert stores at the original export sites
