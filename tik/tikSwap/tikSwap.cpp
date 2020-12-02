@@ -372,7 +372,7 @@ int main(int argc, char *argv[])
         }
         inst->eraseFromParent();
     }
-    for( const auto& rm : badPair )
+    for (const auto &rm : badPair)
     {
         storeSite.erase(rm);
     }
