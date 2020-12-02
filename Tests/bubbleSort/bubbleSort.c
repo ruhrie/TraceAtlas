@@ -28,7 +28,6 @@ int main(int argc, char *argv[])
     int *in = get_input(SIZE);
 
     // bubble sort
-    TraceAtlasKernelEnter("bubbleSort");
     int swap;
     for (int i = 0; i < SIZE; i++)
     {
@@ -42,8 +41,6 @@ int main(int argc, char *argv[])
             }
         }
     }
-    TraceAtlasKernelExit("bubbleSort");
-
     printf("\nSorting Done");
     free(in);
     return 0;
