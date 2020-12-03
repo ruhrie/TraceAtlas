@@ -214,13 +214,7 @@ int main(int argc, char **argv)
                 blockIndeces.push_back(block);
             }
         }
-
-        if (type1Kernels.empty())
-        {
-            spdlog::warn("Detected no kernels, exiting");
-            return EXIT_SUCCESS;
-        }
-
+        
         TypeTwo::Setup(bitcodePtrs, type1Kernels);
         ProcessTrace(inputTrace, &TypeTwo::Process, "Detecting type 2 kernels", noBar);
         auto type2Kernels = TypeTwo::Get();
