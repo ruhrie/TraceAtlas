@@ -8,7 +8,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        Configuration: ["Debug", "Release", "RelWithDebInfo", "MinSizeRel"]
+        Configuration: ["Debug", "Release", "RelWithDebInfo"]
         os: ["ubuntu-18.04"]
     steps:
       - name: Install dependencies
