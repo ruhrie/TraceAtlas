@@ -46,9 +46,11 @@ int main(int argc, char **argv)
     {
         change = false;
         int priorSize = kernels.size();
+        spdlog::info("Finding base kernels, pass {0}", count);
         //start by adding new kernels
         for (int i = 0; i < probabilityGraph.WeightMatrix.size(); i++)
         {
+            spdlog::trace("{0} of {1}", i, probabilityGraph.WeightMatrix.size());
             auto path = Dijkstra(probabilityGraph, i, i);
             if (!path.empty())
             {
@@ -67,52 +69,50 @@ int main(int argc, char **argv)
 
         //now that we added new kernels, legalize them
         //step 1: grow kernels to have the most probable paths
-        bool change = true;
+        spdlog::info("Stage one kernel refinements, pass {0}", count);
         bool fuse = false;
         set<GraphKernel> stepOneKernels;
-        while (change)
+        int i = 0;
+        for (GraphKernel kernel : kernels)
         {
-            change = false;
-            GraphKernel fuseA;
-            GraphKernel fuseB;
-            bool fuse = false;
-            for (GraphKernel kernel : kernels)
+            spdlog::trace("{0} of {1}", i++, kernels.size());
+            while (true)
             {
-                while (true)
+                auto legality = kernel.IsLegal(baseGraph, kernels, probabilityGraph);
+                if (legality == Legality::Legal || legality == Legality::RuleTwo)
                 {
-                    auto legality = kernel.IsLegal(baseGraph, kernels, probabilityGraph);
-                    if (legality == Legality::Legal || legality == Legality::RuleTwo)
+                    break;
+                }
+                float minScore = FLT_MAX;
+                GraphKernel currentCandidate;
+                for (const auto &cComp : kernels)
+                {
+                    if (kernel != cComp)
                     {
-                        break;
-                    }
-                    float minScore = FLT_MAX;
-                    GraphKernel currentCandidate;
-                    for (const auto &cComp : kernels)
-                    {
-                        if (kernel != cComp)
+                        float score = kernel.ScoreSimilarity(cComp, csvData, baseGraph);
+                        if (score != -1 && score < minScore)
                         {
-                            float score = kernel.ScoreSimilarity(cComp, csvData, baseGraph);
-                            if (score != -1 && score < minScore)
-                            {
-                                minScore = score;
-                                currentCandidate = cComp;
-                            }
+                            minScore = score;
+                            currentCandidate = cComp;
                         }
                     }
-                    if (minScore == FLT_MAX)
-                    {
-                        throw AtlasException("Unimplemented");
-                    }
-                    kernel.Blocks.insert(currentCandidate.Blocks.begin(), currentCandidate.Blocks.end());
                 }
-                stepOneKernels.insert(kernel);
+                if (minScore == FLT_MAX)
+                {
+                    throw AtlasException("Unimplemented");
+                }
+                kernel.Blocks.insert(currentCandidate.Blocks.begin(), currentCandidate.Blocks.end());
             }
+            stepOneKernels.insert(kernel);
         }
-        spdlog::trace("Discovered {0} kernels during step 1, pass {1}", stepOneKernels.size(), count);
+        spdlog::info("Discovered {0} kernels during step 1, pass {1}", stepOneKernels.size(), count);
         //step 2: fuse kernels that paritally overlap
+        spdlog::info("Stage two kernel refinements, pass {0}", count);
         set<GraphKernel> stepTwoKernels;
+        i = 0;
         for (const GraphKernel &kernel : stepOneKernels)
         {
+            spdlog::trace("{0} of {1}", i++, stepOneKernels.size());
             while (true)
             {
                 auto legality = kernel.IsLegal(baseGraph, stepOneKernels, probabilityGraph);
@@ -120,15 +120,19 @@ int main(int argc, char **argv)
                 {
                     break;
                 }
+                spdlog::error("Failed to convert a kernel");
                 throw AtlasException("Unimplemented");
             }
             stepTwoKernels.insert(kernel);
         }
 
-        spdlog::trace("Discovered {0} kernels during step 2, pass {1}", stepTwoKernels.size(), count);
+        spdlog::info("Discovered {0} kernels during step 2, pass {1}", stepTwoKernels.size(), count);
         //step 3: sanity check to make sure they are all legal
+        i = 0;
+        spdlog::info("Performing sanity check on kernels, pass {0}", count);
         for (const GraphKernel &kernel : stepTwoKernels)
         {
+            spdlog::trace("{0} of {1}", i++, stepTwoKernels.size());
             auto legality = kernel.IsLegal(baseGraph, stepTwoKernels, probabilityGraph);
             if (legality != Legality::Legal)
             {

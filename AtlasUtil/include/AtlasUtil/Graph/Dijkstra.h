@@ -3,8 +3,9 @@
 #include "AtlasUtil/Graph/Graph.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <map>
-#include <stdint.h>
+#include <set>
 #include <vector>
 
 struct DistanceTuple
@@ -29,87 +30,69 @@ struct DistanceTuple
 //note, we assume this is a digraph
 inline std::vector<uint64_t> Dijkstra(Graph<float> graph, uint64_t start, uint64_t end)
 {
+    uint64_t maxSize = graph.WeightMatrix.size();
+    std::vector<float> dist(maxSize, std::numeric_limits<float>::infinity());
+    std::vector<uint64_t> prev(maxSize, std::numeric_limits<uint64_t>::max());
+    std::vector<bool> Q(maxSize, true);
     std::vector<uint64_t> result;
-
-    std::vector<DistanceTuple> distances(graph.WeightMatrix.size());
-    std::map<uint64_t, std::vector<uint64_t>> paths;
-    std::map<uint64_t, bool> visited;
-
-    //init the distance graph
-    for (int i = 0; i < graph.WeightMatrix.size(); i++)
+    uint64_t vCount = 0;
+    for (int i = 0; i < maxSize; i++)
     {
-        distances[i] = DistanceTuple(i, INFINITY);
+        float val = graph.WeightMatrix[start][i];
+        if (!std::isnan(val) && !std::isinf(val))
+        {
+            dist[i] = val;
+            prev[i] = start;
+        }
     }
-
-    uint64_t current = start;
-    bool done = false;
-    while (!done)
+    while (vCount != maxSize)
     {
-        float currentDist = 0;
-        if (current != start)
+        //select smallest here //real slow
+        uint64_t u = std::numeric_limits<uint64_t>::max();
+        float d = INFINITY;
+        for (int i = 0; i < maxSize; i++)
         {
-            for (auto &d : distances)
+            if (dist[i] < d && Q[i])
             {
-                if (d.key == current)
-                {
-                    currentDist = d.distance;
-                }
+                d = dist[i];
+                u = i;
             }
         }
-        auto &currentPath = paths[current];
-        for (int i = 0; i < graph.WeightMatrix[current].size(); i++)
-        {
-            float newDist = currentDist + graph.WeightMatrix[current][i];
-            DistanceTuple *compDistance = nullptr;
-            for (auto &d : distances)
-            {
-                if (d.key == i)
-                {
-                    compDistance = &d;
-                    break;
-                }
-            }
-            if (compDistance == nullptr)
-            {
-                throw AtlasException("Failed to find branch")
-            }
-            if (newDist < compDistance->distance)
-            {
-                compDistance->distance = newDist;
-                paths[i] = currentPath;
-                if (paths[i].empty())
-                {
-                    paths[i].push_back(start);
-                }
-                paths[i].push_back(i);
-            }
-        }
-        visited[current] = true;
-        sort(distances.begin(), distances.end());
-        bool found = false;
-        for (auto &d : distances)
-        {
-            if (!visited[d.key])
-            {
-                current = d.key;
-                found = true;
-                break;
-            }
-        }
-        if (!found)
+        //unofficial
+        if (u == std::numeric_limits<uint64_t>::max())
         {
             break;
         }
-        for (auto &d : distances)
+        Q[u] = false;
+        if (u == end)
         {
-            if (d.key == end && d.distance != INFINITY)
+            while(u != std::numeric_limits<uint64_t>::max())
             {
-                done = true;
-                result = paths[d.key];
-                break;
+                result.push_back(prev[u]);
+                u = prev[u];
+                if(u == start)
+                {
+                    break;
+                }
+            }
+            std::reverse(result.begin(), result.end());
+            break;
+        }
+        //for neighor of u
+        for (int v = 0; v < maxSize; v++)
+        {
+            float val = graph.WeightMatrix[u][v];
+            if (!std::isnan(val) && !std::isinf(val))
+            {
+                auto alt = dist[u] + val;
+                if (alt < dist[v])
+                {
+                    dist[v] = alt;
+                    prev[v] = u;
+                }
             }
         }
+        vCount++;
     }
-
     return result;
 }
