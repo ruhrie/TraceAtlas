@@ -1,10 +1,10 @@
 #include "AtlasUtil/Format.h"
-#include "AtlasUtil/Graph.h"
+#include "AtlasUtil/Graph/Dijkstra.h"
+#include "AtlasUtil/Graph/Graph.h"
+#include "AtlasUtil/Graph/GraphTransforms.h"
+#include "AtlasUtil/Graph/Kernel.h"
 #include "AtlasUtil/IO.h"
 #include "AtlasUtil/Traces.h"
-#include "Dijkstra.h"
-#include "GraphTransforms.h"
-#include "Kernel.h"
 #include <algorithm>
 #include <cfloat>
 #include <fstream>
@@ -32,7 +32,7 @@ int main(int argc, char **argv)
     auto probabilityGraph = baseGraph;
 
     bool change = true;
-    set<Kernel> kernels;
+    set<GraphKernel> kernels;
     while (change)
     {
         change = false;
@@ -43,7 +43,7 @@ int main(int argc, char **argv)
             auto path = Dijkstra(probabilityGraph, i, i);
             if (!path.empty())
             {
-                auto newKernel = Kernel();
+                auto newKernel = GraphKernel();
                 for (const auto &step : path)
                 {
                     newKernel.Blocks.insert(probabilityGraph.IndexAlias[step].begin(), probabilityGraph.IndexAlias[step].end());
@@ -60,14 +60,14 @@ int main(int argc, char **argv)
         //step 1: grow kernels to have the most probable paths
         bool change = true;
         bool fuse = false;
-        set<Kernel> stepOneKernels;
+        set<GraphKernel> stepOneKernels;
         while (change)
         {
             change = false;
-            Kernel fuseA;
-            Kernel fuseB;
+            GraphKernel fuseA;
+            GraphKernel fuseB;
             bool fuse = false;
-            for (Kernel kernel : kernels)
+            for (GraphKernel kernel : kernels)
             {
                 while (true)
                 {
@@ -77,7 +77,7 @@ int main(int argc, char **argv)
                         break;
                     }
                     float minScore = FLT_MAX;
-                    Kernel currentCandidate;
+                    GraphKernel currentCandidate;
                     for (const auto &cComp : kernels)
                     {
                         if (kernel != cComp)
@@ -100,8 +100,8 @@ int main(int argc, char **argv)
             }
         }
         //step 2: fuse kernels that paritally overlap
-        set<Kernel> stepTwoKernels;
-        for (const Kernel &kernel : stepOneKernels)
+        set<GraphKernel> stepTwoKernels;
+        for (const GraphKernel &kernel : stepOneKernels)
         {
             while (true)
             {
@@ -116,7 +116,7 @@ int main(int argc, char **argv)
         }
 
         //step 3: sanity check to make sure they are all legal
-        for (const Kernel &kernel : stepTwoKernels)
+        for (const GraphKernel &kernel : stepTwoKernels)
         {
             auto legality = kernel.IsLegal(baseGraph, stepTwoKernels, probabilityGraph);
             if (legality != Legality::Legal)

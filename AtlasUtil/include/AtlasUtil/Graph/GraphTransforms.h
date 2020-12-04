@@ -1,15 +1,17 @@
-#include <GraphTransforms.h>
-#include <cmath>
+#pragma once
+#include "AtlasUtil/Graph/Graph.h"
+#include "AtlasUtil/Graph/Kernel.h"
+#include <set>
+#include <stdint.h>
+#include <vector>
 
-using namespace std;
-
-Graph<float> ProbabilityTransform(Graph<uint64_t> input)
+inline Graph<float> ProbabilityTransform(Graph<uint64_t> input)
 {
     Graph<float> result;
 
     for (int i = 0; i < input.WeightMatrix.size(); i++)
     {
-        vector<float> newRow(input.WeightMatrix.size());
+        std::vector<float> newRow(input.WeightMatrix.size());
         float sum = 0.0f;
 
         for (uint64_t j : input.WeightMatrix[i])
@@ -29,14 +31,14 @@ Graph<float> ProbabilityTransform(Graph<uint64_t> input)
     return result;
 }
 
-Graph<float> GraphCollapse(Graph<float> base, const set<Kernel> &kernels)
+inline Graph<float> GraphCollapse(Graph<float> base, const std::set<GraphKernel> &kernels)
 {
     Graph<float> result;
 
-    set<set<uint64_t>> mappedBlocks;
+    std::set<std::set<uint64_t>> mappedBlocks;
     for (const auto &kernel : kernels)
     {
-        set<uint64_t> remappedKernel;
+        std::set<uint64_t> remappedKernel;
         for (const auto &block : kernel.Blocks)
         {
             remappedKernel.insert(base.LocationAlias[block]);
@@ -46,7 +48,7 @@ Graph<float> GraphCollapse(Graph<float> base, const set<Kernel> &kernels)
 
     //remove non-top level
     //needs testing
-    set<set<uint64_t>> toRemove;
+    std::set<std::set<uint64_t>> toRemove;
     for (const auto &k1 : mappedBlocks)
     {
         for (const auto &k2 : mappedBlocks)
@@ -55,7 +57,7 @@ Graph<float> GraphCollapse(Graph<float> base, const set<Kernel> &kernels)
             {
                 continue;
             }
-            set<uint64_t> difference;
+            std::set<uint64_t> difference;
             set_difference(k2.begin(), k2.end(), k1.begin(), k1.end(), std::inserter(difference, difference.begin()));
             if (difference.empty())
             {

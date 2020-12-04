@@ -1,5 +1,5 @@
 #pragma once
-#include "AtlasUtil/Graph.h"
+#include "AtlasUtil/Graph/Graph.h"
 #include "AtlasUtil/Print.h"
 #include <fstream>
 #include <llvm/IR/Module.h>

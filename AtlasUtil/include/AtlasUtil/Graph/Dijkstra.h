@@ -1,10 +1,11 @@
-#include "Dijkstra.h"
+#pragma once
 #include "AtlasUtil/Exceptions.h"
+#include "AtlasUtil/Graph/Graph.h"
 #include <algorithm>
 #include <cmath>
 #include <map>
-
-using namespace std;
+#include <stdint.h>
+#include <vector>
 
 struct DistanceTuple
 {
@@ -26,13 +27,13 @@ struct DistanceTuple
 };
 
 //note, we assume this is a digraph
-vector<uint64_t> Dijkstra(Graph<float> graph, uint64_t start, uint64_t end)
+inline std::vector<uint64_t> Dijkstra(Graph<float> graph, uint64_t start, uint64_t end)
 {
-    vector<uint64_t> result;
+    std::vector<uint64_t> result;
 
-    vector<DistanceTuple> distances(graph.WeightMatrix.size());
-    map<uint64_t, vector<uint64_t>> paths;
-    map<uint64_t, bool> visited;
+    std::vector<DistanceTuple> distances(graph.WeightMatrix.size());
+    std::map<uint64_t, std::vector<uint64_t>> paths;
+    std::map<uint64_t, bool> visited;
 
     //init the distance graph
     for (int i = 0; i < graph.WeightMatrix.size(); i++)
