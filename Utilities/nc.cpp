@@ -4,6 +4,7 @@
 #include "AtlasUtil/Graph/GraphTransforms.h"
 #include "AtlasUtil/Graph/Kernel.h"
 #include "AtlasUtil/IO.h"
+#include "AtlasUtil/Logging.h"
 #include "AtlasUtil/Traces.h"
 #include <algorithm>
 #include <cfloat>
@@ -19,6 +20,8 @@ using namespace std;
 
 cl::opt<std::string> InputFilename("i", cl::desc("Specify csv file"), cl::value_desc("csv filename"), cl::Required);
 cl::opt<std::string> OutputFilename("o", cl::desc("Specify output json"), cl::value_desc("output filename"), cl::Required);
+cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
+cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 
 map<int64_t, set<string>> labels;
 set<string> currentLabels;
@@ -26,13 +29,19 @@ set<string> currentLabels;
 int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
+
+    SetupLogger(LogFile, LogLevel);
+
+    spdlog::trace("Loading csv");
     auto csvData = LoadCSV(InputFilename);
 
+    spdlog::trace("Building graph");
     auto baseGraph = ProbabilityTransform(csvData);
     auto probabilityGraph = baseGraph;
 
     bool change = true;
     set<GraphKernel> kernels;
+    int count = 0;
     while (change)
     {
         change = false;
@@ -99,6 +108,7 @@ int main(int argc, char **argv)
                 stepOneKernels.insert(kernel);
             }
         }
+        spdlog::trace("Discovered {0} kernels during step 1, pass {1}", stepOneKernels.size(), count);
         //step 2: fuse kernels that paritally overlap
         set<GraphKernel> stepTwoKernels;
         for (const GraphKernel &kernel : stepOneKernels)
@@ -115,6 +125,7 @@ int main(int argc, char **argv)
             stepTwoKernels.insert(kernel);
         }
 
+        spdlog::trace("Discovered {0} kernels during step 2, pass {1}", stepTwoKernels.size(), count);
         //step 3: sanity check to make sure they are all legal
         for (const GraphKernel &kernel : stepTwoKernels)
         {
@@ -125,13 +136,17 @@ int main(int argc, char **argv)
             }
         }
 
+        spdlog::trace("Discovered {0} kernels during pass {1}", stepTwoKernels.size(), count++);
         //finally replace the prior kernels
         kernels.clear();
         kernels.insert(stepTwoKernels.begin(), stepTwoKernels.end());
 
+        spdlog::trace("Collapsing kernel graph");
         //now rebuild the graph with kernels collapsed
         probabilityGraph = GraphCollapse(probabilityGraph, kernels);
     }
+
+    spdlog::info("Finished discovering {0} kernels", kernels.size());
 
     nlohmann::json outputJson;
     int i = 0;
@@ -140,9 +155,9 @@ int main(int argc, char **argv)
         outputJson["Kernels"]["K" + to_string(i++)]["Blocks"] = kernel.Blocks;
     }
 
+    spdlog::trace("Writing kernels to {0}", OutputFilename);
     ofstream oStream(OutputFilename);
     oStream << outputJson;
     oStream.close();
-
     return EXIT_SUCCESS;
 }
