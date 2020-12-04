@@ -27,6 +27,7 @@ inline Graph<float> ProbabilityTransform(Graph<uint64_t> input)
     }
     result.LocationAlias = input.LocationAlias;
     result.IndexAlias = input.IndexAlias;
+    result.NeighborMap = input.NeighborMap;
 
     return result;
 }
@@ -151,6 +152,19 @@ inline Graph<float> GraphCollapse(Graph<float> base, const std::set<GraphKernel>
         for (uint64_t j = 0; j < result.WeightMatrix.size(); j++)
         {
             result.WeightMatrix[i][j] = -1 * log(result.WeightMatrix[i][j]);
+        }
+    }
+
+    //remake neighbor map
+    for (uint64_t i = 0; i < result.WeightMatrix.size(); i++)
+    {
+        for (uint64_t j = 0; j < result.WeightMatrix.size(); j++)
+        {
+            float &val = result.WeightMatrix[i][j];
+            if (!std::isnan(val) && !std::isinf(val))
+            {
+                result.NeighborMap[i].insert(j);
+            }
         }
     }
 

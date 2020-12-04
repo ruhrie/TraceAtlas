@@ -53,5 +53,15 @@ inline Graph<uint64_t> LoadCSV(const std::string &path)
         result.IndexAlias[i].push_back(i);
         result.LocationAlias[i] = i;
     }
+    for (uint64_t i = 0; i < result.WeightMatrix.size(); i++)
+    {
+        for (uint64_t j = 0; j < result.WeightMatrix.size(); j++)
+        {
+            if (result.WeightMatrix[i][j] != 0)
+            {
+                result.NeighborMap[i].insert(j);
+            }
+        }
+    }
     return result;
 }

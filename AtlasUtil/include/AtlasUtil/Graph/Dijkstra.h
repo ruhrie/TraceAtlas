@@ -36,14 +36,11 @@ inline std::vector<uint64_t> Dijkstra(Graph<float> graph, uint64_t start, uint64
     std::vector<bool> Q(maxSize, true);
     std::vector<uint64_t> result;
     uint64_t vCount = 0;
-    for (int i = 0; i < maxSize; i++)
+    for (auto i : graph.NeighborMap[start])
     {
-        float val = graph.WeightMatrix[start][i];
-        if (!std::isnan(val) && !std::isinf(val))
-        {
-            dist[i] = val;
-            prev[i] = start;
-        }
+        float &val = graph.WeightMatrix[start][i];
+        dist[i] = val;
+        prev[i] = start;
     }
     while (vCount != maxSize)
     {
@@ -66,11 +63,11 @@ inline std::vector<uint64_t> Dijkstra(Graph<float> graph, uint64_t start, uint64
         Q[u] = false;
         if (u == end)
         {
-            while(u != std::numeric_limits<uint64_t>::max())
+            while (u != std::numeric_limits<uint64_t>::max())
             {
                 result.push_back(prev[u]);
                 u = prev[u];
-                if(u == start)
+                if (u == start)
                 {
                     break;
                 }
@@ -79,17 +76,14 @@ inline std::vector<uint64_t> Dijkstra(Graph<float> graph, uint64_t start, uint64
             break;
         }
         //for neighor of u
-        for (int v = 0; v < maxSize; v++)
+        for (auto v : graph.NeighborMap[u])
         {
-            float val = graph.WeightMatrix[u][v];
-            if (!std::isnan(val) && !std::isinf(val))
+            float &val = graph.WeightMatrix[u][v];
+            auto alt = dist[u] + val;
+            if (alt < dist[v])
             {
-                auto alt = dist[u] + val;
-                if (alt < dist[v])
-                {
-                    dist[v] = alt;
-                    prev[v] = u;
-                }
+                dist[v] = alt;
+                prev[v] = u;
             }
         }
         vCount++;
