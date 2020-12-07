@@ -12,6 +12,14 @@
 #include <vector>
 #include <zlib.h>
 #include <iostream>
+#include "AtlasUtil/Annotate.h"
+#include <llvm/Bitcode/BitcodeReader.h>
+#include <llvm/IRReader/IRReader.h>
+#include <llvm/Support/SourceMgr.h>
+#include <string>
+#include <tuple>
+
+
 using namespace llvm;
 using namespace std;
 
@@ -20,7 +28,9 @@ using namespace std;
 cl::opt<std::string> InputFilename("t", cl::desc("Specify input trace"), cl::value_desc("trace filename"), cl::Required);
 cl::opt<std::string> OutputFilename("o", cl::desc("Specify output json"), cl::value_desc("output filename"), cl::Required);
 cl::opt<std::string> KernelFilename("k", cl::desc("Specify kernel json"), cl::value_desc("kernel filename"), cl::Required);
+llvm::cl::opt<string> bitcodeFile("b", llvm::cl::desc("Specify bitcode name"), llvm::cl::value_desc("bitcode filename"), llvm::cl::Required);
 llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::value_desc("No progress bar"));
+
 
 // kernel instance id
 static int UID = 0;
@@ -46,6 +56,16 @@ map<int, set<int>> myFormerInput;
 // kernel instance id -> its former output kernel instance id
 map<int, set<int>> myFormerOutput;
 
+// for data size
+
+map<int64_t,vector<uint64_t>> BBMemInstSize;
+// start end byte_count ref_count
+typedef tuple <int64_t, int64_t, int64_t,int64_t> AddrRange;
+map<int64_t,AddrRange> LoadAddrRangeMap;
+map<int64_t,AddrRange> StoreAddrRangeMap;
+set<int64_t> ValidBlock;
+int vBlock;
+int64_t instCounter = 0;
 typedef struct InternaladdressLiving
 {
     uint64_t addr;
@@ -102,6 +122,7 @@ void firstStore(uint64_t addrIndex, int64_t t, bool fromStore, int kernelIndex)
     }
 }
 
+
 void Process(string &key, string &value)
 {
 //kernel instance detection
@@ -110,13 +131,16 @@ void Process(string &key, string &value)
     {
         // block represents current processed block id in the trace
         int block = stoi(value, nullptr, 0);
+        //printf("block:%d \n",block);
         if (currentKernel == "-1" || kernelMap[currentKernel].find(block) == kernelMap[currentKernel].end())
         {
+            printf("111 \n");
             string innerKernel = "-1";
             for (auto k : kernelMap)
             {
                 if (k.second.find(block) != k.second.end())
                 {
+                    //instCounter = 0;
                     innerKernel = k.first;
                     break;
                 }
@@ -129,7 +153,16 @@ void Process(string &key, string &value)
                 // kernelIdMap records the map from kernel instance id to kernel id
                 kernelIdMap[UID++] = currentKernel;
             }
+            else
+            {
+                currentUid = -1;
+            }
         }
+        // if (kernelMap.find(value) != kernelMap.end())
+        // {
+
+        //     vBlock = (stol(value, nullptr, 0));
+        // }
     }
     else if (key == "StoreAddress")
     {
@@ -146,7 +179,7 @@ void Process(string &key, string &value)
         {
             prodUid = -1;
         }
-        if (prodUid != -1 && prodUid != currentUid)
+        if (prodUid != -1 &&prodUid != 0 && prodUid != currentUid)
         {
             //former kernel instances that I load from 
             myFormerInput[currentUid].insert(prodUid);
@@ -155,7 +188,31 @@ void Process(string &key, string &value)
         {
             internalSet.insert(prodUid);
         }
-        firstStore(address, timing, true, currentUid);
+        if (currentUid != -1)
+        {
+            
+            firstStore(address, timing, true, currentUid);
+            
+            // uint64_t dataSize = BBMemInstSize[vBlock][instCounter];
+            // instCounter++;
+            //printf("vblock:%d,ins:%lu,data size:%lu \n",vBlock,instCounter,dataSize);
+            // if (LoadAddrRangeMap.find(address) ==LoadAddrRangeMap.end())
+            // {
+            //     std::tuple<int64_t, int64_t, int64_t,int64_t> AddrRange(address, address+dataSize, dataSize, 1); 
+            //     LoadAddrRangeMap[address] = AddrRange;
+            // }
+            // else
+            // {
+            //     std::tuple<int64_t, int64_t, int64_t,int64_t> ar = LoadAddrRangeMap[address];
+            //     int64_t stop = std::get<1> (ar);
+            //     if (stop < address+ dataSize)
+            //     {
+            //         std::tuple<int64_t, int64_t, int64_t,int64_t> addrRange(address, address+dataSize,std::get<2> (ar) + dataSize,std::get<3> (ar) + 1); 
+            //         LoadAddrRangeMap[address] = addrRange;
+            //     }
+            // }
+        }
+        
     }
     else if (key == "LoadAddress")
     {
@@ -171,7 +228,7 @@ void Process(string &key, string &value)
         {
             prodUid = -1;
         }
-        if (prodUid != -1 && prodUid != currentUid)
+        if (prodUid != -1 &&prodUid != 0 && prodUid != currentUid)
         {
             //former kernel instances that store to me
             myFormerOutput[currentUid].insert(prodUid);
@@ -181,22 +238,32 @@ void Process(string &key, string &value)
             internalSet.insert(prodUid);
         }
 
-        if (KernelWorkingSetMap[currentUid].internalAddressIndexMap.find(address) != KernelWorkingSetMap[currentUid].internalAddressIndexMap.end())
+        if (currentUid != -1)
         {
-            KernelWorkingSetMap[currentUid].internalAddressLivingVec[KernelWorkingSetMap[currentUid].internalAddressIndexMap[address]].deathTime = timing;
-            KernelWorkingSetMap[currentUid].internalAddressIndexSet.insert(address);
-            //remove the address from output set, if there is a load corresponding to a store
-            if (KernelWorkingSetMap[currentUid].outputAddressIndexSet.find(address) !=KernelWorkingSetMap[currentUid].outputAddressIndexSet.end())
+            if (KernelWorkingSetMap[currentUid].internalAddressIndexMap.find(address) != KernelWorkingSetMap[currentUid].internalAddressIndexMap.end())
             {
-                KernelWorkingSetMap[currentUid].outputAddressIndexSet.erase(address);
-            }         
+                KernelWorkingSetMap[currentUid].internalAddressLivingVec[KernelWorkingSetMap[currentUid].internalAddressIndexMap[address]].deathTime = timing;
+                KernelWorkingSetMap[currentUid].internalAddressIndexSet.insert(address);
+                //remove the address from output set, if there is a load corresponding to a store
+                if (KernelWorkingSetMap[currentUid].outputAddressIndexSet.find(address) !=KernelWorkingSetMap[currentUid].outputAddressIndexSet.end())
+                {
+                    KernelWorkingSetMap[currentUid].outputAddressIndexSet.erase(address);
+                }         
+            }
+            else if (KernelWorkingSetMap[currentUid].inputAddressIndexSet.find(address) == KernelWorkingSetMap[currentUid].inputAddressIndexSet.end())
+            {
+                firstStore(address, timing, false, currentUid);
+            }
+            // instCounter++;
+            // uint64_t dataSize = BBMemInstSize[vBlock][instCounter];
+            // std::tuple<int64_t, int64_t, int64_t,int64_t> AddrRange(address, address+dataSize, dataSize, 1); 
+            // StoreAddrRangeMap[address] = AddrRange;
         }
-        else if (KernelWorkingSetMap[currentUid].inputAddressIndexSet.find(address) == KernelWorkingSetMap[currentUid].inputAddressIndexSet.end())
-        {
-            firstStore(address, timing, false, currentUid);
-        }
+        
     }    
 }
+
+
 
 
 int main(int argc, char **argv)
@@ -215,6 +282,67 @@ int main(int argc, char **argv)
         nlohmann::json kernel = l["Blocks"];
         kernelMap[index] = kernel.get<set<int>>();
     }
+
+
+
+
+    nlohmann::json blocks = j["ValidBlocks"];
+    ValidBlock = blocks.get<set<int64_t>>();
+
+
+    // build memory instructions to data size map
+    LLVMContext context;
+    SMDiagnostic smerror;
+    unique_ptr<Module> sourceBitcode;
+    try
+    {
+        sourceBitcode = parseIRFile(bitcodeFile, smerror, context);
+    }
+    catch (exception &e)
+    {
+        return 0;
+    }
+
+    Module *M = sourceBitcode.get();
+    Annotate(M);
+
+    //bbid -> instruction data size
+    
+
+    for (auto &mi : *M)
+    {
+        for (auto fi = mi.begin(); fi != mi.end(); fi++)
+        {
+            auto *bb = cast<BasicBlock>(fi);
+            auto dl = bb->getModule()->getDataLayout();
+            int64_t id = GetBlockID(bb);
+            if (ValidBlock.find(id) != ValidBlock.end())
+            {
+                for (auto bi = fi->begin(); bi != fi->end(); bi++)
+                {
+                    if (auto *inst = dyn_cast<LoadInst>(bi))
+                    {
+                        //errs()<< *inst<<"\n";
+                        auto *type = inst->getPointerOperand()->getType()->getContainedType(0);
+                        uint64_t dataSize = dl.getTypeAllocSize(type);
+                        //errs()<< dataSize<<"\n";
+                        BBMemInstSize[id].push_back(dataSize);
+                        // printf("11111data szie %lu \n",dataSize);
+                    }
+                    else if(auto *inst = dyn_cast<StoreInst>(bi))
+                    {
+                        auto *type = inst->getPointerOperand()->getType()->getContainedType(0);
+                        uint64_t dataSize = dl.getTypeAllocSize(type);
+                        //errs()<< *inst<<"\n";
+                        //BBMemInstSize[id]
+                        BBMemInstSize[id].push_back(dataSize);
+                        // printf("111222 data szie %lu \n",dataSize);
+                    }
+                }              
+            }
+        }
+    }
+
 
     ProcessTrace(InputFilename, Process, "Generating DAG", noBar);
     vector <vector<int>> serialAll; 
@@ -265,88 +393,115 @@ int main(int argc, char **argv)
         i++;  
     }
     
+    bool fast = true;
+    map<pair<uint64_t,uint64_t>,vector<uint64_t>> kernelInterSection;
 
-    map<pair<uint64_t,uint64_t>,vector<uint64_t>> kernelInterSection; 
-    for (int it1 = 0; it1 < maxUID; it1++)
+    if (!fast)
     {
-        for (int it2 = it1+1 ; it2< maxUID; it2++)
+         
+        for (int it1 = 0; it1 < maxUID; it1++)
         {
-            //calculate intersections here
-            vector<uint64_t> overlaps;
-            pair<uint64_t,uint64_t> kernelpair(it1,it2);
-            overlaps.resize(max(KernelWorkingSetMap[it1].inputAddressIndexSet.size(),KernelWorkingSetMap[it2].inputAddressIndexSet.size()));
-            auto it = set_intersection(KernelWorkingSetMap[it1].inputAddressIndexSet.begin(),KernelWorkingSetMap[it1].inputAddressIndexSet.end(), KernelWorkingSetMap[it2].inputAddressIndexSet.begin(),KernelWorkingSetMap[it2].inputAddressIndexSet.end(),overlaps.begin());
-            kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-            overlaps.clear();
+            for (int it2 = it1+1 ; it2< maxUID; it2++)
+            {
+                //calculate intersections here
+                vector<uint64_t> overlaps;
+                pair<uint64_t,uint64_t> kernelpair(it1,it2);
+                overlaps.resize(max(KernelWorkingSetMap[it1].inputAddressIndexSet.size(),KernelWorkingSetMap[it2].inputAddressIndexSet.size()));
+                auto it = set_intersection(KernelWorkingSetMap[it1].inputAddressIndexSet.begin(),KernelWorkingSetMap[it1].inputAddressIndexSet.end(), KernelWorkingSetMap[it2].inputAddressIndexSet.begin(),KernelWorkingSetMap[it2].inputAddressIndexSet.end(),overlaps.begin());
+                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
+                overlaps.clear();
 
-            overlaps.resize(max(KernelWorkingSetMap[it1].inputAddressIndexSet.size(),KernelWorkingSetMap[it2].internalAddressIndexSet.size()));
-            it = set_intersection(KernelWorkingSetMap[it1].inputAddressIndexSet.begin(),KernelWorkingSetMap[it1].inputAddressIndexSet.end(), KernelWorkingSetMap[it2].internalAddressIndexSet.begin(),KernelWorkingSetMap[it2].internalAddressIndexSet.end(),overlaps.begin());
-            kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-            overlaps.clear();
+                overlaps.resize(max(KernelWorkingSetMap[it1].inputAddressIndexSet.size(),KernelWorkingSetMap[it2].internalAddressIndexSet.size()));
+                it = set_intersection(KernelWorkingSetMap[it1].inputAddressIndexSet.begin(),KernelWorkingSetMap[it1].inputAddressIndexSet.end(), KernelWorkingSetMap[it2].internalAddressIndexSet.begin(),KernelWorkingSetMap[it2].internalAddressIndexSet.end(),overlaps.begin());
+                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
+                overlaps.clear();
 
-            overlaps.resize(max(KernelWorkingSetMap[it1].inputAddressIndexSet.size(),KernelWorkingSetMap[it2].outputAddressIndexSet.size()));
-            it = set_intersection(KernelWorkingSetMap[it1].inputAddressIndexSet.begin(),KernelWorkingSetMap[it1].inputAddressIndexSet.end(), KernelWorkingSetMap[it2].outputAddressIndexSet.begin(),KernelWorkingSetMap[it2].outputAddressIndexSet.end(),overlaps.begin());
-            kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-            overlaps.clear();
+                overlaps.resize(max(KernelWorkingSetMap[it1].inputAddressIndexSet.size(),KernelWorkingSetMap[it2].outputAddressIndexSet.size()));
+                it = set_intersection(KernelWorkingSetMap[it1].inputAddressIndexSet.begin(),KernelWorkingSetMap[it1].inputAddressIndexSet.end(), KernelWorkingSetMap[it2].outputAddressIndexSet.begin(),KernelWorkingSetMap[it2].outputAddressIndexSet.end(),overlaps.begin());
+                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
+                overlaps.clear();
 
-            overlaps.resize(max(KernelWorkingSetMap[it1].internalAddressIndexSet.size(),KernelWorkingSetMap[it2].inputAddressIndexSet.size()));
-            it = set_intersection(KernelWorkingSetMap[it1].internalAddressIndexSet.begin(),KernelWorkingSetMap[it1].internalAddressIndexSet.end(), KernelWorkingSetMap[it2].inputAddressIndexSet.begin(),KernelWorkingSetMap[it2].inputAddressIndexSet.end(),overlaps.begin());
-            kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-            overlaps.clear();
+                overlaps.resize(max(KernelWorkingSetMap[it1].internalAddressIndexSet.size(),KernelWorkingSetMap[it2].inputAddressIndexSet.size()));
+                it = set_intersection(KernelWorkingSetMap[it1].internalAddressIndexSet.begin(),KernelWorkingSetMap[it1].internalAddressIndexSet.end(), KernelWorkingSetMap[it2].inputAddressIndexSet.begin(),KernelWorkingSetMap[it2].inputAddressIndexSet.end(),overlaps.begin());
+                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
+                overlaps.clear();
 
-            overlaps.resize(max(KernelWorkingSetMap[it1].internalAddressIndexSet.size(),KernelWorkingSetMap[it2].internalAddressIndexSet.size()));
-            it = set_intersection(KernelWorkingSetMap[it1].internalAddressIndexSet.begin(),KernelWorkingSetMap[it1].internalAddressIndexSet.end(), KernelWorkingSetMap[it2].internalAddressIndexSet.begin(),KernelWorkingSetMap[it2].internalAddressIndexSet.end(),overlaps.begin());
-            kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-            overlaps.clear();
+                overlaps.resize(max(KernelWorkingSetMap[it1].internalAddressIndexSet.size(),KernelWorkingSetMap[it2].internalAddressIndexSet.size()));
+                it = set_intersection(KernelWorkingSetMap[it1].internalAddressIndexSet.begin(),KernelWorkingSetMap[it1].internalAddressIndexSet.end(), KernelWorkingSetMap[it2].internalAddressIndexSet.begin(),KernelWorkingSetMap[it2].internalAddressIndexSet.end(),overlaps.begin());
+                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
+                overlaps.clear();
 
-            overlaps.resize(max(KernelWorkingSetMap[it1].internalAddressIndexSet.size(),KernelWorkingSetMap[it2].outputAddressIndexSet.size()));
-            it = set_intersection(KernelWorkingSetMap[it1].internalAddressIndexSet.begin(),KernelWorkingSetMap[it1].internalAddressIndexSet.end(), KernelWorkingSetMap[it2].outputAddressIndexSet.begin(),KernelWorkingSetMap[it2].outputAddressIndexSet.end(),overlaps.begin());
-            kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-            overlaps.clear();
+                overlaps.resize(max(KernelWorkingSetMap[it1].internalAddressIndexSet.size(),KernelWorkingSetMap[it2].outputAddressIndexSet.size()));
+                it = set_intersection(KernelWorkingSetMap[it1].internalAddressIndexSet.begin(),KernelWorkingSetMap[it1].internalAddressIndexSet.end(), KernelWorkingSetMap[it2].outputAddressIndexSet.begin(),KernelWorkingSetMap[it2].outputAddressIndexSet.end(),overlaps.begin());
+                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
+                overlaps.clear();
 
-            overlaps.resize(max(KernelWorkingSetMap[it1].outputAddressIndexSet.size(),KernelWorkingSetMap[it2].inputAddressIndexSet.size()));
-            it = set_intersection(KernelWorkingSetMap[it1].outputAddressIndexSet.begin(),KernelWorkingSetMap[it1].outputAddressIndexSet.end(), KernelWorkingSetMap[it2].inputAddressIndexSet.begin(),KernelWorkingSetMap[it2].inputAddressIndexSet.end(),overlaps.begin());
-            kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-            overlaps.clear();
+                overlaps.resize(max(KernelWorkingSetMap[it1].outputAddressIndexSet.size(),KernelWorkingSetMap[it2].inputAddressIndexSet.size()));
+                it = set_intersection(KernelWorkingSetMap[it1].outputAddressIndexSet.begin(),KernelWorkingSetMap[it1].outputAddressIndexSet.end(), KernelWorkingSetMap[it2].inputAddressIndexSet.begin(),KernelWorkingSetMap[it2].inputAddressIndexSet.end(),overlaps.begin());
+                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
+                overlaps.clear();
 
-            overlaps.resize(max(KernelWorkingSetMap[it1].outputAddressIndexSet.size(),KernelWorkingSetMap[it2].internalAddressIndexSet.size()));
-            it = set_intersection(KernelWorkingSetMap[it1].outputAddressIndexSet.begin(),KernelWorkingSetMap[it1].outputAddressIndexSet.end(), KernelWorkingSetMap[it2].internalAddressIndexSet.begin(),KernelWorkingSetMap[it2].internalAddressIndexSet.end(),overlaps.begin());
-            kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-            overlaps.clear();
+                overlaps.resize(max(KernelWorkingSetMap[it1].outputAddressIndexSet.size(),KernelWorkingSetMap[it2].internalAddressIndexSet.size()));
+                it = set_intersection(KernelWorkingSetMap[it1].outputAddressIndexSet.begin(),KernelWorkingSetMap[it1].outputAddressIndexSet.end(), KernelWorkingSetMap[it2].internalAddressIndexSet.begin(),KernelWorkingSetMap[it2].internalAddressIndexSet.end(),overlaps.begin());
+                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
+                overlaps.clear();
 
-            overlaps.resize(max(KernelWorkingSetMap[it1].outputAddressIndexSet.size(),KernelWorkingSetMap[it2].outputAddressIndexSet.size()));
-            it = set_intersection(KernelWorkingSetMap[it1].outputAddressIndexSet.begin(),KernelWorkingSetMap[it1].outputAddressIndexSet.end(), KernelWorkingSetMap[it2].outputAddressIndexSet.begin(),KernelWorkingSetMap[it2].outputAddressIndexSet.end(),overlaps.begin());
-            kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-            overlaps.clear();
-            
+                overlaps.resize(max(KernelWorkingSetMap[it1].outputAddressIndexSet.size(),KernelWorkingSetMap[it2].outputAddressIndexSet.size()));
+                it = set_intersection(KernelWorkingSetMap[it1].outputAddressIndexSet.begin(),KernelWorkingSetMap[it1].outputAddressIndexSet.end(), KernelWorkingSetMap[it2].outputAddressIndexSet.begin(),KernelWorkingSetMap[it2].outputAddressIndexSet.end(),overlaps.begin());
+                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
+                overlaps.clear();
+                
+            }
         }
     }
+    
+
+    //int64_t lastEnd = 0;
+
+    // for (auto it : LoadAddrRangeMap)
+    // {
+    //     // merge first
+    //     if (get<1>(it.second)< lastEnd && get<0>(it.second) < lastEnd )
+    //     {
+
+    //     }
+    //     else if (get<1>(it.second)< lastEnd && get<0>(it.second) < lastEnd )
+    //     {}
 
 
+
+    // }
+
+    printf("load tuple size: %lu ,store tuple size: %lu",LoadAddrRangeMap.size(),StoreAddrRangeMap.size());
 
     nlohmann::json jOut;
     jOut["serialAll"] = serialAll;
     jOut["myFormerInput"] = myFormerInput;
     jOut["myFormerOutput"] = myFormerOutput;
 
-    for (const auto &key : kernelInterSection)
+    if(!fast)
     {
-        jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Input,Input"] = key.second[0];
-        jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Input,Internal"] = key.second[1];
-        jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Input,Output"] = key.second[2];
-        jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Internal,Input"] = key.second[3];
-        jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Internal,Internal"] = key.second[4];
-        jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Internal,Output"] = key.second[5];
-        jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Output,Input"] = key.second[6];
-        jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Output,Internal"] = key.second[7];
-        jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Output,Output"] = key.second[8];
+        for (const auto &key : kernelInterSection)
+        {
+            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Input,Input"] = key.second[0]*4;
+            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Input,Internal"] = key.second[1]*4;
+            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Input,Output"] = key.second[2]*4;
+            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Internal,Input"] = key.second[3]*4;
+            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Internal,Internal"] = key.second[4]*4;
+            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Internal,Output"] = key.second[5]*4;
+            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Output,Input"] = key.second[6]*4;
+            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Output,Internal"] = key.second[7]*4;
+            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Output,Output"] = key.second[8]*4;
+        }
     }
-
+        
+    jOut["KernelInstanceMap"] = kernelIdMap;
 
     std::ofstream file;
     file.open(OutputFilename);
     file << jOut;
     file.close();
+
 
     spdlog::info("Successfully detected kernel instance serial");
     return 0;

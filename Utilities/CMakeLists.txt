@@ -7,6 +7,8 @@ target_include_directories(libDetector SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
 
 install(TARGETS libDetector RUNTIME DESTINATION bin)
 
+
+
 add_executable(kernelHasher KernelHasher.cpp)
 
 set_target_properties(kernelHasher PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
@@ -57,3 +59,25 @@ set_target_properties(KernelVerifier
 )
 
 install(TARGETS KernelVerifier RUNTIME DESTINATION bin)
+
+
+add_executable(JR JR.cpp)
+target_link_libraries(JR ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
+target_include_directories(JR SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(JR PRIVATE ${LLVM_DEFINITIONS})
+
+set_target_properties(JR
+	PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin" 
+)
+
+
+add_executable(KernelSerial KernelSerial.cpp)
+target_link_libraries(KernelSerial ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
+target_include_directories(KernelSerial SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(KernelSerial PRIVATE ${LLVM_DEFINITIONS})
+
+set_target_properties(KernelSerial
+	PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin" 
+)

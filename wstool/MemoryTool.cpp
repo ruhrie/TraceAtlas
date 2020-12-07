@@ -20,7 +20,7 @@
 using namespace std;
 using namespace llvm;
 using namespace WorkingSet;
-map<int64_t, set<uint64_t>> kernelMap;
+map<uint64_t, set<uint64_t>> kernelMap;
 map<int64_t,vector<uint64_t>> BBMemInstSize;
 
 set<int64_t> ValidBlock;
@@ -43,7 +43,7 @@ int main(int argc, char **argv)
     {
         uint64_t index = stoul(key, nullptr, 0);
         nlohmann::json kernel = value["Blocks"];
-        for (auto it :kernel.get<set<int64_t>>())
+        for (auto it :kernel.get<set<uint64_t>>())
         {
             kernelMap[it].insert(index);
         }
@@ -148,7 +148,9 @@ int main(int argc, char **argv)
         printf("maxDataInput: %lu \n maxinternal: %lu \n maxOutput: %lu \n", maxInput, maxinternal, maxOutput);
     }
 
-    //calculate intersections here
+
+    map<pair<uint64_t,uint64_t>,vector<vector<uint64_t>>> kernelInterSection; 
+    map<uint64_t,pair<set<uint64_t>,set<uint64_t>>> kernelTemporal; 
     for (auto it1:kernelMap)
     {
         for (auto it2:kernelMap)
@@ -157,10 +159,43 @@ int main(int argc, char **argv)
             {
                 continue;
             }
-            
+            //calculate intersections here
+            vector<uint64_t> overlaps;
+            pair<uint64_t,uint64_t> kernelpair(it1.first,it2.first);
+            set_intersection(KernelWorkingSetMap[it1.first].inputAddressIndexSet.begin(),KernelWorkingSetMap[it1.first].inputAddressIndexSet.end(), KernelWorkingSetMap[it2.first].inputAddressIndexSet.begin(),KernelWorkingSetMap[it2.first].inputAddressIndexSet.end(),overlaps.begin());
+            kernelInterSection[kernelpair].push_back(overlaps);
+            set_intersection(KernelWorkingSetMap[it1.first].inputAddressIndexSet.begin(),KernelWorkingSetMap[it1.first].inputAddressIndexSet.end(), KernelWorkingSetMap[it2.first].internalAddressIndexSet.begin(),KernelWorkingSetMap[it2.first].internalAddressIndexSet.end(),overlaps.begin());
+            kernelInterSection[kernelpair].push_back(overlaps);
+            set_intersection(KernelWorkingSetMap[it1.first].inputAddressIndexSet.begin(),KernelWorkingSetMap[it1.first].inputAddressIndexSet.end(), KernelWorkingSetMap[it2.first].outputAddressIndexSet.begin(),KernelWorkingSetMap[it2.first].outputAddressIndexSet.end(),overlaps.begin());
+            kernelInterSection[kernelpair].push_back(overlaps);
+            set_intersection(KernelWorkingSetMap[it1.first].internalAddressIndexSet.begin(),KernelWorkingSetMap[it1.first].internalAddressIndexSet.end(), KernelWorkingSetMap[it2.first].inputAddressIndexSet.begin(),KernelWorkingSetMap[it2.first].inputAddressIndexSet.end(),overlaps.begin());
+            kernelInterSection[kernelpair].push_back(overlaps);
+            set_intersection(KernelWorkingSetMap[it1.first].internalAddressIndexSet.begin(),KernelWorkingSetMap[it1.first].internalAddressIndexSet.end(), KernelWorkingSetMap[it2.first].internalAddressIndexSet.begin(),KernelWorkingSetMap[it2.first].internalAddressIndexSet.end(),overlaps.begin());
+            kernelInterSection[kernelpair].push_back(overlaps);
+            set_intersection(KernelWorkingSetMap[it1.first].internalAddressIndexSet.begin(),KernelWorkingSetMap[it1.first].internalAddressIndexSet.end(), KernelWorkingSetMap[it2.first].outputAddressIndexSet.begin(),KernelWorkingSetMap[it2.first].outputAddressIndexSet.end(),overlaps.begin());
+            kernelInterSection[kernelpair].push_back(overlaps);
+            set_intersection(KernelWorkingSetMap[it1.first].outputAddressIndexSet.begin(),KernelWorkingSetMap[it1.first].outputAddressIndexSet.end(), KernelWorkingSetMap[it2.first].inputAddressIndexSet.begin(),KernelWorkingSetMap[it2.first].inputAddressIndexSet.end(),overlaps.begin());
+            kernelInterSection[kernelpair].push_back(overlaps);
+            set_intersection(KernelWorkingSetMap[it1.first].outputAddressIndexSet.begin(),KernelWorkingSetMap[it1.first].outputAddressIndexSet.end(), KernelWorkingSetMap[it2.first].internalAddressIndexSet.begin(),KernelWorkingSetMap[it2.first].internalAddressIndexSet.end(),overlaps.begin());
+            kernelInterSection[kernelpair].push_back(overlaps);
+            set_intersection(KernelWorkingSetMap[it1.first].outputAddressIndexSet.begin(),KernelWorkingSetMap[it1.first].outputAddressIndexSet.end(), KernelWorkingSetMap[it2.first].outputAddressIndexSet.begin(),KernelWorkingSetMap[it2.first].outputAddressIndexSet.end(),overlaps.begin());
+            kernelInterSection[kernelpair].push_back(overlaps);
+
+            //calculate kernel temporal relationships here
+            if ((KernelLivenessMap[it1.first].birthTime > KernelLivenessMap[it2.first].birthTime)&&(KernelLivenessMap[it1.first].birthTime < KernelLivenessMap[it2.first].deathTime))
+            {
+                //concurrent
+                kernelTemporal[it1.first].first.insert(it2.first);
+            }
+            else if (KernelLivenessMap[it2.first].birthTime > KernelLivenessMap[it1.first].deathTime)
+            {
+                //successor
+                kernelTemporal[it1.first].second.insert(it2.first);
+            }
 
         }
     }
+
 
 
     // output liveness address number here

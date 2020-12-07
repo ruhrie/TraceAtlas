@@ -23,8 +23,15 @@ namespace WorkingSet
         vector<InternaladdressLiving> internalAddressLivingVec;
         set<uint64_t> outputAddressIndexSet;
         set<uint64_t> inputAddressIndexSet;
+        set<uint64_t> internalAddressIndexSet;
         uint64_t internalMapSize;
     } KernelWorkingSet;
+
+    typedef struct KernelLiveness
+    {
+        int64_t birthTime;
+        int64_t deathTime;
+    } KernelLiveness;
 
     extern map<uint64_t,KernelWorkingSet> KernelWorkingSetMap;
     extern int64_t timing;
@@ -35,6 +42,15 @@ namespace WorkingSet
     extern uint64_t internalMapSize;
     extern set<uint64_t> outputAddressIndexSet;
     extern map<uint64_t,uint64_t> maxinternalfiring;
+    
+    // for data size restoring
+    extern map<uint64_t,uint64_t> importantAddrToDatasize;
+
+
+    //for kernel liveness
+    extern map<uint64_t,KernelLiveness> KernelLivenessMap;
     void Process(std::string &key, std::string &value);
     void ProcessBlock(std::string &key, std::string &value);
+
+
 } // namespace WorkingSet
