@@ -1,5 +1,6 @@
 #pragma once
 #include "AtlasUtil/Graph/Graph.h"
+#include <AtlasUtil/Graph/GraphChecks.h>
 #include <cfloat>
 #include <set>
 #include <vector>
@@ -36,17 +37,9 @@ public:
     Legality IsLegal(const Graph<float> &graph, const std::set<GraphKernel> &kernels, const Graph<float> &probGraph) const
     {
         //requirement 1: is strongly connected
-        for (const auto &blockA : Blocks)
+        if(!IsStronglyConnected(Blocks, graph))
         {
-            for (const auto &blockB : Blocks)
-            {
-                auto path = Dijkstra(graph, blockA, blockB);
-                if (path.empty())
-                {
-                    //there is no path
-                    return Legality::RuleOne;
-                }
-            }
+            return Legality::RuleOne;
         }
         //requirement 2: no partial overlaps
         //check this last
@@ -156,23 +149,7 @@ public:
         fusedSet.insert(compare.Blocks.begin(), compare.Blocks.end());
 
         bool broke = false;
-        for (const auto &a : fusedSet)
-        {
-            for (const auto &b : fusedSet)
-            {
-                auto path = Dijkstra(probGraph, a, b);
-                if (path.empty())
-                {
-                    broke = true;
-                    break;
-                }
-            }
-            if (broke)
-            {
-                break;
-            }
-        }
-        if (broke)
+        if(!IsStronglyConnected(fusedSet, probGraph))
         {
             return -1;
         }
