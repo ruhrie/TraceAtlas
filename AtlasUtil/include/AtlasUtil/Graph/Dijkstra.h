@@ -28,7 +28,7 @@ struct DistanceTuple
 };
 
 //note, we assume this is a digraph
-inline std::vector<uint64_t> Dijkstra(Graph<float> graph, uint64_t start, uint64_t end)
+inline std::vector<uint64_t> Dijkstra(const Graph<float> &graph, uint64_t start, uint64_t end)
 {
     uint64_t maxSize = graph.WeightMatrix.size();
     std::vector<float> dist(maxSize, std::numeric_limits<float>::infinity());
@@ -36,9 +36,13 @@ inline std::vector<uint64_t> Dijkstra(Graph<float> graph, uint64_t start, uint64
     std::vector<bool> Q(maxSize, true);
     std::vector<uint64_t> result;
     uint64_t vCount = 0;
-    for (auto i : graph.NeighborMap[start])
+    if(graph.NeighborMap.find(start) == graph.NeighborMap.end())
     {
-        float &val = graph.WeightMatrix[start][i];
+        return result;
+    }
+    for (auto i : graph.NeighborMap.at(start))
+    {
+        float val = graph.WeightMatrix.at(start).at(i);
         dist[i] = val;
         prev[i] = start;
     }
@@ -76,14 +80,17 @@ inline std::vector<uint64_t> Dijkstra(Graph<float> graph, uint64_t start, uint64
             break;
         }
         //for neighor of u
-        for (auto v : graph.NeighborMap[u])
+        if (graph.NeighborMap.find(u) != graph.NeighborMap.end())
         {
-            float &val = graph.WeightMatrix[u][v];
-            auto alt = dist[u] + val;
-            if (alt < dist[v])
+            for (auto v : graph.NeighborMap.at(u))
             {
-                dist[v] = alt;
-                prev[v] = u;
+                float val = graph.WeightMatrix.at(u).at(v);
+                auto alt = dist[u] + val;
+                if (alt < dist[v])
+                {
+                    dist[v] = alt;
+                    prev[v] = u;
+                }
             }
         }
         vCount++;

@@ -37,7 +37,7 @@ public:
     Legality IsLegal(const Graph<float> &graph, const std::set<GraphKernel> &kernels, const Graph<float> &probGraph) const
     {
         //requirement 1: is strongly connected
-        if(!IsStronglyConnected(Blocks, graph))
+        if (!IsStronglyConnected(Blocks, graph))
         {
             return Legality::RuleOne;
         }
@@ -50,17 +50,21 @@ public:
             //get the max path
             uint64_t minBlock = 0;
             float prob = FLT_MAX;
-            for (int i = 0; i < graph.WeightMatrix[block].size(); i++)
+            auto blockIndex = graph.LocationAlias.at(block);
+            for (int i = 0; i < graph.WeightMatrix[blockIndex].size(); i++)
             {
-                if (graph.WeightMatrix[block][i] < prob)
+                if (graph.WeightMatrix[blockIndex][i] < prob)
                 {
                     minBlock = i;
-                    prob = graph.WeightMatrix[block][i];
+                    prob = graph.WeightMatrix[blockIndex][i];
                 }
             }
-            if (find(Blocks.begin(), Blocks.end(), minBlock) == Blocks.end()) //more probable to leave
+            for (auto subBlock : graph.IndexAlias.at(minBlock))
             {
-                return Legality::RuleThree;
+                if (find(Blocks.begin(), Blocks.end(), subBlock) == Blocks.end()) //more probable to leave
+                {
+                    return Legality::RuleThree;
+                }
             }
         }
         //requirement 4: a hierarchy must have a distinct entrace
@@ -149,7 +153,7 @@ public:
         fusedSet.insert(compare.Blocks.begin(), compare.Blocks.end());
 
         bool broke = false;
-        if(!IsStronglyConnected(fusedSet, probGraph))
+        if (!IsStronglyConnected(fusedSet, probGraph))
         {
             return -1;
         }
@@ -162,12 +166,14 @@ public:
         set_difference(Blocks.begin(), Blocks.end(), compare.Blocks.begin(), compare.Blocks.end(), std::inserter(diff, diff.begin()));
         for (const auto &a : fusedSet)
         {
+            auto A = graph.LocationAlias.at(a);
             for (const auto &b : fusedSet)
             {
-                denominator += graph.WeightMatrix[a][b];
+                auto B = graph.LocationAlias.at(b);
+                denominator += graph.WeightMatrix[A][B];
                 if (diff.find(a) != diff.end() || diff.find(b) != diff.end())
                 {
-                    numerator += graph.WeightMatrix[a][b];
+                    numerator += graph.WeightMatrix[A][B];
                 }
             }
         }

@@ -42,7 +42,7 @@ inline Graph<float> GraphCollapse(Graph<float> base, const std::set<GraphKernel>
         std::set<uint64_t> remappedKernel;
         for (const auto &block : kernel.Blocks)
         {
-            remappedKernel.insert(base.LocationAlias[block]);
+            remappedKernel.insert(block);
         }
         mappedBlocks.insert(remappedKernel);
     }
@@ -76,11 +76,13 @@ inline Graph<float> GraphCollapse(Graph<float> base, const std::set<GraphKernel>
     for (const auto &priorIndex : base.IndexAlias)
     {
         auto pId = priorIndex.first;
+        for (auto baseBlock : priorIndex.second)
+        {
         //check if this is in a new fusion
         bool fuse = false;
         for (const auto &k : mappedBlocks)
         {
-            if (k.find(pId) != k.end())
+                if (k.find(baseBlock) != k.end())
             {
                 bool found = false;
                 for (const auto &block : k)
@@ -90,16 +92,16 @@ inline Graph<float> GraphCollapse(Graph<float> base, const std::set<GraphKernel>
                         //a match
                         found = true;
                         auto loc = result.LocationAlias[block];
-                        result.IndexAlias[loc].push_back(pId);
-                        result.LocationAlias[pId] = loc;
+                            result.IndexAlias[loc].push_back(baseBlock);
+                            result.LocationAlias[baseBlock] = loc;
                         break;
                     }
                 }
                 if (!found)
                 {
                     //never found one
-                    result.IndexAlias[newId].push_back(pId);
-                    result.LocationAlias[pId] = newId++;
+                        result.IndexAlias[newId].push_back(baseBlock);
+                        result.LocationAlias[baseBlock] = newId++;
                 }
                 fuse = true;
                 break;
@@ -107,9 +109,11 @@ inline Graph<float> GraphCollapse(Graph<float> base, const std::set<GraphKernel>
         }
         if (!fuse)
         {
-            result.IndexAlias[newId].push_back(pId);
-            result.LocationAlias[pId] = newId++;
+                result.IndexAlias[newId].push_back(baseBlock);
+                result.LocationAlias[baseBlock] = newId++;
         }
+    }
+
     }
 
     //now that the dependencies are figured out we can populate the graph weights

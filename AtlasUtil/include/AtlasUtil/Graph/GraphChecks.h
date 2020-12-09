@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <vector>
 
-bool IsStronglyConnected(std::set<uint64_t> elements, Graph<float> graph)
+inline bool IsStronglyConnected(std::set<uint64_t> elements, Graph<float> graph)
 {
     using namespace std;
     for (auto e : elements)
@@ -16,11 +16,13 @@ bool IsStronglyConnected(std::set<uint64_t> elements, Graph<float> graph)
         while (!toProcess.empty())
         {
             auto c = toProcess.back();
+            auto C = graph.LocationAlias[c];
             toProcess.pop_back();
             visited.insert(c);
             for (auto f : elements)
             {
-                if (graph.NeighborMap[c].find(f) != graph.NeighborMap[c].end())
+                auto g = graph.LocationAlias[f];
+                if (graph.NeighborMap[C].find(g) != graph.NeighborMap[C].end())
                 {
                     reachable.insert(f);
                     if (find(toProcess.begin(), toProcess.end(), f) == toProcess.end() && visited.find(f) == visited.end())
