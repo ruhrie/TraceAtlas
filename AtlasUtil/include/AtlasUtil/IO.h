@@ -6,6 +6,7 @@
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/SourceMgr.h>
 #include <memory>
+#include <spdlog/spdlog.h>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -31,6 +32,7 @@ inline std::vector<std::unique_ptr<llvm::Module>> LoadBitcodes(const std::vector
 
 inline Graph<uint64_t> LoadCSV(const std::string &path)
 {
+    spdlog::trace("Loading csv file: {0}", path);
     Graph<uint64_t> result;
     std::fstream inputFile;
     inputFile.open(path, std::ios::in);

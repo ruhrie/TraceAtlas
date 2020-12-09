@@ -32,11 +32,9 @@ int main(int argc, char **argv)
 
     SetupLogger(LogFile, LogLevel);
 
-    spdlog::trace("Loading csv");
     auto csvData = LoadCSV(InputFilename);
-
-    spdlog::trace("Building graph");
-    auto baseGraph = ProbabilityTransform(csvData);
+    auto compressedGraph = CompressGraph(csvData);
+    auto baseGraph = ProbabilityTransform(compressedGraph);
     auto probabilityGraph = baseGraph;
 
     bool change = true;

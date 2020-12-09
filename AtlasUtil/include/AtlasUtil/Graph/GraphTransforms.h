@@ -2,11 +2,13 @@
 #include "AtlasUtil/Graph/Graph.h"
 #include "AtlasUtil/Graph/Kernel.h"
 #include <set>
+#include <spdlog/spdlog.h>
 #include <stdint.h>
 #include <vector>
 
 inline Graph<float> ProbabilityTransform(Graph<uint64_t> input)
 {
+    spdlog::trace("Building probability graph");
     Graph<float> result;
 
     for (int i = 0; i < input.WeightMatrix.size(); i++)
@@ -34,6 +36,7 @@ inline Graph<float> ProbabilityTransform(Graph<uint64_t> input)
 
 inline Graph<float> GraphCollapse(Graph<float> base, const std::set<GraphKernel> &kernels)
 {
+    spdlog::trace("Collapsing graph");
     Graph<float> result;
 
     std::set<std::set<uint64_t>> mappedBlocks;
@@ -78,42 +81,42 @@ inline Graph<float> GraphCollapse(Graph<float> base, const std::set<GraphKernel>
         auto pId = priorIndex.first;
         for (auto baseBlock : priorIndex.second)
         {
-        //check if this is in a new fusion
-        bool fuse = false;
-        for (const auto &k : mappedBlocks)
-        {
-                if (k.find(baseBlock) != k.end())
+            //check if this is in a new fusion
+            bool fuse = false;
+            for (const auto &k : mappedBlocks)
             {
-                bool found = false;
-                for (const auto &block : k)
+                if (k.find(baseBlock) != k.end())
                 {
-                    if (result.LocationAlias.find(block) != result.LocationAlias.end()) //sus
+                    bool found = false;
+                    for (const auto &block : k)
                     {
-                        //a match
-                        found = true;
-                        auto loc = result.LocationAlias[block];
+                        if (result.LocationAlias.find(block) != result.LocationAlias.end()) //sus
+                        {
+                            //a match
+                            found = true;
+                            auto loc = result.LocationAlias[block];
                             result.IndexAlias[loc].push_back(baseBlock);
                             result.LocationAlias[baseBlock] = loc;
-                        break;
+                            break;
+                        }
                     }
-                }
-                if (!found)
-                {
-                    //never found one
+                    if (!found)
+                    {
+                        //never found one
                         result.IndexAlias[newId].push_back(baseBlock);
                         result.LocationAlias[baseBlock] = newId++;
+                    }
+                    fuse = true;
+                    break;
                 }
-                fuse = true;
-                break;
             }
-        }
-        if (!fuse)
-        {
+            if (!fuse)
+            {
                 result.IndexAlias[newId].push_back(baseBlock);
                 result.LocationAlias[baseBlock] = newId++;
+            }
         }
-    }
-
+        
     }
 
     //now that the dependencies are figured out we can populate the graph weights
@@ -173,4 +176,66 @@ inline Graph<float> GraphCollapse(Graph<float> base, const std::set<GraphKernel>
     }
 
     return result;
+}
+
+inline Graph<uint64_t> CompressGraph(Graph<uint64_t> base)
+{
+    spdlog::trace("Compressing graph");
+    //first remove no neighbor edges
+    std::vector<uint64_t> indexesToRemove;
+    for (uint64_t i = 0; i < base.WeightMatrix.size(); i++)
+    {
+        if (base.NeighborMap.find(i) == base.NeighborMap.end())
+        {
+            bool connected = false;
+            for (uint64_t j = 0; j < base.WeightMatrix.size(); j++)
+            {
+                if (base.WeightMatrix[j][i] != 0)
+                {
+                    connected = true;
+                    break;
+                }
+            }
+            if (!connected)
+            {
+                indexesToRemove.push_back(i);
+            }
+        }
+    }
+    Graph<uint64_t> noNeighborGraph;
+    uint64_t newSize = base.WeightMatrix.size() - indexesToRemove.size();
+    uint64_t j = 0;
+    for (uint64_t i = 0; i < base.WeightMatrix.size(); i++)
+    {
+        if (find(indexesToRemove.begin(), indexesToRemove.end(), i) == indexesToRemove.end())
+        {
+            std::vector<uint64_t> subEntries(newSize);
+            uint64_t l = 0;
+            for (uint64_t k = 0; k < base.WeightMatrix.size(); k++)
+            {
+                if (find(indexesToRemove.begin(), indexesToRemove.end(), k) == indexesToRemove.end())
+                {
+                    subEntries[l++] = base.WeightMatrix[i][k];
+                }
+            }
+            noNeighborGraph.WeightMatrix.push_back(subEntries);
+            noNeighborGraph.IndexAlias[j].push_back(i);
+            noNeighborGraph.LocationAlias[i] = j;
+
+            j++;
+        }
+    }
+    for (uint64_t i = 0; i < noNeighborGraph.WeightMatrix.size(); i++)
+    {
+        auto index = noNeighborGraph.IndexAlias[i][0];
+        std::set<uint64_t> subNeighbor;
+        for (auto k : base.NeighborMap[index])
+        {
+            subNeighbor.insert(noNeighborGraph.LocationAlias[k]);
+        }
+        noNeighborGraph.NeighborMap[i] = subNeighbor;
+    }
+
+    //then remove absolute edges
+    return noNeighborGraph;
 }
