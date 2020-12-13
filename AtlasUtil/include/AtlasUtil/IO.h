@@ -1,11 +1,12 @@
 #pragma once
-#include "AtlasUtil/Graph.h"
+#include "AtlasUtil/Graph/Graph.h"
 #include "AtlasUtil/Print.h"
 #include <fstream>
 #include <llvm/IR/Module.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/SourceMgr.h>
 #include <memory>
+#include <spdlog/spdlog.h>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -31,6 +32,7 @@ inline std::vector<std::unique_ptr<llvm::Module>> LoadBitcodes(const std::vector
 
 inline Graph<uint64_t> LoadCSV(const std::string &path)
 {
+    spdlog::trace("Loading csv file: {0}", path);
     Graph<uint64_t> result;
     std::fstream inputFile;
     inputFile.open(path, std::ios::in);
@@ -52,6 +54,16 @@ inline Graph<uint64_t> LoadCSV(const std::string &path)
     {
         result.IndexAlias[i].push_back(i);
         result.LocationAlias[i] = i;
+    }
+    for (uint64_t i = 0; i < result.WeightMatrix.size(); i++)
+    {
+        for (uint64_t j = 0; j < result.WeightMatrix.size(); j++)
+        {
+            if (result.WeightMatrix[i][j] != 0)
+            {
+                result.NeighborMap[i].insert(j);
+            }
+        }
     }
     return result;
 }
