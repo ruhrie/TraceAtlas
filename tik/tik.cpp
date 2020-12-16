@@ -45,7 +45,7 @@ cl::opt<string> OutputType("f", cl::desc("Specify output file format. Can be LLV
 cl::opt<bool> ASCIIFormat("S", cl::desc("output json as human-readable ASCII text"));
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
-cl::opt<bool> Preformat("pf", llvm::cl::desc("Split and annotate source bitcode blocks and values before processing."));
+cl::opt<bool> Preformat("pf", llvm::cl::desc("Don't split and annotate source bitcode blocks and values before processing."));
 
 int main(int argc, char *argv[])
 {
@@ -87,6 +87,7 @@ int main(int argc, char *argv[])
         case 5:
         {
             spdlog::set_level(spdlog::level::debug);
+            break;
         }
         case 6:
         {
@@ -96,6 +97,7 @@ int main(int argc, char *argv[])
         default:
         {
             spdlog::warn("Invalid logging level: " + to_string(LogLevel));
+            break;
         }
     }
     ifstream inputJson;
@@ -171,7 +173,7 @@ int main(int argc, char *argv[])
 
     Module *base = sourceBitcode.get();
 
-    CleanModule(base);
+    //CleanModule(base);
 
     //annotate it with the same algorithm used in the tracer
     if (!Preformat)

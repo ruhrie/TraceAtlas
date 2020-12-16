@@ -36,7 +36,7 @@ inline std::vector<uint64_t> Dijkstra(const Graph<float> &graph, uint64_t start,
     std::vector<bool> Q(maxSize, true);
     std::vector<uint64_t> result;
     uint64_t vCount = 0;
-    if(graph.NeighborMap.find(start) == graph.NeighborMap.end())
+    if (graph.NeighborMap.find(start) == graph.NeighborMap.end())
     {
         return result;
     }

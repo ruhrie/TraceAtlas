@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
     // Annotate its bitcodes and values
-    CleanModule(sourceBitcode.get());
+    //CleanModule(sourceBitcode.get());
     if (!Preformat)
     {
         Format(sourceBitcode.get());

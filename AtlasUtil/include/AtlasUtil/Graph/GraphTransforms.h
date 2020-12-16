@@ -116,7 +116,6 @@ inline Graph<float> GraphCollapse(Graph<float> base, const std::set<GraphKernel>
                 result.LocationAlias[baseBlock] = newId++;
             }
         }
-        
     }
 
     //now that the dependencies are figured out we can populate the graph weights
