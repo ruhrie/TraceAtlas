@@ -61,8 +61,10 @@ map<int, set<int>> myFormerOutput;
 map<int64_t,vector<uint64_t>> BBMemInstSize;
 // start end byte_count ref_count
 typedef tuple <int64_t, int64_t, int64_t,int64_t> AddrRange;
-map<int64_t,AddrRange> LoadAddrRangeMap;
-map<int64_t,AddrRange> StoreAddrRangeMap;
+typedef map<int64_t,AddrRange> AddrRangeMap;
+map <int, AddrRangeMap> loadAddrRangeMapPerInstance;
+map <int, AddrRangeMap> storeAddrRangeMapPerInstance;
+
 set<int64_t> ValidBlock;
 int vBlock;
 int64_t instCounter = 0;
@@ -122,6 +124,103 @@ void firstStore(uint64_t addrIndex, int64_t t, bool fromStore, int kernelIndex)
     }
 }
 
+void MergeAfterProcess()
+{
+    int errorRate = 100;
+    map<int64_t,vector<int64_t>> toBeMerged;
+    
+    for(auto &it :loadAddrRangeMapPerInstance)
+    {
+        int64_t lastStart = -1;
+        int64_t lastEnd = -1;
+        toBeMerged.clear();
+        map<int64_t,AddrRange> itAddrRangeMap = it.second ;
+        for(auto itr:itAddrRangeMap)
+        {
+            tuple <int64_t, int64_t, int64_t,int64_t> itAddrRange = itr.second;
+            
+            if(lastStart == -1)
+            {
+                lastStart = get<0> (itAddrRange);
+                lastEnd = get<1> (itAddrRange);
+            }
+            else if ((get<0> (itAddrRange) - lastEnd)/(get<1> (itAddrRange) - lastStart) < errorRate)
+            //else if (get<0> (itAddrRange) - lastEnd < 1)
+            {
+                toBeMerged[lastStart].push_back(get<0> (itAddrRange));
+                lastEnd = get<1> (itAddrRange);              
+            }
+            else
+            {
+                lastStart = get<0> (itAddrRange);
+                lastEnd = get<1> (itAddrRange);             
+            } 
+            //printf("start : %ld end : %ld, org start : %ld org end : %ld \n",lastStart,lastEnd,get<0> (itAddrRange),get<1> (itAddrRange)) ;        
+        }
+        map<int64_t,AddrRange> updatedMap;
+
+        for(auto itm:toBeMerged) 
+        {
+            int64_t endAddr =  get<1>(itAddrRangeMap[itm.second.back()]);
+            tuple<int64_t, int64_t, int64_t,int64_t> AddrRange(itm.first, endAddr, endAddr-itm.first, itm.second.size());
+            updatedMap[itm.first] = AddrRange;
+        }
+        it.second = updatedMap;
+        int size = 0;
+        for (auto itv :toBeMerged)
+        {
+            size += itv.second.size();
+        }
+        //printf("merge size:%d,before size: %lu, ki:%d \n",size,itAddrRangeMap.size(),it.first);
+    }
+}
+
+void MergeBeforeProcess(int uid)
+{
+    int errorRate = 100;
+    map<int64_t,vector<int64_t>> toBeMerged;
+    int64_t lastStart = -1;
+    int64_t lastEnd = -1;
+    map<int64_t,AddrRange> itAddrRangeMap = loadAddrRangeMapPerInstance[uid];
+    for(auto itr:itAddrRangeMap)
+    {
+        tuple <int64_t, int64_t, int64_t,int64_t> itAddrRange = itr.second;
+        
+        if(lastStart == -1)
+        {
+            lastStart = get<0> (itAddrRange);
+            lastEnd = get<1> (itAddrRange);
+        }
+        else if ((get<0> (itAddrRange) - lastEnd)/(get<1> (itAddrRange) - lastStart) < errorRate)
+        //else if (get<0> (itAddrRange) - lastEnd < 1)
+        {
+            toBeMerged[lastStart].push_back(get<0> (itAddrRange));
+            lastEnd = get<1> (itAddrRange);              
+        }
+        else
+        {
+            lastStart = get<0> (itAddrRange);
+            lastEnd = get<1> (itAddrRange);             
+        } 
+        //printf("start : %ld end : %ld, org start : %ld org end : %ld \n",lastStart,lastEnd,get<0> (itAddrRange),get<1> (itAddrRange)) ;        
+    }
+    map<int64_t,AddrRange> updatedMap;
+
+    for(auto itm:toBeMerged) 
+    {
+        int64_t endAddr =  get<1>(itAddrRangeMap[itm.second.back()]);
+        tuple<int64_t, int64_t, int64_t,int64_t> AddrRange(itm.first, endAddr, endAddr-itm.first, itm.second.size());
+        updatedMap[itm.first] = AddrRange;
+    }
+    loadAddrRangeMapPerInstance[uid] = updatedMap;
+    int size = 0;
+    for (auto itv :toBeMerged)
+    {
+        size += itv.second.size();
+    }
+    //printf("merge size:%d,before size: %lu, ki:%d \n",size,itAddrRangeMap.size(),it.first);   
+}
+
 
 void Process(string &key, string &value)
 {
@@ -130,17 +229,19 @@ void Process(string &key, string &value)
     if (key == "BBEnter")
     {
         // block represents current processed block id in the trace
+        instCounter = 0;
         int block = stoi(value, nullptr, 0);
         //printf("block:%d \n",block);
         if (currentKernel == "-1" || kernelMap[currentKernel].find(block) == kernelMap[currentKernel].end())
         {
-            printf("111 \n");
+            //printf("111 \n");
+            
+            vBlock = block;
             string innerKernel = "-1";
             for (auto k : kernelMap)
             {
                 if (k.second.find(block) != k.second.end())
-                {
-                    //instCounter = 0;
+                {                   
                     innerKernel = k.first;
                     break;
                 }
@@ -158,11 +259,10 @@ void Process(string &key, string &value)
                 currentUid = -1;
             }
         }
-        // if (kernelMap.find(value) != kernelMap.end())
-        // {
-
-        //     vBlock = (stol(value, nullptr, 0));
-        // }
+        else if (kernelMap[currentKernel].find(block) != kernelMap[currentKernel].end())
+        {
+            vBlock = block;
+        }
     }
     else if (key == "StoreAddress")
     {
@@ -193,24 +293,25 @@ void Process(string &key, string &value)
             
             firstStore(address, timing, true, currentUid);
             
-            // uint64_t dataSize = BBMemInstSize[vBlock][instCounter];
-            // instCounter++;
+            uint64_t dataSize = BBMemInstSize[vBlock][instCounter];
+            instCounter++;
             //printf("vblock:%d,ins:%lu,data size:%lu \n",vBlock,instCounter,dataSize);
-            // if (LoadAddrRangeMap.find(address) ==LoadAddrRangeMap.end())
-            // {
-            //     std::tuple<int64_t, int64_t, int64_t,int64_t> AddrRange(address, address+dataSize, dataSize, 1); 
-            //     LoadAddrRangeMap[address] = AddrRange;
-            // }
-            // else
-            // {
-            //     std::tuple<int64_t, int64_t, int64_t,int64_t> ar = LoadAddrRangeMap[address];
-            //     int64_t stop = std::get<1> (ar);
-            //     if (stop < address+ dataSize)
-            //     {
-            //         std::tuple<int64_t, int64_t, int64_t,int64_t> addrRange(address, address+dataSize,std::get<2> (ar) + dataSize,std::get<3> (ar) + 1); 
-            //         LoadAddrRangeMap[address] = addrRange;
-            //     }
-            // }
+            if (storeAddrRangeMapPerInstance[currentUid].find(address) == storeAddrRangeMapPerInstance[currentUid].end())
+            {
+                std::tuple<int64_t, int64_t, int64_t,int64_t> AddrRange(address, address+dataSize, dataSize, 1); 
+                storeAddrRangeMapPerInstance[currentUid][address] = AddrRange;
+            }
+            else
+            {
+                std::tuple<int64_t, int64_t, int64_t,int64_t> ar = storeAddrRangeMapPerInstance[currentUid][address];
+                int64_t stop = std::get<1> (ar);
+                if (stop < address+ dataSize)
+                {
+                    std::tuple<int64_t, int64_t, int64_t,int64_t> addrRange(address, address+dataSize,std::get<2> (ar) + dataSize,std::get<3> (ar) + 1); 
+                    storeAddrRangeMapPerInstance[currentUid][address] = addrRange;
+                }
+            }
+            //printf("load tuple size: %lu ,store tuple size: %lu, uid %d,addr:%ld \n",loadAddrRangeMapPerInstance[currentUid].size(),storeAddrRangeMapPerInstance[currentUid].size(),currentUid,address);
         }
         
     }
@@ -254,10 +355,31 @@ void Process(string &key, string &value)
             {
                 firstStore(address, timing, false, currentUid);
             }
-            // instCounter++;
-            // uint64_t dataSize = BBMemInstSize[vBlock][instCounter];
-            // std::tuple<int64_t, int64_t, int64_t,int64_t> AddrRange(address, address+dataSize, dataSize, 1); 
-            // StoreAddrRangeMap[address] = AddrRange;
+
+            int mergeThreshould = 10;
+            uint64_t dataSize = BBMemInstSize[vBlock][instCounter];
+            instCounter++;
+            if (loadAddrRangeMapPerInstance[currentUid].find(address) == loadAddrRangeMapPerInstance[currentUid].end())
+            {
+                std::tuple<int64_t, int64_t, int64_t,int64_t> AddrRange(address, address+dataSize, dataSize, 1); 
+                loadAddrRangeMapPerInstance[currentUid][address] = AddrRange;
+            }
+            else
+            {
+                std::tuple<int64_t, int64_t, int64_t,int64_t> ar = loadAddrRangeMapPerInstance[currentUid][address];
+                int64_t stop = std::get<1> (ar);
+                if (stop < address+ dataSize)
+                {
+                    std::tuple<int64_t, int64_t, int64_t,int64_t> addrRange(address, address+dataSize,get<2> (ar) + dataSize,get<3> (ar) + 1); 
+                    loadAddrRangeMapPerInstance[currentUid][address] = addrRange;
+                }
+            }
+            if (loadAddrRangeMapPerInstance[currentUid].size()>10)
+            {
+                MergeBeforeProcess(currentUid);
+            }
+            
+            //printf("load tuple size: %lu ,data size: %lu, uid %d,addr:%ld \n",loadAddrRangeMapPerInstance[currentUid].size(),dataSize,currentUid,address);
         }
         
     }    
@@ -349,6 +471,11 @@ int main(int argc, char **argv)
     vector <int> serial;
     int i = 0;
     int maxUID = UID;
+
+
+
+
+
 
     
     while (i < maxUID)
@@ -455,24 +582,8 @@ int main(int argc, char **argv)
         }
     }
     
-
-    //int64_t lastEnd = 0;
-
-    // for (auto it : LoadAddrRangeMap)
-    // {
-    //     // merge first
-    //     if (get<1>(it.second)< lastEnd && get<0>(it.second) < lastEnd )
-    //     {
-
-    //     }
-    //     else if (get<1>(it.second)< lastEnd && get<0>(it.second) < lastEnd )
-    //     {}
-
-
-
-    // }
-
-    printf("load tuple size: %lu ,store tuple size: %lu",LoadAddrRangeMap.size(),StoreAddrRangeMap.size());
+    
+    MergeAfterProcess();
 
     nlohmann::json jOut;
     jOut["serialAll"] = serialAll;

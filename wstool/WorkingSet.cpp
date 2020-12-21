@@ -32,6 +32,8 @@ namespace WorkingSet
     typedef tuple <uint64_t, uint64_t, uint64_t,uint64_t> AddrRange;
     map<uint64_t,AddrRange> LoadAddrRangeMap;
     map<uint64_t,AddrRange> StoreAddrRangeMap;
+    typedef map<uint64_t,AddrRange> AddrRangeMap;
+    map <int, AddrRangeMap> loadAddrRangeMapPerInstance;
 
     void firstStore(uint64_t addrIndex, int64_t t, bool fromStore, uint64_t kernelIndex)
     {
@@ -203,7 +205,7 @@ namespace WorkingSet
                 importantAddrToDatasize[addressIndex] = dataSize;
                 if (key == "StoreAddress")
                 {
-                    printf("store size %lu  \n",StoreAddrRangeMap.size());
+                    //printf("store size %lu  \n",StoreAddrRangeMap.size());
                     if (StoreAddrRangeMap.find(addressIndex) ==StoreAddrRangeMap.end())
                     {
                         std::tuple<uint64_t, uint64_t, uint64_t,uint64_t> AddrRange(addressIndex, addressIndex+dataSize, dataSize, 1); 
