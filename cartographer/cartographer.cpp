@@ -159,6 +159,7 @@ int main(int argc, char **argv)
         default:
         {
             spdlog::warn("Invalid logging level: " + to_string(LogLevel));
+            break;
         }
     }
     spdlog::trace("Set logging level");
@@ -213,12 +214,6 @@ int main(int argc, char **argv)
                 ValidBlocks.insert(block);
                 blockIndeces.push_back(block);
             }
-        }
-
-        if (type1Kernels.empty())
-        {
-            spdlog::warn("Detected no kernels, exiting");
-            return EXIT_SUCCESS;
         }
 
         TypeTwo::Setup(bitcodePtrs, type1Kernels);

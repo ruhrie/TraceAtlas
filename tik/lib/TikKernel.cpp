@@ -1,5 +1,7 @@
 #include "tik/TikKernel.h"
 #include "AtlasUtil/Exceptions.h"
+#include <iostream>
+#include <llvm/Transforms/Utils/Cloning.h>
 #include <nlohmann/json.hpp>
 
 using namespace llvm;
@@ -7,9 +9,9 @@ using namespace std;
 
 namespace TraceAtlas::tik
 {
-    TikKernel::TikKernel(Function *kernFunc)
+    TikKernel::TikKernel(Function *func)
     {
-        KernelFunction = kernFunc;
+        KernelFunction = func;
         Name = KernelFunction->getName();
         // TODO: Conditional init
 

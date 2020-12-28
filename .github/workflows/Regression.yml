@@ -1,0 +1,46 @@
+name: "Regression Tests"
+on: [pull_request]
+
+jobs:
+  job:
+    name: ${{matrix.os}}-${{matrix.Configuration}}
+    runs-on: ${{matrix.os}}
+    strategy:
+      fail-fast: false
+      matrix:
+        Configuration: ["Debug", "Release", "RelWithDebInfo"]
+        os: ["ubuntu-18.04"]
+    steps:
+      - name: Install dependencies
+        run: sudo apt install libpapi-dev clang-tidy-9
+        shell: bash
+      - uses: actions/checkout@v1
+        with:
+          submodules: true
+      - name: Run vcpkg
+        uses: lukka/run-vcpkg@v6
+        id: runvcpkg
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+        with:
+          vcpkgArguments: "@${{ github.workspace }}/vcpkg.txt"
+          vcpkgDirectory: "${{ github.workspace }}/vcpkg"
+          appendedCacheKey: ${{ hashFiles( '${{ github.workspace }}/vcpkg.txt' ) }}
+      - name: Run CMake with Ninja
+        env:
+          CC: clang-9
+          CXX: clang++-9
+          LDFLAGS: -fuse-ld=lld-9
+        uses: lukka/run-cmake@v1
+        id: runcmake
+        with:
+          cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
+          cmakeListsTxtPath: "${{ github.workspace }}/CMakeLists.txt"
+          useVcpkgToolchainFile: true
+          buildWithCMakeArgs: "-- -v"
+          buildDirectory: ${{github.workspace}}/build
+          cmakeAppendedArgs: -G Ninja -DENABLE_LINTER=ON -DCMAKE_BUILD_TYPE=${{matrix.Configuration}}
+      - name: Run ctest
+        run: ctest
+        shell: bash
+        working-directory: ${{github.workspace}}/build

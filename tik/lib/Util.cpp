@@ -1,6 +1,7 @@
 #include "tik/Util.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
+#include "AtlasUtil/Print.h"
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/Instructions.h>
@@ -13,29 +14,8 @@ using namespace llvm;
 
 namespace TraceAtlas::tik
 {
-
     std::map<int64_t, llvm::BasicBlock *> IDToBlock;
     std::map<int64_t, llvm::Value *> IDToValue;
-
-    void PopulateIdMap(llvm::Module *M)
-    {
-        for (auto &mi : *M)
-        {
-            for (auto &fi : mi)
-            {
-                for (auto bi = fi.begin(); bi != fi.end(); bi++)
-                {
-                    auto inst = cast<Instruction>(bi);
-                    uint32_t numOps = inst->getNumOperands();
-                    for (uint32_t i = 0; i < numOps; i++)
-                    {
-                        Value *op = inst->getOperand(i);
-                        IDToValue[GetValueID(op)] = op;
-                    }
-                }
-            }
-        }
-    }
 
     string GetString(Value *v)
     {
@@ -156,7 +136,7 @@ namespace TraceAtlas::tik
         }
         return checked;
     }
-    set<BasicBlock *> GetEntrances(set<BasicBlock *> &blocks)
+    set<BasicBlock *> GetEntrances(const set<BasicBlock *> &blocks)
     {
         set<BasicBlock *> Entrances;
         for (auto block : blocks)
@@ -360,37 +340,6 @@ namespace TraceAtlas::tik
         return IsReachable(base, base, validBlocks);
     }
 
-    set<BasicBlock *> GetExits(set<BasicBlock *> blocks)
-    {
-        set<BasicBlock *> Exits;
-        for (auto block : blocks)
-        {
-            for (auto suc : successors(block))
-            {
-                if (blocks.find(suc) == blocks.end())
-                {
-                    Exits.insert(suc);
-                }
-            }
-            auto term = block->getTerminator();
-            if (auto retInst = dyn_cast<ReturnInst>(term))
-            {
-                Function *base = block->getParent();
-                for (auto user : base->users())
-                {
-                    if (auto v = dyn_cast<Instruction>(user))
-                    {
-                        auto parentBlock = v->getParent();
-                        if (blocks.find(parentBlock) == blocks.end())
-                        {
-                            Exits.insert(parentBlock);
-                        }
-                    }
-                }
-            }
-        }
-        return Exits;
-    }
     set<BasicBlock *> GetConditionals(const set<BasicBlock *> &blocks, const set<int64_t> &validBlocks)
     {
         set<BasicBlock *> result;
@@ -444,6 +393,70 @@ namespace TraceAtlas::tik
                 if (suc->getParent() != F)
                 {
                     result.insert(suc);
+                }
+            }
+        }
+        return result;
+    }
+
+    set<BasicBlock *> GetExits(set<BasicBlock *> blocks)
+    {
+        set<BasicBlock *> Exits;
+        for (auto block : blocks)
+        {
+            for (auto suc : successors(block))
+            {
+                if (blocks.find(suc) == blocks.end())
+                {
+                    Exits.insert(suc);
+                }
+            }
+            auto term = block->getTerminator();
+            if (auto retInst = dyn_cast<ReturnInst>(term))
+            {
+                Function *base = block->getParent();
+                for (auto user : base->users())
+                {
+                    if (auto v = dyn_cast<Instruction>(user))
+                    {
+                        auto parentBlock = v->getParent();
+                        if (blocks.find(parentBlock) == blocks.end())
+                        {
+                            Exits.insert(parentBlock);
+                        }
+                    }
+                }
+            }
+        }
+        return Exits;
+    }
+
+    set<BasicBlock *> GetExits(set<BasicBlock *> &s, BasicBlock *entrance)
+    {
+        set<BasicBlock *> result;
+        for (auto block : s)
+        {
+            for (auto suc : successors(block))
+            {
+                if (s.find(suc) == s.end() && suc->getParent() == entrance->getParent())
+                {
+                    result.insert(suc);
+                }
+            }
+            auto term = block->getTerminator();
+            if (auto retInst = dyn_cast<ReturnInst>(term))
+            {
+                Function *base = block->getParent();
+                for (auto user : base->users())
+                {
+                    if (auto v = dyn_cast<Instruction>(user))
+                    {
+                        auto parentBlock = v->getParent();
+                        if (s.find(parentBlock) == s.end() && parentBlock->getParent() == entrance->getParent())
+                        {
+                            result.insert(parentBlock);
+                        }
+                    }
                 }
             }
         }
