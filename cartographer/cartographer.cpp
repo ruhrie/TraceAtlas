@@ -42,7 +42,7 @@ cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("l
 cl::opt<string> DotFile("d", cl::desc("Specify dot filename"), cl::value_desc("dot file"));
 cl::opt<string> DumpFile("D", cl::desc("Block relationship file"), cl::value_desc("Relationship file"));
 llvm::cl::opt<bool> Debug("db", llvm::cl::desc("Debug output"), llvm::cl::value_desc("Export debug information to utput file"));
-cl::opt<bool> Preformat("pf", llvm::cl::desc("Don't split and annotate source bitcode blocks and values before processing."));
+cl::opt<bool> Preformat("pf", llvm::cl::desc("Bitcode is preformatted"), llvm::cl::value_desc("Bitcode is preformatted"));
 
 void Dump(const string &dump, std::vector<Module *> &Ms)
 {

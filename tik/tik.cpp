@@ -45,7 +45,7 @@ cl::opt<string> OutputType("f", cl::desc("Specify output file format. Can be LLV
 cl::opt<bool> ASCIIFormat("S", cl::desc("output json as human-readable ASCII text"));
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
-cl::opt<bool> Preformat("pf", llvm::cl::desc("Don't split and annotate source bitcode blocks and values before processing."));
+cl::opt<bool> Preformat("pf", llvm::cl::desc("Bitcode is preformatted"), llvm::cl::value_desc("Bitcode is preformatted"));
 
 int main(int argc, char *argv[])
 {
