@@ -27,20 +27,12 @@ namespace DashTracer
             uint64_t blockCount = GetBlockCount(&M);
             ConstantInt *i = ConstantInt::get(Type::getInt64Ty(M.getContext()), blockCount);
             tst = new GlobalVariable(M, i->getType(), false, llvm::GlobalValue::LinkageTypes::ExternalLinkage, i, "MarkovBlockCount");
-            appendToGlobalCtors(M, MarkovOpen, 0);
-            appendToGlobalDtors(M, MarkovClose, 0);
             return true;
         }
 
         void MarkovIO::getAnalysisUsage(AnalysisUsage &AU) const
         {
             AU.setPreservesAll();
-        }
-        bool MarkovIO::doInitialization(Module &M)
-        {
-            MarkovOpen = cast<Function>(M.getOrInsertFunction("MarkovInit", Type::getVoidTy(M.getContext())).getCallee());
-            MarkovClose = cast<Function>(M.getOrInsertFunction("MarkovExport", Type::getVoidTy(M.getContext())).getCallee());
-            return true;
         }
     } // namespace Passes
     char Passes::MarkovIO::ID = 0;

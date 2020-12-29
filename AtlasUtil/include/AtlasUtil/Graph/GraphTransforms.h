@@ -16,16 +16,17 @@ inline Graph<float> ProbabilityTransform(Graph<uint64_t> input)
         std::vector<float> newRow(input.WeightMatrix.size());
         float sum = 0.0f;
 
-        for (uint64_t j : input.WeightMatrix[i])
+        for (auto j : input.WeightMatrix[i])
         {
-            sum += j;
+            sum += j.second;
         }
 
         for (int j = 0; j < input.WeightMatrix[i].size(); j++)
         {
-            newRow[j] = -1 * log(input.WeightMatrix[i][j] / sum);
+            result.WeightMatrix[i][j] = -1 * log(input.WeightMatrix[i][j] / sum);
+            //newRow[j] = -1 * log(input.WeightMatrix[i][j] / sum);
         }
-        result.WeightMatrix.push_back(newRow);
+        //result.WeightMatrix.push_back(newRow);
     }
     result.LocationAlias = input.LocationAlias;
     result.IndexAlias = input.IndexAlias;
@@ -119,11 +120,13 @@ inline Graph<float> GraphCollapse(Graph<float> base, const std::set<GraphKernel>
     }
 
     //now that the dependencies are figured out we can populate the graph weights
+    /*
     int popCount = result.IndexAlias.size();
     for (int i = 0; i < popCount; i++)
     {
         result.WeightMatrix.emplace_back(popCount);
     }
+    */
 
     //merge the weights
     for (uint64_t i = 0; i < base.WeightMatrix.size(); i++)
@@ -204,6 +207,7 @@ inline Graph<uint64_t> CompressGraph(Graph<uint64_t> base)
     Graph<uint64_t> noNeighborGraph;
     uint64_t newSize = base.WeightMatrix.size() - indexesToRemove.size();
     uint64_t j = 0;
+    uint64_t m = 0;
     for (uint64_t i = 0; i < base.WeightMatrix.size(); i++)
     {
         if (find(indexesToRemove.begin(), indexesToRemove.end(), i) == indexesToRemove.end())
@@ -214,14 +218,15 @@ inline Graph<uint64_t> CompressGraph(Graph<uint64_t> base)
             {
                 if (find(indexesToRemove.begin(), indexesToRemove.end(), k) == indexesToRemove.end())
                 {
-                    subEntries[l++] = base.WeightMatrix[i][k];
+                    noNeighborGraph.WeightMatrix[m][l++] = base.WeightMatrix[i][k];
+                    //subEntries[l++] = base.WeightMatrix[i][k];
                 }
             }
-            noNeighborGraph.WeightMatrix.push_back(subEntries);
+            //noNeighborGraph.WeightMatrix.push_back(subEntries);
             noNeighborGraph.IndexAlias[j].push_back(i);
             noNeighborGraph.LocationAlias[i] = j;
-
             j++;
+            m++;
         }
     }
     for (uint64_t i = 0; i < noNeighborGraph.WeightMatrix.size(); i++)

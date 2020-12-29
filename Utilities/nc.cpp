@@ -32,7 +32,7 @@ int main(int argc, char **argv)
 
     SetupLogger(LogFile, LogLevel);
 
-    auto csvData = LoadCSV(InputFilename);
+    auto csvData = LoadBIN(InputFilename);
     auto compressedGraph = CompressGraph(csvData);
     auto baseGraph = ProbabilityTransform(compressedGraph);
     auto probabilityGraph = baseGraph;

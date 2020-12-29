@@ -30,23 +30,26 @@ inline std::vector<std::unique_ptr<llvm::Module>> LoadBitcodes(const std::vector
     return result;
 }
 
-inline Graph<uint64_t> LoadCSV(const std::string &path)
+inline Graph<uint64_t> LoadBIN(const std::string &path)
 {
-    spdlog::trace("Loading csv file: {0}", path);
+    spdlog::trace("Loading bin file: {0}", path);
     Graph<uint64_t> result;
     std::fstream inputFile;
-    inputFile.open(path, std::ios::in);
-    std::string ln;
-    while (getline(inputFile, ln))
+    inputFile.open(path, std::ios::in | std::ios::binary);
+    while (inputFile.peek() != EOF)
     {
-        std::vector<uint64_t> lVec;
-        std::stringstream lnStream(ln);
-        std::string sub;
-        while (getline(lnStream, sub, ','))
+        uint64_t key;
+        inputFile.readsome((char *)&key, sizeof(uint64_t));
+        uint64_t count;
+        inputFile.readsome((char *)&count, sizeof(uint64_t));
+        for (uint64_t i = 0; i < count; i++)
         {
-            lVec.push_back(std::stoull(sub));
+            uint64_t k2;
+            inputFile.readsome((char *)&k2, sizeof(uint64_t));
+            uint64_t val;
+            inputFile.readsome((char *)&val, sizeof(uint64_t));
+            result.WeightMatrix[key][k2] = val;
         }
-        result.WeightMatrix.push_back(lVec);
     }
     inputFile.close();
     //temporary, needs modification for the future

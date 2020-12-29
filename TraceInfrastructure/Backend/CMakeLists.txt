@@ -1,4 +1,4 @@
-set(SOURCES BackendTrace.c BackendMarkov.c)
+set(SOURCES BackendTrace.c BackendMarkov.cpp)
 if(NOT WIN32)
     list(APPEND SOURCES BackendPapi.c)
 endif()

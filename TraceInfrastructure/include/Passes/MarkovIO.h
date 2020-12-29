@@ -15,7 +15,6 @@ namespace DashTracer
             MarkovIO() : ModulePass(ID) {}
             bool runOnModule(Module &M) override;
             void getAnalysisUsage(AnalysisUsage &AU) const override;
-            bool doInitialization(Module &M) override;
         };
     } // namespace Passes
 } // namespace DashTracer
