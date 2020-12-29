@@ -122,13 +122,13 @@ namespace TraceAtlas::tik
     {
         for (const auto &kernel : kernels)
         {
-            for (auto ai = kernel->KernelFunction->arg_begin(); ai < kernel->KernelFunction->arg_end(); ai++)
+            for (auto *ai = kernel->KernelFunction->arg_begin(); ai < kernel->KernelFunction->arg_end(); ai++)
             {
                 RecurseForStructs(ai->getType(), AllStructures);
             }
         }
         std::string AllStructureDefinitions;
-        for (auto structure : AllStructures)
+        for (auto *structure : AllStructures)
         {
             std::string a = structure->getName();
             std::string structureDefinition = "\nstruct " + a + " {\n";

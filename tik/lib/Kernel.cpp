@@ -35,7 +35,7 @@ namespace TraceAtlas::tik
 
     Kernel::~Kernel() = default;
 
-    std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures)
+    std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures) const
     {
         std::string headerString;
         try
@@ -50,7 +50,7 @@ namespace TraceAtlas::tik
         headerString += KernelFunction->getName();
         headerString += "(";
         int i = 0;
-        for (auto ai = KernelFunction->arg_begin(); ai < KernelFunction->arg_end(); ai++)
+        for (auto *ai = KernelFunction->arg_begin(); ai < KernelFunction->arg_end(); ai++)
         {
             std::string type;
             std::string argname = "arg" + std::to_string(i);
@@ -93,7 +93,7 @@ namespace TraceAtlas::tik
         {
             for (auto bi = fi.begin(); bi != fi.end(); bi++)
             {
-                auto inst = cast<Instruction>(bi);
+                auto *inst = cast<Instruction>(bi);
                 inst->setMetadata("dbg", nullptr);
             }
         }
@@ -103,21 +103,21 @@ namespace TraceAtlas::tik
         {
             for (auto bi = fi.begin(); bi != fi.end(); bi++)
             {
-                if (auto di = dyn_cast<DbgInfoIntrinsic>(bi))
+                if (auto *di = dyn_cast<DbgInfoIntrinsic>(bi))
                 {
                     toRemove.push_back(di);
                 }
-                auto inst = cast<Instruction>(bi);
+                auto *inst = cast<Instruction>(bi);
                 inst->setMetadata("dbg", nullptr);
             }
         }
-        for (auto r : toRemove)
+        for (auto *r : toRemove)
         {
             r->eraseFromParent();
         }
         //annotate the kernel functions
         string metadata = "{\n\t\"Entrances\": {\n\t\t\"Blocks\": [";
-        for (auto &index : Entrances)
+        for (const auto &index : Entrances)
         {
             if (index != *(Entrances.begin()))
             {
@@ -126,7 +126,7 @@ namespace TraceAtlas::tik
             metadata += to_string(index->Block);
         }
         metadata += "],\n\t\t\"Indices\": [";
-        for (auto &index : Entrances)
+        for (const auto &index : Entrances)
         {
             if (index != *(Entrances.begin()))
             {
@@ -135,7 +135,7 @@ namespace TraceAtlas::tik
             metadata += to_string(index->Index);
         }
         metadata += "]\n\t},\n\t\"Exits\": {\n\t\t\"Blocks\": [";
-        for (auto &index : Exits)
+        for (const auto &index : Exits)
         {
             if (index != *(Exits.begin()))
             {
@@ -144,7 +144,7 @@ namespace TraceAtlas::tik
             metadata += to_string(index->Block);
         }
         metadata += "],\n\t\t\"Indices\": [";
-        for (auto &index : Exits)
+        for (const auto &index : Exits)
         {
             if (index != *(Exits.begin()))
             {
@@ -153,7 +153,7 @@ namespace TraceAtlas::tik
             metadata += to_string(index->Index);
         }
         metadata += "]\n\t},\n\t\"Arguments\": [";
-        for (auto arg = KernelFunction->arg_begin(); arg != KernelFunction->arg_end(); arg++)
+        for (auto *arg = KernelFunction->arg_begin(); arg != KernelFunction->arg_end(); arg++)
         {
             // if this is not the first argument, its a value that comes from the bitcode
             if (arg != KernelFunction->arg_begin())
@@ -175,14 +175,14 @@ namespace TraceAtlas::tik
         MDNode *json = MDNode::get(TikModule->getContext(), MDString::get(TikModule->getContext(), metadata));
         KernelFunction->setMetadata("Boundaries", json);
         int i = 0;
-        for (auto &ent : Entrances)
+        for (const auto &ent : Entrances)
         {
             MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t) static_cast<int>(ent->Index))));
             KernelFunction->setMetadata("Ent" + to_string(i), newNode);
             i++;
         }
         i = 0;
-        for (auto &ex : Exits)
+        for (const auto &ex : Exits)
         {
             MDNode *newNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t) static_cast<int>(ex->Index))));
             KernelFunction->setMetadata("Ex" + to_string(i), newNode);
@@ -190,7 +190,7 @@ namespace TraceAtlas::tik
         }
         //annotate the conditional, has to happen after body since conditional is a part of the body
         MDNode *condNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), static_cast<int>(TikMetadata::Conditional))));
-        for (auto cond : Conditional)
+        for (auto *cond : Conditional)
         {
             cast<Instruction>(cond->getFirstInsertionPt())->setMetadata("TikMetadata", condNode);
         }

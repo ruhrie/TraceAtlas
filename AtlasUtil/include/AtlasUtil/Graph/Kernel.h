@@ -51,12 +51,12 @@ public:
             uint64_t minBlock = 0;
             float prob = FLT_MAX;
             auto blockIndex = graph.LocationAlias.at(block);
-            for (int i = 0; i < graph.WeightMatrix[blockIndex].size(); i++)
+            for (int i = 0; i < graph.WeightMatrix.at(blockIndex).size(); i++)
             {
-                if (graph.WeightMatrix[blockIndex][i] < prob)
+                if (graph.WeightMatrix.at(blockIndex).at(i) < prob)
                 {
                     minBlock = i;
-                    prob = graph.WeightMatrix[blockIndex][i];
+                    prob = graph.WeightMatrix.at(blockIndex).at(i);
                 }
             }
             for (auto subBlock : graph.IndexAlias.at(minBlock))
@@ -87,7 +87,7 @@ public:
                     uint64_t blockLoc = probGraph.LocationAlias.at(block);
                     for (int i = 0; i < probGraph.WeightMatrix.size(); i++)
                     {
-                        float weight = probGraph.WeightMatrix[i][blockLoc];
+                        float weight = probGraph.WeightMatrix.at(i).at(blockLoc);
                         if (weight != std::numeric_limits<float>::infinity() && !std::isnan(weight))
                         {
                             //this node is a predecessor, if it is an entrance it will not be in kComp
@@ -170,10 +170,10 @@ public:
             for (const auto &b : fusedSet)
             {
                 auto B = graph.LocationAlias.at(b);
-                denominator += graph.WeightMatrix[A][B];
+                denominator += graph.WeightMatrix.at(A).at(B);
                 if (diff.find(a) != diff.end() || diff.find(b) != diff.end())
                 {
-                    numerator += graph.WeightMatrix[A][B];
+                    numerator += graph.WeightMatrix.at(A).at(B);
                 }
             }
         }

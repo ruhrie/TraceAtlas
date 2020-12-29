@@ -23,7 +23,7 @@ namespace DashTracer::Passes
     {
         for (auto fi = F.begin(); fi != F.end(); fi++)
         {
-            auto BB = cast<BasicBlock>(fi);
+            auto *BB = cast<BasicBlock>(fi);
             auto firstInsertion = BB->getFirstInsertionPt();
             auto *firstInst = cast<Instruction>(firstInsertion);
             Value *trueConst = ConstantInt::get(Type::getInt1Ty(BB->getContext()), 1);
@@ -65,7 +65,7 @@ namespace DashTracer::Passes
                 }
             }
             Instruction *preTerm = BB->getTerminator();
-            IRBuilder endBuilder(preTerm);
+            IRBuilder<> endBuilder(preTerm);
             endBuilder.CreateCall(BB_ID, args);
         }
         return true;

@@ -87,7 +87,7 @@ namespace TraceAtlas::tik
         {
             BasicBlock *bb = toProcess.front();
             toProcess.pop();
-            for (auto suc : successors(bb))
+            for (auto *suc : successors(bb))
             {
                 if (suc == base)
                 {
@@ -106,7 +106,7 @@ namespace TraceAtlas::tik
             //we now check if there is a function call, and if so add the entry
             for (auto bi = bb->begin(); bi != bb->end(); bi++)
             {
-                if (auto ci = dyn_cast<CallBase>(bi))
+                if (auto *ci = dyn_cast<CallBase>(bi))
                 {
                     Function *f = ci->getCalledFunction();
                     if (f != nullptr && !f->empty())
@@ -139,7 +139,7 @@ namespace TraceAtlas::tik
     set<BasicBlock *> GetEntrances(const set<BasicBlock *> &blocks)
     {
         set<BasicBlock *> Entrances;
-        for (auto block : blocks)
+        for (auto *block : blocks)
         {
             Function *F = block->getParent();
             BasicBlock *par = &F->getEntryBlock();
@@ -148,9 +148,9 @@ namespace TraceAtlas::tik
             {
                 bool exte = false;
                 bool inte = false;
-                for (auto user : F->users())
+                for (auto *user : F->users())
                 {
-                    if (auto cb = dyn_cast<CallBase>(user))
+                    if (auto *cb = dyn_cast<CallBase>(user))
                     {
                         BasicBlock *parent = cb->getParent(); //the parent of the function call
                         if (blocks.find(parent) == blocks.end())
@@ -239,7 +239,7 @@ namespace TraceAtlas::tik
         {
             BasicBlock *bb = toProcess.front();
             toProcess.pop();
-            for (auto suc : successors(bb))
+            for (auto *suc : successors(bb))
             {
                 if (suc == target)
                 {
@@ -258,7 +258,7 @@ namespace TraceAtlas::tik
             //we now check if there is a function call, and if so add the entry
             for (auto bi = bb->begin(); bi != bb->end(); bi++)
             {
-                if (auto ci = dyn_cast<CallBase>(bi))
+                if (auto *ci = dyn_cast<CallBase>(bi))
                 {
                     Function *f = ci->getCalledFunction();
                     if (f != nullptr && !f->empty())
@@ -282,12 +282,12 @@ namespace TraceAtlas::tik
             }
             //finally check the terminator and add the call points
             Instruction *I = bb->getTerminator();
-            if (auto ri = dyn_cast<ReturnInst>(I))
+            if (auto *ri = dyn_cast<ReturnInst>(I))
             {
                 Function *f = bb->getParent();
-                for (auto use : f->users())
+                for (auto *use : f->users())
                 {
-                    if (auto cb = dyn_cast<CallBase>(use))
+                    if (auto *cb = dyn_cast<CallBase>(use))
                     {
                         BasicBlock *entry = cb->getParent();
                         if (entry == target)
@@ -306,12 +306,12 @@ namespace TraceAtlas::tik
                     }
                 }
             }
-            else if (auto ri = dyn_cast<ResumeInst>(I))
+            else if (auto *ri = dyn_cast<ResumeInst>(I))
             {
                 Function *f = bb->getParent();
-                for (auto use : f->users())
+                for (auto *use : f->users())
                 {
-                    if (auto cb = dyn_cast<CallBase>(use))
+                    if (auto *cb = dyn_cast<CallBase>(use))
                     {
                         BasicBlock *entry = cb->getParent();
                         if (entry == target)
@@ -344,9 +344,9 @@ namespace TraceAtlas::tik
     {
         set<BasicBlock *> result;
         //a conditional is defined by a successor that cannot reach the conditional again
-        for (auto block : blocks)
+        for (auto *block : blocks)
         {
-            for (auto suc : successors(block))
+            for (auto *suc : successors(block))
             {
                 if (!IsReachable(suc, block, validBlocks))
                 {
@@ -365,9 +365,9 @@ namespace TraceAtlas::tik
     bool HasEpilogue(const set<BasicBlock *> &blocks, const set<int64_t> &validBlocks)
     {
         auto conds = GetConditionals(blocks, validBlocks);
-        for (auto cond : conds)
+        for (auto *cond : conds)
         {
-            for (auto suc : successors(cond))
+            for (auto *suc : successors(cond))
             {
                 if (validBlocks.find(GetBlockID(suc)) != validBlocks.end())
                 {
@@ -387,8 +387,8 @@ namespace TraceAtlas::tik
 
         for (auto fi = F->begin(); fi != F->end(); fi++)
         {
-            auto block = cast<BasicBlock>(fi);
-            for (auto suc : successors(block))
+            auto *block = cast<BasicBlock>(fi);
+            for (auto *suc : successors(block))
             {
                 if (suc->getParent() != F)
                 {
@@ -402,24 +402,24 @@ namespace TraceAtlas::tik
     set<BasicBlock *> GetExits(set<BasicBlock *> blocks)
     {
         set<BasicBlock *> Exits;
-        for (auto block : blocks)
+        for (auto *block : blocks)
         {
-            for (auto suc : successors(block))
+            for (auto *suc : successors(block))
             {
                 if (blocks.find(suc) == blocks.end())
                 {
                     Exits.insert(suc);
                 }
             }
-            auto term = block->getTerminator();
-            if (auto retInst = dyn_cast<ReturnInst>(term))
+            auto *term = block->getTerminator();
+            if (auto *retInst = dyn_cast<ReturnInst>(term))
             {
                 Function *base = block->getParent();
-                for (auto user : base->users())
+                for (auto *user : base->users())
                 {
-                    if (auto v = dyn_cast<Instruction>(user))
+                    if (auto *v = dyn_cast<Instruction>(user))
                     {
-                        auto parentBlock = v->getParent();
+                        auto *parentBlock = v->getParent();
                         if (blocks.find(parentBlock) == blocks.end())
                         {
                             Exits.insert(parentBlock);
@@ -434,24 +434,24 @@ namespace TraceAtlas::tik
     set<BasicBlock *> GetExits(set<BasicBlock *> &s, BasicBlock *entrance)
     {
         set<BasicBlock *> result;
-        for (auto block : s)
+        for (auto *block : s)
         {
-            for (auto suc : successors(block))
+            for (auto *suc : successors(block))
             {
                 if (s.find(suc) == s.end() && suc->getParent() == entrance->getParent())
                 {
                     result.insert(suc);
                 }
             }
-            auto term = block->getTerminator();
-            if (auto retInst = dyn_cast<ReturnInst>(term))
+            auto *term = block->getTerminator();
+            if (auto *retInst = dyn_cast<ReturnInst>(term))
             {
                 Function *base = block->getParent();
-                for (auto user : base->users())
+                for (auto *user : base->users())
                 {
-                    if (auto v = dyn_cast<Instruction>(user))
+                    if (auto *v = dyn_cast<Instruction>(user))
                     {
-                        auto parentBlock = v->getParent();
+                        auto *parentBlock = v->getParent();
                         if (s.find(parentBlock) == s.end() && parentBlock->getParent() == entrance->getParent())
                         {
                             result.insert(parentBlock);

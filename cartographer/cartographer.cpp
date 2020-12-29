@@ -53,45 +53,45 @@ void Dump(const string &dump, std::vector<Module *> &Ms)
         {
             for (auto &fi : mi)
             {
-                auto BB = cast<BasicBlock>(&fi);
+                auto *BB = cast<BasicBlock>(&fi);
                 auto id = GetBlockID(BB);
                 set<int64_t> blocks;
-                for (auto suc : successors(BB))
+                for (auto *suc : successors(BB))
                 {
                     blocks.insert(GetBlockID(suc));
                 }
 
                 for (auto &bi : fi)
                 {
-                    if (auto i = dyn_cast<CallBase>(&bi))
+                    if (auto *i = dyn_cast<CallBase>(&bi))
                     {
-                        auto F = i->getCalledFunction();
+                        auto *F = i->getCalledFunction();
                         if (F != nullptr && !F->empty())
                         {
-                            auto entry = &F->getEntryBlock();
+                            auto *entry = &F->getEntryBlock();
                             blocks.insert(GetBlockID(entry));
                         }
                     }
                 }
 
-                auto term = BB->getTerminator();
-                if (auto ret = dyn_cast<ReturnInst>(term))
+                auto *term = BB->getTerminator();
+                if (auto *ret = dyn_cast<ReturnInst>(term))
                 {
-                    auto F = BB->getParent();
-                    for (auto user : F->users())
+                    auto *F = BB->getParent();
+                    for (auto *user : F->users())
                     {
-                        if (auto i = dyn_cast<CallBase>(user))
+                        if (auto *i = dyn_cast<CallBase>(user))
                         {
                             blocks.insert(GetBlockID(i->getParent()));
                         }
                     }
                 }
-                else if (auto res = dyn_cast<ResumeInst>(term))
+                else if (auto *res = dyn_cast<ResumeInst>(term))
                 {
-                    auto F = BB->getParent();
-                    for (auto user : F->users())
+                    auto *F = BB->getParent();
+                    for (auto *user : F->users())
                     {
-                        if (auto i = dyn_cast<CallBase>(user))
+                        if (auto *i = dyn_cast<CallBase>(user))
                         {
                             blocks.insert(GetBlockID(i->getParent()));
                         }
@@ -110,7 +110,7 @@ void Dump(const string &dump, std::vector<Module *> &Ms)
 int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
-    threshold = 1.0f - 2.0f / (0.9f * hotThreshold);
+    threshold = 1.0f - 2.0f / (0.9f * (float)hotThreshold);
     noProgressBar = noBar;
 
     if (!LogFile.empty())
@@ -207,8 +207,10 @@ int main(int argc, char **argv)
         auto type1Kernels = TypeOne::Get();
         spdlog::info("Detected " + to_string(type1Kernels.size()) + " type 1 kernels");
         vector<int64_t> blockIndeces;
-        for (auto &[block, count] : TypeOne::blockCount)
+        for (auto pair : TypeOne::blockCount)
         {
+            auto block = pair.first;
+            auto count = pair.second;
             if (count != 0)
             {
                 ValidBlocks.insert(block);

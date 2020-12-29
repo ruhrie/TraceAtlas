@@ -127,15 +127,15 @@ int main(int argc, char *argv[])
     // tikSwap
     for (auto &kernel : kernels)
     {
-        for (auto &e : kernel->Entrances)
+        for (const auto &e : kernel->Entrances)
         {
             try
             {
                 // look for exits that are not expecting this predecessor
-                auto enterBlock = IDToBlock[e->Block];
+                auto *enterBlock = IDToBlock[e->Block];
                 for (const auto &exit : kernel->Exits)
                 {
-                    auto succ = IDToBlock[exit->Block];
+                    auto *succ = IDToBlock[exit->Block];
                     if (find(predecessors(succ).begin(), predecessors(succ).end(), enterBlock) == predecessors(succ).end())
                     {
                         // have to evaluate if the block is dependent on its predecessors
@@ -145,7 +145,7 @@ int main(int argc, char *argv[])
                         {
                             for (auto it = succ->begin(); it != succ->end(); it++)
                             {
-                                if (auto phi = dyn_cast<PHINode>(it))
+                                if (auto *phi = dyn_cast<PHINode>(it))
                                 {
                                     found = false;
                                     for (unsigned int k = 0; k < phi->getNumIncomingValues(); k++)
@@ -180,7 +180,7 @@ int main(int argc, char *argv[])
                     mappedVals.push_back(IDToValue[it->second]);
                     if (it->first->getName()[0] == 'e')
                     {
-                        auto ptr = IDToValue[it->second]->getType()->getPointerTo();
+                        auto *ptr = IDToValue[it->second]->getType()->getPointerTo();
                         argTypes.push_back(cast<Type>(ptr));
                     }
                     else
@@ -189,23 +189,23 @@ int main(int argc, char *argv[])
                     }
                 }
                 // create function signature to swap for this entrance
-                auto FuTy = FunctionType::get(Type::getInt8Ty(sourceBitcode->getContext()), argTypes, false);
-                auto newFunc = Function::Create(FuTy, kernel->KernelFunction->getLinkage(), kernel->KernelFunction->getAddressSpace(), "", sourceBitcode.get());
+                auto *FuTy = FunctionType::get(Type::getInt8Ty(sourceBitcode->getContext()), argTypes, false);
+                auto *newFunc = Function::Create(FuTy, kernel->KernelFunction->getLinkage(), kernel->KernelFunction->getAddressSpace(), "", sourceBitcode.get());
                 newFunc->setName(kernel->KernelFunction->getName());
                 // get our entrance predecessor blocks and swap tik
                 if (IDToBlock.find(e->Block) != IDToBlock.end())
                 {
-                    auto block = IDToBlock[e->Block];
+                    auto *block = IDToBlock[e->Block];
                     // create the call instruction to kernel
-                    auto origterm = block->getTerminator();
-                    IRBuilder iBuilder(block);
-                    auto baseFuncInst = cast<Function>(sourceBitcode->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
+                    auto *origterm = block->getTerminator();
+                    IRBuilder<> iBuilder(block);
+                    auto *baseFuncInst = cast<Function>(sourceBitcode->getOrInsertFunction(newFunc->getName(), newFunc->getFunctionType()).getCallee());
                     CallInst *KInst = iBuilder.CreateCall(baseFuncInst, mappedVals);
                     MDNode *callNode = MDNode::get(KInst->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(KInst->getContext()), (uint64_t)IDState::Artificial)));
                     KInst->setMetadata("ValueID", callNode);
                     // create switch case to process retval from kernel callinst
                     KernelInterface a(IDState::Artificial, IDState::Artificial);
-                    for (auto &j : kernel->Exits)
+                    for (const auto &j : kernel->Exits)
                     {
                         if (j->Index == 0)
                         {
@@ -213,10 +213,10 @@ int main(int argc, char *argv[])
                             a.Index = j->Index;
                         }
                     }
-                    auto sw = iBuilder.CreateSwitch(cast<Value>(KInst), IDToBlock[a.Block], (unsigned int)kernel->Exits.size());
+                    auto *sw = iBuilder.CreateSwitch(cast<Value>(KInst), IDToBlock[a.Block], (unsigned int)kernel->Exits.size());
                     MDNode *swNode = MDNode::get(sw->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(sw->getContext()), (uint64_t)IDState::Artificial)));
                     sw->setMetadata("ValueID", swNode);
-                    for (auto &j : kernel->Exits)
+                    for (const auto &j : kernel->Exits)
                     {
                         if (j->Index != 0)
                         {
@@ -235,13 +235,13 @@ int main(int argc, char *argv[])
                             AllocaInst *alloc;
                             if (mappedExports.find(IDToValue[key.second]) == mappedExports.end())
                             {
-                                auto insertion = cast<Instruction>(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt()->getNextNode());
+                                auto *insertion = cast<Instruction>(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt()->getNextNode());
                                 IRBuilder<> alBuilder(sw->getParent()->getParent()->getEntryBlock().getFirstInsertionPt()->getParent());
                                 alloc = iBuilder.CreateAlloca(IDToValue[key.second]->getType());
                                 SetIDAndMap(alloc, IDToValue, true);
                                 alloc->moveBefore(insertion);
                                 mappedExports[IDToValue[key.second]] = alloc;
-                                if (auto originalInst = dyn_cast<Instruction>(IDToValue[key.second]))
+                                if (auto *originalInst = dyn_cast<Instruction>(IDToValue[key.second]))
                                 {
                                     // if the original instruction is not within the kernel function parent, we can't do this
                                     if (originalInst->getParent()->getParent() == alloc->getParent()->getParent())
@@ -257,12 +257,12 @@ int main(int argc, char *argv[])
                             // next, inject a store to the export pointer right after the original value was used
                             vector<pair<Value *, Instruction *>> toReplace;
                             // finally, create a load and replace the old value for every use of this export
-                            for (auto use : IDToValue[key.second]->users())
+                            for (auto *use : IDToValue[key.second]->users())
                             {
-                                if (auto inst = dyn_cast<Instruction>(use))
+                                if (auto *inst = dyn_cast<Instruction>(use))
                                 {
                                     // skip the kernel calls
-                                    if (auto calli = dyn_cast<CallInst>(inst))
+                                    if (auto *calli = dyn_cast<CallInst>(inst))
                                     {
                                         if (calli->getCalledFunction() == baseFuncInst)
                                         {
@@ -285,7 +285,7 @@ int main(int argc, char *argv[])
                             KInst->replaceUsesOfWith(IDToValue[key.second], alloc);
                             for (auto pa : toReplace)
                             {
-                                if (auto phi = dyn_cast<PHINode>(pa.second))
+                                if (auto *phi = dyn_cast<PHINode>(pa.second))
                                 {
                                     BasicBlock *predBlock;
                                     for (unsigned int i = 0; i < phi->getNumIncomingValues(); i++)
@@ -293,18 +293,18 @@ int main(int argc, char *argv[])
                                         if (phi->getIncomingValue(i) == pa.first)
                                         {
                                             predBlock = phi->getIncomingBlock(i);
-                                            auto term = predBlock->getTerminator();
+                                            auto *term = predBlock->getTerminator();
                                             IRBuilder<> ldBuilder(predBlock);
-                                            auto ld = ldBuilder.CreateLoad(alloc);
+                                            auto *ld = ldBuilder.CreateLoad(alloc);
                                             ld->moveBefore(term);
                                             phi->setIncomingValue(i, ld);
                                         }
                                     }
                                 }
-                                else if (auto inst = dyn_cast<Instruction>(pa.second))
+                                else if (auto *inst = dyn_cast<Instruction>(pa.second))
                                 {
                                     IRBuilder<> ldBuilder(inst->getParent());
-                                    auto ld = ldBuilder.CreateLoad(alloc);
+                                    auto *ld = ldBuilder.CreateLoad(alloc);
                                     ld->moveBefore(inst);
                                     inst->replaceUsesOfWith(pa.first, ld);
                                 }
@@ -327,22 +327,22 @@ int main(int argc, char *argv[])
 
     set<Instruction *> badInst;
     // remove blocks if any
-    for (auto ind : toRemove)
+    for (auto *ind : toRemove)
     {
         // if the successors of this terminator only have the terminator parent as a pred, any uses of the successors values will be unresolved
-        if (auto br = dyn_cast<BranchInst>(ind))
+        if (auto *br = dyn_cast<BranchInst>(ind))
         {
             for (unsigned int i = 0; i < br->getNumSuccessors(); i++)
             {
-                auto succ = br->getSuccessor(i);
+                auto *succ = br->getSuccessor(i);
                 if (succ->hasNPredecessors(1))
                 {
                     // for each inst in the now predecessor-less block
                     for (auto &it : *succ)
                     {
-                        for (auto use : it.users())
+                        for (auto *use : it.users())
                         {
-                            if (auto useInst = dyn_cast<Instruction>(use))
+                            if (auto *useInst = dyn_cast<Instruction>(use))
                             {
                                 if (!useInst->isTerminator())
                                 {
@@ -361,7 +361,7 @@ int main(int argc, char *argv[])
         ind->eraseFromParent();
     }
     vector<pair<Instruction *, AllocaInst *>> badPair;
-    for (auto inst : badInst)
+    for (auto *inst : badInst)
     {
         for (auto pa : storeSite)
         {
@@ -381,9 +381,9 @@ int main(int argc, char *argv[])
     for (auto pa : storeSite)
     {
         IRBuilder<> stBuilder(pa.first->getParent());
-        auto st = stBuilder.CreateStore(pa.first, pa.second);
-        auto insertion = pa.first;
-        if (auto phi = dyn_cast<PHINode>(pa.first))
+        auto *st = stBuilder.CreateStore(pa.first, pa.second);
+        auto *insertion = pa.first;
+        if (auto *phi = dyn_cast<PHINode>(pa.first))
         {
             insertion = pa.first->getParent()->getFirstNonPHI();
         }
@@ -402,7 +402,7 @@ int main(int argc, char *argv[])
             {
                 if (it.getNodePtr() != nullptr)
                 {
-                    if (auto phi = dyn_cast<PHINode>(it))
+                    if (auto *phi = dyn_cast<PHINode>(it))
                     {
                         // each index to remove has to be the index that results after all previous entries to remove are out
                         unsigned int j = 0;

@@ -50,7 +50,7 @@ namespace TypeThree
                     bool sucFound = false;
                     if (base == &F->getEntryBlock())
                     {
-                        for (auto user : F->users())
+                        for (auto *user : F->users())
                         {
                             if (auto *cb = dyn_cast<CallBase>(user))
                             {
@@ -68,7 +68,7 @@ namespace TypeThree
                     {
                         //check if there is a valid predecessor
                         //aka mandate that everything has to be a part of the loop
-                        for (auto pred : predecessors(base))
+                        for (auto *pred : predecessors(base))
                         {
                             int64_t id = GetBlockID(pred);
                             if (kernel.find(id) != kernel.end())
@@ -81,7 +81,7 @@ namespace TypeThree
 
                     if (isa<ReturnInst>(term)) //check if a ret
                     {
-                        for (auto user : F->users())
+                        for (auto *user : F->users())
                         {
                             if (auto *cb = dyn_cast<CallBase>(user))
                             {
@@ -99,7 +99,7 @@ namespace TypeThree
                     {
                         //check if there is a valid successor
                         //aka mandate that everything has to be a part of the loop
-                        for (auto suc : successors(base))
+                        for (auto *suc : successors(base))
                         {
                             int64_t id = GetBlockID(suc);
                             if (kernel.find(id) != kernel.end())

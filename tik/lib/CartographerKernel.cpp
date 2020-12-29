@@ -22,7 +22,7 @@ namespace TraceAtlas::tik
 
     void findScopedStructures(Value *val, set<BasicBlock *> &scopedBlocks, set<Function *> &scopedFuncs, set<Function *> &embeddedKernels)
     {
-        if (auto func = dyn_cast<Function>(val))
+        if (auto *func = dyn_cast<Function>(val))
         {
             if (scopedFuncs.find(func) != scopedFuncs.end())
             {
@@ -31,11 +31,11 @@ namespace TraceAtlas::tik
             scopedFuncs.insert(func);
             for (auto it = func->begin(); it != func->end(); it++)
             {
-                auto block = cast<BasicBlock>(it);
+                auto *block = cast<BasicBlock>(it);
                 findScopedStructures(block, scopedBlocks, scopedFuncs, embeddedKernels);
             }
         }
-        else if (auto block = dyn_cast<BasicBlock>(val))
+        else if (auto *block = dyn_cast<BasicBlock>(val))
         {
             scopedBlocks.insert(block);
             // check whether its an entrance to a subkernel
@@ -54,13 +54,13 @@ namespace TraceAtlas::tik
             }
             for (auto BB = block->begin(); BB != block->end(); BB++)
             {
-                auto inst = cast<Instruction>(BB);
+                auto *inst = cast<Instruction>(BB);
                 findScopedStructures(inst, scopedBlocks, scopedFuncs, embeddedKernels);
             }
         }
-        else if (auto inst = dyn_cast<Instruction>(val))
+        else if (auto *inst = dyn_cast<Instruction>(val))
         {
-            if (auto ci = dyn_cast<CallInst>(inst))
+            if (auto *ci = dyn_cast<CallInst>(inst))
             {
                 if (ci->getCalledFunction() == nullptr)
                 {
@@ -68,7 +68,7 @@ namespace TraceAtlas::tik
                 }
                 findScopedStructures(ci->getCalledFunction(), scopedBlocks, scopedFuncs, embeddedKernels);
             }
-            else if (auto inv = dyn_cast<InvokeInst>(inst))
+            else if (auto *inv = dyn_cast<InvokeInst>(inst))
             {
                 if (inv->getCalledFunction() == nullptr)
                 {
@@ -81,18 +81,18 @@ namespace TraceAtlas::tik
 
     void CopyOperand(llvm::User *inst, llvm::ValueToValueMapTy &VMap)
     {
-        if (auto func = dyn_cast<Function>(inst))
+        if (auto *func = dyn_cast<Function>(inst))
         {
-            auto m = func->getParent();
+            auto *m = func->getParent();
             if (m != TikModule)
             {
                 auto *funcDec = cast<Function>(TikModule->getOrInsertFunction(func->getName(), func->getFunctionType()).getCallee());
                 funcDec->setAttributes(func->getAttributes());
                 VMap[cast<Value>(func)] = funcDec;
-                for (auto arg = funcDec->arg_begin(); arg < funcDec->arg_end(); arg++)
+                for (auto *arg = funcDec->arg_begin(); arg < funcDec->arg_end(); arg++)
                 {
-                    auto argVal = cast<Value>(arg);
-                    if (auto Use = dyn_cast<User>(argVal))
+                    auto *argVal = cast<Value>(arg);
+                    if (auto *Use = dyn_cast<User>(argVal))
                     {
                         CopyOperand(Use, VMap);
                     }
@@ -117,7 +117,7 @@ namespace TraceAtlas::tik
                             CopyOperand(internal, VMap);
                         }
                     }
-                    auto newGlobal = cast<GlobalVariable>(TikModule->getOrInsertGlobal(gv->getName(), gv->getType()->getPointerElementType()));
+                    auto *newGlobal = cast<GlobalVariable>(TikModule->getOrInsertGlobal(gv->getName(), gv->getType()->getPointerElementType()));
                     newGlobal->setConstant(gv->isConstant());
                     newGlobal->setLinkage(gv->getLinkage());
                     newGlobal->setThreadLocalMode(gv->getThreadLocalMode());
@@ -140,7 +140,7 @@ namespace TraceAtlas::tik
                     }
                     globalDeclarationSet.insert(newGlobal);
                     VMap[gv] = newGlobal;
-                    for (auto user : gv->users())
+                    for (auto *user : gv->users())
                     {
                         if (auto *newInst = dyn_cast<llvm::Instruction>(user))
                         {
@@ -153,11 +153,11 @@ namespace TraceAtlas::tik
                     // check for arguments within the global variable
                     for (unsigned int i = 0; i < newGlobal->getNumOperands(); i++)
                     {
-                        if (auto newOp = dyn_cast<GlobalVariable>(newGlobal->getOperand(i)))
+                        if (auto *newOp = dyn_cast<GlobalVariable>(newGlobal->getOperand(i)))
                         {
                             CopyOperand(newOp, VMap);
                         }
-                        else if (auto newOp = dyn_cast<Constant>(newGlobal->getOperand(i)))
+                        else if (auto *newOp = dyn_cast<Constant>(newGlobal->getOperand(i)))
                         {
                             CopyOperand(newOp, VMap);
                         }
@@ -167,19 +167,19 @@ namespace TraceAtlas::tik
         }
         for (uint32_t j = 0; j < inst->getNumOperands(); j++)
         {
-            if (auto newGP = dyn_cast<GlobalVariable>(inst->getOperand(j)))
+            if (auto *newGP = dyn_cast<GlobalVariable>(inst->getOperand(j)))
             {
                 CopyOperand(newGP, VMap);
             }
-            else if (auto newFunc = dyn_cast<Function>(inst->getOperand(j)))
+            else if (auto *newFunc = dyn_cast<Function>(inst->getOperand(j)))
             {
                 CopyOperand(newFunc, VMap);
             }
-            else if (auto newOp = dyn_cast<GEPOperator>(inst->getOperand(j)))
+            else if (auto *newOp = dyn_cast<GEPOperator>(inst->getOperand(j)))
             {
                 CopyOperand(newOp, VMap);
             }
-            else if (auto newBitCast = dyn_cast<BitCastOperator>(inst->getOperand(j)))
+            else if (auto *newBitCast = dyn_cast<BitCastOperator>(inst->getOperand(j)))
             {
                 CopyOperand(newBitCast, VMap);
             }
@@ -204,7 +204,7 @@ namespace TraceAtlas::tik
         try
         {
             //this is a recursion check, just so we can enumerate issues
-            for (auto block : blocks)
+            for (auto *block : blocks)
             {
                 Function *f = block->getParent();
                 for (auto bi = block->begin(); bi != block->end(); bi++)
@@ -244,7 +244,7 @@ namespace TraceAtlas::tik
             // patch work here. Sometimes when inlining, llvm will inject the block terminator before an export store
             for (auto &fi : *KernelFunction)
             {
-                if (auto st = dyn_cast<StoreInst>(prev(fi.end())))
+                if (auto *st = dyn_cast<StoreInst>(prev(fi.end())))
                 {
                     // have to find the true terminator
                     for (auto &bi : fi)
@@ -289,10 +289,10 @@ namespace TraceAtlas::tik
         // since its possible for exports to only exist in the kernel, they qualify as imports first
         // if an import is deemed an export, this can lead to bad memory accesses
         set<int64_t> kernelIE;
-        for (const auto block : scopedBlocks)
+        for (auto *block : scopedBlocks)
         {
             // check for an embedded kernel here
-            for (auto embeddedKern : embeddedKernels)
+            for (auto *embeddedKern : embeddedKernels)
             {
                 auto subKernel = KfMap[embeddedKern];
                 if (subKernel->Entrances.find(GetBlockID(block)) != subKernel->Entrances.end())
@@ -302,8 +302,8 @@ namespace TraceAtlas::tik
                         // just look at imports
                         if (key.first->getName()[0] == 'i')
                         {
-                            auto importVal = IDToValue[key.second];
-                            if (auto importInst = dyn_cast<Instruction>(importVal))
+                            auto *importVal = IDToValue[key.second];
+                            if (auto *importInst = dyn_cast<Instruction>(importVal))
                             {
                                 if (scopedBlocks.find(importInst->getParent()) == scopedBlocks.end())
                                 {
@@ -327,7 +327,7 @@ namespace TraceAtlas::tik
                     int64_t valID = GetValueID(op);
                     if (valID < IDState::Artificial)
                     {
-                        if (auto testBlock = dyn_cast<BasicBlock>(op))
+                        if (auto *testBlock = dyn_cast<BasicBlock>(op))
                         {
                             if (GetBlockID(testBlock) < IDState::Artificial)
                             {
@@ -335,15 +335,15 @@ namespace TraceAtlas::tik
                             }
                         }
                         // check to see if this object can have metadata
-                        else if (auto testInst = dyn_cast<Instruction>(op))
+                        else if (auto *testInst = dyn_cast<Instruction>(op))
                         {
                             throw AtlasException("Found a value in the bitcode that did not have a valueID.");
                         }
-                        else if (auto testGO = dyn_cast<GlobalObject>(op))
+                        else if (auto *testGO = dyn_cast<GlobalObject>(op))
                         {
                             throw AtlasException("Found a global object in the bitcode that did not have a valueID.");
                         }
-                        else if (auto arg = dyn_cast<Argument>(op))
+                        else if (auto *arg = dyn_cast<Argument>(op))
                         {
                             throw AtlasException("Found an argument in the bitcode that did not have a valueID.");
                         }
@@ -353,7 +353,7 @@ namespace TraceAtlas::tik
                             continue;
                         }
                     }
-                    if (auto arg = dyn_cast<Argument>(op))
+                    if (auto *arg = dyn_cast<Argument>(op))
                     {
                         if (scopedFuncs.find(arg->getParent()) == scopedFuncs.end())
                         {
@@ -373,7 +373,7 @@ namespace TraceAtlas::tik
                     {
                         // if this operand is being used in a phi, this may be an incoming values through a side door (a phi that once had many predecessors, but now has fewer because of the kernel partition)
                         // these values should be ignored
-                        if (auto phi = dyn_cast<PHINode>(inst))
+                        if (const auto *phi = dyn_cast<PHINode>(inst))
                         {
                             for (unsigned int j = 0; j < phi->getNumIncomingValues(); j++)
                             {
@@ -381,7 +381,7 @@ namespace TraceAtlas::tik
                                 {
                                     // below captures values who are used in phi nodes that are one level away from our entrances
                                     bool import = false;
-                                    for (auto succ : successors(phi->getIncomingBlock(j)))
+                                    for (auto *succ : successors(phi->getIncomingBlock(j)))
                                     {
                                         if (succ != phi->getIncomingBlock(j) && Entrances.find(GetBlockID(succ)) != Entrances.end() && scopedBlocks.find(phi->getIncomingBlock(j)) == scopedBlocks.end())
                                         {
@@ -427,14 +427,14 @@ namespace TraceAtlas::tik
                 // check the instructions uses
                 if (!isa<LoadInst>(inst))
                 {
-                    for (auto use : inst->users())
+                    for (auto *use : inst->users())
                     {
-                        if (auto useInst = dyn_cast<Instruction>(use))
+                        if (auto *useInst = dyn_cast<Instruction>(use))
                         {
                             if (scopedBlocks.find(useInst->getParent()) == scopedBlocks.end())
                             {
                                 // may belong to a subkernel, which is not an export
-                                if (embeddedKernels.find(useInst->getParent()->getParent()) == embeddedKernels.end())
+                                if (embeddedKernels.find((Function *)useInst->getParent()->getParent()) == embeddedKernels.end())
                                 {
                                     auto sExtVal = GetValueID(inst);
                                     if (kernelIE.find(sExtVal) == kernelIE.end())
@@ -453,15 +453,15 @@ namespace TraceAtlas::tik
                     // now we have to check the block successors
                     // if this block can exit the kernel, that means we are replacing a block in the source bitcode that may be left with no predecessors
                     // but there may still be users of its values. So they need to be exported
-                    for (auto succ : successors(block))
+                    for (auto *succ : successors(block))
                     {
                         if (scopedBlocks.find(succ) == scopedBlocks.end())
                         {
                             // this block can exit
                             // if the value uses extend beyond this block, export it
-                            for (auto use : inst->users())
+                            for (const auto *use : inst->users())
                             {
-                                if (auto outInst = dyn_cast<Instruction>(use))
+                                if (const auto *outInst = dyn_cast<Instruction>(use))
                                 {
                                     if (outInst->getParent() != inst->getParent()) // && scopedBlocks.find(inst->getParent()) == scopedBlocks.end() )
                                     {
@@ -494,16 +494,16 @@ namespace TraceAtlas::tik
         for (const auto &en : Entrances)
         {
             // if the entrance successors only has the kernel entrance as a pred, each use of each instruction of the successor has to be evaluated for possible export
-            if (auto br = dyn_cast<BranchInst>(IDToBlock[en->Block]->getTerminator()))
+            if (auto *br = dyn_cast<BranchInst>(IDToBlock[en->Block]->getTerminator()))
             {
                 for (unsigned int i = 0; i < br->getNumSuccessors(); i++)
                 {
-                    auto succ = br->getSuccessor(i);
+                    auto *succ = br->getSuccessor(i);
                     if (scopedBlocks.find(succ) != scopedBlocks.end() && succ->hasNPredecessors(1) && succ != br->getParent())
                     {
                         for (auto it = succ->begin(); it != succ->end(); it++)
                         {
-                            if (auto inst = dyn_cast<Instruction>(it))
+                            if (auto *inst = dyn_cast<Instruction>(it))
                             {
                                 if (!isa<LoadInst>(inst))
                                 {
@@ -511,14 +511,14 @@ namespace TraceAtlas::tik
                                     {
                                         // if the instruction only has uses within the kernel, it won't be detected as an export
                                         // this is an imperfect filter because there are exits evaluated here that don't make it into the final kernel
-                                        for (auto use : inst->users())
+                                        for (auto *use : inst->users())
                                         {
-                                            if (auto useInst = dyn_cast<Instruction>(use))
+                                            if (auto *useInst = dyn_cast<Instruction>(use))
                                             {
                                                 if (scopedBlocks.find(useInst->getParent()) != scopedBlocks.end())
                                                 {
                                                     // evaluate if this use is reachable by any of the exits
-                                                    for (auto exit : exits)
+                                                    for (auto *exit : exits)
                                                     {
                                                         // if it is reachable from exit to value, this value will be unresolved after tikSwap
                                                         if (isPotentiallyReachable(exit, useInst->getParent()))
@@ -546,7 +546,7 @@ namespace TraceAtlas::tik
                 }
             }
         }
-        for (const auto block : scopedBlocks)
+        for (const auto *block : scopedBlocks)
         {
             // now check its proximity to all other exits
             // if this value is defined in a block that occurs before an exit, the values within the block can be used in the source code later
@@ -555,17 +555,17 @@ namespace TraceAtlas::tik
             // see opencv_projects/kalman example K31
             for (auto it = block->begin(); it != block->end(); it++)
             {
-                if (auto inst = dyn_cast<Instruction>(it))
+                if (const auto *inst = dyn_cast<Instruction>(it))
                 {
                     if (!isa<LoadInst>(inst))
                     {
                         if (inst->getType()->getTypeID() != Type::VoidTyID)
                         {
-                            for (auto use : inst->users())
+                            for (const auto *use : inst->users())
                             {
-                                if (auto useInst = dyn_cast<Instruction>(use))
+                                if (const auto *useInst = dyn_cast<Instruction>(use))
                                 {
-                                    for (auto ex : exits)
+                                    for (auto *ex : exits)
                                     {
                                         if (isPotentiallyReachable(ex, useInst->getParent()))
                                         {
@@ -620,7 +620,7 @@ namespace TraceAtlas::tik
             throw AtlasException("Kernel has 0 body entrances.");
         }
         int entranceId = 0;
-        for (auto e : ent)
+        for (auto *e : ent)
         {
             Entrances.insert(make_shared<KernelInterface>(entranceId++, GetBlockID(e)));
         }
@@ -628,7 +628,7 @@ namespace TraceAtlas::tik
         vector<int64_t> KernelExports;
         set<BasicBlock *> scopedBlocks = blocks;
         set<Function *> scopedFuncs;
-        for (auto block : blocks)
+        for (auto *block : blocks)
         {
             findScopedStructures(block, scopedBlocks, scopedFuncs, embeddedKernels);
         }
@@ -674,7 +674,7 @@ namespace TraceAtlas::tik
         KernelFunction = Function::Create(funcType, GlobalValue::LinkageTypes::ExternalLinkage, Name, TikModule);
 
         // Map our kernel function to IDs
-        for (auto arg = KernelFunction->arg_begin(); arg != KernelFunction->arg_end(); arg++)
+        for (auto *arg = KernelFunction->arg_begin(); arg != KernelFunction->arg_end(); arg++)
         {
             SetIDAndMap(arg, IDToValue, true);
         }
@@ -717,7 +717,7 @@ namespace TraceAtlas::tik
             throw AtlasException("Entrances not on same level");
         }
 
-        for (auto block : blocks)
+        for (auto *block : blocks)
         {
             if (headFunctions.find(block->getParent()) == headFunctions.end())
             {
@@ -744,7 +744,7 @@ namespace TraceAtlas::tik
                     {
                         // values to go into arg operands of callinst
                         std::vector<llvm::Value *> inargs;
-                        for (auto ai = nestedKernel->KernelFunction->arg_begin(); ai < nestedKernel->KernelFunction->arg_end(); ai++)
+                        for (auto *ai = nestedKernel->KernelFunction->arg_begin(); ai < nestedKernel->KernelFunction->arg_end(); ai++)
                         {
                             if (ai == nestedKernel->KernelFunction->arg_begin())
                             {
@@ -766,18 +766,18 @@ namespace TraceAtlas::tik
                         BasicBlock *intermediateBlock = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
                         blocks.insert(intermediateBlock);
                         IRBuilder<> intBuilder(intermediateBlock);
-                        auto cc = intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
+                        auto *cc = intBuilder.CreateCall(nestedKernel->KernelFunction, inargs);
                         MDNode *tikNode = MDNode::get(TikModule->getContext(), ConstantAsMetadata::get(ConstantInt::get(Type::getInt1Ty(TikModule->getContext()), 1)));
                         SetBlockID(intermediateBlock, IDState::Artificial);
                         cc->setMetadata("KernelCall", tikNode);
-                        auto sw = intBuilder.CreateSwitch(cc, Exception, (uint32_t)nestedKernel->Exits.size());
+                        auto *sw = intBuilder.CreateSwitch(cc, Exception, (uint32_t)nestedKernel->Exits.size());
                         for (const auto &exit : nestedKernel->Exits)
                         {
                             sw->addCase(ConstantInt::get(Type::getInt8Ty(TikModule->getContext()), (uint64_t)exit->Index), IDToBlock[exit->Block]);
                             // now remap any phis that exist in this exit
                             for (auto it = IDToBlock[exit->Block]->begin(); it != IDToBlock[exit->Block]->end(); it++)
                             {
-                                if (auto phi = dyn_cast<PHINode>(it))
+                                if (auto *phi = dyn_cast<PHINode>(it))
                                 {
                                     // if we remap more than one to the same exit we're in trouble
                                     int remapped = 0;
@@ -811,7 +811,7 @@ namespace TraceAtlas::tik
             }
             else
             {
-                auto cb = CloneBasicBlock(block, VMap, "", KernelFunction);
+                auto *cb = CloneBasicBlock(block, VMap, "", KernelFunction);
                 VMap[block] = cb;
                 // add medadata to this block to remember what its original predecessor was, for swapping later
                 if (Conditional.find(block) != Conditional.end())
@@ -826,7 +826,7 @@ namespace TraceAtlas::tik
                     if (auto *p = dyn_cast<PHINode>(bi))
                     {
                         int replaced = 0;
-                        for (auto pred : p->blocks())
+                        for (auto *pred : p->blocks())
                         {
                             if (blocks.find(pred) == blocks.end())
                             {
@@ -870,10 +870,10 @@ namespace TraceAtlas::tik
         set<pair<Instruction *, Argument *>> storeSite;
         for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
         {
-            auto block = cast<BasicBlock>(fi);
+            auto *block = cast<BasicBlock>(fi);
             for (auto bi = block->begin(); bi != block->end(); bi++)
             {
-                auto inst = cast<Instruction>(bi);
+                auto *inst = cast<Instruction>(bi);
                 auto instID = GetValueID(inst);
                 for (auto key : ArgumentMap)
                 {
@@ -891,8 +891,8 @@ namespace TraceAtlas::tik
         for (auto inst : storeSite)
         {
             IRBuilder<> stBuilder(inst.first->getParent());
-            auto st = stBuilder.CreateStore(inst.first, inst.second);
-            if (auto phi = dyn_cast<PHINode>(inst.first))
+            auto *st = stBuilder.CreateStore(inst.first, inst.second);
+            if (auto *phi = dyn_cast<PHINode>(inst.first))
             {
                 st->moveBefore(inst.first->getParent()->getFirstNonPHI());
             }
@@ -908,7 +908,7 @@ namespace TraceAtlas::tik
     {
         IRBuilder<> initBuilder(Init);
 
-        auto initSwitch = initBuilder.CreateSwitch(KernelFunction->arg_begin(), Exception, (uint32_t)Entrances.size());
+        auto *initSwitch = initBuilder.CreateSwitch(KernelFunction->arg_begin(), Exception, (uint32_t)Entrances.size());
         uint64_t i = 0;
         for (const auto &ent : Entrances)
         {
@@ -929,20 +929,20 @@ namespace TraceAtlas::tik
     {
         if (remappedOperandSet.find(op) == remappedOperandSet.end())
         {
-            IRBuilder Builder(inst);
+            IRBuilder<> Builder(inst);
             // if its a gep or load we need to make a new one (because gep and load args can't be changed after construction)
-            if (auto gepInst = dyn_cast<GEPOperator>(op))
+            if (auto *gepInst = dyn_cast<GEPOperator>(op))
             {
                 // duplicate the indexes of the GEP
                 vector<Value *> idxList;
-                for (auto idx = gepInst->idx_begin(); idx != gepInst->idx_end(); idx++)
+                for (auto *idx = gepInst->idx_begin(); idx != gepInst->idx_end(); idx++)
                 {
-                    auto indexValue = cast<Value>(idx);
+                    auto *indexValue = cast<Value>(idx);
                     idxList.push_back(indexValue);
                 }
                 // find out what our pointer needs to be
                 Value *ptr;
-                if (auto gepPtr = dyn_cast<GlobalVariable>(gepInst->getPointerOperand()))
+                if (auto *gepPtr = dyn_cast<GlobalVariable>(gepInst->getPointerOperand()))
                 {
                     if (gepPtr->getParent() != TikModule)
                     {
@@ -974,11 +974,11 @@ namespace TraceAtlas::tik
                 {
                 }
             }
-            else if (auto loadInst = dyn_cast<LoadInst>(op))
+            else if (auto *loadInst = dyn_cast<LoadInst>(op))
             {
                 // find out what our pointer needs to be
                 Value *ptr;
-                if (auto loadPtr = dyn_cast<GlobalVariable>(loadInst->getPointerOperand()))
+                if (auto *loadPtr = dyn_cast<GlobalVariable>(loadInst->getPointerOperand()))
                 {
                     if (loadPtr->getParent() != TikModule)
                     {
@@ -1013,18 +1013,18 @@ namespace TraceAtlas::tik
         for (unsigned int operand = 0; operand < op->getNumOperands(); operand++)
         {
             Instruction *newInst = inst;
-            if (auto test = dyn_cast<Instruction>(op))
+            if (auto *test = dyn_cast<Instruction>(op))
             {
                 newInst = test;
             }
-            auto opi = op->getOperand(operand);
+            auto *opi = op->getOperand(operand);
             if (opi != nullptr)
             {
-                if (auto newGlob = dyn_cast<GlobalVariable>(opi))
+                if (auto *newGlob = dyn_cast<GlobalVariable>(opi))
                 {
                     CopyOperand(newGlob, VMap);
                 }
-                else if (auto newOp = dyn_cast<Operator>(opi))
+                else if (auto *newOp = dyn_cast<Operator>(opi))
                 {
                     if (remappedOperandSet.find(newOp) == remappedOperandSet.end())
                     {
@@ -1040,14 +1040,14 @@ namespace TraceAtlas::tik
     {
         for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
         {
-            auto BB = cast<BasicBlock>(fi);
+            auto *BB = cast<BasicBlock>(fi);
             for (BasicBlock::iterator bi = BB->begin(); bi != BB->end(); bi++)
             {
                 auto *inst = cast<Instruction>(bi);
                 for (unsigned int arg = 0; arg < inst->getNumOperands(); arg++)
                 {
                     Value *inputOp = inst->getOperand(arg);
-                    if (auto op = dyn_cast<Operator>(inputOp))
+                    if (auto *op = dyn_cast<Operator>(inputOp))
                     {
                         RemapOperands(op, inst, VMap);
                     }
@@ -1060,25 +1060,25 @@ namespace TraceAtlas::tik
     void CartographerKernel::CheckChildExits(set<Function *> &embeddedKernels)
     {
         // Evaluate embedded kernel exits for export ambiguities
-        for (auto embfunc : embeddedKernels)
+        for (auto *embfunc : embeddedKernels)
         {
             for (auto &bi : *KernelFunction)
             {
                 for (auto it = bi.begin(); it != bi.end(); it++)
                 {
-                    if (auto callInst = dyn_cast<CallInst>(it))
+                    if (auto *callInst = dyn_cast<CallInst>(it))
                     {
                         if (callInst->getCalledFunction() == embfunc)
                         {
                             // found an embedded kernel, evaluate its exits
-                            auto sw = cast<SwitchInst>(bi.getTerminator());
-                            for (auto succ : successors(sw->getParent()))
+                            auto *sw = cast<SwitchInst>(bi.getTerminator());
+                            for (auto *succ : successors(sw->getParent()))
                             {
-                                auto destBlock = succ;
+                                auto *destBlock = succ;
                                 for (auto ii = destBlock->begin(); ii != destBlock->end(); ii++)
                                 {
                                     // look for a phi node in the successor that has exports in it
-                                    if (auto phi = dyn_cast<PHINode>(ii))
+                                    if (auto *phi = dyn_cast<PHINode>(ii))
                                     {
                                         // set of exit index and argument pairs to consolidate to one value and map to the needing phi
                                         set<pair<int64_t, int64_t>> exportsToMap;
@@ -1104,11 +1104,11 @@ namespace TraceAtlas::tik
                                             // now create a switch instruction to export the correct value to the phi
                                             IRBuilder<> seBuilder(sw->getParent());
                                             Value *prevSel = IDToValue[exportsToMap.begin()->second];
-                                            for (const auto exit : exportsToMap)
+                                            for (const auto &exit : exportsToMap)
                                             {
-                                                auto cmp = seBuilder.CreateICmpEQ(ConstantInt::get(Type::getInt8Ty(callInst->getContext()), (uint64_t)exit.first), callInst);
+                                                auto *cmp = seBuilder.CreateICmpEQ(ConstantInt::get(Type::getInt8Ty(callInst->getContext()), (uint64_t)exit.first), callInst);
                                                 cast<CmpInst>(cmp)->moveBefore(sw);
-                                                auto sel = seBuilder.CreateSelect(cmp, IDToValue[exit.second], prevSel);
+                                                auto *sel = seBuilder.CreateSelect(cmp, IDToValue[exit.second], prevSel);
                                                 cast<SelectInst>(sel)->moveBefore(sw);
                                                 prevSel = sel;
                                             }
@@ -1139,7 +1139,7 @@ namespace TraceAtlas::tik
             change = false;
             for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
             {
-                auto baseBlock = cast<BasicBlock>(fi);
+                auto *baseBlock = cast<BasicBlock>(fi);
                 auto id = GetBlockID(baseBlock);
                 if (blocks.find(id) == blocks.end())
                 {
@@ -1147,9 +1147,9 @@ namespace TraceAtlas::tik
                 }
                 for (auto bi = fi->begin(); bi != fi->end(); bi++)
                 {
-                    if (auto ci = dyn_cast<CallBase>(bi))
+                    if (auto *ci = dyn_cast<CallBase>(bi))
                     {
-                        if (auto debug = ci->getMetadata("KernelCall"))
+                        if (auto *debug = ci->getMetadata("KernelCall"))
                         {
                             continue;
                         }
@@ -1168,12 +1168,12 @@ namespace TraceAtlas::tik
             }
         }
         //erase null blocks here
-        auto blockList = &KernelFunction->getBasicBlockList();
+        auto *blockList = &KernelFunction->getBasicBlockList();
         vector<Function::iterator> toRemove;
 
         for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
         {
-            if (auto b = dyn_cast<BasicBlock>(fi))
+            if (auto *b = dyn_cast<BasicBlock>(fi))
             {
                 //do nothing
             }
@@ -1195,11 +1195,11 @@ namespace TraceAtlas::tik
         vector<BasicBlock *> bToRemove;
         for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
         {
-            auto block = cast<BasicBlock>(fi);
+            auto *block = cast<BasicBlock>(fi);
             int64_t id = GetBlockID(block);
             if (blocks.find(id) == blocks.end() && block != Exit && block != Init && block != Exception && id >= 0)
             {
-                for (auto user : block->users())
+                for (auto *user : block->users())
                 {
                     if (auto *phi = dyn_cast<PHINode>(user))
                     {
@@ -1217,12 +1217,12 @@ namespace TraceAtlas::tik
         {
             for (auto bi = fi.begin(); bi != fi.end(); bi++)
             {
-                auto inst = cast<Instruction>(bi);
-                if (auto cv = dyn_cast<CallBase>(inst))
+                auto *inst = cast<Instruction>(bi);
+                if (auto *cv = dyn_cast<CallBase>(inst))
                 {
-                    for (auto i = cv->arg_begin(); i < cv->arg_end(); i++)
+                    for (auto *i = cv->arg_begin(); i < cv->arg_end(); i++)
                     {
-                        if (auto user = dyn_cast<User>(i))
+                        if (auto *user = dyn_cast<User>(i))
                         {
                             CopyOperand(user, VMap);
                         }
@@ -1240,14 +1240,14 @@ namespace TraceAtlas::tik
     {
         for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
         {
-            auto b = cast<BasicBlock>(fi);
+            auto *b = cast<BasicBlock>(fi);
             vector<Instruction *> phisToRemove;
             for (auto &phi : b->phis())
             {
                 vector<BasicBlock *> valuesToRemove;
                 for (uint32_t i = 0; i < phi.getNumIncomingValues(); i++)
                 {
-                    auto block = phi.getIncomingBlock(i);
+                    auto *block = phi.getIncomingBlock(i);
                     BasicBlock *rblock;
                     if (VMap.find(phi.getIncomingBlock(i)) != VMap.end())
                     {
@@ -1264,7 +1264,7 @@ namespace TraceAtlas::tik
                     else
                     {
                         bool isPred = false;
-                        for (auto pred : predecessors(b))
+                        for (auto *pred : predecessors(b))
                         {
                             if (pred == block)
                             {
@@ -1278,7 +1278,7 @@ namespace TraceAtlas::tik
                         }
                     }
                 }
-                for (auto toR : valuesToRemove)
+                for (auto *toR : valuesToRemove)
                 {
                     DeadCode = true;
                     phi.removeIncomingValue(toR, false);
@@ -1286,14 +1286,14 @@ namespace TraceAtlas::tik
                 if (phi.getNumIncomingValues() == 0)
                 {
                     phisToRemove.push_back(&phi);
-                    for (auto user : phi.users())
+                    for (auto *user : phi.users())
                     {
-                        if (auto br = dyn_cast<BranchInst>(user))
+                        if (auto *br = dyn_cast<BranchInst>(user))
                         {
                             if (br->isConditional())
                             {
-                                auto b0 = br->getSuccessor(0);
-                                auto b1 = br->getSuccessor(1);
+                                auto *b0 = br->getSuccessor(0);
+                                auto *b1 = br->getSuccessor(1);
                                 if (b0 != b1)
                                 {
                                     throw AtlasException("Phi successors don't match");
@@ -1314,7 +1314,7 @@ namespace TraceAtlas::tik
                     }
                 }
             }
-            for (auto phi : phisToRemove)
+            for (auto *phi : phisToRemove)
             {
                 DeadCode = true;
                 phi->eraseFromParent();
@@ -1345,7 +1345,7 @@ namespace TraceAtlas::tik
                             if (GetValueID(it->getOperand(i)) == parKey.second)
                             {
                                 found = true;
-                                if (auto callInst = dyn_cast<CallInst>(it))
+                                if (auto *callInst = dyn_cast<CallInst>(it))
                                 {
                                     if (embeddedKernels.find(callInst->getCalledFunction()) != embeddedKernels.end())
                                     {
@@ -1354,7 +1354,7 @@ namespace TraceAtlas::tik
                                     else
                                     {
                                         IRBuilder<> ldBuilder(callInst->getParent());
-                                        auto ld = ldBuilder.CreateLoad(parKey.first);
+                                        auto *ld = ldBuilder.CreateLoad(parKey.first);
                                         ld->moveBefore(callInst);
                                         callInst->replaceUsesOfWith(IDToValue[parKey.second], ld);
                                     }
@@ -1363,36 +1363,36 @@ namespace TraceAtlas::tik
                                 {
                                     // it's possible for a child kernel to export to both the parent and the parent's parent
                                     // this will be an export of both the child and parent, the value will not be born in the parent, and there will be uses in the parent
-                                    if (auto useInst = dyn_cast<Instruction>(it->getOperand(i)))
+                                    if (auto *useInst = dyn_cast<Instruction>(it->getOperand(i)))
                                     {
                                         if (useInst->getParent()->getParent() != KernelFunction)
                                         {
-                                            for (const auto child : embeddedKernels)
+                                            for (auto *child : embeddedKernels)
                                             {
                                                 for (auto childArg : KfMap[child]->ArgumentMap)
                                                 {
                                                     if (parKey.second == childArg.second && childArg.first->getName()[0] == 'e')
                                                     {
                                                         // inject a load for the export and replace this operand
-                                                        if (auto phi = dyn_cast<PHINode>(it))
+                                                        if (auto *phi = dyn_cast<PHINode>(it))
                                                         {
                                                             for (unsigned int i = 0; i < phi->getNumIncomingValues(); i++)
                                                             {
                                                                 if (phi->getIncomingValue(i) == IDToValue[parKey.second])
                                                                 {
-                                                                    auto predBlock = phi->getIncomingBlock(i);
-                                                                    auto term = predBlock->getTerminator();
+                                                                    auto *predBlock = phi->getIncomingBlock(i);
+                                                                    auto *term = predBlock->getTerminator();
                                                                     IRBuilder<> ldBuilder(predBlock);
-                                                                    auto ld = ldBuilder.CreateLoad(parKey.first);
+                                                                    auto *ld = ldBuilder.CreateLoad(parKey.first);
                                                                     ld->moveBefore(term);
                                                                     phi->setIncomingValue(i, ld);
                                                                 }
                                                             }
                                                         }
-                                                        else if (auto inst = dyn_cast<Instruction>(it))
+                                                        else if (auto *inst = dyn_cast<Instruction>(it))
                                                         {
                                                             IRBuilder<> ldBuilder(inst->getParent());
-                                                            auto ld = ldBuilder.CreateLoad(parKey.first);
+                                                            auto *ld = ldBuilder.CreateLoad(parKey.first);
                                                             ld->moveBefore(inst);
                                                             inst->replaceUsesOfWith(IDToValue[parKey.second], ld);
                                                         }
@@ -1411,7 +1411,7 @@ namespace TraceAtlas::tik
                     // this value must be only present in the child
                     // map this parent export to the correct child function callinst
                     // see srsLTE/eNodeB_Tx/K66 and K68 for an example
-                    for (const auto child : embeddedKernels)
+                    for (auto *child : embeddedKernels)
                     {
                         for (auto childArg : KfMap[child]->ArgumentMap)
                         {
@@ -1422,7 +1422,7 @@ namespace TraceAtlas::tik
                                 {
                                     for (auto it = bi.begin(); it != bi.end(); it++)
                                     {
-                                        if (auto ci = dyn_cast<CallInst>(it))
+                                        if (auto *ci = dyn_cast<CallInst>(it))
                                         {
                                             if (child == ci->getCalledFunction())
                                             {
@@ -1439,7 +1439,7 @@ namespace TraceAtlas::tik
         }
 
         // replace child exports to parent with loads from those exports
-        for (auto embedded : embeddedKernels)
+        for (auto *embedded : embeddedKernels)
         {
             auto kernFunc = KfMap[embedded];
             for (auto embExp : kernFunc->ArgumentMap)
@@ -1459,9 +1459,9 @@ namespace TraceAtlas::tik
                     {
                         // this is an export to the parent, make sure the parent has a use for it first
                         bool useFound = false;
-                        for (auto use : IDToValue[embExp.second]->users())
+                        for (auto *use : IDToValue[embExp.second]->users())
                         {
-                            if (auto useInst = dyn_cast<Instruction>(use))
+                            if (auto *useInst = dyn_cast<Instruction>(use))
                             {
                                 if (blocks.find(useInst->getParent()) != blocks.end())
                                 {
@@ -1474,9 +1474,9 @@ namespace TraceAtlas::tik
                             throw AtlasException("Child export to parent has no uses!");
                         }
                         // make an alloc for it in Init
-                        IRBuilder alBuilder(Init);
-                        auto sel = Init->getTerminator();
-                        auto al = alBuilder.CreateAlloca(IDToValue[embExp.second]->getType());
+                        IRBuilder<> alBuilder(Init);
+                        auto *sel = Init->getTerminator();
+                        auto *al = alBuilder.CreateAlloca(IDToValue[embExp.second]->getType());
                         al->moveBefore(sel);
                         // now replace all uses of the export value with loads or references to the alloca
                         bool instFound = false;
@@ -1489,11 +1489,8 @@ namespace TraceAtlas::tik
                                     if (embExp.second == GetValueID(it->getOperand(i)))
                                     {
                                         instFound = true;
-                                        if (auto st = dyn_cast<StoreInst>(it))
-                                        {
-                                            continue;
-                                        }
-                                        else if (auto callInst = dyn_cast<CallInst>(it))
+
+                                        if (auto *callInst = dyn_cast<CallInst>(it))
                                         {
                                             if (embeddedKernels.find(callInst->getCalledFunction()) != embeddedKernels.end())
                                             {
@@ -1502,31 +1499,35 @@ namespace TraceAtlas::tik
                                             else
                                             {
                                                 IRBuilder<> ldBuilder(callInst->getParent());
-                                                auto ld = ldBuilder.CreateLoad(al);
+                                                auto *ld = ldBuilder.CreateLoad(al);
                                                 ld->moveBefore(callInst);
                                                 callInst->replaceUsesOfWith(IDToValue[embExp.second], ld);
                                             }
                                         }
-                                        else if (auto phi = dyn_cast<PHINode>(it))
+                                        else if (auto *phi = dyn_cast<PHINode>(it))
                                         {
                                             // inject loads into the predecessor of our user
                                             for (unsigned int j = 0; j < phi->getNumIncomingValues(); j++)
                                             {
                                                 if (phi->getIncomingValue(j) == IDToValue[embExp.second])
                                                 {
-                                                    auto predBlock = phi->getIncomingBlock(j);
-                                                    auto term = predBlock->getTerminator();
+                                                    auto *predBlock = phi->getIncomingBlock(j);
+                                                    auto *term = predBlock->getTerminator();
                                                     IRBuilder<> ldBuilder(predBlock);
-                                                    auto ld = ldBuilder.CreateLoad(al);
+                                                    auto *ld = ldBuilder.CreateLoad(al);
                                                     ld->moveBefore(term);
                                                     phi->replaceUsesOfWith(IDToValue[embExp.second], ld);
                                                 }
                                             }
                                         }
-                                        else if (auto useInst = dyn_cast<Instruction>(it))
+                                        else if (auto *st = dyn_cast<StoreInst>(it))
+                                        {
+                                            continue;
+                                        }
+                                        else if (auto *useInst = dyn_cast<Instruction>(it))
                                         {
                                             IRBuilder<> ldBuilder(useInst->getParent());
-                                            auto ld = ldBuilder.CreateLoad(al);
+                                            auto *ld = ldBuilder.CreateLoad(al);
                                             useInst->replaceUsesOfWith(IDToValue[embExp.second], ld);
                                             ld->moveBefore(useInst);
                                         }
@@ -1543,7 +1544,7 @@ namespace TraceAtlas::tik
                             {
                                 for (auto it = bi.begin(); it != bi.end(); it++)
                                 {
-                                    if (auto callInst = dyn_cast<CallInst>(it))
+                                    if (auto *callInst = dyn_cast<CallInst>(it))
                                     {
                                         if (embeddedKernels.find(callInst->getCalledFunction()) != embeddedKernels.end())
                                         {
@@ -1564,7 +1565,7 @@ namespace TraceAtlas::tik
         {
             for (auto inst = bi.begin(); inst != bi.end(); inst++)
             {
-                if (auto callBase = dyn_cast<CallBase>(inst))
+                if (auto *callBase = dyn_cast<CallBase>(inst))
                 {
                     Function *f = callBase->getCalledFunction();
                     if (f == nullptr)
@@ -1585,7 +1586,7 @@ namespace TraceAtlas::tik
         int exitId = 0;
         auto ex = GetExits(KernelFunction);
         map<BasicBlock *, BasicBlock *> exitMap;
-        for (auto exit : ex)
+        for (auto *exit : ex)
         {
             Exits.insert(make_shared<KernelInterface>(exitId++, GetBlockID(exit)));
             BasicBlock *tmp = BasicBlock::Create(TikModule->getContext(), "", KernelFunction);
@@ -1596,13 +1597,13 @@ namespace TraceAtlas::tik
 
         for (auto fi = KernelFunction->begin(); fi != KernelFunction->end(); fi++)
         {
-            auto block = cast<BasicBlock>(fi);
-            auto term = block->getTerminator();
+            auto *block = cast<BasicBlock>(fi);
+            auto *term = block->getTerminator();
             if (term != nullptr)
             {
                 for (uint32_t i = 0; i < term->getNumSuccessors(); i++)
                 {
-                    auto suc = term->getSuccessor(i);
+                    auto *suc = term->getSuccessor(i);
                     if (suc->getParent() != KernelFunction)
                     {
                         //we have an exit
@@ -1612,7 +1613,7 @@ namespace TraceAtlas::tik
             }
         }
 
-        auto phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), (uint32_t)Exits.size());
+        auto *phi = exitBuilder.CreatePHI(Type::getInt8Ty(TikModule->getContext()), (uint32_t)Exits.size());
         for (const auto &exit : Exits)
         {
             if (exitMap.find(IDToBlock[exit->Block]) == exitMap.end())
@@ -1634,10 +1635,10 @@ namespace TraceAtlas::tik
         {
             for (auto bi = fi.begin(); bi != fi.end(); bi++)
             {
-                if (auto ii = dyn_cast<InvokeInst>(bi))
+                if (auto *ii = dyn_cast<InvokeInst>(bi))
                 {
                     throw AtlasException("Exception handling is not supported");
-                    auto a = ii->getLandingPadInst();
+                    auto *a = ii->getLandingPadInst();
                     if (isa<BranchInst>(a))
                     {
                         throw AtlasException("Exception handling is not supported");

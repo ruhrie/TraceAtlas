@@ -19,7 +19,7 @@ namespace TraceAtlas::tik
     {
     public:
         ~Kernel();
-        std::string GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures);
+        std::string GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures) const;
         std::string Name;
         std::set<llvm::BasicBlock *> Conditional;
         struct KICompare

@@ -222,7 +222,7 @@ inline int64_t GetBlockID(llvm::BasicBlock *BB)
     {
         return result;
     }
-    llvm::Instruction *first = llvm::cast<llvm::Instruction>(BB->getFirstInsertionPt());
+    auto *first = llvm::cast<llvm::Instruction>(BB->getFirstInsertionPt());
     if (llvm::MDNode *node = first->getMetadata("BlockID"))
     {
         auto ci = llvm::cast<llvm::ConstantInt>(llvm::cast<llvm::ConstantAsMetadata>(node->getOperand(0))->getValue());
@@ -231,10 +231,10 @@ inline int64_t GetBlockID(llvm::BasicBlock *BB)
     return result;
 }
 
-inline int64_t GetValueID(llvm::Value *val)
+inline int64_t GetValueID(const llvm::Value *val)
 {
     int64_t result = IDState::Uninitialized;
-    if (llvm::Instruction *first = llvm::dyn_cast<llvm::Instruction>(val))
+    if (auto *first = llvm::dyn_cast<llvm::Instruction>(val))
     {
         if (llvm::MDNode *node = first->getMetadata("ValueID"))
         {

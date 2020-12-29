@@ -22,7 +22,7 @@ namespace DashTracer::Passes
     {
         for (auto fi = F.begin(); fi != F.end(); fi++)
         {
-            auto BB = cast<BasicBlock>(fi);
+            auto *BB = cast<BasicBlock>(fi);
             auto firstInsertion = BB->getFirstInsertionPt();
             auto *firstInst = cast<Instruction>(firstInsertion);
             IRBuilder<> firstBuilder(firstInst);

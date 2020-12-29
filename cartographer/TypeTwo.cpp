@@ -33,7 +33,7 @@ namespace TypeTwo
             {
                 for (auto fi = mi.begin(); fi != mi.end(); fi++)
                 {
-                    auto b = cast<BasicBlock>(fi);
+                    auto *b = cast<BasicBlock>(fi);
                     auto id = GetBlockID(b);
                     if (id != -1)
                     {
