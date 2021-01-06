@@ -23,6 +23,8 @@ uint8_t TraceAtlasStoreBuffer[TRACEATLASBUFSIZE];
 bool TraceAtlasOpened = false;
 bool TraceAtlasClosed = false;
 
+bool TraceAtlasZlibInit = false;
+
 void TraceAtlasWriteStream(char *input)
 {
     size_t size = strlen(input);
@@ -117,6 +119,7 @@ void TraceAtlasOpenFile()
             TraceAtlasStrm.opaque = Z_NULL;
             TraceAtlasStrm.next_out = TraceAtlasTempBuffer;
             TraceAtlasStrm.avail_out = TRACEATLASBUFSIZE;
+            TraceAtlasZlibInit = true;
             int defResult = deflateInit(&TraceAtlasStrm, TraceAtlasTraceCompressionLevel);
             if (defResult != Z_OK)
             {
@@ -265,17 +268,23 @@ void TraceAtlasBB_ID_Dump(uint64_t block, bool enter)
 
 void TraceAtlasKernelEnter(char *label)
 {
-    char fin[128];
-    strcpy(fin, "KernelEnter:");
-    strcat(fin, label);
-    strcat(fin, "\n");
-    TraceAtlasWriteStream(fin);
+    if (TraceAtlasZlibInit)
+    {
+        char fin[128];
+        strcpy(fin, "KernelEnter:");
+        strcat(fin, label);
+        strcat(fin, "\n");
+        TraceAtlasWriteStream(fin);
+    }
 }
 void TraceAtlasKernelExit(char *label)
 {
-    char fin[128];
-    strcpy(fin, "KernelExit:");
-    strcat(fin, label);
-    strcat(fin, "\n");
-    TraceAtlasWriteStream(fin);
+    if (TraceAtlasZlibInit)
+    {
+        char fin[128];
+        strcpy(fin, "KernelExit:");
+        strcat(fin, label);
+        strcat(fin, "\n");
+        TraceAtlasWriteStream(fin);
+    }
 }
