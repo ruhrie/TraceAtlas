@@ -70,6 +70,12 @@ set_target_properties(JR
 
 install(TARGETS JR RUNTIME DESTINATION bin)
 
+add_executable(CallGraph CallGraph.cpp)
+target_link_libraries(CallGraph ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
+target_include_directories(CallGraph SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(CallGraph PRIVATE ${LLVM_DEFINITIONS})
+set_target_properties(CallGraph PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
 OPTION(BUILD_EXPERIMENTAL "Build experimental tools" OFF)
 
 if(${BUILD_EXPERIMENTAL})
