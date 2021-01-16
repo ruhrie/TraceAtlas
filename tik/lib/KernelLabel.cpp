@@ -39,7 +39,7 @@ namespace TraceAtlas::tik
             if (auto *cmp = dyn_cast<ICmpInst>(condition))
             {
                 auto *left = cmp->getOperand(0);
-                auto* right = cmp->getOperand(1);
+                auto *right = cmp->getOperand(1);
                 //if either of these are constant we know this is a dynamic limit
                 bool leftConst = isa<Constant>(left);
                 bool rightConst = isa<Constant>(right);

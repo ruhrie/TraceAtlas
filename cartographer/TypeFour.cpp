@@ -52,7 +52,7 @@ namespace TypeFour
 
             set<BasicBlock *> entrances = GetEntrances(blockSet);
 
-            for (auto* ent : entrances)
+            for (auto *ent : entrances)
             {
                 auto a = GetReachable(ent, blocks);
                 set<int64_t> b;

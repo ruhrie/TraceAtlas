@@ -20,7 +20,7 @@ namespace TraceAtlas::tik
         //     parse json and populate Entrances, Exits,
         MDNode *meta = KernelFunction->getMetadata("Boundaries");
         std::string metaString;
-        if (auto* mstring = dyn_cast<MDString>(meta->getOperand(0)))
+        if (auto *mstring = dyn_cast<MDString>(meta->getOperand(0)))
         {
             metaString = mstring->getString();
         }
@@ -47,7 +47,7 @@ namespace TraceAtlas::tik
         }
         for (auto BB = KernelFunction->begin(); BB != KernelFunction->end(); BB++)
         {
-            auto* block = cast<BasicBlock>(BB);
+            auto *block = cast<BasicBlock>(BB);
             // Special class members
             if (block->getName() == "Init")
             {

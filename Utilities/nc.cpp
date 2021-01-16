@@ -87,6 +87,7 @@ int main(int argc, char **argv)
                 {
                     if (kernel != cComp)
                     {
+                        // breaks here for TDOA example
                         float score = kernel.ScoreSimilarity(cComp, csvData, baseGraph);
                         if (score != -1 && score < minScore)
                         {
