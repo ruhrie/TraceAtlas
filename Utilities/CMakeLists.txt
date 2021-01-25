@@ -58,6 +58,18 @@ set_target_properties(KernelVerifier
 
 install(TARGETS KernelVerifier RUNTIME DESTINATION bin)
 
+add_executable(kernelSourceMapper kernelSourceMapper.cpp)
+target_link_libraries(kernelSourceMapper ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil libtik)
+target_include_directories(kernelSourceMapper SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(kernelSourceMapper PRIVATE ${LLVM_DEFINITIONS})
+
+set_target_properties(kernelSourceMapper
+	PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin" 
+)
+
+install(TARGETS kernelSourceMapper RUNTIME DESTINATION bin)
+
 add_executable(JR JR.cpp)
 target_link_libraries(JR ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
 target_include_directories(JR SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})

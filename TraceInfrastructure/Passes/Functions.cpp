@@ -16,4 +16,5 @@ namespace DashTracer::Passes
     Function *MarkovOpen;
     Function *MarkovClose;
     Function *MarkovIncrement;
+    Function *MarkovExit;
 } // namespace DashTracer::Passes

@@ -68,10 +68,10 @@ add_subdirectory("hydra")
 
 #responsible for injecting the tracer. Fairly fragile so be careful
 function(InjectTracer tar)
-    target_compile_options(${tar} PRIVATE "-flto")
+    target_compile_options(${tar} PRIVATE "-flto" "-g")
     set_target_properties(${tar} PROPERTIES LINK_FLAGS "-fuse-ld=lld -Wl,--plugin-opt=emit-llvm")
     add_custom_command(OUTPUT opt.bc
-        COMMAND ${LLVM_INSTALL_PREFIX}/bin/opt -load $<TARGET_FILE:AtlasPasses> -EncodedTrace $<TARGET_FILE:${tar}> -o opt.bc
+        COMMAND ${LLVM_INSTALL_PREFIX}/bin/opt -load $<TARGET_FILE:AtlasPasses> -Markov $<TARGET_FILE:${tar}> -o opt.bc
         DEPENDS $<TARGET_FILE:${tar}>
     )
     set_source_files_properties(
