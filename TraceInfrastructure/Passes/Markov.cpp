@@ -25,12 +25,17 @@ namespace DashTracer::Passes
             auto *BB = cast<BasicBlock>(fi);
             auto firstInsertion = BB->getFirstInsertionPt();
             auto *firstInst = cast<Instruction>(firstInsertion);
+            auto lastInsertion = BB->getTerminator();
             IRBuilder<> firstBuilder(firstInst);
+
             int64_t id = GetBlockID(BB);
             Value *idValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), (uint64_t)id);
             std::vector<Value *> args;
             args.push_back(idValue);
             firstBuilder.CreateCall(MarkovIncrement, args);
+
+            auto call = firstBuilder.CreateCall(MarkovExit);
+            call->moveBefore(lastInsertion);
         }
         return true;
     }
@@ -38,6 +43,7 @@ namespace DashTracer::Passes
     bool Markov::doInitialization(Module &M)
     {
         MarkovIncrement = cast<Function>(M.getOrInsertFunction("MarkovIncrement", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext())).getCallee());
+        MarkovExit = cast<Function>(M.getOrInsertFunction("MarkovExit", Type::getVoidTy(M.getContext())).getCallee());
         return false;
     }
 

@@ -19,5 +19,6 @@ namespace DashTracer
         extern Function *MarkovOpen;
         extern Function *MarkovClose;
         extern Function *MarkovIncrement;
+        extern Function *MarkovExit;
     } // namespace Passes
 } // namespace DashTracer

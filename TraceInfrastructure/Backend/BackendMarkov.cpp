@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <iostream>
 #include <nlohmann/json.hpp>
+#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -43,6 +44,9 @@ public:
     }
 };
 
+long openIndicator = -1;
+map<string, set<uint64_t>> blockCallers;
+
 struct labelMap
 {
     map<string, map<string, uint64_t>> blockLabels;
@@ -51,16 +55,17 @@ struct labelMap
         json labelMap;
         for (const auto &bbid : blockLabels)
         {
-            for (const auto &label : bbid.second)
-            {
-                labelMap[bbid.first][label.first] = label.second;
-            }
+            labelMap[bbid.first]["Labels"] = bbid.second;
+        }
+        for (const auto &bbid : blockCallers)
+        {
+            labelMap[bbid.first]["BlockCallers"] = bbid.second;
         }
         ofstream file;
-        char *labelFileName = getenv("LABEL_FILE");
+        char *labelFileName = getenv("BLOCK_FILE");
         if (labelFileName == nullptr)
         {
-            file.open("Labels.json");
+            file.open("BlockInfo.json");
         }
         else
         {
@@ -98,6 +103,7 @@ extern "C"
             if (TraceAtlasLabelMap.blockLabels.find(to_string(a)) == TraceAtlasLabelMap.blockLabels.end())
             {
                 TraceAtlasLabelMap.blockLabels[to_string(a)] = map<string, uint64_t>();
+                blockCallers[to_string(a)] = set<uint64_t>();
             }
             if (TraceAtlasLabelMap.blockLabels[to_string(a)].find(labelName) == TraceAtlasLabelMap.blockLabels[to_string(a)].end())
             {
@@ -105,6 +111,16 @@ extern "C"
             }
             TraceAtlasLabelMap.blockLabels[to_string(a)][labelName]++;
         }
+        // mark our block caller, if necessary
+        if (openIndicator != -1)
+        {
+            blockCallers[to_string(openIndicator)].insert(a);
+        }
+        openIndicator = (long)a;
+    }
+    void MarkovExit()
+    {
+        openIndicator = -1;
     }
     void TraceAtlasMarkovKernelEnter(char *label)
     {
