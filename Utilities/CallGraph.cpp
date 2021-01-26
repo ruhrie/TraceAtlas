@@ -1,7 +1,6 @@
+#include "llvm/Analysis/CallGraph.h"
 #include "AtlasUtil/Format.h"
 #include "AtlasUtil/Print.h"
-
-#include "llvm/Analysis/CallGraph.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/LLVMContext.h"
@@ -11,7 +10,6 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/SourceMgr.h"
 #include <fstream>
-#include <iostream>
 #include <map>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -97,12 +95,12 @@ int main(int argc, char **argv)
                             }
                             else
                             {
-                                cout << "BlockCallers contained an empty list for this BBID" << endl;
+                                spdlog::warn("BlockCallers did not contain an entry for the indirect function call in BBID " + to_string(BBID));
                             }
                         }
                         else
                         {
-                            cout << "BlockCallers did not contain an entry for this BBID" << endl;
+                            spdlog::warn("BlockCallers did not contain an entry for the indirect call in BBID " + to_string(BBID));
                         }
                     }
                 }
@@ -123,7 +121,7 @@ int main(int argc, char **argv)
             if (calledFunc != nullptr)
             {
                 string calledFName = calledFunc->getName();
-                cout << "Parent: " << fname << ", Child: " << calledFName << endl;
+                spdlog::info("Parent: " + fname + ", Child: " + calledFName);
             }
         }
     }

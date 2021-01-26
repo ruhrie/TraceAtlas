@@ -4,6 +4,10 @@
 #include <cstdint>
 #include <vector>
 
+/// @brief Returns true if all nodes in elements are reachable to each other, false otherwise
+///
+/// @param elements A set of node IDs
+/// @param graph    A directed probability graph
 inline bool IsStronglyConnected(std::set<uint64_t> elements, Graph<float> graph)
 {
     using namespace std;

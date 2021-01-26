@@ -7,10 +7,15 @@
 
 enum class Legality
 {
+    /// All requirements are met
     Legal,
+    /// The kernel is "strongly connected", meaning every node within the kernel graph can reach all other nodes
     RuleOne,
+    /// The kernel does not overlap with any other kernels
     RuleTwo,
+    /// The kernel is more probable to keep recurring than to exit
     RuleThree,
+    /// If there is a hierarchy to two or more kernels, there must be a unique entrance to each of the children
     RuleFour
 };
 
@@ -67,7 +72,7 @@ public:
                 }
             }
         }
-        //requirement 4: a hierarchy must have a distinct entrace
+        //requirement 4: a hierarchy must have a distinct entrance
         //only enforce this on the child kernel, the parent is technically legal already
         for (auto &kComp : kernels)
         {
@@ -133,15 +138,18 @@ public:
         return Legality::Legal;
     }
     std::set<uint64_t> Blocks;
+    /// @brief Evaluates rules 1, 3 and 4 of a legal kernel
+    /// @retval Returns the ratio of edges that are not shared (numerator) and shared (denominator). 0 means total overlap between the two, 1 means no common edges. -1 means the two kernels fused together are not strongly connected.
     float ScoreSimilarity(const GraphKernel &compare, const Graph<uint64_t> &graph, const Graph<float> &probGraph) const
     {
         //first check that they aren't hierarchical (If they are then why bother merging)
-        //note that this part is asymetric
+        //note that this part is asymmetric
         std::set<uint64_t> diffA;
         std::set<uint64_t> diffB;
         set_difference(Blocks.begin(), Blocks.end(), compare.Blocks.begin(), compare.Blocks.end(), std::inserter(diffA, diffA.begin()));
         set_difference(compare.Blocks.begin(), compare.Blocks.end(), Blocks.begin(), Blocks.end(), std::inserter(diffB, diffB.begin()));
 
+        // Should return 0. This case means total overlap, which is indicated by a retval of 0
         if (diffB.empty())
         {
             return -1;
