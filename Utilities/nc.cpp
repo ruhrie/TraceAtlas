@@ -99,7 +99,22 @@ int main(int argc, char **argv)
                     {
                         // this means that a kernel, when fused with any other kernel, does not form a strongly connected kernel
                         // therefore this kernel does not satisfy one or more of rules 1, 3 and 4
-                        throw AtlasException("Base kernel does not satisfy one or more of rules 1, 3 and 4");
+                        if (legality == Legality::RuleOne)
+                        {
+                            throw AtlasException("Base kernel does not satisfy rule 1.");
+                        }
+                        else if (legality == Legality::RuleThree)
+                        {
+                            throw AtlasException("Base kernel does not satisfy rule 3.")
+                        }
+                        else if (legality == Legality::RuleFour)
+                        {
+                            throw AtlasException("Base kernel does not satisfy rule 4.");
+                        }
+                        else
+                        {
+                            throw AtlasException("Base kernel exception unclear.");
+                        }
                     }
                     kernel.Blocks.insert(currentCandidate.Blocks.begin(), currentCandidate.Blocks.end());
                 }
