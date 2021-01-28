@@ -53,11 +53,19 @@ inline std::vector<uint64_t> Dijkstra(const Graph<float> &graph, uint64_t start,
         return result;
     }
     // for each neighbor of the source node, assign the distance to be the probability edge between source and neighbor
-    for (auto i : graph.NeighborMap.at(start))
+    try
     {
-        float val = graph.WeightMatrix.at(start).at(i);
-        dist[i] = val;
-        prev[i] = start;
+        for (auto i : graph.NeighborMap.at(start))
+        {
+            float val = graph.WeightMatrix.at(start).at(i);
+            dist[i] = val;
+            prev[i] = start;
+        }
+    }
+    catch (std::exception &e)
+    {
+        spdlog::error("Exception thrown in Dijkstra method: " + std::string(e.what()));
+        return result;
     }
     while (vCount != maxSize)
     {
@@ -97,20 +105,28 @@ inline std::vector<uint64_t> Dijkstra(const Graph<float> &graph, uint64_t start,
         }
         //for neighor of u
         // not sure why this check is necessary
-        if (graph.NeighborMap.find(u) != graph.NeighborMap.end())
+        try
         {
-            // for each neighbor of the current node
-            for (auto v : graph.NeighborMap.at(u))
+            if (graph.NeighborMap.find(u) != graph.NeighborMap.end())
             {
-                // if a lesser probability edge is found between this node and a neighbor, update the distance matrix
-                float val = graph.WeightMatrix.at(u).at(v);
-                auto alt = dist[u] + val;
-                if (alt < dist[v])
+                // for each neighbor of the current node
+                for (auto v : graph.NeighborMap.at(u))
                 {
-                    dist[v] = alt;
-                    prev[v] = u;
+                    // if a lesser probability edge is found between this node and a neighbor, update the distance matrix
+                    float val = graph.WeightMatrix.at(u).at(v);
+                    auto alt = dist[u] + val;
+                    if (alt < dist[v])
+                    {
+                        dist[v] = alt;
+                        prev[v] = u;
+                    }
                 }
             }
+        }
+        catch (std::exception &e)
+        {
+            spdlog::error("Exception thrown in Dijkstra method: " + std::string(e.what()));
+            return result;
         }
         vCount++;
     }

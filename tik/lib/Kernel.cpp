@@ -33,6 +33,7 @@ namespace TraceAtlas::tik
 
     set<string> reservedNames;
 
+    Kernel::Kernel() = default;
     Kernel::~Kernel() = default;
 
     std::string Kernel::GetHeaderDeclaration(std::set<llvm::StructType *> &AllStructures) const
@@ -195,5 +196,4 @@ namespace TraceAtlas::tik
             cast<Instruction>(cond->getFirstInsertionPt())->setMetadata("TikMetadata", condNode);
         }
     }
-    Kernel::Kernel() = default;
 } // namespace TraceAtlas::tik

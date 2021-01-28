@@ -52,24 +52,32 @@ public:
         //requirement 3: more probable to stay inside than out
         for (const auto &block : Blocks)
         {
-            //get the max path
-            uint64_t minBlock = 0;
-            float prob = FLT_MAX;
-            auto blockIndex = graph.LocationAlias.at(block);
-            for (int i = 0; i < graph.WeightMatrix.at(blockIndex).size(); i++)
+            try
             {
-                if (graph.WeightMatrix.at(blockIndex).at(i) < prob)
+                //get the max path
+                uint64_t minBlock = 0;
+                float prob = FLT_MAX;
+                auto blockIndex = graph.LocationAlias.at(block);
+                for (int i = 0; i < graph.WeightMatrix.at(blockIndex).size(); i++)
                 {
-                    minBlock = i;
-                    prob = graph.WeightMatrix.at(blockIndex).at(i);
+                    if (graph.WeightMatrix.at(blockIndex).at(i) < prob)
+                    {
+                        minBlock = i;
+                        prob = graph.WeightMatrix.at(blockIndex).at(i);
+                    }
+                }
+                for (auto subBlock : graph.IndexAlias.at(minBlock))
+                {
+                    if (find(Blocks.begin(), Blocks.end(), subBlock) == Blocks.end()) //more probable to leave
+                    {
+                        return Legality::RuleThree;
+                    }
                 }
             }
-            for (auto subBlock : graph.IndexAlias.at(minBlock))
+            catch (std::exception &e)
             {
-                if (find(Blocks.begin(), Blocks.end(), subBlock) == Blocks.end()) //more probable to leave
-                {
-                    return Legality::RuleThree;
-                }
+                spdlog::error("Exception thrown in IsLegal method: " + std::string(e.what()));
+                return Legality::RuleThree;
             }
         }
         //requirement 4: a hierarchy must have a distinct entrance
@@ -84,39 +92,47 @@ public:
             }
             std::set<uint64_t> difference;
             set_difference(kComp.Blocks.begin(), kComp.Blocks.end(), Blocks.begin(), Blocks.end(), std::inserter(difference, difference.begin()));
-            if (!difference.empty()) //there is a hierarchy (we already know it doesn't overlap partially by rule 2)
+            try
             {
-                int entranceCount = 0;
-                for (auto &block : difference)
+                if (!difference.empty()) //there is a hierarchy (we already know it doesn't overlap partially by rule 2)
                 {
-                    uint64_t blockLoc = probGraph.LocationAlias.at(block);
-                    for (int i = 0; i < probGraph.WeightMatrix.size(); i++)
+                    int entranceCount = 0;
+                    for (auto &block : difference)
                     {
-                        float weight = probGraph.WeightMatrix.at(i).at(blockLoc);
-                        if (weight != std::numeric_limits<float>::infinity() && !std::isnan(weight))
+                        uint64_t blockLoc = probGraph.LocationAlias.at(block);
+                        for (int i = 0; i < probGraph.WeightMatrix.size(); i++)
                         {
-                            //this node is a predecessor, if it is an entrance it will not be in kComp
-                            auto enterBlocks = probGraph.IndexAlias.at(i);
-                            bool external = false;
-                            for (auto entrance : enterBlocks)
+                            float weight = probGraph.WeightMatrix.at(i).at(blockLoc);
+                            if (weight != std::numeric_limits<float>::infinity() && !std::isnan(weight))
                             {
-                                if (kComp.Blocks.find(entrance) == kComp.Blocks.end())
+                                //this node is a predecessor, if it is an entrance it will not be in kComp
+                                auto enterBlocks = probGraph.IndexAlias.at(i);
+                                bool external = false;
+                                for (auto entrance : enterBlocks)
                                 {
-                                    external = true;
-                                    break;
+                                    if (kComp.Blocks.find(entrance) == kComp.Blocks.end())
+                                    {
+                                        external = true;
+                                        break;
+                                    }
                                 }
-                            }
-                            if (external)
-                            {
-                                entranceCount += 1;
+                                if (external)
+                                {
+                                    entranceCount += 1;
+                                }
                             }
                         }
                     }
+                    if (entranceCount == 0)
+                    {
+                        return Legality::RuleFour;
+                    }
                 }
-                if (entranceCount == 0)
-                {
-                    return Legality::RuleFour;
-                }
+            }
+            catch (std::exception &e)
+            {
+                spdlog::error("Exception thrown in IsLegal method: " + std::string(e.what()));
+                return Legality::RuleFour;
             }
         }
 
@@ -172,18 +188,26 @@ public:
         float denominator = 0;
         std::set<uint64_t> diff;
         set_difference(Blocks.begin(), Blocks.end(), compare.Blocks.begin(), compare.Blocks.end(), std::inserter(diff, diff.begin()));
-        for (const auto &a : fusedSet)
+        try
         {
-            auto A = graph.LocationAlias.at(a);
-            for (const auto &b : fusedSet)
+            for (const auto &a : fusedSet)
             {
-                auto B = graph.LocationAlias.at(b);
-                denominator += graph.WeightMatrix.at(A).at(B);
-                if (diff.find(a) != diff.end() || diff.find(b) != diff.end())
+                auto A = graph.LocationAlias.at(a);
+                for (const auto &b : fusedSet)
                 {
-                    numerator += graph.WeightMatrix.at(A).at(B);
+                    auto B = graph.LocationAlias.at(b);
+                    denominator += graph.WeightMatrix.at(A).at(B);
+                    if (diff.find(a) != diff.end() || diff.find(b) != diff.end())
+                    {
+                        numerator += graph.WeightMatrix.at(A).at(B);
+                    }
                 }
             }
+        }
+        catch (std::exception &e)
+        {
+            spdlog::error("Exception thrown in ScoreSimilarity method: " + std::string(e.what()));
+            return -1;
         }
         return numerator / denominator;
     }
