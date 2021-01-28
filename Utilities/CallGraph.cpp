@@ -10,12 +10,14 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/SourceMgr.h"
 #include <fstream>
+#include <iomanip>
 #include <map>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
 using namespace llvm;
 using namespace std;
+using json = nlohmann::json;
 
 cl::opt<std::string> InputFilename("i", cl::desc("Specify input bitcode"), cl::value_desc("bitcode filename"), cl::Required);
 cl::opt<std::string> BlockInfo("j", cl::desc("Specify BlockInfo json"), cl::value_desc("BlockInfo filename"), cl::Required);
@@ -35,9 +37,8 @@ int main(int argc, char **argv)
     }
     catch (exception &e)
     {
-        std::cerr << "Couldn't open input json file: " << BlockInfo << "\n";
-        std::cerr << e.what() << '\n';
-        spdlog::critical("Failed to open kernel file: " + BlockInfo);
+        spdlog::critical("Couldn't open input json file: " + BlockInfo);
+        spdlog::critical(e.what());
         return EXIT_FAILURE;
     }
     map<string, vector<int64_t>> blockCallers;
@@ -61,6 +62,7 @@ int main(int argc, char **argv)
 
     map<int64_t, BasicBlock *> IDToBlock;
     map<int64_t, Value *> IDToValue;
+    map<BasicBlock *, Function *> BlockToFPtr;
     InitializeIDMaps(SourceBitcode.get(), IDToBlock, IDToValue);
 
     // Call graph, doesn't include function pointers
@@ -78,7 +80,7 @@ int main(int argc, char **argv)
                     auto callee = CI->getCalledFunction();
                     if (callee == nullptr)
                     {
-                        // try to find a block caller for this function, if it's not there we have to move on
+                        // try to find a block caller entry for this function, if it's not there we have to move on
                         auto BBID = GetBlockID(cast<BasicBlock>(bb));
                         if (blockCallers.find(to_string(BBID)) != blockCallers.end())
                         {
@@ -91,6 +93,7 @@ int main(int argc, char **argv)
                                     auto parentNode = CG.getOrInsertFunction(bb->getParent());
                                     auto childNode = CG.getOrInsertFunction(calleeBlock->getParent());
                                     parentNode->addCalledFunction(CI, childNode);
+                                    BlockToFPtr[cast<BasicBlock>(bb)] = calleeBlock->getParent();
                                 }
                             }
                             else
@@ -107,6 +110,7 @@ int main(int argc, char **argv)
             }
         }
     }
+    json outputJson;
     for (const auto &node : CG)
     {
         if (node.first == nullptr)
@@ -115,15 +119,20 @@ int main(int argc, char **argv)
             continue;
         }
         string fname = node.first->getName();
+        outputJson[fname] = std::vector<string>();
         for (unsigned int i = 0; i < node.second->size(); i++)
         {
             auto calledFunc = (*node.second)[i]->getFunction();
             if (calledFunc != nullptr)
             {
                 string calledFName = calledFunc->getName();
-                spdlog::info("Parent: " + fname + ", Child: " + calledFName);
+                outputJson[node.first->getName()].push_back(calledFunc->getName());
             }
+            // null function calls can still exist, this tool only adds functions to the callgraph
         }
     }
+    ofstream oStream(OutputFilename);
+    oStream << setw(4) << outputJson;
+    oStream.close();
     return 0;
 }

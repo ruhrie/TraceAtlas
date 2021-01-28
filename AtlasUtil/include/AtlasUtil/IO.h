@@ -60,7 +60,9 @@ inline Graph<uint64_t> LoadBIN(const std::string &path)
     }
     for (uint64_t i = 0; i < result.WeightMatrix.size(); i++)
     {
-        for (uint64_t j = 0; j < result.WeightMatrix.size(); j++)
+        // Has an alloc problem (std::bad_alloc exception).
+        // this broke in FFTW/2d_512. When building this matrix, the array is so large the spade node runs out of memory (observed on top to demand greater than 220GB)
+        for (uint64_t j = 0; j < result.WeightMatrix[i].size(); j++)
         {
             if (result.WeightMatrix[i][j] != 0)
             {
