@@ -6,24 +6,24 @@
 #include <stdint.h>
 #include <vector>
 
-inline Graph<float> ProbabilityTransform(Graph<uint64_t> input)
+inline Graph<float> ProbabilityTransform(Graph<uint64_t>& input)
 {
     spdlog::trace("Building probability graph");
     Graph<float> result;
 
-    for (int i = 0; i < input.WeightMatrix.size(); i++)
+    for ( auto& i : input.WeightMatrix )
     {
-        std::vector<float> newRow(input.WeightMatrix.size());
+        //std::vector<float> newRow(input.WeightMatrix.size());
         float sum = 0.0f;
 
-        for (auto j : input.WeightMatrix[i])
+        for (const auto& j : i.second)
         {
             sum += j.second;
         }
 
-        for (int j = 0; j < input.WeightMatrix[i].size(); j++)
+        for ( auto& j : i.second )
         {
-            result.WeightMatrix[i][j] = -1 * log(input.WeightMatrix[i][j] / sum);
+            j.second = -1 * log(j.second / sum);
             //newRow[j] = -1 * log(input.WeightMatrix[i][j] / sum);
         }
         //result.WeightMatrix.push_back(newRow);
@@ -31,7 +31,7 @@ inline Graph<float> ProbabilityTransform(Graph<uint64_t> input)
     result.LocationAlias = input.LocationAlias;
     result.IndexAlias = input.IndexAlias;
     result.NeighborMap = input.NeighborMap;
-
+    
     return result;
 }
 
@@ -129,16 +129,16 @@ inline Graph<float> GraphCollapse(Graph<float> base, const std::set<GraphKernel>
     */
 
     //merge the weights
-    for (uint64_t i = 0; i < base.WeightMatrix.size(); i++)
+    for (auto& i : base.WeightMatrix)
     {
-        uint64_t x = result.LocationAlias[base.IndexAlias[i].front()];
-        for (uint64_t j = 0; j < base.WeightMatrix[i].size(); j++)
+        uint64_t x = result.LocationAlias[base.IndexAlias[i.first].front()];
+        for ( auto& j : i.second)
         {
-            uint64_t y = result.LocationAlias[base.IndexAlias[j].front()];
+            uint64_t y = result.LocationAlias[base.IndexAlias[j.first].front()];
             //skip self cycles
             if (x != y)
             {
-                result.WeightMatrix[x][y] += exp(-1 * base.WeightMatrix[i][j]);
+                result.WeightMatrix[x][y] += exp(-1 * j.second);
             }
         }
     }
@@ -180,19 +180,23 @@ inline Graph<float> GraphCollapse(Graph<float> base, const std::set<GraphKernel>
     return result;
 }
 
+/// @brief Transforms an input CFG into a minimal version of itself
+///
+/// 1.) Removes "no-neighbor" edges, an edge between two nodes that has 0 probability
+/// 2.) TODO: Trivially merges chains of nodes connected sequentially by unconditional branches
 inline Graph<uint64_t> CompressGraph(Graph<uint64_t> base)
 {
     spdlog::trace("Compressing graph");
     //first remove no neighbor edges
     std::vector<uint64_t> indexesToRemove;
-    for (uint64_t i = 0; i < base.WeightMatrix.size(); i++)
+    for (const auto& i : base.WeightMatrix)
     {
-        if (base.NeighborMap.find(i) == base.NeighborMap.end())
+        if (base.NeighborMap.find(i.first) == base.NeighborMap.end())
         {
             bool connected = false;
-            for (uint64_t j = 0; j < base.WeightMatrix.size(); j++)
+            for (const auto& j : i.second)
             {
-                if (base.WeightMatrix[j][i] != 0)
+                if (j.second != 0)
                 {
                     connected = true;
                     break;
@@ -200,7 +204,7 @@ inline Graph<uint64_t> CompressGraph(Graph<uint64_t> base)
             }
             if (!connected)
             {
-                indexesToRemove.push_back(i);
+                indexesToRemove.push_back(i.first);
             }
         }
     }
@@ -212,9 +216,9 @@ inline Graph<uint64_t> CompressGraph(Graph<uint64_t> base)
     {
         if (find(indexesToRemove.begin(), indexesToRemove.end(), i) == indexesToRemove.end())
         {
-            std::vector<uint64_t> subEntries(newSize);
+            //std::vector<uint64_t> subEntries(newSize);
             uint64_t l = 0;
-            for (uint64_t k = 0; k < base.WeightMatrix.size(); k++)
+            for (uint64_t k = 0; k < base.WeightMatrix[i].size(); k++)
             {
                 if (find(indexesToRemove.begin(), indexesToRemove.end(), k) == indexesToRemove.end())
                 {

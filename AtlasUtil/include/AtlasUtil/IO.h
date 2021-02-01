@@ -58,15 +58,20 @@ inline Graph<uint64_t> LoadBIN(const std::string &path)
         result.IndexAlias[i].push_back(i);
         result.LocationAlias[i] = i;
     }
-    for (uint64_t i = 0; i < result.WeightMatrix.size(); i++)
+    //for (uint64_t i = 0; i < result.WeightMatrix.size(); i++)
+    //{
+    for( const auto& key : result.WeightMatrix )
     {
         // Has an alloc problem (std::bad_alloc exception).
         // this broke in FFTW/2d_512. When building this matrix, the array is so large the spade node runs out of memory (observed on top to demand greater than 220GB)
-        for (uint64_t j = 0; j < result.WeightMatrix[i].size(); j++)
+        // The [] operator automatically allocates a new place if the key doesn't exist. Therefore just iterate through the keys
+        //for (uint64_t j = 0; j < result.WeightMatrix[i].size(); j++)
+        //{
+        for( const auto& sk : key.second )
         {
-            if (result.WeightMatrix[i][j] != 0)
+            if ( sk.second != 0)
             {
-                result.NeighborMap[i].insert(j);
+                result.NeighborMap[key.first].insert(sk.first);
             }
         }
     }

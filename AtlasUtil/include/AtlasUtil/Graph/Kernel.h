@@ -13,7 +13,7 @@ enum class Legality
     RuleOne,
     /// The kernel does not overlap with any other kernels
     RuleTwo,
-    /// The kernel is more probable to keep recurring than to exit
+    /// Every node in the kernel is more probable to keep recurring than to exit
     RuleThree,
     /// If there is a hierarchy to two or more kernels, there must be a unique entrance to each of the children
     RuleFour
@@ -50,6 +50,7 @@ public:
         //check this last
 
         //requirement 3: more probable to stay inside than out
+        // if any node has an edge that is more probable to leave the kernel than recur back into it, rule 3 is violated
         for (const auto &block : Blocks)
         {
             try
@@ -58,6 +59,7 @@ public:
                 uint64_t minBlock = 0;
                 float prob = FLT_MAX;
                 auto blockIndex = graph.LocationAlias.at(block);
+                // find the maximum probability edge of this block and remember it
                 for (int i = 0; i < graph.WeightMatrix.at(blockIndex).size(); i++)
                 {
                     if (graph.WeightMatrix.at(blockIndex).at(i) < prob)
@@ -66,6 +68,7 @@ public:
                         prob = graph.WeightMatrix.at(blockIndex).at(i);
                     }
                 }
+                // look at the destination node of the maximum probability edge, if it is outside the kernel then rule 3 is violated
                 for (auto subBlock : graph.IndexAlias.at(minBlock))
                 {
                     if (find(Blocks.begin(), Blocks.end(), subBlock) == Blocks.end()) //more probable to leave

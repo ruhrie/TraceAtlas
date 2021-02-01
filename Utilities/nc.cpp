@@ -49,7 +49,7 @@ int main(int argc, char **argv)
         for (int i = 0; i < probabilityGraph.WeightMatrix.size(); i++)
         {
             spdlog::trace("{0} of {1}", i, probabilityGraph.WeightMatrix.size());
-            // find minimum probability cycle for i and if one exists make a kernel out of it
+            // find maximum probability cycle for i and if one exists make a kernel out of it
             auto path = Dijkstra(probabilityGraph, i, i);
             if (!path.empty())
             {
