@@ -16,7 +16,7 @@ public:
     /// The bitcode can contain chains of nodes that unconditionally branch sequentially. We transform these chains to be 1 node. This structure therefore maps a nodeID (that may be several blocks combined) to the blockID(s) it represents
     std::map<uint64_t, std::vector<uint64_t>> IndexAlias; //node to block
     /// Maps a blockID in the source program to a nodeID in the weightMatrix
-    std::map<uint64_t, uint64_t> LocationAlias;           //block to node
+    std::map<uint64_t, uint64_t> LocationAlias; //block to node
     /// Maps a node to a set of neighbors
     std::map<uint64_t, std::set<uint64_t>> NeighborMap;
 };

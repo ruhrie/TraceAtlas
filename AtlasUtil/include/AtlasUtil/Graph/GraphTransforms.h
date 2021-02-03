@@ -6,22 +6,22 @@
 #include <stdint.h>
 #include <vector>
 
-inline Graph<float> ProbabilityTransform(Graph<uint64_t>& input)
+inline Graph<float> ProbabilityTransform(Graph<uint64_t> &input)
 {
     spdlog::trace("Building probability graph");
     Graph<float> result;
 
-    for ( auto& i : input.WeightMatrix )
+    for (auto &i : input.WeightMatrix)
     {
         //std::vector<float> newRow(input.WeightMatrix.size());
         float sum = 0.0f;
 
-        for (const auto& j : i.second)
+        for (const auto &j : i.second)
         {
             sum += j.second;
         }
 
-        for ( auto& j : i.second )
+        for (auto &j : i.second)
         {
             j.second = -1 * log(j.second / sum);
             //newRow[j] = -1 * log(input.WeightMatrix[i][j] / sum);
@@ -31,7 +31,7 @@ inline Graph<float> ProbabilityTransform(Graph<uint64_t>& input)
     result.LocationAlias = input.LocationAlias;
     result.IndexAlias = input.IndexAlias;
     result.NeighborMap = input.NeighborMap;
-    
+
     return result;
 }
 
@@ -129,10 +129,10 @@ inline Graph<float> GraphCollapse(Graph<float> base, const std::set<GraphKernel>
     */
 
     //merge the weights
-    for (auto& i : base.WeightMatrix)
+    for (auto &i : base.WeightMatrix)
     {
         uint64_t x = result.LocationAlias[base.IndexAlias[i.first].front()];
-        for ( auto& j : i.second)
+        for (auto &j : i.second)
         {
             uint64_t y = result.LocationAlias[base.IndexAlias[j.first].front()];
             //skip self cycles
@@ -189,12 +189,12 @@ inline Graph<uint64_t> CompressGraph(Graph<uint64_t> base)
     spdlog::trace("Compressing graph");
     //first remove no neighbor edges
     std::vector<uint64_t> indexesToRemove;
-    for (const auto& i : base.WeightMatrix)
+    for (const auto &i : base.WeightMatrix)
     {
         if (base.NeighborMap.find(i.first) == base.NeighborMap.end())
         {
             bool connected = false;
-            for (const auto& j : i.second)
+            for (const auto &j : i.second)
             {
                 if (j.second != 0)
                 {
