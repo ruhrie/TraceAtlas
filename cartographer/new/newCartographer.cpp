@@ -1,42 +1,19 @@
 #include "newCartographer.h"
 #include "AtlasUtil/IO.h"
 #include <fstream>
-#include <iostream>
+#include <iomanip>
+#include <nlohmann/json.hpp>
 
 using namespace llvm;
 using namespace std;
+using json = nlohmann::json;
 
 cl::opt<string> InputFilename("i", cl::desc("Specify bin file"), cl::value_desc(".bin filename"), cl::Required);
+cl::opt<string> BlockInfoFilename("i", cl::desc("Specify BlockInfo.json file"), cl::value_desc(".json filename"), cl::Required);
 cl::opt<string> OutputFilename("o", cl::desc("Specify output json"), cl::value_desc("kernel filename"), cl::Required);
 
 uint64_t GraphNode::nextNID = 0;
-uint32_t MinKernel::nextKID = 0;
-
-enum class NodeColor
-{
-    White,
-    Grey,
-    Black
-};
-
-struct DijkstraNode
-{
-    DijkstraNode() = default;
-    DijkstraNode(double d, uint64_t p, NodeColor c)
-    {
-        distance = d;
-        predecessor = p;
-        color = c;
-    }
-    /// distance between this node and the target source node
-    /// since our objective is to find the maximum likelihood path, we need to map probabilities onto a space that minimizes big probabilities and maximizes small ones
-    /// -log(p) is how we do this
-    double distance;
-    /// minimum-distance predecessor of this node
-    uint64_t predecessor;
-    /// whether or not this node has been investigated
-    NodeColor color;
-};
+uint32_t Kernel::nextKID = 0;
 
 vector<uint64_t> Dijkstras(set<GraphNode, GNCompare> &nodes, uint64_t source, uint64_t sink)
 {
@@ -54,6 +31,7 @@ vector<uint64_t> Dijkstras(set<GraphNode, GNCompare> &nodes, uint64_t source, ui
     Q.push_back(*(nodes.find(source)));
     while (!Q.empty())
     {
+        // TODO: select the neighbor with the shortest path to boost performance
         // for each neighbor of u, calculate the neighbors new distance
         for (const auto &neighbor : Q.front().neighbors)
         {
@@ -115,13 +93,33 @@ int main(int argc, char *argv[])
     cl::ParseCommandLineOptions(argc, argv);
     auto csvData = LoadBIN(InputFilename);
 
+    ifstream inputJson;
+    nlohmann::json j;
+    try
+    {
+        inputJson.open(BlockInfoFilename);
+        inputJson >> j;
+        inputJson.close();
+    }
+    catch (exception &e)
+    {
+        spdlog::critical("Couldn't open input json file: " + BlockInfoFilename);
+        spdlog::critical(e.what());
+        return EXIT_FAILURE;
+    }
+    map<string, vector<int64_t>> blockCallers;
+    for (const auto &bbid : j.items())
+    {
+        blockCallers[bbid.key()] = j[bbid.key()]["BlockCallers"].get<vector<int64_t>>();
+    }
+
     spdlog::trace("Loading bin file: {0}", InputFilename);
     set<GraphNode, GNCompare> nodes;
     fstream inputFile;
     inputFile.open(InputFilename, ios::in | ios::binary);
     while (inputFile.peek() != EOF)
     {
-        // New block description: BBID,#ofNeighbors (16 bytes per neighber)
+        // New block description: BBID,#ofNeighbors (16 bytes per neighbor)
         uint64_t key;
         inputFile.readsome((char *)&key, sizeof(uint64_t));
         GraphNode currentNode;
@@ -164,48 +162,71 @@ int main(int argc, char *argv[])
             spdlog::info("Neighbor " + to_string(neighbor.first) + " has instance count " + to_string(neighbor.second.first) + " and probability " + to_string(neighbor.second.second));
         }
         cout << endl;*/
-        spdlog::info("Node "+to_string(node.NID)+" has "+to_string(node.neighbors.size())+" neighbors.");
+        spdlog::info("Node " + to_string(node.NID) + " has " + to_string(node.neighbors.size()) + " neighbors.");
     }
 
     // find minimum cycles
-    bool notDone = true;
+    bool done = false;
     size_t numKernels = 0;
-    set<MinKernel, MKCompare> minKernels;
-    while (notDone)
+    set<Kernel, KCompare> kernels;
+    while (!done)
     {
-        notDone = false;
+        done = true;
         for (const auto &node : nodes)
         {
             auto nodeIDs = Dijkstras(nodes, node.NID, node.NID);
             if (!nodeIDs.empty())
             {
-                auto newKernel = MinKernel();
+                auto newKernel = Kernel();
                 for (const auto &id : nodeIDs)
                 {
                     newKernel.nodes.insert(*(nodes.find(id)));
                 }
-                minKernels.insert(newKernel);
+                // compare to other kernels we already have, if any exist
+                if (!kernels.empty())
+                {
+                    bool match = false;
+                    for (const auto &kern : kernels)
+                    {
+                        if (kern.Compare(newKernel) > 0.999)
+                        {
+                            match = true;
+                        }
+                    }
+                    if (!match)
+                    {
+                        kernels.insert(newKernel);
+                    }
+                }
+                else
+                {
+                    kernels.insert(newKernel);
+                }
             }
         }
-        if (minKernels.size() == 0)
+        if (kernels.size() == numKernels)
         {
-            notDone = false;
+            done = true;
         }
         else
         {
-            notDone = true;
-            numKernels += minKernels.size();
+            done = false;
+            numKernels = kernels.size();
         }
-        break;
     }
-    for (const auto &kernel : minKernels)
+
+    json outputJson;
+    outputJson["BlockCallers"] = 0;
+    int id = 0;
+    for (const auto &kernel : kernels)
     {
-        spdlog::info("MinKernel " + to_string(kernel.KID) + " has " + to_string(kernel.getBlocks().size()) + " blocks:");
-        for (const auto &block : kernel.getBlocks())
-        {
-            spdlog::info(to_string(block));
-        }
-        cout << endl;
+        outputJson["Kernels"][to_string(id)]["Blocks"] = kernel.getBlocks();
+        outputJson["Kernels"][to_string(id)]["Labels"] = std::vector<string>();
+        outputJson["Kernels"][to_string(id)]["Labels"].push_back("");
+        id++;
     }
+    ofstream oStream(OutputFilename);
+    oStream << setw(4) << outputJson;
+    oStream.close();
     return 0;
 }
