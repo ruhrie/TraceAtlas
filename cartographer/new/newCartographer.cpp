@@ -9,7 +9,7 @@ using namespace std;
 using json = nlohmann::json;
 
 cl::opt<string> InputFilename("i", cl::desc("Specify bin file"), cl::value_desc(".bin filename"), cl::Required);
-cl::opt<string> BlockInfoFilename("i", cl::desc("Specify BlockInfo.json file"), cl::value_desc(".json filename"), cl::Required);
+cl::opt<string> BlockInfoFilename("b", cl::desc("Specify BlockInfo.json file"), cl::value_desc(".json filename"), cl::Required);
 cl::opt<string> OutputFilename("o", cl::desc("Specify output json"), cl::value_desc("kernel filename"), cl::Required);
 
 uint64_t GraphNode::nextNID = 0;
@@ -216,7 +216,12 @@ int main(int argc, char *argv[])
     }
 
     json outputJson;
-    outputJson["BlockCallers"] = 0;
+    outputJson["Valid Blocks"] = std::vector<string>();
+    for (const auto &bid : blockCallers)
+    {
+        outputJson["BlockCallers"][bid.first] = bid.second;
+        outputJson["ValidBlocks"].push_back(bid.first);
+    }
     int id = 0;
     for (const auto &kernel : kernels)
     {
