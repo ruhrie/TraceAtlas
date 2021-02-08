@@ -31,7 +31,8 @@ vector<uint64_t> Dijkstras(set<GraphNode, GNCompare> &nodes, uint64_t source, ui
     Q.push_back(*(nodes.find(source)));
     while (!Q.empty())
     {
-        // TODO: select the neighbor with the shortest path to boost performance
+        // sort the queue
+
         // for each neighbor of u, calculate the neighbors new distance
         for (const auto &neighbor : Q.front().neighbors)
         {
@@ -216,7 +217,7 @@ int main(int argc, char *argv[])
     }
 
     json outputJson;
-    outputJson["Valid Blocks"] = std::vector<string>();
+    outputJson["ValidBlocks"] = std::vector<string>();
     for (const auto &bid : blockCallers)
     {
         outputJson["BlockCallers"][bid.first] = bid.second;
@@ -235,3 +236,33 @@ int main(int argc, char *argv[])
     oStream.close();
     return 0;
 }
+
+    /* simple dijkstra example
+    GraphNode first = GraphNode(0);
+    first.blocks.insert(0);
+    GraphNode second = GraphNode(1);
+    second.blocks.insert(1);
+    GraphNode third = GraphNode(2);
+    third.blocks.insert(2);
+    GraphNode fourth = GraphNode(3);
+    fourth.blocks.insert(3);
+    GraphNode fifth = GraphNode(4);
+    fifth.blocks.insert(4);
+    GraphNode sixth = GraphNode(5);
+    sixth.blocks.insert(5);
+
+    first.neighbors[1] = pair(9, 0.9);
+    second.neighbors[2] = pair(1, 0.1);
+    second.neighbors[3] = pair(9, 0.9);
+    third.neighbors[0] = pair(1, 1);
+    fourth.neighbors[4] = pair(9, 1);
+    fifth.neighbors[5] = pair(9, 1);
+    sixth.neighbors[0] = pair(9, 1);
+
+    nodes.insert(first);
+    nodes.insert(second);
+    nodes.insert(third);
+    nodes.insert(fourth);
+    nodes.insert(fifth);
+    nodes.insert(sixth);
+    */

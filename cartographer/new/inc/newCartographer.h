@@ -29,6 +29,23 @@ struct DijkstraNode
     NodeColor color;
 };
 
+struct DCompare
+{
+    using is_transparent = void;
+    bool operator()(const DijkstraNode &lhs, const DijkstraNode &rhs) const
+    {
+        return lhs.distance < rhs.distance;
+    }
+    /*bool operator()(const DijkstraNode &lhs, uint64_t rhs) const
+    {
+        return lhs.distance < rhs;
+    }
+    bool operator()(uint64_t lhs, const DijkstraNode &rhs) const
+    {
+        return lhs < rhs.distance;
+    }*/
+};
+
 struct GraphNode
 {
     uint64_t NID;
@@ -100,7 +117,8 @@ struct Kernel
     ///
     /// If two kernels are the same, 1 will be returned
     /// If two kernels are completely different, 0 will be returned
-    /// If two kernels share some nodes, (compare shared) / (this shared) will be returned
+    /// If two kernels share some nodes, (compare shared) / (this size) will be returned
+    /// TODO: if this fully overlaps with compare, but compare contains other blocks, this will say that we fully match when we actually don't. Fix that
     float Compare(const Kernel &compare) const
     {
         int compShared = 0;
@@ -113,7 +131,7 @@ struct Kernel
         }
         return (float)((float)compShared / (float)(nodes.size()));
     }
-    /// Returns true is any node in the kernel can reach every other node in the kernel. False otherwise
+    /// Returns true if any node in the kernel can reach every other node in the kernel. False otherwise
     bool FullyConnected() const
     {
         for (const auto &node : nodes)
