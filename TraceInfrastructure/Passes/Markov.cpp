@@ -35,7 +35,12 @@ namespace DashTracer::Passes
             {
                 if (auto CI = dyn_cast<CallBase>(bi))
                 {
-                    blockCalls.push_back(CI);
+                    // check to see if the function will be compiled into bitcode
+                    // if the function won't be bitcode, it won't call MarkovIncrement. The graph will have this node pointing to itself which makes no sense
+                    if (CI->getCalledFunction()->isLocalLinkage())
+                    {
+                        blockCalls.push_back(CI);
+                    }
                 }
             }
 
