@@ -28,11 +28,28 @@ namespace DashTracer::Passes
             auto lastInsertion = BB->getTerminator();
             IRBuilder<> firstBuilder(firstInst);
 
+            // look for call insts in the block. After each callinst, we need to inject a call to MarkovIncrement to record the returnInst in the graph
+            // do this before we inject our own CallBases
+            std::vector<CallBase *> blockCalls;
+            for (auto bi = BB->begin(); bi != BB->end(); bi++)
+            {
+                if (auto CI = dyn_cast<CallBase>(bi))
+                {
+                    blockCalls.push_back(CI);
+                }
+            }
+
             int64_t id = GetBlockID(BB);
             Value *idValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), (uint64_t)id);
             std::vector<Value *> args;
             args.push_back(idValue);
             firstBuilder.CreateCall(MarkovIncrement, args);
+
+            for (const auto &call : blockCalls)
+            {
+                auto nextCall = firstBuilder.CreateCall(MarkovIncrement, args);
+                nextCall->moveAfter(call);
+            }
 
             auto call = firstBuilder.CreateCall(MarkovExit);
             call->moveBefore(lastInsertion);
