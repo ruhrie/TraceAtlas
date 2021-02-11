@@ -1,9 +1,11 @@
 #include "newCartographer.h"
-#include "AtlasUtil/IO.h"
 #include <fstream>
 #include <iomanip>
+#include <iostream>
+#include <llvm/Support/CommandLine.h>
 #include <nlohmann/json.hpp>
 #include <queue>
+#include <spdlog/spdlog.h>
 
 using namespace llvm;
 using namespace std;
@@ -35,45 +37,48 @@ vector<uint64_t> Dijkstras(set<GraphNode, GNCompare> &nodes, uint64_t source, ui
         // sort the priority queue
         std::sort(Q.begin(), Q.end(), DCompare);
         // for each neighbor of u, calculate the neighbors new distance
-        for (const auto &neighbor : nodes.find(Q.front().NID)->neighbors)
+        if (nodes.find(Q.front().NID) != nodes.end())
         {
-            /*spdlog::info("Priority Q has the following entries in this order:");
-            for( const auto& entry : Q )
+            for (const auto &neighbor : nodes.find(Q.front().NID)->neighbors)
             {
-                spdlog::info(to_string(entry.NID));
-            }*/
-            if (neighbor.first == source)
-            {
-                // we've found a loop
-                // the DMap distance will be 0 for the source node so we can't do a comparison of distances on the first go-round
-                // if the source doesnt yet have a predecessor then update its stats
-                if (DMap[source].predecessor == std::numeric_limits<uint64_t>::max())
+                /*spdlog::info("Priority Q has the following entries in this order:");
+                for( const auto& entry : Q )
                 {
-                    DMap[source].predecessor = Q.front().NID;
-                    DMap[source].distance = -log(neighbor.second.second) + DMap[Q.front().NID].distance;
-                }
-            }
-            if (-log(neighbor.second.second) + Q.front().distance < DMap[neighbor.first].distance)
-            {
-                DMap[neighbor.first].predecessor = Q.front().NID;
-                DMap[neighbor.first].distance = -log(neighbor.second.second) + DMap[Q.front().NID].distance;
-                if (DMap[neighbor.first].color == NodeColor::White)
+                    spdlog::info(to_string(entry.NID));
+                }*/
+                if (neighbor.first == source)
                 {
-                    DMap[neighbor.first].color = NodeColor::Grey;
-                    Q.push_back(DMap[neighbor.first]);
-                }
-                else if (DMap[neighbor.first].color == NodeColor::Grey)
-                {
-                    // we have already seen this neighbor, it must be in the queue. We have to find its queue entry and update it
-                    for (auto &node : Q)
+                    // we've found a loop
+                    // the DMap distance will be 0 for the source node so we can't do a comparison of distances on the first go-round
+                    // if the source doesnt yet have a predecessor then update its stats
+                    if (DMap[source].predecessor == std::numeric_limits<uint64_t>::max())
                     {
-                        if (node.NID == DMap[neighbor.first].NID)
-                        {
-                            node.predecessor = DMap[neighbor.first].predecessor;
-                            node.distance = DMap[neighbor.first].distance;
-                        }
+                        DMap[source].predecessor = Q.front().NID;
+                        DMap[source].distance = -log(neighbor.second.second) + DMap[Q.front().NID].distance;
                     }
-                    std::sort(Q.begin(), Q.end(), DCompare);
+                }
+                if (-log(neighbor.second.second) + Q.front().distance < DMap[neighbor.first].distance)
+                {
+                    DMap[neighbor.first].predecessor = Q.front().NID;
+                    DMap[neighbor.first].distance = -log(neighbor.second.second) + DMap[Q.front().NID].distance;
+                    if (DMap[neighbor.first].color == NodeColor::White)
+                    {
+                        DMap[neighbor.first].color = NodeColor::Grey;
+                        Q.push_back(DMap[neighbor.first]);
+                    }
+                    else if (DMap[neighbor.first].color == NodeColor::Grey)
+                    {
+                        // we have already seen this neighbor, it must be in the queue. We have to find its queue entry and update it
+                        for (auto &node : Q)
+                        {
+                            if (node.NID == DMap[neighbor.first].NID)
+                            {
+                                node.predecessor = DMap[neighbor.first].predecessor;
+                                node.distance = DMap[neighbor.first].distance;
+                            }
+                        }
+                        std::sort(Q.begin(), Q.end(), DCompare);
+                    }
                 }
             }
         }
@@ -107,7 +112,6 @@ vector<uint64_t> Dijkstras(set<GraphNode, GNCompare> &nodes, uint64_t source, ui
 int main(int argc, char *argv[])
 {
     cl::ParseCommandLineOptions(argc, argv);
-    auto csvData = LoadBIN(InputFilename);
 
     ifstream inputJson;
     nlohmann::json j;
@@ -172,13 +176,13 @@ int main(int argc, char *argv[])
 
     for (const auto &node : nodes)
     {
-        spdlog::info("Examining node " + to_string(node.NID));
+        /*spdlog::info("Examining node " + to_string(node.NID));
         for (const auto &neighbor : node.neighbors)
         {
             spdlog::info("Neighbor " + to_string(neighbor.first) + " has instance count " + to_string(neighbor.second.first) + " and probability " + to_string(neighbor.second.second));
         }
-        cout << endl;
-        //spdlog::info("Node " + to_string(node.NID) + " has " + to_string(node.neighbors.size()) + " neighbors.");
+        cout << endl;*/
+        spdlog::info("Node " + to_string(node.NID) + " has " + to_string(node.neighbors.size()) + " neighbors.");
     }
 
     // find minimum cycles

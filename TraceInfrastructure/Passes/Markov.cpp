@@ -50,11 +50,11 @@ namespace DashTracer::Passes
             args.push_back(idValue);
             firstBuilder.CreateCall(MarkovIncrement, args);
 
-            for (const auto &call : blockCalls)
+            /*for (const auto &call : blockCalls)
             {
                 auto nextCall = firstBuilder.CreateCall(MarkovIncrement, args);
                 nextCall->moveAfter(call);
-            }
+            }*/
 
             auto call = firstBuilder.CreateCall(MarkovExit);
             call->moveBefore(lastInsertion);
