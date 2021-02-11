@@ -13,12 +13,14 @@ enum class NodeColor
 struct DijkstraNode
 {
     DijkstraNode() = default;
-    DijkstraNode(double d, uint64_t p, NodeColor c)
+    DijkstraNode(double d, uint64_t id, uint64_t p, NodeColor c)
     {
         distance = d;
+        NID = id;
         predecessor = p;
         color = c;
     }
+    uint64_t NID; // maps this dijkstra node to a GraphNode.NID
     /// distance between this node and the target source node
     /// since our objective is to find the maximum likelihood path, we need to map probabilities onto a space that minimizes big probabilities and maximizes small ones
     /// -log(p) is how we do this
@@ -29,7 +31,7 @@ struct DijkstraNode
     NodeColor color;
 };
 
-struct DCompare
+struct DijkstraCompare
 {
     using is_transparent = void;
     bool operator()(const DijkstraNode &lhs, const DijkstraNode &rhs) const
@@ -44,7 +46,7 @@ struct DCompare
     {
         return lhs < rhs.distance;
     }*/
-};
+} DCompare;
 
 struct GraphNode
 {
