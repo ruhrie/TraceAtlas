@@ -69,6 +69,7 @@ struct GraphNode
         blocks = std::set<uint64_t>();
         neighbors = std::map<uint64_t, std::pair<uint64_t, double>>();
     }
+private:
     static uint64_t nextNID;
     static uint64_t getNextNID()
     {
@@ -176,6 +177,7 @@ struct Kernel
     }
     std::set<GraphNode, GNCompare> nodes;
     uint32_t KID;
+private:
     static uint32_t nextKID;
     static uint32_t getNextKID()
     {
