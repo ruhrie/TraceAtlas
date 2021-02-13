@@ -173,16 +173,100 @@ int main(int argc, char *argv[])
         nodes.insert(currentNode);
     }
     inputFile.close();
-
     for (const auto &node : nodes)
     {
-        /*spdlog::info("Examining node " + to_string(node.NID));
+        spdlog::info("Examining node " + to_string(node.NID));
         for (const auto &neighbor : node.neighbors)
         {
             spdlog::info("Neighbor " + to_string(neighbor.first) + " has instance count " + to_string(neighbor.second.first) + " and probability " + to_string(neighbor.second.second));
         }
-        cout << endl;*/
-        spdlog::info("Node " + to_string(node.NID) + " has " + to_string(node.neighbors.size()) + " neighbors.");
+        cout << endl;
+        //spdlog::info("Node " + to_string(node.NID) + " has " + to_string(node.neighbors.size()) + " neighbors.");
+    }
+    // first index is the node to remove, second index is the nodeID in which the toRemove node has been merged
+    set<pair<uint64_t, uint64_t>, PairComp<uint64_t>> toRemove;
+    // combine all trivial edges
+    vector<GraphNode> tmpNodes(nodes.begin(), nodes.end());
+    for (auto &node : tmpNodes)
+    {
+        if (toRemove.find(node.NID) != toRemove.end())
+        {
+            continue;
+        }
+        // if this node only has 1 edge
+        if (node.neighbors.size() == 1)
+        {
+            // and that edge has probability 1.0
+            if (node.neighbors.begin()->second.second > 0.9999)
+            {
+                // there is trivial merge opportunity here
+                // we have to recursively follow our neighbors until we find a block that cannot be trivially merged
+                bool done = false;
+                while (!done)
+                {
+                    // we always combine to the source node because we can't go against the edge directions
+                    // Steps:
+                    // 1.) add sink node's blocks to source node
+                    // 2.) put the sink node in the remove set
+                    // 3.) make the source node neighbors the sink node neighbors
+                    // 4.) check if this is the end of a sequential chain of nodes, and continue if it's not
+                    auto neighbor = nodes.find(node.neighbors.begin()->first);
+                    if (toRemove.find(neighbor->NID) == toRemove.end())
+                    {
+                        for (const auto &b : neighbor->blocks)
+                        {
+                            node.blocks.insert(b);
+                        }
+                        toRemove.insert(pair(neighbor->NID, node.NID));
+                        node.neighbors.clear();
+                        for (const auto &k : neighbor->neighbors)
+                        {
+                            node.neighbors[k.first] = k.second;
+                        }
+                        if ((node.neighbors.size() == 1) && (node.neighbors.begin()->second.second > 0.9999))
+                        {
+                            done = false;
+                        }
+                        else
+                        {
+                            done = true;
+                        }
+                    }
+                    else
+                    {
+                        // here we have to make a recording of a neighbor change to preserve the neighbor edge back to a possibly block-merged node
+                        node.neighbors[toRemove.find(neighbor->NID)->second] = node.neighbors[toRemove.find(neighbor->NID)->first];
+                        node.neighbors.erase(toRemove.find(neighbor->NID)->first);
+                        done = true;
+                    }
+                }
+            }
+        }
+    }
+    nodes.clear();
+    for (const auto &node : tmpNodes)
+    {
+        if (toRemove.find(node.NID) == toRemove.end())
+        {
+            nodes.insert(node);
+        }
+    }
+
+    for (const auto &node : nodes)
+    {
+        spdlog::info("Examining node " + to_string(node.NID));
+        string blocks;
+        for (const auto &b : node.blocks)
+        {
+            blocks += to_string(b) + ",";
+        }
+        spdlog::info("This node contains blocks: " + blocks);
+        for (const auto &neighbor : node.neighbors)
+        {
+            spdlog::info("Neighbor " + to_string(neighbor.first) + " has instance count " + to_string(neighbor.second.first) + " and probability " + to_string(neighbor.second.second));
+        }
+        cout << endl;
+        //spdlog::info("Node " + to_string(node.NID) + " has " + to_string(node.neighbors.size()) + " neighbors.");
     }
 
     // find minimum cycles

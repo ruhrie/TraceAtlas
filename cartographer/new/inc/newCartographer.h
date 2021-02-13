@@ -10,6 +10,24 @@ enum class NodeColor
     Black
 };
 
+template <typename T>
+struct PairComp
+{
+    using is_transparent = void;
+    bool operator()(const std::pair<T, T> &lhs, const std::pair<T, T> &rhs) const
+    {
+        return lhs.first < rhs.first;
+    }
+    bool operator()(const std::pair<T, T> &lhs, T rhs) const
+    {
+        return lhs.first < rhs;
+    }
+    bool operator()(T lhs, const std::pair<T, T> &rhs) const
+    {
+        return lhs < rhs.first;
+    }
+};
+
 struct DijkstraNode
 {
     DijkstraNode() = default;
@@ -69,6 +87,7 @@ struct GraphNode
         blocks = std::set<uint64_t>();
         neighbors = std::map<uint64_t, std::pair<uint64_t, double>>();
     }
+
 private:
     static uint64_t nextNID;
     static uint64_t getNextNID()
@@ -177,6 +196,7 @@ struct Kernel
     }
     std::set<GraphNode, GNCompare> nodes;
     uint32_t KID;
+
 private:
     static uint32_t nextKID;
     static uint32_t getNextKID()
