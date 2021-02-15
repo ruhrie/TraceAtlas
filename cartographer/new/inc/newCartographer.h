@@ -70,21 +70,23 @@ struct GraphNode
 {
     uint64_t NID;
     /// BBIDs from the source bitcode that are represented by this node
-    std::set<uint64_t> blocks;
+    /// Each key is a member BBID and its value is the basic block its unconditional edge points to
+    /// If a key maps to itself, there is no edge attached to this block
+    std::map<uint64_t, uint64_t> blocks;
     /// Maps a neighbor nodeID to a probability edge. The set of keys is comprehensive for all neighbors of this GraphNode
     /// The first index in the pair is the raw count, the second is the histogram probability
     std::map<uint64_t, std::pair<uint64_t, double>> neighbors;
     GraphNode()
     {
         NID = getNextNID();
-        blocks = std::set<uint64_t>();
+        blocks = std::map<uint64_t, uint64_t>();
         neighbors = std::map<uint64_t, std::pair<uint64_t, double>>();
     }
     /// Meant to be constructed from a new block description in the input binary file
     GraphNode(uint64_t ID)
     {
         NID = ID;
-        blocks = std::set<uint64_t>();
+        blocks = std::map<uint64_t, uint64_t>();
         neighbors = std::map<uint64_t, std::pair<uint64_t, double>>();
     }
 
@@ -126,12 +128,27 @@ struct Kernel
         KID = ID;
         nodes = std::set<GraphNode, GNCompare>();
     }
-    const std::set<uint64_t> getBlocks() const
+    /// This function only returns the blocks that belong to a loop
+    /// In GraphNode::blocks map, the key that matches its value is this block
+    const std::map<uint64_t, uint64_t> getBlocks(bool full = true) const
     {
-        std::set<uint64_t> blocks;
+        std::map<uint64_t, uint64_t> blocks;
         for (const auto &node : nodes)
         {
-            blocks.insert(node.blocks.begin(), node.blocks.end());
+            for (const auto &k : node.blocks)
+            {
+                if (full)
+                {
+                    blocks[k.first] = k.second;
+                }
+                else
+                {
+                    if (k.first == k.second)
+                    {
+                        blocks[k.first] = k.second;
+                    }
+                }
+            }
         }
         return blocks;
     }

@@ -147,7 +147,7 @@ int main(int argc, char *argv[])
         {
             currentNode = GraphNode(key);
             // right now, NID and blocks are 1to1
-            currentNode.blocks.insert(key);
+            currentNode.blocks[key] = key;
         }
         // the instance count of the edge
         uint64_t count;
@@ -193,61 +193,113 @@ int main(int argc, char *argv[])
         {
             continue;
         }
-        // if this node only has 1 edge
-        if (node.neighbors.size() == 1)
+        // if this node only has 1 edge with certain probability
+        if ((node.neighbors.size() == 1) && (node.neighbors.begin()->second.second > 0.9999))
         {
-            // and that edge has probability 1.0
-            if (node.neighbors.begin()->second.second > 0.9999)
+            // there is trivial merge opportunity here
+            // we always combine to the source node because we can't go against the edge directions
+            bool done = false;
+            while (!done)
             {
-                // there is trivial merge opportunity here
-                // we have to recursively follow our neighbors until we find a block that cannot be trivially merged
-                bool done = false;
-                while (!done)
+                auto neighbor = tmpNodes.end();
+                for (auto n = tmpNodes.begin(); n != tmpNodes.end(); n++)
                 {
-                    // we always combine to the source node because we can't go against the edge directions
-                    // Steps:
-                    // 1.) add sink node's blocks to source node
-                    // 2.) put the sink node in the remove set
-                    // 3.) make the source node neighbors the sink node neighbors
-                    // 4.) check if this is the end of a sequential chain of nodes, and continue if it's not
-                    auto neighbor = nodes.find(node.neighbors.begin()->first);
-                    if (toRemove.find(neighbor->NID) == toRemove.end())
+                    if (n->NID == node.neighbors.begin()->first)
                     {
-                        for (const auto &b : neighbor->blocks)
+                        neighbor = n;
+                    }
+                }
+                if (neighbor != tmpNodes.end() && toRemove.find(neighbor->NID) == toRemove.end())
+                {
+
+                    // 1.) add sink node's blocks to source node
+                    // a.) first, find the block that maps to itself and change its value to the new neighbor. This updates the sequential chain map to have the new merged node as the head node in the chain
+                    for (auto &b : node.blocks)
+                    {
+                        if (b.first == b.second)
                         {
-                            node.blocks.insert(b);
+                            b.second = neighbor->NID;
+                            break; // should only have one match
                         }
-                        toRemove.insert(pair(neighbor->NID, node.NID));
-                        node.neighbors.clear();
-                        for (const auto &k : neighbor->neighbors)
+                    }
+                    // b.) make the sink node the head of the source node block map by mapping it to itself
+                    node.blocks[neighbor->NID] = neighbor->NID;
+                    for (const auto &b : neighbor->blocks)
+                    {
+                        node.blocks[b.first] = b.second;
+                    }
+                    // 2.) put the sink node in the remove set
+                    // a.) add the node and its new mapping
+                    toRemove.insert(pair(neighbor->NID, node.NID));
+                    // b.) look for any other entries that map to the block that has now been merged
+                    set<pair<uint64_t, uint64_t>, PairComp<uint64_t>> toChange;
+                    for (auto &r : toRemove)
+                    {
+                        if (r.second == neighbor->NID)
                         {
-                            node.neighbors[k.first] = k.second;
+                            // make a replacement entry for r.first (the ID of a block that must move nodes now)
+                            toChange.insert(pair(r.first, node.NID));
                         }
-                        if ((node.neighbors.size() == 1) && (node.neighbors.begin()->second.second > 0.9999))
-                        {
-                            done = false;
-                        }
-                        else
-                        {
-                            done = true;
-                        }
+                    }
+                    // erase() only looks for c.first, so we can delete the old pair with c, even though c.second is different
+                    for (const auto &c : toChange)
+                    {
+                        toRemove.erase(c);
+                        toRemove.insert(c);
+                    }
+                    // 3.) make the source node neighbors the sink node neighbors
+                    node.neighbors.clear();
+                    for (const auto &k : neighbor->neighbors)
+                    {
+                        node.neighbors[k.first] = k.second;
+                    }
+                    // 4.) check if this is the end of a sequential chain of nodes, and continue if it's not
+                    if ((node.neighbors.size() == 1) && (node.neighbors.begin()->second.second > 0.9999))
+                    {
+                        done = false;
                     }
                     else
                     {
-                        // here we have to make a recording of a neighbor change to preserve the neighbor edge back to a possibly block-merged node
-                        node.neighbors[toRemove.find(neighbor->NID)->second] = node.neighbors[toRemove.find(neighbor->NID)->first];
-                        node.neighbors.erase(toRemove.find(neighbor->NID)->first);
                         done = true;
                     }
+                }
+                else
+                {
+                    // here we have to make a recording of a neighbor change to preserve the neighbor edge back to a possibly block-merged node
+                    node.neighbors[toRemove.find(neighbor->NID)->second] = node.neighbors[toRemove.find(neighbor->NID)->first];
+                    node.neighbors.erase(toRemove.find(neighbor->NID)->first);
+                    done = true;
                 }
             }
         }
     }
     nodes.clear();
-    for (const auto &node : tmpNodes)
+    for (auto &node : tmpNodes)
     {
         if (toRemove.find(node.NID) == toRemove.end())
         {
+            // if any of our neighbors have been merged we need to fix them
+            vector<uint64_t> badNeighbors;
+            for (auto &neighbor : node.neighbors)
+            {
+                if (toRemove.find(neighbor.first) != toRemove.end())
+                {
+                    // we have to find which node our neighbor was merged into
+                    for (const auto &newNeighbor : tmpNodes)
+                    {
+                        if (newNeighbor.neighbors.find(neighbor.first) != newNeighbor.neighbors.end())
+                        {
+                            node.neighbors[newNeighbor.NID] = neighbor.second;
+                        }
+                    }
+                    // and remove the old one
+                    badNeighbors.push_back(neighbor.first);
+                }
+            }
+            for (auto &e : badNeighbors)
+            {
+                node.neighbors.erase(e);
+            }
             nodes.insert(node);
         }
     }
@@ -258,7 +310,7 @@ int main(int argc, char *argv[])
         string blocks;
         for (const auto &b : node.blocks)
         {
-            blocks += to_string(b) + ",";
+            blocks += to_string(b.first) + "->" + to_string(b.second) + ",";
         }
         spdlog::info("This node contains blocks: " + blocks);
         for (const auto &neighbor : node.neighbors)
@@ -329,7 +381,11 @@ int main(int argc, char *argv[])
     int id = 0;
     for (const auto &kernel : kernels)
     {
-        outputJson["Kernels"][to_string(id)]["Blocks"] = kernel.getBlocks();
+        auto blocksMap = kernel.getBlocks(false);
+        for (const auto &k : kernel.getBlocks(false))
+        {
+            outputJson["Kernels"][to_string(id)]["Blocks"].push_back(k.first);
+        }
         outputJson["Kernels"][to_string(id)]["Labels"] = std::vector<string>();
         outputJson["Kernels"][to_string(id)]["Labels"].push_back("");
         id++;
