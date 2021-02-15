@@ -18,7 +18,7 @@ cl::opt<string> OutputFilename("o", cl::desc("Specify output json"), cl::value_d
 uint64_t GraphNode::nextNID = 0;
 uint32_t Kernel::nextKID = 0;
 
-vector<uint64_t> Dijkstras(set<GraphNode, GNCompare> &nodes, uint64_t source, uint64_t sink)
+vector<uint64_t> Dijkstras(const set<GraphNode, GNCompare> &nodes, uint64_t source, uint64_t sink)
 {
     // maps a node ID to its dijkstra information
     map<uint64_t, DijkstraNode> DMap;
@@ -381,10 +381,9 @@ int main(int argc, char *argv[])
     int id = 0;
     for (const auto &kernel : kernels)
     {
-        auto blocksMap = kernel.getBlocks(false);
         for (const auto &k : kernel.getBlocks(false))
         {
-            outputJson["Kernels"][to_string(id)]["Blocks"].push_back(k.first);
+            outputJson["Kernels"][to_string(id)]["Blocks"].push_back(k);
         }
         outputJson["Kernels"][to_string(id)]["Labels"] = std::vector<string>();
         outputJson["Kernels"][to_string(id)]["Labels"].push_back("");

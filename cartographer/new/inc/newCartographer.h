@@ -2,6 +2,7 @@
 #include <deque>
 #include <map>
 #include <set>
+#include <vector>
 
 enum class NodeColor
 {
@@ -116,6 +117,9 @@ struct GNCompare
     }
 };
 
+/// @brief Dijkstra implementation inspired by boost library
+std::vector<uint64_t> Dijkstras(const std::set<GraphNode, GNCompare> &nodes, uint64_t source, uint64_t sink);
+
 struct Kernel
 {
     Kernel()
@@ -128,24 +132,80 @@ struct Kernel
         KID = ID;
         nodes = std::set<GraphNode, GNCompare>();
     }
-    /// This function only returns the blocks that belong to a loop
-    /// In GraphNode::blocks map, the key that matches its value is this block
-    const std::map<uint64_t, uint64_t> getBlocks(bool full = true) const
+    /// @brief Returns the IDs of the kernel entrances
+    ///
+    /// @param[in] block     When true, this method will return the ID of the block from the original source code. When false, it returns the GraphNode ID
+    /// @retval    entrances Vector of IDs that specify which nodes (or blocks) are the kernel entrances. Kernel entrances are the source nodes of edges that enter the kernel
+    /*const std::vector<uint64_t> getEntrances(bool block = false) const
     {
-        std::map<uint64_t, uint64_t> blocks;
+        for( const auto& node : nodes )
+        {
+            // need to find out if we can reach this node
+        }
+    }*/
+    /// @brief Returns the IDs of the kernel exits
+    ///
+    /// @param[in] block When true, this method will return the ID of the block from the original source code. When false, it returns the GraphNode ID
+    /// @retval    exits Vector of IDs that specify which nodes (or blocks) are the kernel exits. Kernel exits are the destination nodes of edges that leave the kernel
+    const std::set<uint64_t> getExits() const //bool block = false) const
+    {
+        std::set<uint64_t> exitNodes;
         for (const auto &node : nodes)
         {
-            for (const auto &k : node.blocks)
+            for (const auto &neighbor : node.neighbors)
             {
-                if (full)
+                if (nodes.find(neighbor.first) == nodes.end())
                 {
-                    blocks[k.first] = k.second;
+                    // we've found an exit
+                    exitNodes.insert(neighbor.first);
                 }
-                else
+            }
+        }
+        /*if( block )
+        {
+            std::set<uint64_t> exits;
+            for( const auto& e : exitNodes )
+            {
+                exits.insert()
+            }
+        }*/
+        return exitNodes;
+    }
+    /// @brief Returns the member blocks (from the source bitcode) of this kernel
+    ///
+    /// @param[in] full When true, return all blocks that belong to the kernel, even the sequential code that precedes the loop within the kernel and proceeds the exit from that loop. When false, only return the blocks that belong to the loop
+    const std::set<uint64_t> getBlocks(bool full = true) const
+    {
+        std::set<uint64_t> blocks;
+        for (const auto &node : nodes)
+        {
+            if (full)
+            {
+                blocks.insert(node.NID);
+            }
+            else
+            {
+                // There are three types of nodes we need to worry about
+                // 1.) If the node has one edge that is certain, we likely have a loop body, thus all blocks should be part of the kernel
+                // 2.) If our node has multiple neighbors, it is likely a kernel beginning ended by the loop iterator. So just take the end block
+                // 3.) If our node has multiple neighbors, and it has an exit edge from the kernel, all blocks within that node should be included (because it likely roped in a part of the loop body)
+                if (node.neighbors.size() == 1 && node.neighbors.begin()->second.second > 0.9999)
                 {
-                    if (k.first == k.second)
+                    // add the entire node blockmap to the return set
+                    for (const auto &b : node.blocks)
                     {
-                        blocks[k.first] = k.second;
+                        blocks.insert(b.first);
+                    }
+                }
+                else if (node.neighbors.size() > 1)
+                {
+                    // just add the head block to the return set
+                    for (const auto &b : node.blocks)
+                    {
+                        if (b.first == b.second)
+                        {
+                            blocks.insert(b.first);
+                        }
                     }
                 }
             }
