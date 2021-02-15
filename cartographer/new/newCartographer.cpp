@@ -287,7 +287,7 @@ int main(int argc, char *argv[])
                     // we have to find which node our neighbor was merged into
                     for (const auto &newNeighbor : tmpNodes)
                     {
-                        if (newNeighbor.neighbors.find(neighbor.first) != newNeighbor.neighbors.end())
+                        if (newNeighbor.blocks.find(neighbor.first) != newNeighbor.blocks.end())
                         {
                             node.neighbors[newNeighbor.NID] = neighbor.second;
                         }
