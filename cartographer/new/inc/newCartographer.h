@@ -66,7 +66,6 @@ struct DijkstraCompare
         return lhs < rhs.distance;
     }*/
 } DCompare;
-
 struct GraphNode
 {
     uint64_t NID;
@@ -77,11 +76,14 @@ struct GraphNode
     /// Maps a neighbor nodeID to a probability edge. The set of keys is comprehensive for all neighbors of this GraphNode
     /// The first index in the pair is the raw count, the second is the histogram probability
     std::map<uint64_t, std::pair<uint64_t, double>> neighbors;
+    /// Holds the node IDs of each predecessor of this node
+    std::set<uint64_t> predecessors;
     GraphNode()
     {
         NID = getNextNID();
         blocks = std::map<uint64_t, uint64_t>();
         neighbors = std::map<uint64_t, std::pair<uint64_t, double>>();
+        predecessors = std::set<uint64_t>();
     }
     /// Meant to be constructed from a new block description in the input binary file
     GraphNode(uint64_t ID)
@@ -89,6 +91,23 @@ struct GraphNode
         NID = ID;
         blocks = std::map<uint64_t, uint64_t>();
         neighbors = std::map<uint64_t, std::pair<uint64_t, double>>();
+        predecessors = std::set<uint64_t>();
+    }
+    void addBlock(uint64_t newBlock)
+    {
+        // to add a block
+        // 1.) find the key that maps to itself
+        // 2.) update that value to addBlock
+        // 3.) add a new pair to the map (newBlock,newBlock)
+        for (auto &k : blocks)
+        {
+            if (k.first == k.second)
+            {
+                k.second = newBlock;
+                break;
+            }
+        }
+        blocks[newBlock] = newBlock;
     }
 
 private:

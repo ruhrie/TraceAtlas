@@ -18,9 +18,9 @@ cl::opt<string> OutputFilename("o", cl::desc("Specify output json"), cl::value_d
 uint64_t GraphNode::nextNID = 0;
 uint32_t Kernel::nextKID = 0;
 
-void ReadBIN(set<GraphNode, GNCompare>& nodes, const string& filename)
+void ReadBIN(set<GraphNode, GNCompare> &nodes, const string &filename)
 {
-    spdlog::trace("Loading bin file: {0}", filename);
+    // set that holds the first iteration of the graph
     fstream inputFile;
     inputFile.open(filename, ios::in | ios::binary);
     while (inputFile.peek() != EOF)
@@ -34,6 +34,10 @@ void ReadBIN(set<GraphNode, GNCompare>& nodes, const string& filename)
             currentNode = GraphNode(key);
             // right now, NID and blocks are 1to1
             currentNode.blocks[key] = key;
+        }
+        else
+        {
+            spdlog::error("Found a BBID that already existed in the graph!");
         }
         // the instance count of the edge
         uint64_t count;
@@ -59,9 +63,36 @@ void ReadBIN(set<GraphNode, GNCompare>& nodes, const string& filename)
         nodes.insert(currentNode);
     }
     inputFile.close();
+
+    // now fill in all the predecessor nodes
+    for (auto &node : nodes)
+    {
+        for (const auto &neighbor : node.neighbors)
+        {
+            auto successorNode = nodes.find(neighbor.first);
+            if (successorNode != nodes.end())
+            {
+                GraphNode newNode = *successorNode;
+                newNode.predecessors.insert(node.NID);
+                nodes.erase(*successorNode);
+                nodes.insert(newNode);
+            }
+        }
+    }
+
     for (const auto &node : nodes)
     {
         spdlog::info("Examining node " + to_string(node.NID));
+        string preds;
+        for (auto pred : node.predecessors)
+        {
+            preds += to_string(pred);
+            if (pred != *prev(node.predecessors.end()))
+            {
+                preds += ",";
+            }
+        }
+        spdlog::info("Predecessors: " + preds);
         for (const auto &neighbor : node.neighbors)
         {
             spdlog::info("Neighbor " + to_string(neighbor.first) + " has instance count " + to_string(neighbor.second.first) + " and probability " + to_string(neighbor.second.second));
@@ -190,6 +221,10 @@ int main(int argc, char *argv[])
     set<GraphNode, GNCompare> nodes;
     ReadBIN(nodes, InputFilename);
 
+    // combine all trivial node merges
+    // a trivial node merge must satisfy two conditions
+    // 1.) The source node has exactly 1 neighbor with certain probability
+    // 2.) The sink node has exactly 1 precesssor (the source node) with certain probability
     // set of nodes to remove from the node set because they have been transformed into something else
     // first index is the node to remove, second index is the nodeID in which the toRemove node has been merged
     set<pair<uint64_t, uint64_t>, PairComp<uint64_t>> toRemove;
@@ -197,127 +232,65 @@ int main(int argc, char *argv[])
     vector<GraphNode> tmpNodes(nodes.begin(), nodes.end());
     for (auto &node : tmpNodes)
     {
-        if (toRemove.find(node.NID) != toRemove.end())
+        if (nodes.find(node.NID) == nodes.end())
         {
+            // we've already been removed, do nothing
             continue;
         }
-        // if this node only has 1 edge with certain probability
-        if ((node.neighbors.size() == 1) && (node.neighbors.begin()->second.second > 0.9999))
+        auto currentNode = node;
+        while (true)
         {
-            // there is trivial merge opportunity here
-            // we always combine to the source node because we can't go against the edge directions
-            bool done = false;
-            while (!done)
+            // first condition, our source node must have 1 certain successor
+            if ((currentNode.neighbors.size() == 1) && (currentNode.neighbors.begin()->second.second > 0.9999))
             {
-                auto neighbor = tmpNodes.end();
-                for (auto n = tmpNodes.begin(); n != tmpNodes.end(); n++)
+                auto succ = nodes.find(currentNode.neighbors.begin()->first);
+                if (succ != nodes.end())
                 {
-                    if (n->NID == node.neighbors.begin()->first)
+                    // second condition, the sink node must have 1 certain predecessor
+                    if ((succ->predecessors.size() == 1) && (succ->predecessors.find(currentNode.NID) != succ->predecessors.end()))
                     {
-                        neighbor = n;
-                    }
-                }
-                if (neighbor != tmpNodes.end() && toRemove.find(neighbor->NID) == toRemove.end())
-                {
-                    // 1.) add sink node's blocks to source node
-                    // a.) first, find the block that maps to itself and change its value to the new neighbor. This updates the sequential chain map to have the new merged node as the head node in the chain
-                    for (auto &b : node.blocks)
-                    {
-                        if (b.first == b.second)
+                        // trivial merge, we merge into the source node
+                        auto merged = currentNode;
+                        // keep the NID, preds
+                        // change the neighbors to the sink neighbors AND update the successors of the merged node to include the merged node as its predecessor
+                        merged.neighbors.clear();
+                        for (const auto &n : succ->neighbors)
                         {
-                            b.second = neighbor->NID;
-                            break; // should only have one match
+                            merged.neighbors[n.first] = n.second;
+                            auto succ2 = nodes.find(n.first);
+                            if (succ2 != nodes.end())
+                            {
+                                auto newPreds = *succ2;
+                                newPreds.predecessors.erase(succ->NID);
+                                newPreds.predecessors.insert(merged.NID);
+                                nodes.erase(*succ2);
+                                nodes.insert(newPreds);
+                            }
                         }
-                    }
-                    // b.) make the sink node the head of the source node block map by mapping it to itself
-                    node.blocks[neighbor->NID] = neighbor->NID;
-                    for (const auto &b : neighbor->blocks)
-                    {
-                        node.blocks[b.first] = b.second;
-                    }
-                    // 2.) put the sink node in the remove set
-                    // a.) add the node and its new mapping
-                    toRemove.insert(pair(neighbor->NID, node.NID));
-                    // b.) look for any other entries that map to the block that has now been merged
-                    set<pair<uint64_t, uint64_t>, PairComp<uint64_t>> toChange;
-                    for (auto &r : toRemove)
-                    {
-                        if (r.second == neighbor->NID)
-                        {
-                            // make a replacement entry for r.first (the ID of a block that must move nodes now)
-                            toChange.insert(pair(r.first, node.NID));
-                        }
-                    }
-                    // erase() only looks for c.first, so we can delete the old pair with c, even though c.second is different
-                    for (const auto &c : toChange)
-                    {
-                        toRemove.erase(c);
-                        toRemove.insert(c);
-                    }
-                    // 3.) make the source node neighbors the sink node neighbors
-                    node.neighbors.clear();
-                    for (const auto &k : neighbor->neighbors)
-                    {
-                        node.neighbors[k.first] = k.second;
-                    }
-                    // 4.) check if this is the end of a sequential chain of nodes, and continue if it's not
-                    if ((node.neighbors.size() == 1) && (node.neighbors.begin()->second.second > 0.9999))
-                    {
-                        done = false;
+                        // add the successor blocks
+                        merged.addBlock(succ->NID);
+
+                        // remove the two nodes from the node set
+                        nodes.erase(currentNode);
+                        nodes.erase(*succ);
+                        nodes.insert(merged);
+
+                        currentNode = merged;
                     }
                     else
                     {
-                        done = true;
+                        break;
                     }
                 }
                 else
                 {
-                    // here we have to make a recording of a neighbor change to preserve the neighbor edge back to a possibly block-merged node
-                    node.neighbors[toRemove.find(neighbor->NID)->second] = node.neighbors[toRemove.find(neighbor->NID)->first];
-                    node.neighbors.erase(toRemove.find(neighbor->NID)->first);
-                    done = true;
+                    break;
                 }
             }
-        }
-    }
-    nodes.clear();
-    // if any of our neighbors have been merged we need to fix them
-    for (auto &node : tmpNodes)
-    {
-        if (toRemove.find(node.NID) == toRemove.end())
-        {
-            // neighbors that no longer exist and don't need to be remapped
-            vector<uint64_t> badNeighbors;
-            for (auto &neighbor : node.neighbors)
+            else
             {
-                if (toRemove.find(neighbor.first) != toRemove.end())
-                {
-                    // we have to find which node our neighbor was merged into
-                    for (const auto &newNeighbor : tmpNodes)
-                    {
-                        if (newNeighbor.blocks.find(neighbor.first) != newNeighbor.blocks.end())
-                        {
-                            // if our node has two unique destinations, and those destinations have been merged together, we need to add their probabilities together
-                            if ((node.neighbors.size() > 1) && (node.neighbors.find(newNeighbor.NID) != node.neighbors.end()))
-                            {
-                                node.neighbors[newNeighbor.NID].first += neighbor.second.first;
-                                node.neighbors[newNeighbor.NID].second += neighbor.second.second;
-                            }
-                            else
-                            {
-                                node.neighbors[newNeighbor.NID] = neighbor.second;
-                            }
-                        }
-                    }
-                    // and remove the old one
-                    badNeighbors.push_back(neighbor.first);
-                }
+                break;
             }
-            for (auto &e : badNeighbors)
-            {
-                node.neighbors.erase(e);
-            }
-            nodes.insert(node);
         }
     }
 
