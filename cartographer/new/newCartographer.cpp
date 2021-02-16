@@ -211,7 +211,6 @@ int main(int argc, char *argv[])
                 }
                 if (neighbor != tmpNodes.end() && toRemove.find(neighbor->NID) == toRemove.end())
                 {
-
                     // 1.) add sink node's blocks to source node
                     // a.) first, find the block that maps to itself and change its value to the new neighbor. This updates the sequential chain map to have the new merged node as the head node in the chain
                     for (auto &b : node.blocks)
@@ -274,11 +273,12 @@ int main(int argc, char *argv[])
         }
     }
     nodes.clear();
+    // if any of our neighbors have been merged we need to fix them
     for (auto &node : tmpNodes)
     {
         if (toRemove.find(node.NID) == toRemove.end())
         {
-            // if any of our neighbors have been merged we need to fix them
+            // neighbors that no longer exist and don't need to be remapped
             vector<uint64_t> badNeighbors;
             for (auto &neighbor : node.neighbors)
             {
@@ -289,7 +289,16 @@ int main(int argc, char *argv[])
                     {
                         if (newNeighbor.blocks.find(neighbor.first) != newNeighbor.blocks.end())
                         {
-                            node.neighbors[newNeighbor.NID] = neighbor.second;
+                            // if our node has two unique destinations, and those destinations have been merged together, we need to add their probabilities together
+                            if ((node.neighbors.size() > 1) && (node.neighbors.find(newNeighbor.NID) != node.neighbors.end()))
+                            {
+                                node.neighbors[newNeighbor.NID].first += neighbor.second.first;
+                                node.neighbors[newNeighbor.NID].second += neighbor.second.second;
+                            }
+                            else
+                            {
+                                node.neighbors[newNeighbor.NID] = neighbor.second;
+                            }
                         }
                     }
                     // and remove the old one
