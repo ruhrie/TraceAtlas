@@ -18,6 +18,59 @@ cl::opt<string> OutputFilename("o", cl::desc("Specify output json"), cl::value_d
 uint64_t GraphNode::nextNID = 0;
 uint32_t Kernel::nextKID = 0;
 
+void ReadBIN(set<GraphNode, GNCompare>& nodes, const string& filename)
+{
+    spdlog::trace("Loading bin file: {0}", filename);
+    fstream inputFile;
+    inputFile.open(filename, ios::in | ios::binary);
+    while (inputFile.peek() != EOF)
+    {
+        // New block description: BBID,#ofNeighbors (16 bytes per neighbor)
+        uint64_t key;
+        inputFile.readsome((char *)&key, sizeof(uint64_t));
+        GraphNode currentNode;
+        if (nodes.find(key) == nodes.end())
+        {
+            currentNode = GraphNode(key);
+            // right now, NID and blocks are 1to1
+            currentNode.blocks[key] = key;
+        }
+        // the instance count of the edge
+        uint64_t count;
+        // for summing the total count of the neighbors
+        uint64_t sum = 0;
+        inputFile.readsome((char *)&count, sizeof(uint64_t));
+        for (uint64_t i = 0; i < count; i++)
+        {
+            uint64_t k2;
+            inputFile.readsome((char *)&k2, sizeof(uint64_t));
+            uint64_t val;
+            inputFile.readsome((char *)&val, sizeof(uint64_t));
+            if (val > 0)
+            {
+                sum += val;
+                currentNode.neighbors[k2] = pair(val, 0.0);
+            }
+        }
+        for (auto &key : currentNode.neighbors)
+        {
+            key.second.second = (double)key.second.first / (double)sum;
+        }
+        nodes.insert(currentNode);
+    }
+    inputFile.close();
+    for (const auto &node : nodes)
+    {
+        spdlog::info("Examining node " + to_string(node.NID));
+        for (const auto &neighbor : node.neighbors)
+        {
+            spdlog::info("Neighbor " + to_string(neighbor.first) + " has instance count " + to_string(neighbor.second.first) + " and probability " + to_string(neighbor.second.second));
+        }
+        cout << endl;
+        //spdlog::info("Node " + to_string(node.NID) + " has " + to_string(node.neighbors.size()) + " neighbors.");
+    }
+}
+
 vector<uint64_t> Dijkstras(const set<GraphNode, GNCompare> &nodes, uint64_t source, uint64_t sink)
 {
     // maps a node ID to its dijkstra information
@@ -133,56 +186,11 @@ int main(int argc, char *argv[])
         blockCallers[bbid.key()] = j[bbid.key()]["BlockCallers"].get<vector<int64_t>>();
     }
 
-    spdlog::trace("Loading bin file: {0}", InputFilename);
+    // Set of nodes that constitute the entire graph
     set<GraphNode, GNCompare> nodes;
-    fstream inputFile;
-    inputFile.open(InputFilename, ios::in | ios::binary);
-    while (inputFile.peek() != EOF)
-    {
-        // New block description: BBID,#ofNeighbors (16 bytes per neighbor)
-        uint64_t key;
-        inputFile.readsome((char *)&key, sizeof(uint64_t));
-        GraphNode currentNode;
-        if (nodes.find(key) == nodes.end())
-        {
-            currentNode = GraphNode(key);
-            // right now, NID and blocks are 1to1
-            currentNode.blocks[key] = key;
-        }
-        // the instance count of the edge
-        uint64_t count;
-        // for summing the total count of the neighbors
-        uint64_t sum = 0;
-        inputFile.readsome((char *)&count, sizeof(uint64_t));
-        for (uint64_t i = 0; i < count; i++)
-        {
-            uint64_t k2;
-            inputFile.readsome((char *)&k2, sizeof(uint64_t));
-            uint64_t val;
-            inputFile.readsome((char *)&val, sizeof(uint64_t));
-            if (val > 0)
-            {
-                sum += val;
-                currentNode.neighbors[k2] = pair(val, 0.0);
-            }
-        }
-        for (auto &key : currentNode.neighbors)
-        {
-            key.second.second = (double)key.second.first / (double)sum;
-        }
-        nodes.insert(currentNode);
-    }
-    inputFile.close();
-    for (const auto &node : nodes)
-    {
-        spdlog::info("Examining node " + to_string(node.NID));
-        for (const auto &neighbor : node.neighbors)
-        {
-            spdlog::info("Neighbor " + to_string(neighbor.first) + " has instance count " + to_string(neighbor.second.first) + " and probability " + to_string(neighbor.second.second));
-        }
-        cout << endl;
-        //spdlog::info("Node " + to_string(node.NID) + " has " + to_string(node.neighbors.size()) + " neighbors.");
-    }
+    ReadBIN(nodes, InputFilename);
+
+    // set of nodes to remove from the node set because they have been transformed into something else
     // first index is the node to remove, second index is the nodeID in which the toRemove node has been merged
     set<pair<uint64_t, uint64_t>, PairComp<uint64_t>> toRemove;
     // combine all trivial edges
