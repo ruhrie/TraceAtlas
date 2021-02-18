@@ -1,4 +1,5 @@
 #include "newCartographer.h"
+#include "AtlasUtil/Exceptions.h"
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -309,16 +310,19 @@ int main(int argc, char *argv[])
         auto entrance = node;
         while (true)
         {
+            // flag representing the case we have, if any.
+            // false for Case 1, true for Case 2
+            bool MergeCase = false;
             // first step, acquire middle nodes
             // middle nodes are simply the neighbors of the entrance
             // second step, check for 1 of 2 configurations for this transform
             // 1.) 0-deep mux->select: exactly 1 entrance and exit node, 2 neighbors of the entrance node, one is the exit, the other is a node that unconditionally branches to the exit. Exit only has the entrance and the third node as its predecessors. Forms a triangle.
             // 2.) 1-deep mux->select: exactly 1 entrance and exit node, 2 neighbors of the entrance node, 1 successor of the entrance neighbors. The exit only has the two neighbors as the predecessors. Forms a rhombus.
             std::set<uint64_t> midNodeTargets;
-            set<uint64_t> neighborIDs;
+            set<uint64_t> midNodes;
             for (const auto &midNode : entrance.neighbors)
             {
-                neighborIDs.insert(midNode.first);
+                midNodes.insert(midNode.first);
                 if (nodes.find(midNode.first) != nodes.end())
                 {
                     for (const auto &neighbor : nodes.find(midNode.first)->neighbors)
@@ -326,88 +330,243 @@ int main(int argc, char *argv[])
                         midNodeTargets.insert(neighbor.first);
                     }
                 }
+                else
+                {
+                    // ensures that all our midnodes can be found
+                    break;
+                }
             }
-            // Case 2: entrance neighbors only have one target
+            auto potentialExit = nodes.end();
             if (midNodeTargets.size() == 1)
             {
+                // we have confirmed case 2: all entrance successors lead to a common exit
+                MergeCase = true;
+                potentialExit = nodes.find(*midNodeTargets.begin());
+                if (potentialExit == nodes.end())
+                {
+                    break;
+                }
             }
-            // Case 1: the exit is one of the entrance neighbors and only has the entrance and 3rd node as its predecessors
-            // First, check for an intersection between the entrance node neighbors and midnodes (one of the midnodes will be the exit)
-            vector<uint64_t> intersect;
-            if (midNodeTargets.size() > neighborIDs.size())
-            {
-                intersect = vector<uint64_t>(midNodeTargets.size());
-            }
+            // else we may have a neighbor of the entrance that is the exit
+            // to find the exit we need to find a neighbor of the entrance which is the lone successor of all other neighbors of the entrance
             else
             {
-                intersect = vector<uint64_t>(neighborIDs.size());
-            }
-            auto it = set_intersection(midNodeTargets.begin(), midNodeTargets.end(), neighborIDs.begin(), neighborIDs.end(), intersect.begin());
-            intersect.resize(it - intersect.begin());
-            // if this subgraph is following our case, the intersection should have a potential exit
-            if ((intersect.size() == 1))
-            {
-                auto potentialExit = nodes.find(intersect.front());
-                neighborIDs.erase(potentialExit->NID);
-                // if we have a valid potentialExit iterator, we found a match for the potentialExit in the entrance neighbors, and we only have 1 entrance neighbor remaining (the third node)
-                if ((potentialExit != nodes.end()) && (neighborIDs.size() == 1))
+                if (entrance.neighbors.size() > 1)
                 {
-                    auto thirdNode = nodes.find(*neighborIDs.begin());
-                    // entrance should satisfy two things:
-                    // 1.) Only thirdNode and potentialExit are neighbors
-                    // 2.) Neither thirdNode nor potentialExit are predecessors
-                    auto preds = entrance.predecessors;
-                    auto neighbors = entrance.neighbors;
-                    if ((neighbors.size() == 2) && (preds.find(potentialExit->NID) == preds.end()) && (preds.find(thirdNode->NID) == preds.end()) && (neighbors.find(potentialExit->NID) != neighbors.end()) && (neighbors.find(thirdNode->NID) != neighbors.end()))
+                    for (auto succ = entrance.neighbors.begin(); succ != entrance.neighbors.end(); succ++)
                     {
-                        // potentialExit should satisfy two things:
-                        // 1.) Only the entrance and the 3rd node are predecessors
-                        // 2.) Shouldn't have thirdNode or entrance as a neighbor
-                        preds = potentialExit->predecessors;
-                        neighbors = potentialExit->neighbors;
-                        if ((preds.size() == 2) && (preds.find(entrance.NID) != preds.end()) && (preds.find(thirdNode->NID) != preds.end()) && (neighbors.find(entrance.NID) == neighbors.end()) && (neighbors.find(thirdNode->NID) == neighbors.end()))
+                        bool common = true;
+                        for (auto neighborID = entrance.neighbors.begin(); neighborID != entrance.neighbors.end(); neighborID++)
                         {
-                            // thirdNode should satisfy two conditions:
-                            // 1.) Only entrance as predecessor
-                            // 2.) Only have potentialExit as its neighbor
-                            preds = thirdNode->predecessors;
-                            neighbors = thirdNode->neighbors;
-                            if ((preds.size() == 1) && (preds.find(entrance.NID) != preds.end()) && (neighbors.size() == 1) && (neighbors.find(potentialExit->NID) != neighbors.end()))
+                            if (succ == neighborID)
                             {
-                                // merge entrance, exit, thirdNode into the entrance
-                                auto merged = entrance;
-                                // keep the NID, preds
-                                // change the neighbors to potentialExit neighbors AND update the successors of potentialExit to include the merged node in their predecessors
-                                merged.neighbors.clear();
-                                for (const auto &n : potentialExit->neighbors)
-                                {
-                                    merged.neighbors[n.first] = n.second;
-                                    auto succ2 = nodes.find(n.first);
-                                    if (succ2 != nodes.end())
-                                    {
-                                        auto newPreds = *succ2;
-                                        newPreds.predecessors.erase(potentialExit->NID);
-                                        newPreds.predecessors.insert(merged.NID);
-                                        nodes.erase(*succ2);
-                                        nodes.insert(newPreds);
-                                    }
-                                }
-                                // merge thirdNode and potentialExit blocks in order
-                                merged.addBlocks(thirdNode->blocks);
-                                merged.addBlocks(potentialExit->blocks);
-
-                                // remove stale nodes from the node set
-                                nodes.erase(entrance);
-                                nodes.erase(*thirdNode);
-                                nodes.erase(*potentialExit);
-                                nodes.insert(merged);
-
-                                entrance = merged;
+                                continue;
                             }
+                            auto neighbor = nodes.find(neighborID->first);
+                            for (const auto &succ2 : neighbor->neighbors)
+                            {
+                                if (succ2.first != succ->first)
+                                {
+                                    common = false;
+                                }
+                            }
+                        }
+                        if (common)
+                        {
+                            potentialExit = nodes.find(succ->first);
+                            midNodes.erase(succ->first);
+                            break;
                         }
                     }
                 }
+                if (potentialExit == nodes.end())
+                {
+                    break;
+                }
             }
+            // in order for either case to be true, five conditions must be checked
+            // 1.) the entrance can't have the exit or any midnodes as predecessors
+            auto tmpMids = midNodes;
+            auto pushed = tmpMids.insert(potentialExit->NID);
+            if (!pushed.second)
+            {
+                // somehow the exit ID is still in the midNodes set
+                throw AtlasException("PotentialExit found in the midNodes set!");
+            }
+            for (auto &pred : entrance.predecessors)
+            {
+                tmpMids.erase(pred);
+            }
+            if (tmpMids.size() != midNodes.size() + 1)
+            {
+                break;
+            }
+            // 2.) all midnodes must only have entrance as its lone predecessor
+            bool badCondition = false; // can be flipped either by a bad midNode pred or a missing midNode from the nodes set
+            for (const auto &mid : midNodes)
+            {
+                auto midNode = nodes.find(mid);
+                if (midNode != nodes.end())
+                {
+                    if ((midNode->predecessors.size() != 1) || (midNode->predecessors.find(entrance.NID) == midNode->predecessors.end()))
+                    {
+                        badCondition = true;
+                    }
+                }
+                else
+                {
+                    badCondition = true;
+                }
+            }
+            if (badCondition)
+            {
+                break;
+            }
+            // 3.) all midnodes must only have potentialExit as its lone successor
+            badCondition = false; // can be flipped either by a bad midNode pred or a missing midNode from the nodes set
+            for (const auto &mid : midNodes)
+            {
+                auto midNode = nodes.find(mid);
+                if (midNode != nodes.end())
+                {
+                    if ((midNode->neighbors.size() != 1) || (midNode->neighbors.find(potentialExit->NID) == midNode->neighbors.end()))
+                    {
+                        badCondition = true;
+                    }
+                }
+                else
+                {
+                    badCondition = true;
+                }
+            }
+            if (badCondition)
+            {
+                break;
+            }
+            // 4.) potentialExit can only have the midnodes as predecessors
+            tmpMids = midNodes;
+            if ((midNodes.size() == potentialExit->predecessors.size()))
+            {
+                for (auto &pred : potentialExit->predecessors)
+                {
+                    tmpMids.erase(pred);
+                }
+                if (!tmpMids.empty())
+                {
+                    break;
+                }
+            }
+            // 5.) potentialExit can't have the entrance or any midnodes as successors
+            tmpMids = midNodes;
+            badCondition = false; // flipped if we find a midnode or entrance in potentialExit successors, or we find a bad node
+            for (const auto &k : potentialExit->neighbors)
+            {
+                if (midNodes.find(k.first) != midNodes.end())
+                {
+                    badCondition = true;
+                    break;
+                }
+            }
+            if (badCondition)
+            {
+                break;
+            }
+            // Now we do case-specific checks
+            if (MergeCase)
+            {
+                // case 2: all entrance neighbors have a common successor
+                // 2 conditions must be checked
+                // 1.) entrance only has midnodes as successors
+                tmpMids = midNodes;
+                for (auto &n : entrance.neighbors)
+                {
+                    tmpMids.erase(n.first);
+                }
+                if (!tmpMids.empty())
+                {
+                    break;
+                }
+                // 2.) potentialExit only has midnodes as predecessors
+                tmpMids = midNodes;
+                for (auto &n : potentialExit->predecessors)
+                {
+                    tmpMids.erase(n);
+                }
+                if (!tmpMids.empty())
+                {
+                    break;
+                }
+            }
+            else
+            {
+                // case 1: all entrance neighbors have a common successor, and the entrance is a predecessor of that successor
+                // 2 conditions must be checked
+                // 1.) entrance only has midnodes and potentialExit as successors
+                tmpMids = midNodes;
+                tmpMids.insert(potentialExit->NID);
+                for (auto &n : entrance.neighbors)
+                {
+                    tmpMids.erase(n.first);
+                }
+                if (!tmpMids.empty())
+                {
+                    break;
+                }
+                // 2.) potentialExit only has midnodes and entrance as predecessors
+                tmpMids = midNodes;
+                tmpMids.insert(entrance.NID);
+                for (auto &n : potentialExit->predecessors)
+                {
+                    tmpMids.erase(n);
+                }
+                if (!tmpMids.empty())
+                {
+                    break;
+                }
+            }
+            // merge entrance, exit, thirdNode into the entrance
+            auto merged = entrance;
+            // keep the NID, preds
+            // change the neighbors to potentialExit neighbors AND update the successors of potentialExit to include the merged node in their predecessors
+            merged.neighbors.clear();
+            for (const auto &n : potentialExit->neighbors)
+            {
+                merged.neighbors[n.first] = n.second;
+                auto succ2 = nodes.find(n.first);
+                if (succ2 != nodes.end())
+                {
+                    auto newPreds = *succ2;
+                    newPreds.predecessors.erase(potentialExit->NID);
+                    newPreds.predecessors.insert(merged.NID);
+                    nodes.erase(*succ2);
+                    nodes.insert(newPreds);
+                }
+            }
+            // merge midNodes and potentialExit blocks in order
+            for (auto n : midNodes)
+            {
+                auto midNode = nodes.find(n);
+                if (midNode != nodes.end())
+                {
+                    merged.addBlocks(midNode->blocks);
+                }
+            }
+            merged.addBlocks(potentialExit->blocks);
+
+            // remove stale nodes from the node set
+            nodes.erase(entrance);
+            for (auto n : midNodes)
+            {
+                auto midNode = nodes.find(n);
+                if (midNode != nodes.end())
+                {
+                    nodes.erase(*midNode);
+                }
+            }
+            nodes.erase(*potentialExit);
+            nodes.insert(merged);
+
+            entrance = merged;
             break;
         }
     }
