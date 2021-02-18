@@ -224,10 +224,7 @@ int main(int argc, char *argv[])
     // combine all trivial node merges
     // a trivial node merge must satisfy two conditions
     // 1.) The source node has exactly 1 neighbor with certain probability
-    // 2.) The sink node has exactly 1 precesssor (the source node) with certain probability
-    // set of nodes to remove from the node set because they have been transformed into something else
-    // first index is the node to remove, second index is the nodeID in which the toRemove node has been merged
-    set<pair<uint64_t, uint64_t>, PairComp<uint64_t>> toRemove;
+    // 2.) The sink node has exactly 1 predecessor (the source node) with certain probability
     // combine all trivial edges
     vector<GraphNode> tmpNodes(nodes.begin(), nodes.end());
     for (auto &node : tmpNodes)
@@ -252,7 +249,7 @@ int main(int argc, char *argv[])
                         // trivial merge, we merge into the source node
                         auto merged = currentNode;
                         // keep the NID, preds
-                        // change the neighbors to the sink neighbors AND update the successors of the merged node to include the merged node as its predecessor
+                        // change the neighbors to the sink neighbors AND update the successors of the sink node to include the merged node in their predecessors
                         merged.neighbors.clear();
                         for (const auto &n : succ->neighbors)
                         {
@@ -270,7 +267,7 @@ int main(int argc, char *argv[])
                         // add the successor blocks
                         merged.addBlock(succ->NID);
 
-                        // remove the two nodes from the node set
+                        // remove stale nodes from the node set
                         nodes.erase(currentNode);
                         nodes.erase(*succ);
                         nodes.insert(merged);
@@ -291,6 +288,127 @@ int main(int argc, char *argv[])
             {
                 break;
             }
+        }
+    }
+
+    // Next transform, find multiplexers and turn them into select statements, 1 deep version
+    // In other words, condense subgraphs of nodes that have a common entrance and exit, and combine them into a single node
+    // Rules
+    // 1.) The subgraph must have exactly one entrance and one exit
+    // 2.) Exactly one layer of nodes must exist between entrance and exit
+    // 3.) No cycles may exist in the subgraph i.e. Flow can only go from entrance to exit
+    tmpNodes.clear();
+    tmpNodes.insert(tmpNodes.begin(), nodes.begin(), nodes.end());
+    for (auto &node : tmpNodes)
+    {
+        if (nodes.find(node.NID) == nodes.end())
+        {
+            // we've already been removed, do nothing
+            continue;
+        }
+        auto entrance = node;
+        while (true)
+        {
+            // first step, acquire middle nodes
+            // middle nodes are simply the neighbors of the entrance
+            // second step, check for 1 of 2 configurations for this transform
+            // 1.) 0-deep mux->select: exactly 1 entrance and exit node, 2 neighbors of the entrance node, one is the exit, the other is a node that unconditionally branches to the exit. Exit only has the entrance and the third node as its predecessors. Forms a triangle.
+            // 2.) 1-deep mux->select: exactly 1 entrance and exit node, 2 neighbors of the entrance node, 1 successor of the entrance neighbors. The exit only has the two neighbors as the predecessors. Forms a rhombus.
+            std::set<uint64_t> midNodeTargets;
+            set<uint64_t> neighborIDs;
+            for (const auto &midNode : entrance.neighbors)
+            {
+                neighborIDs.insert(midNode.first);
+                if (nodes.find(midNode.first) != nodes.end())
+                {
+                    for (const auto &neighbor : nodes.find(midNode.first)->neighbors)
+                    {
+                        midNodeTargets.insert(neighbor.first);
+                    }
+                }
+            }
+            // Case 2: entrance neighbors only have one target
+            if (midNodeTargets.size() == 1)
+            {
+            }
+            // Case 1: the exit is one of the entrance neighbors and only has the entrance and 3rd node as its predecessors
+            // First, check for an intersection between the entrance node neighbors and midnodes (one of the midnodes will be the exit)
+            vector<uint64_t> intersect;
+            if (midNodeTargets.size() > neighborIDs.size())
+            {
+                intersect = vector<uint64_t>(midNodeTargets.size());
+            }
+            else
+            {
+                intersect = vector<uint64_t>(neighborIDs.size());
+            }
+            auto it = set_intersection(midNodeTargets.begin(), midNodeTargets.end(), neighborIDs.begin(), neighborIDs.end(), intersect.begin());
+            intersect.resize(it - intersect.begin());
+            // if this subgraph is following our case, the intersection should have a potential exit
+            if ((intersect.size() == 1))
+            {
+                auto potentialExit = nodes.find(intersect.front());
+                neighborIDs.erase(potentialExit->NID);
+                // if we have a valid potentialExit iterator, we found a match for the potentialExit in the entrance neighbors, and we only have 1 entrance neighbor remaining (the third node)
+                if ((potentialExit != nodes.end()) && (neighborIDs.size() == 1))
+                {
+                    auto thirdNode = nodes.find(*neighborIDs.begin());
+                    // entrance should satisfy two things:
+                    // 1.) Only thirdNode and potentialExit are neighbors
+                    // 2.) Neither thirdNode nor potentialExit are predecessors
+                    auto preds = entrance.predecessors;
+                    auto neighbors = entrance.neighbors;
+                    if ((neighbors.size() == 2) && (preds.find(potentialExit->NID) == preds.end()) && (preds.find(thirdNode->NID) == preds.end()) && (neighbors.find(potentialExit->NID) != neighbors.end()) && (neighbors.find(thirdNode->NID) != neighbors.end()))
+                    {
+                        // potentialExit should satisfy two things:
+                        // 1.) Only the entrance and the 3rd node are predecessors
+                        // 2.) Shouldn't have thirdNode or entrance as a neighbor
+                        preds = potentialExit->predecessors;
+                        neighbors = potentialExit->neighbors;
+                        if ((preds.size() == 2) && (preds.find(entrance.NID) != preds.end()) && (preds.find(thirdNode->NID) != preds.end()) && (neighbors.find(entrance.NID) == neighbors.end()) && (neighbors.find(thirdNode->NID) == neighbors.end()))
+                        {
+                            // thirdNode should satisfy two conditions:
+                            // 1.) Only entrance as predecessor
+                            // 2.) Only have potentialExit as its neighbor
+                            preds = thirdNode->predecessors;
+                            neighbors = thirdNode->neighbors;
+                            if ((preds.size() == 1) && (preds.find(entrance.NID) != preds.end()) && (neighbors.size() == 1) && (neighbors.find(potentialExit->NID) != neighbors.end()))
+                            {
+                                // merge entrance, exit, thirdNode into the entrance
+                                auto merged = entrance;
+                                // keep the NID, preds
+                                // change the neighbors to potentialExit neighbors AND update the successors of potentialExit to include the merged node in their predecessors
+                                merged.neighbors.clear();
+                                for (const auto &n : potentialExit->neighbors)
+                                {
+                                    merged.neighbors[n.first] = n.second;
+                                    auto succ2 = nodes.find(n.first);
+                                    if (succ2 != nodes.end())
+                                    {
+                                        auto newPreds = *succ2;
+                                        newPreds.predecessors.erase(potentialExit->NID);
+                                        newPreds.predecessors.insert(merged.NID);
+                                        nodes.erase(*succ2);
+                                        nodes.insert(newPreds);
+                                    }
+                                }
+                                // merge thirdNode and potentialExit blocks in order
+                                merged.addBlocks(thirdNode->blocks);
+                                merged.addBlocks(potentialExit->blocks);
+
+                                // remove stale nodes from the node set
+                                nodes.erase(entrance);
+                                nodes.erase(*thirdNode);
+                                nodes.erase(*potentialExit);
+                                nodes.insert(merged);
+
+                                entrance = merged;
+                            }
+                        }
+                    }
+                }
+            }
+            break;
         }
     }
 

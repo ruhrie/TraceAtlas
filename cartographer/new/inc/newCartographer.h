@@ -109,6 +109,14 @@ struct GraphNode
         }
         blocks[newBlock] = newBlock;
     }
+    void addBlocks(const std::map<uint64_t, uint64_t> &newBlocks)
+    {
+        // TODO: finish this
+        // to add this tree of blocks
+        // 1.) find the block that ends the current node
+        // 2.) connect that block to the end block
+        // 3.) append the rest of the new blocks to the map
+    }
 
 private:
     static uint64_t nextNID;
