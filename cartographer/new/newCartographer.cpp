@@ -221,6 +221,38 @@ int main(int argc, char *argv[])
     // Set of nodes that constitute the entire graph
     set<GraphNode, GNCompare> nodes;
     ReadBIN(nodes, InputFilename);
+    /*GraphNode zeroth = GraphNode(0);
+    zeroth.blocks[0] = 0;
+    GraphNode first = GraphNode(1);
+    first.blocks[1] = 1;
+    GraphNode second = GraphNode(2);
+    second.blocks[2] = 2;
+    GraphNode third = GraphNode(3);
+    third.blocks[3] = 3;
+    GraphNode fourth = GraphNode(4);
+    fourth.blocks[4] = 4;
+    GraphNode fifth = GraphNode(5);
+    fifth.blocks[5] = 5;
+
+    zeroth.neighbors[1] = pair(1, 1);
+    first.predecessors.insert(0);
+    first.neighbors[2] = pair(1, 1);
+    second.predecessors.insert(1);
+    second.neighbors[3] = pair(1, 0.5);
+    second.neighbors[4] = pair(1, 0.5);
+    third.predecessors.insert(2);
+    third.neighbors[4] = pair(1, 1);
+    fourth.predecessors.insert(2);
+    fourth.predecessors.insert(3);
+    fourth.neighbors[5] = pair(1, 1);
+    fifth.predecessors.insert(4);
+
+    nodes.insert(zeroth);
+    nodes.insert(first);
+    nodes.insert(second);
+    nodes.insert(third);
+    nodes.insert(fourth);
+    nodes.insert(fifth);*/
 
     // combine all trivial node merges
     // a trivial node merge must satisfy two conditions
@@ -235,7 +267,8 @@ int main(int argc, char *argv[])
             // we've already been removed, do nothing
             continue;
         }
-        auto currentNode = node;
+        auto currentNode = *nodes.find(node.NID);
+        ;
         while (true)
         {
             // first condition, our source node must have 1 certain successor
@@ -292,12 +325,16 @@ int main(int argc, char *argv[])
         }
     }
 
-    // Next transform, find multiplexers and turn them into select statements, 1 deep version
-    // In other words, condense subgraphs of nodes that have a common entrance and exit, and combine them into a single node
+    // Next transform, find conditional branches and turn them into select statements
+    // In other words, condense subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
+    // Vocabulary
+    // entrance - first node that will execute in the target subgraph
+    // midnodes - nodes that lie between entrance and exit
+    // exit     - last node that will execute in the subgraph
     // Rules
     // 1.) The subgraph must have exactly one entrance and one exit
-    // 2.) Exactly one layer of nodes must exist between entrance and exit
-    // 3.) No cycles may exist in the subgraph i.e. Flow can only go from entrance to exit
+    // 2.) Exactly one layer of midnodes must exist between entrance and exit. The entrance is allowed to lead directly to the exit
+    // 3.) No cycles may exist in the subgraph i.e. Flow can only go from entrance to zero or one midnode to exit
     tmpNodes.clear();
     tmpNodes.insert(tmpNodes.begin(), nodes.begin(), nodes.end());
     for (auto &node : tmpNodes)
@@ -307,17 +344,17 @@ int main(int argc, char *argv[])
             // we've already been removed, do nothing
             continue;
         }
-        auto entrance = node;
+        auto entrance = *nodes.find(node.NID);
         while (true)
         {
             // flag representing the case we have, if any.
             // false for Case 1, true for Case 2
             bool MergeCase = false;
             // first step, acquire middle nodes
-            // middle nodes are simply the neighbors of the entrance
+            //
             // second step, check for 1 of 2 configurations for this transform
-            // 1.) 0-deep mux->select: exactly 1 entrance and exit node, 2 neighbors of the entrance node, one is the exit, the other is a node that unconditionally branches to the exit. Exit only has the entrance and the third node as its predecessors. Forms a triangle.
-            // 2.) 1-deep mux->select: exactly 1 entrance and exit node, 2 neighbors of the entrance node, 1 successor of the entrance neighbors. The exit only has the two neighbors as the predecessors. Forms a rhombus.
+            // 1.) 0-deep branch->select: entrance can go directly to exit
+            // 2.) 1-deep branch->select: entrance cannot go directly to exit
             std::set<uint64_t> midNodeTargets;
             set<uint64_t> midNodes;
             for (const auto &midNode : entrance.neighbors)
@@ -337,11 +374,25 @@ int main(int argc, char *argv[])
                 }
             }
             auto potentialExit = nodes.end();
-            if (midNodeTargets.size() == 1)
+            if (midNodeTargets.size() == 1) // corner case where the exit of the subgraph has no successors (it is the last node to execute in the program). In this case we have to check if the entrance is a predecessor of the lone midNodeTarget
             {
-                // we have confirmed case 2: all entrance successors lead to a common exit
-                MergeCase = true;
-                potentialExit = nodes.find(*midNodeTargets.begin());
+                auto cornerCase = nodes.find(*midNodeTargets.begin());
+                if (cornerCase != nodes.end())
+                {
+                    if (cornerCase->predecessors.find(entrance.NID) != cornerCase->predecessors.end())
+                    {
+                        // the entrance can lead directly to the exit
+                        MergeCase = false;
+                        potentialExit = cornerCase;
+                        midNodes.erase(potentialExit->NID);
+                    }
+                    else
+                    {
+                        // we have confirmed case 2: all entrance successors lead to a common exit, meaning the entrance cannot lead directly to the exit
+                        MergeCase = true;
+                        potentialExit = nodes.find(*midNodeTargets.begin());
+                    }
+                }
                 if (potentialExit == nodes.end())
                 {
                     break;
@@ -663,31 +714,31 @@ int main(int argc, char *argv[])
 }
 
 /* simple dijkstra example
-    GraphNode first = GraphNode(0);
-    first.blocks.insert(0);
-    GraphNode second = GraphNode(1);
-    second.blocks.insert(1);
-    GraphNode third = GraphNode(2);
-    third.blocks.insert(2);
-    GraphNode fourth = GraphNode(3);
-    fourth.blocks.insert(3);
-    GraphNode fifth = GraphNode(4);
-    fifth.blocks.insert(4);
-    GraphNode sixth = GraphNode(5);
-    sixth.blocks.insert(5);
+    GraphNode zeroth = GraphNode(0);
+    zeroth.blocks[0] = 0;
+    GraphNode first = GraphNode(1);
+    first.blocks[1] = 1;
+    GraphNode second = GraphNode(2);
+    second.blocks[2] = 2;
+    GraphNode third = GraphNode(3);
+    third.blocks[3] = 3;
+    GraphNode fourth = GraphNode(4);
+    fourth.blocks[4] = 4;
+    GraphNode fifth = GraphNode(5);
+    fifth.blocks[5] = 5;
 
-    first.neighbors[1] = pair(9, 0.9);
-    second.neighbors[2] = pair(1, 0.1);
-    second.neighbors[3] = pair(9, 0.9);
-    third.neighbors[0] = pair(1, 1);
-    fourth.neighbors[4] = pair(9, 1);
-    fifth.neighbors[5] = pair(9, 1);
-    sixth.neighbors[0] = pair(9, 1);
+    zeroth.neighbors[1] = pair(9, 0.9);
+    first.neighbors[2] = pair(1, 0.1);
+    first.neighbors[3] = pair(9, 0.9);
+    second.neighbors[0] = pair(1, 1);
+    third.neighbors[4] = pair(9, 1);
+    fourth.neighbors[5] = pair(9, 1);
+    fifth.neighbors[0] = pair(9, 1);
 
+    nodes.insert(zeroth);
     nodes.insert(first);
     nodes.insert(second);
     nodes.insert(third);
     nodes.insert(fourth);
     nodes.insert(fifth);
-    nodes.insert(sixth);
     */

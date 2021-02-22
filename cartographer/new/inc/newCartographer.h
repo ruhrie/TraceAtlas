@@ -112,6 +112,10 @@ struct GraphNode
     void addBlocks(const std::map<uint64_t, uint64_t> &newBlocks)
     {
         // TODO: finish this
+        for (const auto &k : newBlocks)
+        {
+            blocks[k.first] = k.first;
+        }
         // to add this tree of blocks
         // 1.) find the block that ends the current node
         // 2.) connect that block to the end block
