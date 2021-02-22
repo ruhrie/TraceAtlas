@@ -221,38 +221,6 @@ int main(int argc, char *argv[])
     // Set of nodes that constitute the entire graph
     set<GraphNode, GNCompare> nodes;
     ReadBIN(nodes, InputFilename);
-    /*GraphNode zeroth = GraphNode(0);
-    zeroth.blocks[0] = 0;
-    GraphNode first = GraphNode(1);
-    first.blocks[1] = 1;
-    GraphNode second = GraphNode(2);
-    second.blocks[2] = 2;
-    GraphNode third = GraphNode(3);
-    third.blocks[3] = 3;
-    GraphNode fourth = GraphNode(4);
-    fourth.blocks[4] = 4;
-    GraphNode fifth = GraphNode(5);
-    fifth.blocks[5] = 5;
-
-    zeroth.neighbors[1] = pair(1, 1);
-    first.predecessors.insert(0);
-    first.neighbors[2] = pair(1, 1);
-    second.predecessors.insert(1);
-    second.neighbors[3] = pair(1, 0.5);
-    second.neighbors[4] = pair(1, 0.5);
-    third.predecessors.insert(2);
-    third.neighbors[4] = pair(1, 1);
-    fourth.predecessors.insert(2);
-    fourth.predecessors.insert(3);
-    fourth.neighbors[5] = pair(1, 1);
-    fifth.predecessors.insert(4);
-
-    nodes.insert(zeroth);
-    nodes.insert(first);
-    nodes.insert(second);
-    nodes.insert(third);
-    nodes.insert(fourth);
-    nodes.insert(fifth);*/
 
     // combine all trivial node merges
     // a trivial node merge must satisfy two conditions
@@ -713,7 +681,7 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-/* simple dijkstra example
+/* Simple Type 2 transform example
     GraphNode zeroth = GraphNode(0);
     zeroth.blocks[0] = 0;
     GraphNode first = GraphNode(1);
@@ -727,13 +695,18 @@ int main(int argc, char *argv[])
     GraphNode fifth = GraphNode(5);
     fifth.blocks[5] = 5;
 
-    zeroth.neighbors[1] = pair(9, 0.9);
-    first.neighbors[2] = pair(1, 0.1);
-    first.neighbors[3] = pair(9, 0.9);
-    second.neighbors[0] = pair(1, 1);
-    third.neighbors[4] = pair(9, 1);
-    fourth.neighbors[5] = pair(9, 1);
-    fifth.neighbors[0] = pair(9, 1);
+    zeroth.neighbors[1] = pair(1, 1);
+    first.predecessors.insert(0);
+    first.neighbors[2] = pair(1, 1);
+    second.predecessors.insert(1);
+    second.neighbors[3] = pair(1, 0.5);
+    second.neighbors[4] = pair(1, 0.5);
+    third.predecessors.insert(2);
+    third.neighbors[4] = pair(1, 1);
+    fourth.predecessors.insert(2);
+    fourth.predecessors.insert(3);
+    fourth.neighbors[5] = pair(1, 1);
+    fifth.predecessors.insert(4);
 
     nodes.insert(zeroth);
     nodes.insert(first);
