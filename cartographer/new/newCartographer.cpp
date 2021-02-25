@@ -236,7 +236,6 @@ int main(int argc, char *argv[])
             continue;
         }
         auto currentNode = *nodes.find(node.NID);
-        ;
         while (true)
         {
             // first condition, our source node must have 1 certain successor
@@ -298,7 +297,7 @@ int main(int argc, char *argv[])
     // Vocabulary
     // entrance - first node that will execute in the target subgraph
     // midnodes - nodes that lie between entrance and exit
-    // exit     - last node that will execute in the subgraph
+    // exit     - last node that will execute in the target subgraph
     // Rules
     // 1.) The subgraph must have exactly one entrance and one exit
     // 2.) Exactly one layer of midnodes must exist between entrance and exit. The entrance is allowed to lead directly to the exit
@@ -586,7 +585,6 @@ int main(int argc, char *argv[])
             nodes.insert(merged);
 
             entrance = merged;
-            break;
         }
     }
 
@@ -681,7 +679,7 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-/* Simple Type 2 transform example
+/* Simple Type 2 case 1 transform example
     GraphNode zeroth = GraphNode(0);
     zeroth.blocks[0] = 0;
     GraphNode first = GraphNode(1);
@@ -714,4 +712,140 @@ int main(int argc, char *argv[])
     nodes.insert(third);
     nodes.insert(fourth);
     nodes.insert(fifth);
+    */
+
+/* test bench 1 - exercises simple type 2 transform case 2 (2 midnodes)
+    GraphNode zeroth = GraphNode(0);
+    zeroth.blocks[0] = 0;
+    GraphNode first = GraphNode(1);
+    first.blocks[1] = 1;
+    GraphNode second = GraphNode(2);
+    second.blocks[2] = 2;
+    GraphNode third = GraphNode(3);
+    third.blocks[3] = 3;
+    GraphNode fourth = GraphNode(4);
+    fourth.blocks[4] = 4;
+    GraphNode fifth = GraphNode(5);
+    fifth.blocks[5] = 5;
+    GraphNode sixth = GraphNode(6);
+    sixth.blocks[6] = 6;
+
+    zeroth.neighbors[1] = pair(1, 1);
+    first.predecessors.insert(0);
+    first.neighbors[2] = pair(1, 1);
+    second.predecessors.insert(1);
+    second.neighbors[3] = pair(1, 0.5);
+    second.neighbors[4] = pair(1, 0.5);
+    third.predecessors.insert(2);
+    third.neighbors[5] = pair(1, 1);
+    fourth.predecessors.insert(2);
+    fourth.neighbors[5] = pair(1, 1);
+    fifth.predecessors.insert(3);
+    fifth.predecessors.insert(4);
+    fifth.neighbors[6] = pair(1, 1);
+    sixth.predecessors.insert(5);
+
+    nodes.insert(zeroth);
+    nodes.insert(first);
+    nodes.insert(second);
+    nodes.insert(third);
+    nodes.insert(fourth);
+    nodes.insert(fifth);
+    nodes.insert(sixth);
+    */
+
+/* Test bench 2 - type 2 transform case 1 with 3 midnodes
+    GraphNode zeroth = GraphNode(0);
+    zeroth.blocks[0] = 0;
+    GraphNode first = GraphNode(1);
+    first.blocks[1] = 1;
+    GraphNode second = GraphNode(2);
+    second.blocks[2] = 2;
+    GraphNode third = GraphNode(3);
+    third.blocks[3] = 3;
+    GraphNode fourth = GraphNode(4);
+    fourth.blocks[4] = 4;
+    GraphNode fifth = GraphNode(5);
+    fifth.blocks[5] = 5;
+    GraphNode sixth = GraphNode(6);
+    sixth.blocks[6] = 6;
+    GraphNode seventh = GraphNode(7);
+    seventh.blocks[7] = 7;
+
+    zeroth.neighbors[1] = pair(1, 1);
+    first.predecessors.insert(0);
+    first.neighbors[2] = pair(1, 1);
+    second.predecessors.insert(1);
+    second.neighbors[3] = pair(1, 0.25);
+    second.neighbors[4] = pair(1, 0.25);
+    second.neighbors[5] = pair(1, 0.25);
+    second.neighbors[6] = pair(1, 0.25);
+    third.predecessors.insert(2);
+    third.neighbors[6] = pair(1, 1);
+    fourth.predecessors.insert(2);
+    fourth.neighbors[6] = pair(1, 1);
+    fifth.predecessors.insert(2);
+    fifth.neighbors[6] = pair(1, 1);
+    sixth.predecessors.insert(2);
+    sixth.predecessors.insert(3);
+    sixth.predecessors.insert(4);
+    sixth.predecessors.insert(5);
+    sixth.neighbors[7] = pair(1, 1);
+    seventh.predecessors.insert(6);
+
+    nodes.insert(zeroth);
+    nodes.insert(first);
+    nodes.insert(second);
+    nodes.insert(third);
+    nodes.insert(fourth);
+    nodes.insert(fifth);
+    nodes.insert(sixth);
+    nodes.insert(seventh);
+    */
+
+/* Test bench 3 - type 2 transform case 2 with 3 midnodes
+    GraphNode zeroth = GraphNode(0);
+    zeroth.blocks[0] = 0;
+    GraphNode first = GraphNode(1);
+    first.blocks[1] = 1;
+    GraphNode second = GraphNode(2);
+    second.blocks[2] = 2;
+    GraphNode third = GraphNode(3);
+    third.blocks[3] = 3;
+    GraphNode fourth = GraphNode(4);
+    fourth.blocks[4] = 4;
+    GraphNode fifth = GraphNode(5);
+    fifth.blocks[5] = 5;
+    GraphNode sixth = GraphNode(6);
+    sixth.blocks[6] = 6;
+    GraphNode seventh = GraphNode(7);
+    seventh.blocks[7] = 7;
+
+    zeroth.neighbors[1] = pair(1, 1);
+    first.predecessors.insert(0);
+    first.neighbors[2] = pair(1, 1);
+    second.predecessors.insert(1);
+    second.neighbors[3] = pair(1, 0.333);
+    second.neighbors[4] = pair(1, 0.333);
+    second.neighbors[5] = pair(1, 0.333);
+    third.predecessors.insert(2);
+    third.neighbors[6] = pair(1, 1);
+    fourth.predecessors.insert(2);
+    fourth.neighbors[6] = pair(1, 1);
+    fifth.predecessors.insert(2);
+    fifth.neighbors[6] = pair(1, 1);
+    sixth.predecessors.insert(3);
+    sixth.predecessors.insert(4);
+    sixth.predecessors.insert(5);
+    sixth.neighbors[7] = pair(1, 1);
+    seventh.predecessors.insert(6);
+
+    nodes.insert(zeroth);
+    nodes.insert(first);
+    nodes.insert(second);
+    nodes.insert(third);
+    nodes.insert(fourth);
+    nodes.insert(fifth);
+    nodes.insert(sixth);
+    nodes.insert(seventh);
     */
