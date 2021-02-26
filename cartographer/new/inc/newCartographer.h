@@ -153,6 +153,8 @@ std::vector<uint64_t> Dijkstras(const std::set<GraphNode, GNCompare> &nodes, uin
 
 struct Kernel
 {
+    std::set<GraphNode, GNCompare> nodes;
+    uint32_t KID;
     Kernel()
     {
         KID = getNextKID();
@@ -203,42 +205,14 @@ struct Kernel
         return exitNodes;
     }
     /// @brief Returns the member blocks (from the source bitcode) of this kernel
-    ///
-    /// @param[in] full When true, return all blocks that belong to the kernel, even the sequential code that precedes the loop within the kernel and proceeds the exit from that loop. When false, only return the blocks that belong to the loop
-    const std::set<uint64_t> getBlocks(bool full = true) const
+    const std::set<uint64_t> getBlocks() const
     {
         std::set<uint64_t> blocks;
         for (const auto &node : nodes)
         {
-            if (full)
+            for( const auto& block : node.blocks )
             {
-                blocks.insert(node.NID);
-            }
-            else
-            {
-                // There are three types of nodes we need to worry about
-                // 1.) If the node has one edge that is certain, we likely have a loop body, thus all blocks should be part of the kernel
-                // 2.) If our node has multiple neighbors, it is likely a kernel beginning ended by the loop iterator. So just take the end block
-                // 3.) If our node has multiple neighbors, and it has an exit edge from the kernel, all blocks within that node should be included (because it likely roped in a part of the loop body)
-                if (node.neighbors.size() == 1 && node.neighbors.begin()->second.second > 0.9999)
-                {
-                    // add the entire node blockmap to the return set
-                    for (const auto &b : node.blocks)
-                    {
-                        blocks.insert(b.first);
-                    }
-                }
-                else if (node.neighbors.size() > 1)
-                {
-                    // just add the head block to the return set
-                    for (const auto &b : node.blocks)
-                    {
-                        if (b.first == b.second)
-                        {
-                            blocks.insert(b.first);
-                        }
-                    }
-                }
+                blocks.insert(block.first);
             }
         }
         return blocks;
@@ -302,8 +276,6 @@ struct Kernel
         }
         return true;
     }
-    std::set<GraphNode, GNCompare> nodes;
-    uint32_t KID;
 
 private:
     static uint32_t nextKID;

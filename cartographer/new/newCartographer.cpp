@@ -292,7 +292,7 @@ int main(int argc, char *argv[])
                             }
                         }
                         // add the successor blocks
-                        merged.addBlock(succ->NID);
+                        merged.addBlocks(succ->blocks);
 
                         // remove stale nodes from the node set
                         nodes.erase(currentNode);
@@ -691,7 +691,7 @@ int main(int argc, char *argv[])
     int id = 0;
     for (const auto &kernel : kernels)
     {
-        for (const auto &k : kernel.getBlocks(false))
+        for (const auto &k : kernel.getBlocks())
         {
             outputJson["Kernels"][to_string(id)]["Blocks"].push_back(k);
         }
