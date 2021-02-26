@@ -1,10 +1,9 @@
-#include "llvm/Analysis/CallGraph.h"
 #include "AtlasUtil/Format.h"
+#include "AtlasUtil/Path.h"
 #include "AtlasUtil/Print.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Support/CommandLine.h"
@@ -66,50 +65,8 @@ int main(int argc, char **argv)
     InitializeIDMaps(SourceBitcode.get(), IDToBlock, IDToValue);
 
     // Call graph, doesn't include function pointers
-    CallGraph CG(*(SourceBitcode.get()));
+    auto CG = getCallGraph(SourceBitcode.get(), blockCallers, BlockToFPtr, IDToBlock);
 
-    // Add function pointers
-    for (auto &f : *SourceBitcode)
-    {
-        for (auto bb = f.begin(); bb != f.end(); bb++)
-        {
-            for (auto it = bb->begin(); it != bb->end(); it++)
-            {
-                if (auto CI = dyn_cast<CallInst>(it))
-                {
-                    auto callee = CI->getCalledFunction();
-                    if (callee == nullptr)
-                    {
-                        // try to find a block caller entry for this function, if it's not there we have to move on
-                        auto BBID = GetBlockID(cast<BasicBlock>(bb));
-                        if (blockCallers.find(to_string(BBID)) != blockCallers.end())
-                        {
-                            if (!blockCallers[to_string(BBID)].empty())
-                            {
-                                auto calleeID = blockCallers[to_string(BBID)].front(); // should only be 1 element long, because of basic block splitting
-                                auto calleeBlock = IDToBlock[calleeID];
-                                if (calleeBlock != nullptr)
-                                {
-                                    auto parentNode = CG.getOrInsertFunction(bb->getParent());
-                                    auto childNode = CG.getOrInsertFunction(calleeBlock->getParent());
-                                    parentNode->addCalledFunction(CI, childNode);
-                                    BlockToFPtr[cast<BasicBlock>(bb)] = calleeBlock->getParent();
-                                }
-                            }
-                            else
-                            {
-                                spdlog::warn("BlockCallers did not contain an entry for the indirect function call in BBID " + to_string(BBID));
-                            }
-                        }
-                        else
-                        {
-                            spdlog::warn("BlockCallers did not contain an entry for the indirect call in BBID " + to_string(BBID));
-                        }
-                    }
-                }
-            }
-        }
-    }
     json outputJson;
     for (const auto &node : CG)
     {

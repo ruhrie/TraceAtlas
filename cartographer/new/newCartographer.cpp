@@ -1,5 +1,8 @@
 #include "newCartographer.h"
-#include "AtlasUtil/Exceptions.h"
+#include "AtlasUtil/Format.h"
+#include "AtlasUtil/Path.h"
+#include "llvm/IRReader/IRReader.h"
+#include "llvm/Support/SourceMgr.h"
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -13,7 +16,8 @@ using namespace std;
 using json = nlohmann::json;
 
 cl::opt<string> InputFilename("i", cl::desc("Specify bin file"), cl::value_desc(".bin filename"), cl::Required);
-cl::opt<string> BlockInfoFilename("b", cl::desc("Specify BlockInfo.json file"), cl::value_desc(".json filename"), cl::Required);
+cl::opt<string> BitcodeFileName("b", cl::desc("Specify bitcode file"), cl::value_desc(".bc filename"), cl::Required);
+cl::opt<string> BlockInfoFilename("bi", cl::desc("Specify BlockInfo.json file"), cl::value_desc(".json filename"), cl::Required);
 cl::opt<string> OutputFilename("o", cl::desc("Specify output json"), cl::value_desc("kernel filename"), cl::Required);
 
 uint64_t GraphNode::nextNID = 0;
@@ -198,6 +202,25 @@ int main(int argc, char *argv[])
 {
     cl::ParseCommandLineOptions(argc, argv);
 
+    // read in bitcode file
+    LLVMContext context;
+    SMDiagnostic smerror;
+    std::unique_ptr<Module> SourceBitcode = parseIRFile(BitcodeFileName, smerror, context);
+    if (SourceBitcode.get() == nullptr)
+    {
+        spdlog::critical("Failed to open bitcode file: " + BitcodeFileName);
+        return EXIT_FAILURE;
+    }
+    // Annotate its bitcodes and values
+    CleanModule(SourceBitcode.get());
+    Format(SourceBitcode.get());
+    // construct its callgraph
+    map<int64_t, BasicBlock *> IDToBlock;
+    map<int64_t, Value *> IDToValue;
+    map<BasicBlock *, Function *> BlockToFPtr;
+    InitializeIDMaps(SourceBitcode.get(), IDToBlock, IDToValue);
+
+    // read BlockInfo json
     ifstream inputJson;
     nlohmann::json j;
     try
@@ -217,6 +240,9 @@ int main(int argc, char *argv[])
     {
         blockCallers[bbid.key()] = j[bbid.key()]["BlockCallers"].get<vector<int64_t>>();
     }
+
+    // Construct bitcode CallGraph
+    auto CG = getCallGraph(SourceBitcode.get(), blockCallers, BlockToFPtr, IDToBlock);
 
     // Set of nodes that constitute the entire graph
     set<GraphNode, GNCompare> nodes;

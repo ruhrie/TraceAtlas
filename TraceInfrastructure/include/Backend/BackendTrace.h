@@ -55,6 +55,8 @@ extern "C"
 #endif
     void TraceAtlasKernelEnter(char *label);
     void TraceAtlasKernelExit(char *label);
+    void TraceAtlasMarkovKernelEnter(char *label);
+    void TraceAtlasMarkovKernelExit(char *label);
 #ifdef __cplusplus
 }
 #endif
