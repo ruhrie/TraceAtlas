@@ -222,7 +222,7 @@ struct Kernel
     /// If two kernels are the same, 1 will be returned
     /// If two kernels are completely different, 0 will be returned
     /// If two kernels share some nodes, (compare shared) / (this size) will be returned
-    /// TODO: if this fully overlaps with compare, but compare contains other blocks, this will say that we fully match when we actually don't. Fix that
+    /// TODO: if this object fully overlaps with compare, but compare contains other blocks, this will say that we fully match when we actually don't. Fix that
     float Compare(const Kernel &compare) const
     {
         int compShared = 0;
@@ -275,6 +275,10 @@ struct Kernel
             }
         }
         return true;
+    }
+    inline bool operator==(const Kernel &rhs) const
+    {
+        return rhs.KID == KID;
     }
 
 private:

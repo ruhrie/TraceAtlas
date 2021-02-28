@@ -618,7 +618,7 @@ int main(int argc, char *argv[])
     // combine all trivial node merges
     TrivialTransforms(nodes);
     // Next transform, find conditional branches and turn them into select statements
-    // In other words, condense subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
+    // In other words, find subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
     BranchToSelectTransforms(nodes);
 
     /*for (const auto &node : nodes)
@@ -645,6 +645,7 @@ int main(int argc, char *argv[])
     while (!done)
     {
         done = true;
+        // first, find min paths in the graph
         for (const auto &node : nodes)
         {
             auto nodeIDs = Dijkstras(nodes, node.NID, node.NID);
@@ -677,6 +678,32 @@ int main(int argc, char *argv[])
                 }
             }
         }
+        // second, check whether they overlap with anybody
+        set<Kernel, KCompare> toRemove;
+        for (const auto &kernel : kernels)
+        {
+            if (toRemove.find(kernel) != toRemove.end())
+            {
+                continue;
+            }
+            for (const auto &kernel2 : kernels)
+            {
+                if ((kernel == kernel2) || (toRemove.find(kernel2) != toRemove.end()))
+                {
+                    continue;
+                }
+                if (kernel.Compare(kernel2) > 0)
+                {
+                    // we have an overlap, kill kernel2
+                    toRemove.insert(kernel2);
+                }
+            }
+        }
+        for (const auto &remove : toRemove)
+        {
+            kernels.erase(remove);
+        }
+        // finally, check to see if we found new kernels, and if we didn't we're done
         if (kernels.size() == numKernels)
         {
             done = true;
