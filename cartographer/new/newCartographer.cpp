@@ -198,57 +198,8 @@ vector<uint64_t> Dijkstras(const set<GraphNode, GNCompare> &nodes, uint64_t sour
     return newKernel;
 }
 
-int main(int argc, char *argv[])
+void TrivialTransforms(std::set<GraphNode, GNCompare> &nodes)
 {
-    cl::ParseCommandLineOptions(argc, argv);
-
-    // read in bitcode file
-    LLVMContext context;
-    SMDiagnostic smerror;
-    std::unique_ptr<Module> SourceBitcode = parseIRFile(BitcodeFileName, smerror, context);
-    if (SourceBitcode.get() == nullptr)
-    {
-        spdlog::critical("Failed to open bitcode file: " + BitcodeFileName);
-        return EXIT_FAILURE;
-    }
-    // Annotate its bitcodes and values
-    CleanModule(SourceBitcode.get());
-    Format(SourceBitcode.get());
-    // construct its callgraph
-    map<int64_t, BasicBlock *> IDToBlock;
-    map<int64_t, Value *> IDToValue;
-    map<BasicBlock *, Function *> BlockToFPtr;
-    InitializeIDMaps(SourceBitcode.get(), IDToBlock, IDToValue);
-
-    // read BlockInfo json
-    ifstream inputJson;
-    nlohmann::json j;
-    try
-    {
-        inputJson.open(BlockInfoFilename);
-        inputJson >> j;
-        inputJson.close();
-    }
-    catch (exception &e)
-    {
-        spdlog::critical("Couldn't open input json file: " + BlockInfoFilename);
-        spdlog::critical(e.what());
-        return EXIT_FAILURE;
-    }
-    map<string, vector<int64_t>> blockCallers;
-    for (const auto &bbid : j.items())
-    {
-        blockCallers[bbid.key()] = j[bbid.key()]["BlockCallers"].get<vector<int64_t>>();
-    }
-
-    // Construct bitcode CallGraph
-    auto CG = getCallGraph(SourceBitcode.get(), blockCallers, BlockToFPtr, IDToBlock);
-
-    // Set of nodes that constitute the entire graph
-    set<GraphNode, GNCompare> nodes;
-    ReadBIN(nodes, InputFilename);
-
-    // combine all trivial node merges
     // a trivial node merge must satisfy two conditions
     // 1.) The source node has exactly 1 neighbor with certain probability
     // 2.) The sink node has exactly 1 predecessor (the source node) with certain probability
@@ -317,9 +268,10 @@ int main(int argc, char *argv[])
             }
         }
     }
+}
 
-    // Next transform, find conditional branches and turn them into select statements
-    // In other words, condense subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
+void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes)
+{
     // Vocabulary
     // entrance - first node that will execute in the target subgraph
     // midnodes - nodes that lie between entrance and exit
@@ -328,8 +280,7 @@ int main(int argc, char *argv[])
     // 1.) The subgraph must have exactly one entrance and one exit
     // 2.) Exactly one layer of midnodes must exist between entrance and exit. The entrance is allowed to lead directly to the exit
     // 3.) No cycles may exist in the subgraph i.e. Flow can only go from entrance to zero or one midnode to exit
-    tmpNodes.clear();
-    tmpNodes.insert(tmpNodes.begin(), nodes.begin(), nodes.end());
+    vector<GraphNode> tmpNodes(nodes.begin(), nodes.end());
     for (auto &node : tmpNodes)
     {
         if (nodes.find(node.NID) == nodes.end())
@@ -613,8 +564,64 @@ int main(int argc, char *argv[])
             entrance = merged;
         }
     }
+}
 
-    for (const auto &node : nodes)
+int main(int argc, char *argv[])
+{
+    cl::ParseCommandLineOptions(argc, argv);
+
+    // read in bitcode file
+    LLVMContext context;
+    SMDiagnostic smerror;
+    std::unique_ptr<Module> SourceBitcode = parseIRFile(BitcodeFileName, smerror, context);
+    if (SourceBitcode.get() == nullptr)
+    {
+        spdlog::critical("Failed to open bitcode file: " + BitcodeFileName);
+        return EXIT_FAILURE;
+    }
+    // Annotate its bitcodes and values
+    CleanModule(SourceBitcode.get());
+    Format(SourceBitcode.get());
+    // construct its callgraph
+    map<int64_t, BasicBlock *> IDToBlock;
+    map<int64_t, Value *> IDToValue;
+    map<BasicBlock *, Function *> BlockToFPtr;
+    InitializeIDMaps(SourceBitcode.get(), IDToBlock, IDToValue);
+
+    // read BlockInfo json
+    ifstream inputJson;
+    nlohmann::json j;
+    try
+    {
+        inputJson.open(BlockInfoFilename);
+        inputJson >> j;
+        inputJson.close();
+    }
+    catch (exception &e)
+    {
+        spdlog::critical("Couldn't open input json file: " + BlockInfoFilename);
+        spdlog::critical(e.what());
+        return EXIT_FAILURE;
+    }
+    map<string, vector<int64_t>> blockCallers;
+    for (const auto &bbid : j.items())
+    {
+        blockCallers[bbid.key()] = j[bbid.key()]["BlockCallers"].get<vector<int64_t>>();
+    }
+
+    // Construct bitcode CallGraph
+    auto CG = getCallGraph(SourceBitcode.get(), blockCallers, BlockToFPtr, IDToBlock);
+
+    // Set of nodes that constitute the entire graph
+    set<GraphNode, GNCompare> nodes;
+    ReadBIN(nodes, InputFilename);
+    // combine all trivial node merges
+    TrivialTransforms(nodes);
+    // Next transform, find conditional branches and turn them into select statements
+    // In other words, condense subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
+    BranchToSelectTransforms(nodes);
+
+    /*for (const auto &node : nodes)
     {
         spdlog::info("Examining node " + to_string(node.NID));
         string blocks;
@@ -629,7 +636,7 @@ int main(int argc, char *argv[])
         }
         cout << endl;
         //spdlog::info("Node " + to_string(node.NID) + " has " + to_string(node.neighbors.size()) + " neighbors.");
-    }
+    }*/
 
     // find minimum cycles
     bool done = false;
@@ -681,6 +688,7 @@ int main(int argc, char *argv[])
         }
     }
 
+    // write kernel file
     json outputJson;
     outputJson["ValidBlocks"] = std::vector<string>();
     for (const auto &bid : blockCallers)
