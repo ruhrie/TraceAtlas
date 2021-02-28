@@ -210,7 +210,7 @@ struct Kernel
         std::set<uint64_t> blocks;
         for (const auto &node : nodes)
         {
-            for( const auto& block : node.blocks )
+            for (const auto &block : node.blocks)
             {
                 blocks.insert(block.first);
             }
