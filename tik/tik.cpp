@@ -121,9 +121,7 @@ int main(int argc, char *argv[])
 
     for (auto &[k, l] : j["Kernels"].items())
     {
-        string index = k;
-        nlohmann::json kernel = l["Blocks"];
-        kernels[index] = kernel.get<vector<int64_t>>();
+        kernels[k] = l["Blocks"].get<vector<int64_t>>();
     }
     ValidBlocks = j["ValidBlocks"].get<set<int64_t>>();
 

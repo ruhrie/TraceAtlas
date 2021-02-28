@@ -717,11 +717,14 @@ int main(int argc, char *argv[])
 
     // write kernel file
     json outputJson;
-    outputJson["ValidBlocks"] = std::vector<string>();
+    outputJson["ValidBlocks"] = std::vector<int64_t>();
+    for (const auto &id : IDToBlock)
+    {
+        outputJson["ValidBlocks"].push_back(id.first);
+    }
     for (const auto &bid : blockCallers)
     {
         outputJson["BlockCallers"][bid.first] = bid.second;
-        outputJson["ValidBlocks"].push_back(bid.first);
     }
     int id = 0;
     // average nodes per kernel
@@ -742,13 +745,13 @@ int main(int argc, char *argv[])
     }
     if (!kernels.empty())
     {
-        outputJson["Kernels"]["Average Kernel Size (Nodes)"] = float(totalNodes / (float)kernels.size());
-        outputJson["Kernels"]["Average Kernel Size (Blocks)"] = float(totalBlocks / (float)kernels.size());
+        outputJson["Average Kernel Size (Nodes)"] = float(totalNodes / (float)kernels.size());
+        outputJson["Average Kernel Size (Blocks)"] = float(totalBlocks / (float)kernels.size());
     }
     else
     {
-        outputJson["Kernels"]["Average Kernel Size (Nodes)"] = 0.0;
-        outputJson["Kernels"]["Average Kernel Size (Blocks)"] = 0.0;
+        outputJson["Average Kernel Size (Nodes)"] = 0.0;
+        outputJson["Average Kernel Size (Blocks)"] = 0.0;
     }
     ofstream oStream(OutputFilename);
     oStream << setw(4) << outputJson;
