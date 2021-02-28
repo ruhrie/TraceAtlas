@@ -1,6 +1,6 @@
 add_subdirectory(1DBlur)
 add_subdirectory(1DCondition)
-#add_subdirectory(Recurse)
+add_subdirectory(SharedFunction)
 add_subdirectory(FunctionCall)
 add_subdirectory(bubbleSort)
 if (${ENABLE_TESTING_LONG})
