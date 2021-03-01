@@ -38,7 +38,7 @@ void ReadBIN(set<GraphNode, GNCompare> &nodes, const string &filename)
         {
             currentNode = GraphNode(key);
             // right now, NID and blocks are 1to1
-            currentNode.blocks[key] = key;
+            currentNode.blocks[(int64_t)key] = (int64_t)key;
         }
         else
         {
@@ -606,10 +606,18 @@ int main(int argc, char *argv[])
         spdlog::critical(e.what());
         return EXIT_FAILURE;
     }
-    map<string, vector<int64_t>> blockCallers;
+    map<int64_t, int64_t> blockCallers;
     for (const auto &bbid : j.items())
     {
-        blockCallers[bbid.key()] = j[bbid.key()]["BlockCallers"].get<vector<int64_t>>();
+        auto vec = j[bbid.key()]["BlockCallers"].get<vector<int64_t>>();
+        if (vec.size() == 1)
+        {
+            blockCallers[stol(bbid.key())] = *vec.begin();
+        }
+        else if (vec.size() > 1)
+        {
+            throw AtlasException("Found more than one entry in a blockCaller key!");
+        }
     }
 
     // Construct bitcode CallGraph
@@ -665,9 +673,61 @@ int main(int argc, char *argv[])
                     bool match = false;
                     for (const auto &kern : kernels)
                     {
-                        if (kern.Compare(newKernel) > 0.999)
+                        auto shared = kern.Compare(newKernel);
+                        if (shared.size() == kern.getBlocks().size())
                         {
+                            // if perfect overlap, this kernel has already been found
                             match = true;
+                        }
+                        if (!shared.empty())
+                        {
+                            // we have an overlap with another kernel, check to see if it is because of a shared function
+                            // two overlapping functions need to satisfy two conditions in order for a shared function to be identified
+                            // 1.) All shared blocks are children of parent functions that are called within the kernel
+                            // 2.) The parent functions are completely described by the shared blocks
+                            // first condition, all shared blocks are children of called functions within the kernel
+                            set<Function *> sharedParents;
+                            set<Function *> calledFunctions;
+                            for (const auto &caller : blockCallers)
+                            {
+                                if (newKernel.getBlocks().find(caller.first) != newKernel.getBlocks().end())
+                                {
+                                    calledFunctions.insert(IDToBlock[caller.second]->getParent());
+                                }
+                                if (kern.getBlocks().find(caller.first) != kern.getBlocks().end())
+                                {
+                                    calledFunctions.insert(IDToBlock[caller.second]->getParent());
+                                }
+                            }
+                            for (const auto &block : shared)
+                            {
+                                if (calledFunctions.find(IDToBlock[block]->getParent()) == calledFunctions.end())
+                                {
+                                    // this shared block had a parent that was not part of the called functions within the kernel, so mark these two kernels as a match
+                                    match = true;
+                                }
+                                else
+                                {
+                                    sharedParents.insert(IDToBlock[block]->getParent());
+                                }
+                            }
+                            // second condition, the parent functions are completely described by the shared blocks
+                            set<int64_t> parentBlocks;
+                            for (const auto &parent : sharedParents)
+                            {
+                                for (auto BB = parent->begin(); BB != parent->end(); BB++)
+                                {
+                                    parentBlocks.insert(GetBlockID(cast<BasicBlock>(BB)));
+                                }
+                            }
+                            vector<int64_t> diff(shared.size() + parentBlocks.size());
+                            auto end = set_difference(shared.begin(), shared.end(), parentBlocks.begin(), parentBlocks.end(), diff.begin());
+                            diff.resize(end - diff.begin());
+                            if (!diff.empty())
+                            {
+                                // the difference between the shared set and the parentBlocks set was nonzero, meaning the shared blocks did not perfectly describe the parents
+                                match = true;
+                            }
                         }
                     }
                     if (!match)
@@ -680,31 +740,6 @@ int main(int argc, char *argv[])
                     kernels.insert(newKernel);
                 }
             }
-        }
-        // second, check whether they overlap with anybody
-        set<Kernel, KCompare> toRemove;
-        for (const auto &kernel : kernels)
-        {
-            if (toRemove.find(kernel) != toRemove.end())
-            {
-                continue;
-            }
-            for (const auto &kernel2 : kernels)
-            {
-                if ((kernel == kernel2) || (toRemove.find(kernel2) != toRemove.end()))
-                {
-                    continue;
-                }
-                if (kernel.Compare(kernel2) > 0)
-                {
-                    // we have an overlap, kill kernel2
-                    toRemove.insert(kernel2);
-                }
-            }
-        }
-        for (const auto &remove : toRemove)
-        {
-            kernels.erase(remove);
         }
         // finally, check to see if we found new kernels, and if we didn't we're done
         if (kernels.size() == numKernels)
@@ -727,7 +762,7 @@ int main(int argc, char *argv[])
     }
     for (const auto &bid : blockCallers)
     {
-        outputJson["BlockCallers"][bid.first] = bid.second;
+        outputJson["BlockCallers"][to_string(bid.first)] = bid.second;
     }
     int id = 0;
     // average nodes per kernel

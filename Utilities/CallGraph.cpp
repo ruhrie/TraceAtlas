@@ -40,10 +40,18 @@ int main(int argc, char **argv)
         spdlog::critical(e.what());
         return EXIT_FAILURE;
     }
-    map<string, vector<int64_t>> blockCallers;
+    map<int64_t, int64_t> blockCallers;
     for (const auto &bbid : j.items())
     {
-        blockCallers[bbid.key()] = j[bbid.key()]["BlockCallers"].get<vector<int64_t>>();
+        auto vec = j[bbid.key()]["BlockCallers"].get<vector<int64_t>>();
+        if (vec.size() == 1)
+        {
+            blockCallers[stol(bbid.key())] = *vec.begin();
+        }
+        else if (vec.size() > 1)
+        {
+            throw AtlasException("Found more than one entry in a blockCaller key!");
+        }
     }
 
     LLVMContext context;

@@ -72,7 +72,7 @@ struct GraphNode
     /// BBIDs from the source bitcode that are represented by this node
     /// Each key is a member BBID and its value is the basic block its unconditional edge points to
     /// If a key maps to itself, there is no edge attached to this block
-    std::map<uint64_t, uint64_t> blocks;
+    std::map<int64_t, int64_t> blocks;
     /// Maps a neighbor nodeID to a probability edge. The set of keys is comprehensive for all neighbors of this GraphNode
     /// The first index in the pair is the raw count, the second is the histogram probability
     std::map<uint64_t, std::pair<uint64_t, double>> neighbors;
@@ -81,7 +81,7 @@ struct GraphNode
     GraphNode()
     {
         NID = getNextNID();
-        blocks = std::map<uint64_t, uint64_t>();
+        blocks = std::map<int64_t, int64_t>();
         neighbors = std::map<uint64_t, std::pair<uint64_t, double>>();
         predecessors = std::set<uint64_t>();
     }
@@ -89,11 +89,11 @@ struct GraphNode
     GraphNode(uint64_t ID)
     {
         NID = ID;
-        blocks = std::map<uint64_t, uint64_t>();
+        blocks = std::map<int64_t, int64_t>();
         neighbors = std::map<uint64_t, std::pair<uint64_t, double>>();
         predecessors = std::set<uint64_t>();
     }
-    void addBlock(uint64_t newBlock)
+    void addBlock(int64_t newBlock)
     {
         // to add a block
         // 1.) find the key that maps to itself
@@ -109,7 +109,7 @@ struct GraphNode
         }
         blocks[newBlock] = newBlock;
     }
-    void addBlocks(const std::map<uint64_t, uint64_t> &newBlocks)
+    void addBlocks(const std::map<int64_t, int64_t> &newBlocks)
     {
         // TODO: finish this
         for (const auto &k : newBlocks)
@@ -205,9 +205,9 @@ struct Kernel
         return exitNodes;
     }
     /// @brief Returns the member blocks (from the source bitcode) of this kernel
-    const std::set<uint64_t> getBlocks() const
+    const std::set<int64_t> getBlocks() const
     {
-        std::set<uint64_t> blocks;
+        std::set<int64_t> blocks;
         for (const auto &node : nodes)
         {
             for (const auto &block : node.blocks)
@@ -223,17 +223,20 @@ struct Kernel
     /// If two kernels are completely different, 0 will be returned
     /// If two kernels share some nodes, (compare shared) / (this size) will be returned
     /// TODO: if this object fully overlaps with compare, but compare contains other blocks, this will say that we fully match when we actually don't. Fix that
-    float Compare(const Kernel &compare) const
+    std::set<int64_t> Compare(const Kernel &compare) const
     {
-        int compShared = 0;
+        std::set<int64_t> shared;
         for (const auto &compNode : compare.nodes)
         {
             if (nodes.find(compNode) != nodes.end())
             {
-                compShared++;
+                for (const auto &block : compNode.blocks)
+                {
+                    shared.insert(block.first);
+                }
             }
         }
-        return (float)((float)compShared / (float)(nodes.size()));
+        return shared;
     }
     /// Returns true if any node in the kernel can reach every other node in the kernel. False otherwise
     bool FullyConnected() const

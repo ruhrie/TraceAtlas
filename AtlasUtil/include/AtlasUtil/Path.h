@@ -354,7 +354,7 @@ static std::set<llvm::BasicBlock *> GetEntrances(std::set<llvm::BasicBlock *> &b
     return Entrances;
 }
 
-static llvm::CallGraph getCallGraph(llvm::Module *mod, std::map<std::string, std::vector<int64_t>> &blockCallers, std::map<llvm::BasicBlock *, llvm::Function *> &BlockToFPtr, std::map<int64_t, llvm::BasicBlock *> &IDToBlock)
+static llvm::CallGraph getCallGraph(llvm::Module *mod, std::map<int64_t, int64_t> &blockCallers, std::map<llvm::BasicBlock *, llvm::Function *> &BlockToFPtr, std::map<int64_t, llvm::BasicBlock *> &IDToBlock)
 {
     llvm::CallGraph CG(*mod);
     // Add function pointers
@@ -371,23 +371,16 @@ static llvm::CallGraph getCallGraph(llvm::Module *mod, std::map<std::string, std
                     {
                         // try to find a block caller entry for this function, if it's not there we have to move on
                         auto BBID = GetBlockID(llvm::cast<llvm::BasicBlock>(bb));
-                        if (blockCallers.find(std::to_string(BBID)) != blockCallers.end())
+                        if (blockCallers.find(BBID) != blockCallers.end())
                         {
-                            if (!blockCallers[std::to_string(BBID)].empty())
+                            auto calleeID = blockCallers[BBID]; // should only be 1 element long, because of basic block splitting
+                            auto calleeBlock = IDToBlock[calleeID];
+                            if (calleeBlock != nullptr)
                             {
-                                auto calleeID = blockCallers[std::to_string(BBID)].front(); // should only be 1 element long, because of basic block splitting
-                                auto calleeBlock = IDToBlock[calleeID];
-                                if (calleeBlock != nullptr)
-                                {
-                                    auto parentNode = CG.getOrInsertFunction(bb->getParent());
-                                    auto childNode = CG.getOrInsertFunction(calleeBlock->getParent());
-                                    parentNode->addCalledFunction(CI, childNode);
-                                    BlockToFPtr[llvm::cast<llvm::BasicBlock>(bb)] = calleeBlock->getParent();
-                                }
-                            }
-                            else
-                            {
-                                spdlog::warn("BlockCallers did not contain an entry for the indirect function call in BBID " + std::to_string(BBID));
+                                auto parentNode = CG.getOrInsertFunction(bb->getParent());
+                                auto childNode = CG.getOrInsertFunction(calleeBlock->getParent());
+                                parentNode->addCalledFunction(CI, childNode);
+                                BlockToFPtr[llvm::cast<llvm::BasicBlock>(bb)] = calleeBlock->getParent();
                             }
                         }
                         else
