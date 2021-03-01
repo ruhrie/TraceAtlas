@@ -679,19 +679,15 @@ int main(int argc, char *argv[])
                     if (!shared.empty())
                     {
                         // we have an overlap with another kernel, check to see if it is because of a shared function
-                        // two overlapping functions need to satisfy two conditions in order for a shared function to be identified
+                        // two overlapping functions need to satisfy the following condition in order for a shared function to be identified
                         // 1.) All shared blocks are children of parent functions that are called within the kernel
-                        // 2.) The parent functions are completely described by the shared blocks
                         // first condition, all shared blocks are children of called functions within the kernel
-                        set<Function *> sharedParents;
+                        // set of all functions called in each of the two kernels
                         set<Function *> calledFunctions;
                         for (const auto &caller : blockCallers)
                         {
+                            // only check newKernel because it is the kernel in question
                             if (newKernel.getBlocks().find(caller.first) != newKernel.getBlocks().end())
-                            {
-                                calledFunctions.insert(IDToBlock[caller.second]->getParent());
-                            }
-                            if (kern.getBlocks().find(caller.first) != kern.getBlocks().end())
                             {
                                 calledFunctions.insert(IDToBlock[caller.second]->getParent());
                             }
@@ -703,27 +699,6 @@ int main(int argc, char *argv[])
                                 // this shared block had a parent that was not part of the called functions within the kernel, so mark these two kernels as a match
                                 match = true;
                             }
-                            else
-                            {
-                                sharedParents.insert(IDToBlock[block]->getParent());
-                            }
-                        }
-                        // second condition, the parent functions are completely described by the shared blocks
-                        set<int64_t> parentBlocks;
-                        for (const auto &parent : sharedParents)
-                        {
-                            for (auto BB = parent->begin(); BB != parent->end(); BB++)
-                            {
-                                parentBlocks.insert(GetBlockID(cast<BasicBlock>(BB)));
-                            }
-                        }
-                        vector<int64_t> diff(shared.size() + parentBlocks.size());
-                        auto end = set_difference(shared.begin(), shared.end(), parentBlocks.begin(), parentBlocks.end(), diff.begin());
-                        diff.resize(end - diff.begin());
-                        if (!diff.empty())
-                        {
-                            // the difference between the shared set and the parentBlocks set was nonzero, meaning the shared blocks did not perfectly describe the parents
-                            match = true;
                         }
                     }
                 }
