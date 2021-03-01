@@ -358,11 +358,14 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes)
                                 continue;
                             }
                             auto neighbor = nodes.find(neighborID->first);
-                            for (const auto &succ2 : neighbor->neighbors)
+                            if (neighbor != nodes.end())
                             {
-                                if (succ2.first != succ->first)
+                                for (const auto &succ2 : neighbor->neighbors)
                                 {
-                                    common = false;
+                                    if (succ2.first != succ->first)
+                                    {
+                                        common = false;
+                                    }
                                 }
                             }
                         }
@@ -621,7 +624,7 @@ int main(int argc, char *argv[])
     // In other words, find subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
     BranchToSelectTransforms(nodes);
 
-    /*for (const auto &node : nodes)
+    for (const auto &node : nodes)
     {
         spdlog::info("Examining node " + to_string(node.NID));
         string blocks;
@@ -636,7 +639,7 @@ int main(int argc, char *argv[])
         }
         cout << endl;
         //spdlog::info("Node " + to_string(node.NID) + " has " + to_string(node.neighbors.size()) + " neighbors.");
-    }*/
+    }
 
     // find minimum cycles
     bool done = false;
