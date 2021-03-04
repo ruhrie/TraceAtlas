@@ -740,6 +740,10 @@ int main(int argc, char *argv[])
     {
         totalNodes += (float)kernel.nodes.size();
         totalBlocks += (float)kernel.getBlocks().size();
+        for (const auto &n : kernel.nodes)
+        {
+            outputJson["Kernels"][to_string(id)]["Nodes"].push_back(n.NID);
+        }
         for (const auto &k : kernel.getBlocks())
         {
             outputJson["Kernels"][to_string(id)]["Blocks"].push_back(k);
