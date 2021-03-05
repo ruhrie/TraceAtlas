@@ -1,24 +1,23 @@
+#include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Traces.h"
 #include <algorithm>
 #include <fstream>
 #include <indicators/progress_bar.hpp>
+#include <iostream>
+#include <llvm/Bitcode/BitcodeReader.h>
+#include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Support/SourceMgr.h>
 #include <map>
 #include <nlohmann/json.hpp>
 #include <set>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
 #include <sstream>
-#include <vector>
-#include <zlib.h>
-#include <iostream>
-#include "AtlasUtil/Annotate.h"
-#include <llvm/Bitcode/BitcodeReader.h>
-#include <llvm/IRReader/IRReader.h>
-#include <llvm/Support/SourceMgr.h>
 #include <string>
 #include <tuple>
-
+#include <vector>
+#include <zlib.h>
 
 using namespace llvm;
 using namespace std;
@@ -29,370 +28,643 @@ cl::opt<std::string> InputFilename("t", cl::desc("Specify input trace"), cl::val
 cl::opt<std::string> OutputFilename("o", cl::desc("Specify output json"), cl::value_desc("output filename"), cl::Required);
 cl::opt<std::string> KernelFilename("k", cl::desc("Specify kernel json"), cl::value_desc("kernel filename"), cl::Required);
 llvm::cl::opt<string> bitcodeFile("b", llvm::cl::desc("Specify bitcode name"), llvm::cl::value_desc("bitcode filename"), llvm::cl::Required);
-llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::value_desc("No progress bar"));
+
+typedef struct wsTuple
+{
+    uint64_t start;
+    uint64_t end;
+    uint64_t byte_count;
+    uint64_t ref_count;
+    float regular;
+    uint64_t timing;
+} wsTuple;
+typedef map<int64_t, wsTuple> wsTupleMap;
+
+map<int, wsTupleMap> loadwsTupleMap;
+map<int, wsTupleMap> storewsTupleMap;
+map<int, wsTupleMap> loadAftertorewsTupleMap;
+
+
+wsTupleMap loadwsTuples;
+wsTupleMap storewsTuples;
+wsTupleMap loadAftertorewsTuples;
+
+
+class kernel
+{
+    vector<wsTuple> Tuples;
+public:
+    void addTuple( wsTuple wt)
+    {
+        Tuples.push_back(wt);
+    }     
+};
+class kernelInstance:kernel
+{
+//private:    
+};
+class application
+{
+    vector<kernelInstance> kernelInstances;
+public:
+    void addInstance( kernelInstance ki)
+    {
+        kernelInstances.push_back(ki);
+    } 
+};
+
+class inputInfos
+{
+          
+};
+class KernelSerial
+{
+private:
+    /* data */
+public:
+    KernelSerial(/* args */);
+    ~KernelSerial();
+};
+
+KernelSerial::KernelSerial(/* args */)
+{
+}
+
+KernelSerial::~KernelSerial()
+{
+}
+
 
 
 // kernel instance id
 static int UID = 0;
+static int mUID = 0;
 // kernel id
 string currentKernel = "-1";
 int currentUid = -1;
+bool noerrorInTrance;
 
-
-//maps
-
-// read address -> kernel instance id
-map<uint64_t, int> readMap;
-// write address -> kernel instance id
-map<uint64_t, int> writeMap;
 // kernel instance id that only have internal addresses
 set<int> internalSet;
 // kernel instance id -> kernel id
 map<int, string> kernelIdMap;
 // kernel id -> basic block id
 map<string, set<int>> kernelMap;
-// kernel instance id -> its former input kernel instance id
-map<int, set<int>> myFormerInput;
-// kernel instance id -> its former output kernel instance id
-map<int, set<int>> myFormerOutput;
+
 
 // for data size
 
-map<int64_t,vector<uint64_t>> BBMemInstSize;
+map<int64_t, vector<uint64_t>> BBMemInstSize;
 // start end byte_count ref_count
-typedef tuple <int64_t, int64_t, int64_t,int64_t> AddrRange;
-typedef map<int64_t,AddrRange> AddrRangeMap;
-map <int, AddrRangeMap> loadAddrRangeMapPerInstance;
-map <int, AddrRangeMap> storeAddrRangeMapPerInstance;
 
+
+
+// uint64_t start;
+// uint64_t end;
+// uint64_t byte_count;
+// uint64_t ref_count;
+// uint64_t reuse_dist;
+typedef tuple<int64_t, int64_t, int64_t,vector <uint64_t>> AddrRange;
+typedef map<int64_t, AddrRange> AddrRangeMap;
+map<int, AddrRangeMap> loadAddrRangeMapPerInstance;
+map<int, AddrRangeMap> storeAddrRangeMapPerInstance;
+
+uint64_t timing = 0;
+uint64_t timingIn = 0;
 set<int64_t> ValidBlock;
 int vBlock;
 int64_t instCounter = 0;
-typedef struct InternaladdressLiving
-{
-    uint64_t addr;
-    bool dep;
-    int64_t birthTime;
-    int64_t deathTime;
-} InternaladdressLiving;
 
-typedef struct KernelWorkingSet
+bool overlap (wsTuple a, wsTuple b,int64_t error)
 {
-    map<uint64_t, uint64_t> internalAddressIndexMap;
-    vector<InternaladdressLiving> internalAddressLivingVec;
-    set<uint64_t> outputAddressIndexSet;
-    set<uint64_t> inputAddressIndexSet;
-    set<uint64_t> internalAddressIndexSet;
-    uint64_t internalMapSize;
-} KernelWorkingSet;
-map<uint64_t,KernelWorkingSet> KernelWorkingSetMap;
-int64_t timing = 0;
+    return (max(a.start, b.start) <= (min(a.end, b.end) + error));
+}
 
-void firstStore(uint64_t addrIndex, int64_t t, bool fromStore, int kernelIndex)
+wsTuple tp_or (wsTuple a, wsTuple b, bool dynamic)
 {
-    // birth from a store inst
-    if (fromStore)
+
+    wsTuple wksTuple;
+    float reg;
+
+    if (dynamic)
     {
-        if(KernelWorkingSetMap[kernelIndex].internalAddressIndexMap.find(addrIndex)==KernelWorkingSetMap[kernelIndex].internalAddressIndexMap.end())
+        reg = ((timing - a.timing)+a.regular*a.ref_count + (timing-b.timing)+ b.regular* b.ref_count)/(a.ref_count+b.ref_count);
+        if (a.start != timingIn && b.start != timingIn)
         {
-            InternaladdressLiving internalAddress = {.addr =addrIndex, .birthTime = t, .deathTime = -1,.dep =false};
-            //store the address into output set temporally
-            KernelWorkingSetMap[kernelIndex].outputAddressIndexSet.insert(addrIndex);
-            KernelWorkingSetMap[kernelIndex].internalAddressIndexMap[addrIndex] = KernelWorkingSetMap[kernelIndex].internalMapSize;
-            KernelWorkingSetMap[kernelIndex].internalAddressLivingVec.push_back(internalAddress);
-            KernelWorkingSetMap[kernelIndex].internalMapSize++;
+            timingIn = min(a.start, b.start);
+            timing++;
+        }
+    }
+    else
+    {
+        reg = (a.regular *a.ref_count + b.regular * b.ref_count);
+        reg = reg/(a.ref_count+b.ref_count);
+    }
+    
+    wksTuple = (wsTuple){min(a.start, b.start), max(a.end, b.end), a.byte_count+b.byte_count,a.ref_count + b.ref_count,reg,timing};
+    return wksTuple;
+}
+
+
+
+
+// void TrivialMerge(wsTupleTree &TupleTree, wsTuple t_new)
+// {
+//     (iter, ret) = TupleTree.insert(key = t_new.start, value = t_new)
+//     if (overlaps(t_new,prev(iter)))
+//     {
+//         prev(iter) = tp_or(t_new,prev(iter));
+//         TupleTree.erase(t_new);
+//     }
+//     else if (overlaps(t_new,next(iter)))
+//     {
+//         t_new = tp_or(t_new,next(iter));
+//         TupleTree.erase(next(iter));
+//     }
+// }
+// void NonTrivialMerge(wsTupleTree &TupleTree)
+// {
+//     for (auto i : TupleTree)
+//     {
+//         if (overlaps(i,next(i),error=t))
+//         {
+//             TupleTree[i] = tp_or(i,next(i));
+//             TupleTree.erase(next(i));
+//         }
+//     }
+// }
+void trivialMerge (wsTupleMap &processMap, wsTuple t_new)
+{
+    // 1. check overlaps 2. merge them all 3.update the map
+    bool overlaps = false;
+    vector<int64_t> toMerge;
+    vector<int64_t> notMerge;
+    wsTupleMap res;
+    for (auto t : processMap)
+    {
+        if (overlap(t.second, t_new,0))
+        {
+            toMerge.push_back(t.first);
+            overlaps = true; 
         }
         else
         {
-            InternaladdressLiving internalAddress = {.addr =addrIndex, .birthTime = t, .deathTime = -1,.dep =false};
-            //store the address into output set temporally
-            KernelWorkingSetMap[kernelIndex].outputAddressIndexSet.insert(addrIndex);
-            KernelWorkingSetMap[kernelIndex].internalAddressLivingVec[KernelWorkingSetMap[kernelIndex].internalAddressIndexMap[addrIndex]].dep = true;
-            KernelWorkingSetMap[kernelIndex].internalAddressIndexMap[addrIndex] = KernelWorkingSetMap[kernelIndex].internalMapSize;
-            KernelWorkingSetMap[kernelIndex].internalAddressLivingVec.push_back(internalAddress);
-            KernelWorkingSetMap[kernelIndex].internalMapSize++;
-        }
-        
+            notMerge.push_back(t.first);           
+        }   
     }
-    //birth from a load inst
-    else
+    // what if no one to merge?
+    for (auto i : toMerge)
     {
-        if (KernelWorkingSetMap[kernelIndex].inputAddressIndexSet.find(addrIndex) == KernelWorkingSetMap[kernelIndex].inputAddressIndexSet.end())
-        {
-            KernelWorkingSetMap[kernelIndex].inputAddressIndexSet.insert(addrIndex);
-        }    
+        t_new = tp_or(t_new,processMap[i],true);
     }
+    // new tuple doesn't overlap with anyone, need timing incresing
+    if (overlaps == false)
+    {
+        t_new.timing = timing;
+        timingIn = t_new.start;
+        timing++;
+    }
+    res[t_new.start] = t_new;
+    for (auto i : notMerge)
+    {
+        res[i] = processMap[i];
+    }
+    processMap.clear();
+    processMap = res;
 }
 
-void MergeAfterProcess()
+
+// online changing the map to speed up the processing
+void trivialMergeOpt (wsTupleMap &processMap, wsTuple t_new)
 {
-    int errorRate = 100;
-    map<int64_t,vector<int64_t>> toBeMerged;
-    
-    for(auto &it :loadAddrRangeMapPerInstance)
+      
+    // locating
+    if (processMap.size() == 0)
     {
-        int64_t lastStart = -1;
-        int64_t lastEnd = -1;
-        toBeMerged.clear();
-        map<int64_t,AddrRange> itAddrRangeMap = it.second ;
-        for(auto itr:itAddrRangeMap)
+        timingIn = t_new.start;
+        timing++;
+        processMap[t_new.start] = t_new;
+    }
+    else if (processMap.size() == 1)
+    {
+        auto iter = processMap.begin();
+        // the condition to decide (add and delete) or update
+        if (overlap(t_new,iter->second,0))
         {
-            tuple <int64_t, int64_t, int64_t,int64_t> itAddrRange = itr.second;
-            
-            if(lastStart == -1)
+            t_new = tp_or (t_new, iter->second,true);
+            processMap[t_new.start] = t_new;
+            if (t_new.start != iter->first)
             {
-                lastStart = get<0> (itAddrRange);
-                lastEnd = get<1> (itAddrRange);
+                processMap.erase(iter);
             }
-            else if ((get<0> (itAddrRange) - lastEnd)/(get<1> (itAddrRange) - lastStart) < errorRate)
-            //else if (get<0> (itAddrRange) - lastEnd < 1)
+        }
+        else
+        {
+            timingIn = t_new.start;
+            timing++;
+            processMap[t_new.start] = t_new;
+        }
+
+    }
+    else
+    {
+        if (processMap.find(t_new.start)==processMap.end())
+        {
+            processMap[t_new.start] = t_new;
+            auto iter = processMap.find(t_new.start);
+            // need to delete someone
+            if (processMap.find(prev(iter)->first) !=processMap.end() && overlap(processMap[t_new.start],prev(iter)->second,0)&& 
+            processMap.find(next(iter)->first) !=processMap.end() && overlap(processMap[t_new.start],next(iter)->second,0))
             {
-                toBeMerged[lastStart].push_back(get<0> (itAddrRange));
-                lastEnd = get<1> (itAddrRange);              
+                processMap[prev(iter)->first] = tp_or (prev(iter)->second, processMap[t_new.start],true);
+                processMap[prev(iter)->first] = tp_or (prev(iter)->second, next(iter)->second,true);
+                processMap.erase(next(iter));
+                processMap.erase(iter);
+            }
+            else if(processMap.find(prev(iter)->first) !=processMap.end() && overlap(processMap[t_new.start],prev(iter)->second,0))
+            {
+                processMap[prev(iter)->first] = tp_or (prev(iter)->second, processMap[t_new.start],true);
+                processMap.erase(iter);
+
+            }
+            else if(processMap.find(next(iter)->first) !=processMap.end() && overlap(processMap[t_new.start],next(iter)->second,0))
+            {
+                processMap[iter->first] = tp_or (iter->second, next(iter)->second,true);
+                processMap.erase(next(iter));
             }
             else
             {
-                lastStart = get<0> (itAddrRange);
-                lastEnd = get<1> (itAddrRange);             
+                timingIn = t_new.start;
+                timing++;
+            }            
+        }
+        else
+        {   auto iter = processMap.find(t_new.start);
+            processMap[t_new.start] = tp_or (t_new, processMap[t_new.start],true);
+            if (processMap.find(next(iter)->first) !=processMap.end() && overlap(processMap[t_new.start],next(iter)->second,0))
+            {
+                processMap[t_new.start] = tp_or (next(iter)->second, processMap[t_new.start],true);
+                processMap.erase(next(iter));
+            }
+            else
+            {
+                timingIn = t_new.start;
+                timing++;
             } 
-            //printf("start : %ld end : %ld, org start : %ld org end : %ld \n",lastStart,lastEnd,get<0> (itAddrRange),get<1> (itAddrRange)) ;        
         }
-        map<int64_t,AddrRange> updatedMap;
-
-        for(auto itm:toBeMerged) 
-        {
-            int64_t endAddr =  get<1>(itAddrRangeMap[itm.second.back()]);
-            tuple<int64_t, int64_t, int64_t,int64_t> AddrRange(itm.first, endAddr, endAddr-itm.first, itm.second.size());
-            updatedMap[itm.first] = AddrRange;
-        }
-        it.second = updatedMap;
-        int size = 0;
-        for (auto itv :toBeMerged)
-        {
-            size += itv.second.size();
-        }
-        //printf("merge size:%d,before size: %lu, ki:%d \n",size,itAddrRangeMap.size(),it.first);
-    }
+    }   
 }
 
-void MergeBeforeProcess(int uid)
+
+
+void trivialMergeOpt2 (wsTupleMap &processMap, wsTuple t_new)
 {
-    int errorRate = 100;
-    map<int64_t,vector<int64_t>> toBeMerged;
-    int64_t lastStart = -1;
-    int64_t lastEnd = -1;
-    map<int64_t,AddrRange> itAddrRangeMap = loadAddrRangeMapPerInstance[uid];
-    for(auto itr:itAddrRangeMap)
+      
+    // locating
+    if (processMap.size() == 0)
     {
-        tuple <int64_t, int64_t, int64_t,int64_t> itAddrRange = itr.second;
-        
-        if(lastStart == -1)
+        timingIn = t_new.start;
+        timing++;
+        processMap[t_new.start] = t_new;
+    }
+    else if (processMap.size() == 1)
+    {
+        auto iter = processMap.begin();
+        // the condition to decide (add and delete) or update
+        if (overlap(t_new,iter->second,0))
         {
-            lastStart = get<0> (itAddrRange);
-            lastEnd = get<1> (itAddrRange);
-        }
-        else if ((get<0> (itAddrRange) - lastEnd)/(get<1> (itAddrRange) - lastStart) < errorRate)
-        //else if (get<0> (itAddrRange) - lastEnd < 1)
-        {
-            toBeMerged[lastStart].push_back(get<0> (itAddrRange));
-            lastEnd = get<1> (itAddrRange);              
+            t_new = tp_or (t_new, iter->second,true);
+            processMap[t_new.start] = t_new;
+            if (t_new.start != iter->first)
+            {
+                processMap.erase(iter);
+            }
         }
         else
         {
-            lastStart = get<0> (itAddrRange);
-            lastEnd = get<1> (itAddrRange);             
-        } 
-        //printf("start : %ld end : %ld, org start : %ld org end : %ld \n",lastStart,lastEnd,get<0> (itAddrRange),get<1> (itAddrRange)) ;        
-    }
-    map<int64_t,AddrRange> updatedMap;
+            timingIn = t_new.start;
+            timing++;
+            processMap[t_new.start] = t_new;
+        }
 
-    for(auto itm:toBeMerged) 
-    {
-        int64_t endAddr =  get<1>(itAddrRangeMap[itm.second.back()]);
-        tuple<int64_t, int64_t, int64_t,int64_t> AddrRange(itm.first, endAddr, endAddr-itm.first, itm.second.size());
-        updatedMap[itm.first] = AddrRange;
     }
-    loadAddrRangeMapPerInstance[uid] = updatedMap;
-    int size = 0;
-    for (auto itv :toBeMerged)
+    else
     {
-        size += itv.second.size();
-    }
-    //printf("merge size:%d,before size: %lu, ki:%d \n",size,itAddrRangeMap.size(),it.first);   
+        for (auto iter = processMap.begin(); iter != processMap.end();++iter)
+        {
+            if (iter->first >= t_new.start)
+            {
+                if (iter != processMap.begin()) // the prev or current tuple needs to be merged
+                {
+                    auto iterPrev  = std::prev(iter);
+                    if(overlap(t_new, iterPrev->second,0)&&overlap(t_new,iter->second,0))
+                    {
+                        t_new = tp_or (t_new, iterPrev->second,true);
+                        t_new = tp_or (t_new, iter->second,true);
+                        processMap[t_new.start] = t_new;
+                        if(t_new.start != iter->first)
+                        {
+                            processMap.erase(iter);
+                        }
+                        break;  
+
+                    }
+                    else if (overlap(t_new, iterPrev->second,0))
+                    {
+                        t_new = tp_or (t_new, iterPrev->second,true);
+                        processMap[t_new.start] = t_new;
+                        break;
+                    } 
+                    else if (overlap(t_new,iter->second,0))
+                    {
+                        t_new = tp_or (t_new, iter->second,true);
+                        processMap[t_new.start] = t_new;
+                        if(t_new.start != iter->first)
+                        {
+                            processMap.erase(iter);
+                        }
+                        
+                        break;
+                    }
+                    else
+                    {
+                        timingIn = t_new.start;
+                        timing++;              
+                        processMap[t_new.start] = t_new;
+                        break;
+                    }           
+                }
+                else // add new elements
+                {
+                    if (overlap(t_new,iter->second,0))
+                    {
+                        t_new = tp_or (t_new, iter->second,true);
+                        processMap[t_new.start] = t_new;
+                        if(t_new.start != iter->first)
+                        {
+                            processMap.erase(iter);
+                        }
+                        break;
+                    }
+                    else
+                    {
+                        timingIn = t_new.start;
+                        timing++;
+                        processMap[t_new.start] = t_new;
+                        break;
+                    }
+                }
+            }
+            else // check next tuple
+            {
+                continue;
+            }
+            
+        }
+        
+    }  
 }
 
 
+
+
+void nontrivialMergeOpt (wsTupleMap &processMap)
+{
+
+    uint64_t start = processMap.begin()->first;
+    map<uint64_t,vector<uint64_t>> toMerge;
+    vector<uint64_t> notMerge;
+    wsTupleMap res;
+    wsTuple afterMerge;   
+    for (auto iter = processMap.begin(); iter != processMap.end();++iter)
+    {
+        auto iterNext  = std::next(iter);
+        if(processMap.find(iterNext->first) != processMap.end())
+        {          
+            if (overlap(iter->second, iterNext->second,20))
+            {
+                toMerge[start].push_back(iterNext->first);
+            }
+            else
+            {
+                if (iter->first ==start)
+                {
+                    notMerge.push_back(iter->first);
+                }
+                if(std::next(iterNext) == processMap.end())
+                {
+                    notMerge.push_back(iterNext->first);
+                }            
+                start = iterNext->first;
+            }
+        }
+    }
+    for (auto m : toMerge)
+    {
+        afterMerge = processMap[m.first];
+        for (auto mi: m.second)
+        {
+            afterMerge = tp_or(afterMerge,processMap[mi],false);
+        }
+        res[m.first] = afterMerge;
+    }
+    for (auto m : notMerge)
+    {
+        res[m] = processMap[m];
+    }
+    processMap.clear();
+    processMap = res;
+}
+
+
+// todo optimizing it according to trivial merge
+void nontrivialMerge (wsTupleMap &processMap)
+{
+
+    auto iter = processMap.begin();
+    auto iterNext = next(iter);
+
+    while(iterNext != processMap.end())
+    {
+        if (processMap.find(iterNext->first) !=processMap.end() && overlap(iter->second, iterNext->second,20))
+        {
+            processMap[iter->first] = tp_or(iter->second,iterNext->second,false);
+            auto iterDel = iterNext;
+            iterNext = next(iterNext);
+            processMap.erase(iterDel);
+        }
+        else
+        {
+            iter = next(iter);
+            iterNext = next(iterNext);
+        }
+    }
+}
+
+
+void LoadAterStore (wsTupleMap storeMap, wsTuple t_new, wsTupleMap &loadAfterStore)
+{
+
+    bool overlaps;
+    if (storeMap.find(t_new.start)!=storeMap.end())
+    {
+        overlaps = true;
+    }
+    else
+    {
+        storeMap[t_new.start] = t_new; 
+        auto iter = storeMap.find(t_new.start);
+        if( (storeMap.find(next(iter)->first)!=storeMap.end() && overlap(storeMap[next(iter)->first],t_new,0))
+          ||(storeMap.find(prev(iter)->first)!=storeMap.end() && overlap(storeMap[prev(iter)->first],t_new,0)))
+        {
+            overlaps = true;
+        }
+    }
+    // for (auto it : storeMap)
+    // {
+    //     if (overlap(it.second,t_new,0))
+    //     {
+    //         overlaps = true;
+    //         break;
+    //     }
+    // }
+    if (overlaps)
+    {
+        trivialMergeOpt (loadAfterStore, t_new);
+        if (loadAfterStore.size() > 10)
+        {
+            nontrivialMerge(loadAfterStore);
+        }
+    }
+       
+}
+
 void Process(string &key, string &value)
 {
-//kernel instance detection
-    timing++;
+    //kernel instance detection
+    //printf("key:%s, value:%s \n",key.c_str(),value.c_str());
+    // timing to calculate the reuse distance in one kernel instance
+     
     if (key == "BBEnter")
     {
+        // todo saving the tuple trace per instance, and load them while processing
         // block represents current processed block id in the trace
         instCounter = 0;
         int block = stoi(value, nullptr, 0);
-        //printf("block:%d \n",block);
+        vBlock = block;
+        if (BBMemInstSize.find(vBlock) != BBMemInstSize.end())
+        {
+            noerrorInTrance = true;
+        }
+        else
+        {
+            noerrorInTrance = false;
+        }
+        
         if (currentKernel == "-1" || kernelMap[currentKernel].find(block) == kernelMap[currentKernel].end())
         {
-            //printf("111 \n");
             
-            vBlock = block;
+            //vBlock = block;
             string innerKernel = "-1";
             for (auto k : kernelMap)
             {
                 if (k.second.find(block) != k.second.end())
-                {                   
+                {
                     innerKernel = k.first;
                     break;
                 }
             }
+            if(currentKernel != "-1" &&innerKernel == "-1")
+            {
+                timing = 0;
+                timingIn = 0;
+                currentUid = -1-mUID;
+                mUID++;
+
+                // loadAftertorewsTuples.clear();
+                // loadwsTuples.clear();
+                // storewsTuples.clear();
+            }
             currentKernel = innerKernel;
             if (innerKernel != "-1")
             {
+                timing = 0;
+                timingIn = 0;
                 // uid represents the current kernel instance id
                 currentUid = UID;
                 // kernelIdMap records the map from kernel instance id to kernel id
                 kernelIdMap[UID++] = currentKernel;
+
+                // loadAftertorewsTuples.clear();
+                // loadwsTuples.clear();
+                // storewsTuples.clear();
             }
-            else
-            {
-                currentUid = -1;
-            }
-        }
-        else if (kernelMap[currentKernel].find(block) != kernelMap[currentKernel].end())
-        {
-            vBlock = block;
         }
     }
     else if (key == "StoreAddress")
     {
-        uint64_t address = stoul(value, nullptr, 0);
-        //Maintain a write-map that maps from the addresses that are stored to
-        writeMap[address] = currentUid;
-        int prodUid;
+        uint64_t address = stoul(value, nullptr, 0);      
+        if (noerrorInTrance)
+        {
 
-        if (readMap.find(address) != readMap.end())
-        {
-            prodUid = readMap[address];
-        }
-        else
-        {
-            prodUid = -1;
-        }
-        if (prodUid != -1 &&prodUid != 0 && prodUid != currentUid)
-        {
-            //former kernel instances that I load from 
-            myFormerInput[currentUid].insert(prodUid);
-        }
-        else if (prodUid == currentUid)
-        {
-            internalSet.insert(prodUid);
-        }
-        if (currentUid != -1)
-        {
-            
-            firstStore(address, timing, true, currentUid);
-            
+            // construct the tuple
             uint64_t dataSize = BBMemInstSize[vBlock][instCounter];
             instCounter++;
-            //printf("vblock:%d,ins:%lu,data size:%lu \n",vBlock,instCounter,dataSize);
-            if (storeAddrRangeMapPerInstance[currentUid].find(address) == storeAddrRangeMapPerInstance[currentUid].end())
+            wsTuple storewksTuple;           
+            storewksTuple = (wsTuple){address, address + dataSize, dataSize,1,0,timing};
+            
+            
+            
+            // trivialMergeOpt (storewsTuples, storewksTuple);
+            // if (storewsTuples.size() > 10)
+            // {
+            //     nontrivialMerge(storewsTuples);
+            // }
+            
+            
+            
+            
+            trivialMergeOpt (storewsTupleMap[currentUid], storewksTuple);
+            if (storewsTupleMap[currentUid].size() > 10)
             {
-                std::tuple<int64_t, int64_t, int64_t,int64_t> AddrRange(address, address+dataSize, dataSize, 1); 
-                storeAddrRangeMapPerInstance[currentUid][address] = AddrRange;
+                nontrivialMerge(storewsTupleMap[currentUid]);
             }
-            else
-            {
-                std::tuple<int64_t, int64_t, int64_t,int64_t> ar = storeAddrRangeMapPerInstance[currentUid][address];
-                int64_t stop = std::get<1> (ar);
-                if (stop < address+ dataSize)
-                {
-                    std::tuple<int64_t, int64_t, int64_t,int64_t> addrRange(address, address+dataSize,std::get<2> (ar) + dataSize,std::get<3> (ar) + 1); 
-                    storeAddrRangeMapPerInstance[currentUid][address] = addrRange;
-                }
-            }
-            //printf("load tuple size: %lu ,store tuple size: %lu, uid %d,addr:%ld \n",loadAddrRangeMapPerInstance[currentUid].size(),storeAddrRangeMapPerInstance[currentUid].size(),currentUid,address);
         }
-        
     }
     else if (key == "LoadAddress")
     {
         uint64_t address = stoul(value, nullptr, 0);
         //Maintain a read-map that maps from the addresses that are loaded from
-        readMap[address] = currentUid;
-        int prodUid;
-        if (writeMap.find(address) != writeMap.end())
+        if (noerrorInTrance)
         {
-            prodUid = writeMap[address];
-        }
-        else
-        {
-            prodUid = -1;
-        }
-        if (prodUid != -1 &&prodUid != 0 && prodUid != currentUid)
-        {
-            //former kernel instances that store to me
-            myFormerOutput[currentUid].insert(prodUid);
-        }
-        else if (prodUid == currentUid)
-        {
-            internalSet.insert(prodUid);
-        }
-
-        if (currentUid != -1)
-        {
-            if (KernelWorkingSetMap[currentUid].internalAddressIndexMap.find(address) != KernelWorkingSetMap[currentUid].internalAddressIndexMap.end())
-            {
-                KernelWorkingSetMap[currentUid].internalAddressLivingVec[KernelWorkingSetMap[currentUid].internalAddressIndexMap[address]].deathTime = timing;
-                KernelWorkingSetMap[currentUid].internalAddressIndexSet.insert(address);
-                //remove the address from output set, if there is a load corresponding to a store
-                if (KernelWorkingSetMap[currentUid].outputAddressIndexSet.find(address) !=KernelWorkingSetMap[currentUid].outputAddressIndexSet.end())
-                {
-                    KernelWorkingSetMap[currentUid].outputAddressIndexSet.erase(address);
-                }         
-            }
-            else if (KernelWorkingSetMap[currentUid].inputAddressIndexSet.find(address) == KernelWorkingSetMap[currentUid].inputAddressIndexSet.end())
-            {
-                firstStore(address, timing, false, currentUid);
-            }
-
-            int mergeThreshould = 10;
             uint64_t dataSize = BBMemInstSize[vBlock][instCounter];
             instCounter++;
-            if (loadAddrRangeMapPerInstance[currentUid].find(address) == loadAddrRangeMapPerInstance[currentUid].end())
+            wsTuple loadwksTuple;
+            loadwksTuple = (wsTuple){address, address + dataSize, dataSize,1,0,timing};
+
+
+
+
+            // trivialMergeOpt(loadwsTuples, loadwksTuple);
+            // LoadAterStore(storewsTuples, loadwksTuple,loadAftertorewsTuples);
+            // if (loadwsTuples.size() > 10)
+            // {
+            //     nontrivialMerge(loadwsTuples);
+            // } 
+
+
+            trivialMergeOpt(loadwsTupleMap[currentUid], loadwksTuple);
+            LoadAterStore(storewsTupleMap[currentUid], loadwksTuple,loadAftertorewsTupleMap[currentUid]);
+            if (loadwsTupleMap[currentUid].size() > 10)
             {
-                std::tuple<int64_t, int64_t, int64_t,int64_t> AddrRange(address, address+dataSize, dataSize, 1); 
-                loadAddrRangeMapPerInstance[currentUid][address] = AddrRange;
-            }
-            else
-            {
-                std::tuple<int64_t, int64_t, int64_t,int64_t> ar = loadAddrRangeMapPerInstance[currentUid][address];
-                int64_t stop = std::get<1> (ar);
-                if (stop < address+ dataSize)
-                {
-                    std::tuple<int64_t, int64_t, int64_t,int64_t> addrRange(address, address+dataSize,get<2> (ar) + dataSize,get<3> (ar) + 1); 
-                    loadAddrRangeMapPerInstance[currentUid][address] = addrRange;
-                }
-            }
-            if (loadAddrRangeMapPerInstance[currentUid].size()>10)
-            {
-                MergeBeforeProcess(currentUid);
-            }
-            
-            //printf("load tuple size: %lu ,data size: %lu, uid %d,addr:%ld \n",loadAddrRangeMapPerInstance[currentUid].size(),dataSize,currentUid,address);
+                nontrivialMerge(loadwsTupleMap[currentUid]);
+            }          
         }
-        
-    }    
+    }
 }
 
-
-
-
-int main(int argc, char **argv)
+int parsingKernelInfo(string KernelFilename)
 {
-    cl::ParseCommandLineOptions(argc, argv);
-
-    //read the json
     ifstream inputJson(KernelFilename);
     nlohmann::json j;
     inputJson >> j;
@@ -404,13 +676,6 @@ int main(int argc, char **argv)
         nlohmann::json kernel = l["Blocks"];
         kernelMap[index] = kernel.get<set<int>>();
     }
-
-
-
-
-    nlohmann::json blocks = j["ValidBlocks"];
-    ValidBlock = blocks.get<set<int64_t>>();
-
 
     // build memory instructions to data size map
     LLVMContext context;
@@ -428,8 +693,6 @@ int main(int argc, char **argv)
     Module *M = sourceBitcode.get();
     Annotate(M);
 
-    //bbid -> instruction data size
-    
 
     for (auto &mi : *M)
     {
@@ -438,186 +701,352 @@ int main(int argc, char **argv)
             auto *bb = cast<BasicBlock>(fi);
             auto dl = bb->getModule()->getDataLayout();
             int64_t id = GetBlockID(bb);
-            if (ValidBlock.find(id) != ValidBlock.end())
+
+            for (auto bi = fi->begin(); bi != fi->end(); bi++)
             {
-                for (auto bi = fi->begin(); bi != fi->end(); bi++)
+                if (auto *inst = dyn_cast<LoadInst>(bi))
                 {
-                    if (auto *inst = dyn_cast<LoadInst>(bi))
-                    {
-                        //errs()<< *inst<<"\n";
-                        auto *type = inst->getPointerOperand()->getType()->getContainedType(0);
-                        uint64_t dataSize = dl.getTypeAllocSize(type);
-                        //errs()<< dataSize<<"\n";
-                        BBMemInstSize[id].push_back(dataSize);
-                        // printf("11111data szie %lu \n",dataSize);
-                    }
-                    else if(auto *inst = dyn_cast<StoreInst>(bi))
-                    {
-                        auto *type = inst->getPointerOperand()->getType()->getContainedType(0);
-                        uint64_t dataSize = dl.getTypeAllocSize(type);
-                        //errs()<< *inst<<"\n";
-                        //BBMemInstSize[id]
-                        BBMemInstSize[id].push_back(dataSize);
-                        // printf("111222 data szie %lu \n",dataSize);
-                    }
-                }              
+                    auto *type = inst->getType();
+                    uint64_t dataSize = dl.getTypeAllocSize(type);
+                    BBMemInstSize[id].push_back(dataSize);
+                }
+                else if (auto *inst = dyn_cast<StoreInst>(bi))
+                {
+                    auto *type = inst->getValueOperand()->getType();
+                    uint64_t dataSize = dl.getTypeAllocSize(type);
+                    BBMemInstSize[id].push_back(dataSize);
+
+                }
             }
+            
         }
     }
+    return 0;
+}
 
-
-    ProcessTrace(InputFilename, Process, "Generating DAG", noBar);
-    vector <vector<int>> serialAll; 
-    vector <int> serial;
-    int i = 0;
-    int maxUID = UID;
-
-
-
-
-
-
-    
-    while (i < maxUID)
+void unionVector (AddrRange a, AddrRange b,vector<pair<int64_t, int64_t>> &result)
+{
+    if (result.size() >0)
     {
-        bool inSerial = false;          
-        for (auto &it : serialAll)
+        result.pop_back();
+    }
+    if(
+        (get<0>(a)<= get<0>(b)) && (get<1>(a)<= get<0>(b))      
+     )
+    {
+        pair<int64_t, int64_t> r1(get<0>(a),get<1>(a));
+        result.push_back(r1);
+        pair<int64_t, int64_t> r2(get<0>(b),get<1>(b));
+        result.push_back(r2);
+    }
+    else if ((get<0>(a)<= get<0>(b)) && (get<1>(a)>= get<0>(b))&& (get<1>(a) <= get<1>(b)))
+    {
+        pair<int64_t, int64_t> r1(get<0>(a),get<1>(b));
+        result.push_back(r1);
+    }
+    else if ((get<0>(b)<= get<0>(a)) && (get<1>(b)>= get<0>(a))&& (get<1>(b) <= get<1>(a)))
+    {
+        pair<int64_t, int64_t> r1(get<0>(b),get<1>(a));
+        result.push_back(r1);
+    }
+    else if ((get<0>(b)<= get<0>(a)) && (get<1>(b)<= get<0>(a)))
+    {
+        pair<int64_t, int64_t> r1(get<0>(b),get<1>(b));
+        result.push_back(r1);
+        pair<int64_t, int64_t> r2(get<0>(a),get<1>(a));
+        result.push_back(r2);
+    }
+}
+
+
+// calculate the intersection of load and store in one instance
+void calMemUsePerIns (map<int, int64_t> &totalMemUsage, map<int, vector<pair<int64_t, int64_t>>> &addrTouchedPerInst)
+{
+    int64_t memU;   
+    // kernel instance
+    map<int, AddrRangeMap> iterstore = storeAddrRangeMapPerInstance;
+
+    // iteration in instances
+    for (auto il : loadAddrRangeMapPerInstance)
+    {
+        // restult vector: addr range
+        vector<pair<int64_t, int64_t>> resultVec;
+        // load tuples in ki
+        for (auto ill : il.second)
         {
-            bool finished = false; 
-            if (myFormerInput.find(i) != myFormerInput.end())
+            // store tuples in ki
+            vector<int64_t> tobeErase;
+            for (auto ils : iterstore[il.first])
             {
-                for (auto In :myFormerInput[i])
+                if (resultVec.size()==0)
                 {
-                    if (it.back() == In)
+                    unionVector (ils.second,ill.second,resultVec);
+                    for (auto ite: tobeErase)
                     {
-                        it.push_back(i);
-                        finished = true;
-                        inSerial = true;
+                        iterstore[il.first].erase(ite);
+                    }
+                    
+                    break;
+                }
+                else if( get<0>(ils.second) <= get<0>(ill.second))
+                {
+                    tobeErase.push_back(ils.first);
+                    unionVector (ils.second,AddrRange(resultVec.back().first,resultVec.back().second,0,0),resultVec);
+                }
+                else if( get<0>(ils.second) >= get<0>(ill.second))
+                {
+                    unionVector (ill.second,AddrRange(resultVec.back().first,resultVec.back().second,0,0),resultVec);
+                    for (auto ite: tobeErase)
+                    {
+                        iterstore[il.first].erase(ite);
+                    }
+                    break;
+                }
+                else if ( get<0>(ils.second) == get<0>(ill.second))
+                {
+                    if( get<1>(ils.second) >= get<1>(ill.second))
+                    {
+                        tobeErase.push_back(ils.first);
+                        unionVector (ils.second,AddrRange(resultVec.back().first,resultVec.back().second,0,0),resultVec);
+                    }
+                    else
+                    {
+                        unionVector (ill.second,AddrRange(resultVec.back().first,resultVec.back().second,0,0),resultVec);
+                        for (auto ite: tobeErase)
+                        {
+                            iterstore[il.first].erase(ite);
+                        }
                         break;
                     }
                 }
             }
-            if (finished == false && myFormerOutput.find(i) != myFormerOutput.end())
+            for (auto ite: tobeErase)
             {
-                for (auto Out :myFormerOutput[i])
-                {
-                    if (it.back() == Out)
-                    {
-                        it.push_back(i);
-                        inSerial = true;
-                        break;
-                    }
-                }
-            }                       
-        }
-
-        if (inSerial == false)
-        {
-            serial.push_back(i);
-            serialAll.push_back(serial);
-            serial.clear();
-        }
-        i++;  
-    }
-    
-    bool fast = true;
-    map<pair<uint64_t,uint64_t>,vector<uint64_t>> kernelInterSection;
-
-    if (!fast)
-    {
-         
-        for (int it1 = 0; it1 < maxUID; it1++)
-        {
-            for (int it2 = it1+1 ; it2< maxUID; it2++)
-            {
-                //calculate intersections here
-                vector<uint64_t> overlaps;
-                pair<uint64_t,uint64_t> kernelpair(it1,it2);
-                overlaps.resize(max(KernelWorkingSetMap[it1].inputAddressIndexSet.size(),KernelWorkingSetMap[it2].inputAddressIndexSet.size()));
-                auto it = set_intersection(KernelWorkingSetMap[it1].inputAddressIndexSet.begin(),KernelWorkingSetMap[it1].inputAddressIndexSet.end(), KernelWorkingSetMap[it2].inputAddressIndexSet.begin(),KernelWorkingSetMap[it2].inputAddressIndexSet.end(),overlaps.begin());
-                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-                overlaps.clear();
-
-                overlaps.resize(max(KernelWorkingSetMap[it1].inputAddressIndexSet.size(),KernelWorkingSetMap[it2].internalAddressIndexSet.size()));
-                it = set_intersection(KernelWorkingSetMap[it1].inputAddressIndexSet.begin(),KernelWorkingSetMap[it1].inputAddressIndexSet.end(), KernelWorkingSetMap[it2].internalAddressIndexSet.begin(),KernelWorkingSetMap[it2].internalAddressIndexSet.end(),overlaps.begin());
-                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-                overlaps.clear();
-
-                overlaps.resize(max(KernelWorkingSetMap[it1].inputAddressIndexSet.size(),KernelWorkingSetMap[it2].outputAddressIndexSet.size()));
-                it = set_intersection(KernelWorkingSetMap[it1].inputAddressIndexSet.begin(),KernelWorkingSetMap[it1].inputAddressIndexSet.end(), KernelWorkingSetMap[it2].outputAddressIndexSet.begin(),KernelWorkingSetMap[it2].outputAddressIndexSet.end(),overlaps.begin());
-                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-                overlaps.clear();
-
-                overlaps.resize(max(KernelWorkingSetMap[it1].internalAddressIndexSet.size(),KernelWorkingSetMap[it2].inputAddressIndexSet.size()));
-                it = set_intersection(KernelWorkingSetMap[it1].internalAddressIndexSet.begin(),KernelWorkingSetMap[it1].internalAddressIndexSet.end(), KernelWorkingSetMap[it2].inputAddressIndexSet.begin(),KernelWorkingSetMap[it2].inputAddressIndexSet.end(),overlaps.begin());
-                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-                overlaps.clear();
-
-                overlaps.resize(max(KernelWorkingSetMap[it1].internalAddressIndexSet.size(),KernelWorkingSetMap[it2].internalAddressIndexSet.size()));
-                it = set_intersection(KernelWorkingSetMap[it1].internalAddressIndexSet.begin(),KernelWorkingSetMap[it1].internalAddressIndexSet.end(), KernelWorkingSetMap[it2].internalAddressIndexSet.begin(),KernelWorkingSetMap[it2].internalAddressIndexSet.end(),overlaps.begin());
-                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-                overlaps.clear();
-
-                overlaps.resize(max(KernelWorkingSetMap[it1].internalAddressIndexSet.size(),KernelWorkingSetMap[it2].outputAddressIndexSet.size()));
-                it = set_intersection(KernelWorkingSetMap[it1].internalAddressIndexSet.begin(),KernelWorkingSetMap[it1].internalAddressIndexSet.end(), KernelWorkingSetMap[it2].outputAddressIndexSet.begin(),KernelWorkingSetMap[it2].outputAddressIndexSet.end(),overlaps.begin());
-                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-                overlaps.clear();
-
-                overlaps.resize(max(KernelWorkingSetMap[it1].outputAddressIndexSet.size(),KernelWorkingSetMap[it2].inputAddressIndexSet.size()));
-                it = set_intersection(KernelWorkingSetMap[it1].outputAddressIndexSet.begin(),KernelWorkingSetMap[it1].outputAddressIndexSet.end(), KernelWorkingSetMap[it2].inputAddressIndexSet.begin(),KernelWorkingSetMap[it2].inputAddressIndexSet.end(),overlaps.begin());
-                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-                overlaps.clear();
-
-                overlaps.resize(max(KernelWorkingSetMap[it1].outputAddressIndexSet.size(),KernelWorkingSetMap[it2].internalAddressIndexSet.size()));
-                it = set_intersection(KernelWorkingSetMap[it1].outputAddressIndexSet.begin(),KernelWorkingSetMap[it1].outputAddressIndexSet.end(), KernelWorkingSetMap[it2].internalAddressIndexSet.begin(),KernelWorkingSetMap[it2].internalAddressIndexSet.end(),overlaps.begin());
-                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-                overlaps.clear();
-
-                overlaps.resize(max(KernelWorkingSetMap[it1].outputAddressIndexSet.size(),KernelWorkingSetMap[it2].outputAddressIndexSet.size()));
-                it = set_intersection(KernelWorkingSetMap[it1].outputAddressIndexSet.begin(),KernelWorkingSetMap[it1].outputAddressIndexSet.end(), KernelWorkingSetMap[it2].outputAddressIndexSet.begin(),KernelWorkingSetMap[it2].outputAddressIndexSet.end(),overlaps.begin());
-                kernelInterSection[kernelpair].push_back(it - overlaps.begin());
-                overlaps.clear();
-                
+                iterstore[il.first].erase(ite);
             }
         }
+        addrTouchedPerInst[il.first] = resultVec;
+        resultVec.clear();
     }
     
+    for (auto il : addrTouchedPerInst)
+    {
+        memU = 0;
+        for (auto ill : il.second)
+        {
+            memU += (ill.second - ill.first);
+        }
+        totalMemUsage[il.first] = memU;
+    }
+}
+
+wsTuple intersectionTuple(wsTuple load,wsTuple store)
+{
+    wsTuple result;
+    result.start = max(load.start, store.start);
+    result.end = min(load.end, store.end);
+    // todo updates these
+    float ldr = float(result.end -result.start)/ float(load.end- load.start);
+    float str = float(result.end -result.start)/ float(store.end- store.start);
+    result.byte_count  = load.byte_count* ldr + store.byte_count* str;
+    result.ref_count = load.ref_count* ldr + store.ref_count* str;
+    result.regular = load.regular* ldr + store.regular* str;
+    result.timing = 0;     
+    return result;
+}
+
+
+wsTupleMap intersectionTupleMap(wsTupleMap load, wsTupleMap store)
+{
+
+    wsTupleMap intersecMap;
+    for (auto l :load)
+    {
+        for(auto s :store)
+        {
+            if (overlap(l.second,s.second,0))
+            {
+            wsTuple intersecTuple = intersectionTuple(l.second,s.second);
+            intersecMap[intersecTuple.start] = intersecTuple;
+            }            
+        }
+    }
+    return intersecMap;
+}
+
+void calDependency(map<int, map<int, wsTupleMap>> &dependency)
+{
+    for (auto il : loadwsTupleMap)
+    {
+        if ( il.first <= 0)
+        {
+            continue;
+        }
+        else
+        {
+            //TODO: should be a kernel
+            for (auto is : storewsTupleMap)
+            {
+                if ( is.first <= 0)
+                {
+                    continue;
+                }
+                wsTupleMap intersecMap;
+                if (is.first >= il.first)
+                {
+                    break;
+                }
+                else
+                {
+                    intersecMap = intersectionTupleMap(il.second,is.second);
+                }
+                dependency[il.first][is.first] = intersecMap;
+            }
+        }
+        
+    }
+}
+
+wsTupleMap Aggregate(wsTupleMap a, wsTupleMap b)
+{
+    wsTupleMap res;
+    for (auto i :a)
+    {
+        res[i.first] = i.second;
+    }
+    for (auto i :b)
+    {
+        if (res.find(i.first)==res.end())
+        {
+            res[i.first] = i.second;
+        }
+        else
+        {
+            res[i.first] = tp_or(i.second,a[i.first],false);
+        }
+    }
+    return res;  
+}
+tuple<int,int,float> calTotalSize(wsTupleMap a)
+{
+    int size = 0;
+    int access = 1;
+    float locality = 0;
+    for (auto i : a)
+    {
+        size += i.second.end - i.second.start;                
+        locality = (locality *access + i.second.regular *i.second.ref_count);
+        locality = locality/(access+i.second.ref_count);
+        access += i.second.ref_count;       
+    }
+    tuple<int,int,float> res(size,access,locality); 
+    return res;
+}
+
+int main(int argc, char **argv)
+{
+    cl::ParseCommandLineOptions(argc, argv);
+
+    //read the json
+    parsingKernelInfo(KernelFilename);
+    application a;
+    ProcessTrace(InputFilename, Process, "Generating DAG");
+
+    map<int64_t, wsTupleMap> aggreated;
+    map<string, wsTupleMap> aggreatedKernel;
+    // aggregate sizes and access number
+    map<int64_t,tuple<int,int,float>> aggreatedSize;
+    map<string,tuple<int,int,float>> aggreatedSizeKernel;
+    for (auto i :loadwsTupleMap)
+    {
+        //todo here and notrivial is too complicated wtring
+        aggreated[i.first] = Aggregate(i.second,storewsTupleMap[i.first]);
+        nontrivialMerge(aggreated[i.first]);
+        aggreatedSize[i.first] = calTotalSize(aggreated[i.first]);
+    }
+
+    //map<int, string> kernelIdMap;
+
+    for(auto i : aggreated)
+    {
+        string kernelid = kernelIdMap[i.first];
+        for (auto itp :i.second)
+        {
+            aggreatedKernel[kernelid] = Aggregate(i.second,aggreated[i.first]);
+        }
+    }
+
     
-    MergeAfterProcess();
+    // map<int, vector<pair<int64_t, int64_t>>> addrTouchedPerInst;
+    // map<int, int64_t> totalMemUsage;    
+    // calMemUsePerIns (totalMemUsage, addrTouchedPerInst);
+    // // ki1: kernel instance, ki2: the former , map of (first addr, tuple)
+    map<int, map<int, wsTupleMap>> dependency;
+    calDependency(dependency);
 
     nlohmann::json jOut;
-    jOut["serialAll"] = serialAll;
-    jOut["myFormerInput"] = myFormerInput;
-    jOut["myFormerOutput"] = myFormerOutput;
-
-    if(!fast)
+    jOut["KernelInstanceMap"] = kernelIdMap;
+    jOut["aggreatedSize"] = aggreatedSize;
+  
+    for (auto sti :storewsTupleMap)
     {
-        for (const auto &key : kernelInterSection)
+        for (auto stii: sti.second)
         {
-            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Input,Input"] = key.second[0]*4;
-            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Input,Internal"] = key.second[1]*4;
-            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Input,Output"] = key.second[2]*4;
-            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Internal,Input"] = key.second[3]*4;
-            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Internal,Internal"] = key.second[4]*4;
-            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Internal,Output"] = key.second[5]*4;
-            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Output,Input"] = key.second[6]*4;
-            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Output,Internal"] = key.second[7]*4;
-            jOut["overlaps"][to_string(key.first.first)+","+to_string(key.first.second)]["Output,Output"] = key.second[8]*4;
+            jOut["tuplePerInstance"]["store"][to_string(sti.first)][to_string(stii.first)]["1"] = stii.second.start;
+            jOut["tuplePerInstance"]["store"][to_string(sti.first)][to_string(stii.first)]["2"] = stii.second.end;
+            jOut["tuplePerInstance"]["store"][to_string(sti.first)][to_string(stii.first)]["3"] = stii.second.byte_count;
+            jOut["tuplePerInstance"]["store"][to_string(sti.first)][to_string(stii.first)]["4"] = stii.second.ref_count;
+            jOut["tuplePerInstance"]["store"][to_string(sti.first)][to_string(stii.first)]["5"] = stii.second.regular;
         }
     }
-        
-    jOut["KernelInstanceMap"] = kernelIdMap;
+    for (auto sti :loadwsTupleMap)
+    {
+        for (auto stii: sti.second)
+        {
+            jOut["tuplePerInstance"]["load"][to_string(sti.first)][to_string(stii.first)]["1"] = stii.second.start;
+            jOut["tuplePerInstance"]["load"][to_string(sti.first)][to_string(stii.first)]["2"] = stii.second.end;
+            jOut["tuplePerInstance"]["load"][to_string(sti.first)][to_string(stii.first)]["3"] = stii.second.byte_count;
+            jOut["tuplePerInstance"]["load"][to_string(sti.first)][to_string(stii.first)]["4"] = stii.second.ref_count;
+            jOut["tuplePerInstance"]["load"][to_string(sti.first)][to_string(stii.first)]["5"] = stii.second.regular;
+        }
+    }
+
+    for (auto sti :loadAftertorewsTupleMap)
+    {
+        for (auto stii: sti.second)
+        {
+            jOut["tuplePerInstance"]["store-load"][to_string(sti.first)][to_string(stii.first)]["1"] = stii.second.start;
+            jOut["tuplePerInstance"]["store-load"][to_string(sti.first)][to_string(stii.first)]["2"] = stii.second.end;
+            jOut["tuplePerInstance"]["store-load"][to_string(sti.first)][to_string(stii.first)]["3"] = stii.second.byte_count;
+            jOut["tuplePerInstance"]["store-load"][to_string(sti.first)][to_string(stii.first)]["4"] = stii.second.ref_count;
+            jOut["tuplePerInstance"]["store-load"][to_string(sti.first)][to_string(stii.first)]["5"] = stii.second.regular;
+        }
+    } 
+    
+    for (auto d :dependency)
+    {
+        for (auto di: d.second)
+        {
+            for (auto dii: di.second)            
+            {
+                jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["1"] = dii.second.start;
+                jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["2"] = dii.second.end;
+                jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["3"] = dii.second.byte_count;
+                jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["4"] = dii.second.ref_count;
+                jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["5"] = dii.second.regular;
+            }          
+        }
+    }
+
 
     std::ofstream file;
     file.open(OutputFilename);
-    file << jOut;
+    file << std::setw(4) << jOut << std::endl;
     file.close();
-
 
     spdlog::info("Successfully detected kernel instance serial");
     return 0;
 }
 
-
 /// problem: 1.severl serial has same element but this is not same serial
-//2.  -1 problem 
+//2.  -1 problem
