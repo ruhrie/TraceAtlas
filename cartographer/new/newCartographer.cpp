@@ -485,7 +485,7 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
                 break;
             }
             // 6.) All nodes in the entire subgraph must be contained within a single function
-            set<Function *> parents;
+            /*set<Function *> parents;
             for (const auto &block : entrance.blocks)
             {
                 parents.insert(IDToBlock[block.first]->getParent());
@@ -505,7 +505,7 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
             {
                 // we have violated the condition that every block in the subgraph must belong to the same function, break
                 break;
-            }
+            }*/
             // Now we do case-specific checks
             if (MergeCase)
             {
@@ -522,12 +522,12 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
                     break;
                 }
                 // 2.) potentialExit only has midnodes as predecessors
-                tmpMids = midNodes;
-                for (auto &n : potentialExit->predecessors)
+                auto tmpPreds = potentialExit->predecessors;
+                for (auto &n : midNodes)
                 {
-                    tmpMids.erase(n);
+                    tmpPreds.erase(n);
                 }
-                if (!tmpMids.empty())
+                if (!tmpPreds.empty())
                 {
                     break;
                 }
@@ -548,13 +548,14 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
                     break;
                 }
                 // 2.) potentialExit only has midnodes and entrance as predecessors
+                auto tmpPreds = potentialExit->predecessors;
                 tmpMids = midNodes;
                 tmpMids.insert(entrance.NID);
                 for (auto &n : potentialExit->predecessors)
                 {
-                    tmpMids.erase(n);
+                    tmpPreds.erase(n);
                 }
-                if (!tmpMids.empty())
+                if (!tmpPreds.empty())
                 {
                     break;
                 }
