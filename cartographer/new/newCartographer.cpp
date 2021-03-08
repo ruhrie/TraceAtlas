@@ -198,11 +198,12 @@ vector<uint64_t> Dijkstras(const set<GraphNode, GNCompare> &nodes, uint64_t sour
     return newKernel;
 }
 
-void TrivialTransforms(std::set<GraphNode, GNCompare> &nodes)
+void TrivialTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<int64_t, llvm::BasicBlock *> &IDToBlock)
 {
     // a trivial node merge must satisfy two conditions
     // 1.) The source node has exactly 1 neighbor with certain probability
     // 2.) The sink node has exactly 1 predecessor (the source node) with certain probability
+    // 3.) The edge connecting source and sink must not cross a context level i.e. source and sink must belong to the same function
     // combine all trivial edges
     vector<GraphNode> tmpNodes(nodes.begin(), nodes.end());
     for (auto &node : tmpNodes)
@@ -224,33 +225,43 @@ void TrivialTransforms(std::set<GraphNode, GNCompare> &nodes)
                     // second condition, the sink node must have 1 certain predecessor
                     if ((succ->predecessors.size() == 1) && (succ->predecessors.find(currentNode.NID) != succ->predecessors.end()))
                     {
-                        // trivial merge, we merge into the source node
-                        auto merged = currentNode;
-                        // keep the NID, preds
-                        // change the neighbors to the sink neighbors AND update the successors of the sink node to include the merged node in their predecessors
-                        merged.neighbors.clear();
-                        for (const auto &n : succ->neighbors)
+                        // third condition, edge must not cross a context level
+                        auto sourceBlock = IDToBlock[(int64_t)currentNode.NID];
+                        auto sinkBlock = IDToBlock[(int64_t)succ->NID];
+                        if (sourceBlock->getParent() == sinkBlock->getParent())
                         {
-                            merged.neighbors[n.first] = n.second;
-                            auto succ2 = nodes.find(n.first);
-                            if (succ2 != nodes.end())
+                            // trivial merge, we merge into the source node
+                            auto merged = currentNode;
+                            // keep the NID, preds
+                            // change the neighbors to the sink neighbors AND update the successors of the sink node to include the merged node in their predecessors
+                            merged.neighbors.clear();
+                            for (const auto &n : succ->neighbors)
                             {
-                                auto newPreds = *succ2;
-                                newPreds.predecessors.erase(succ->NID);
-                                newPreds.predecessors.insert(merged.NID);
-                                nodes.erase(*succ2);
-                                nodes.insert(newPreds);
+                                merged.neighbors[n.first] = n.second;
+                                auto succ2 = nodes.find(n.first);
+                                if (succ2 != nodes.end())
+                                {
+                                    auto newPreds = *succ2;
+                                    newPreds.predecessors.erase(succ->NID);
+                                    newPreds.predecessors.insert(merged.NID);
+                                    nodes.erase(*succ2);
+                                    nodes.insert(newPreds);
+                                }
                             }
+                            // add the successor blocks
+                            merged.addBlocks(succ->blocks);
+
+                            // remove stale nodes from the node set
+                            nodes.erase(currentNode);
+                            nodes.erase(*succ);
+                            nodes.insert(merged);
+
+                            currentNode = merged;
                         }
-                        // add the successor blocks
-                        merged.addBlocks(succ->blocks);
-
-                        // remove stale nodes from the node set
-                        nodes.erase(currentNode);
-                        nodes.erase(*succ);
-                        nodes.insert(merged);
-
-                        currentNode = merged;
+                        else
+                        {
+                            break;
+                        }
                     }
                     else
                     {
@@ -270,7 +281,7 @@ void TrivialTransforms(std::set<GraphNode, GNCompare> &nodes)
     }
 }
 
-void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes)
+void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<int64_t, llvm::BasicBlock *> &IDToBlock)
 {
     // Vocabulary
     // entrance - first node that will execute in the target subgraph
@@ -280,6 +291,7 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes)
     // 1.) The subgraph must have exactly one entrance and one exit
     // 2.) Exactly one layer of midnodes must exist between entrance and exit. The entrance is allowed to lead directly to the exit
     // 3.) No cycles may exist in the subgraph i.e. Flow can only go from entrance to zero or one midnode to exit
+    // 4.) No subgraph edges can cross context levels i.e. the entire subgraph must be contained in one function
     vector<GraphNode> tmpNodes(nodes.begin(), nodes.end());
     for (auto &node : tmpNodes)
     {
@@ -291,16 +303,20 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes)
         auto entrance = *nodes.find(node.NID);
         while (true)
         {
+            // block that may be an exit of a transformable subgraph
+            auto potentialExit = nodes.end();
+
+            // first step, acquire middle nodes
+            // we do this by treating the current block as the entrance to a potential subgraph and exploring its neighbors and neighbors of neighbors
+            set<uint64_t> midNodes;
+            // also, check for case 1 of case 2 configurations
             // flag representing the case we have, if any.
             // false for Case 1, true for Case 2
             bool MergeCase = false;
-            // first step, acquire middle nodes
-            //
-            // second step, check for 1 of 2 configurations for this transform
             // 1.) 0-deep branch->select: entrance can go directly to exit
             // 2.) 1-deep branch->select: entrance cannot go directly to exit
+            // holds all neighbors of all midnodes
             std::set<uint64_t> midNodeTargets;
-            set<uint64_t> midNodes;
             for (const auto &midNode : entrance.neighbors)
             {
                 midNodes.insert(midNode.first);
@@ -317,7 +333,6 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes)
                     break;
                 }
             }
-            auto potentialExit = nodes.end();
             if (midNodeTargets.size() == 1) // corner case where the exit of the subgraph has no successors (it is the last node to execute in the program). In this case we have to check if the entrance is a predecessor of the lone midNodeTarget
             {
                 auto cornerCase = nodes.find(*midNodeTargets.begin());
@@ -382,7 +397,7 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes)
                     break;
                 }
             }
-            // in order for either case to be true, five conditions must be checked
+            // in order for either case to be true, six conditions must be checked
             // 1.) the entrance can't have the exit or any midnodes as predecessors
             auto tmpMids = midNodes;
             auto pushed = tmpMids.insert(potentialExit->NID);
@@ -467,6 +482,28 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes)
             }
             if (badCondition)
             {
+                break;
+            }
+            // 6.) All nodes in the entire subgraph must be contained within a single function
+            set<Function *> parents;
+            for (const auto &block : entrance.blocks)
+            {
+                parents.insert(IDToBlock[block.first]->getParent());
+            }
+            for (const auto &mid : midNodes)
+            {
+                for (const auto &block : nodes.find(mid)->blocks)
+                {
+                    parents.insert(IDToBlock[block.first]->getParent());
+                }
+            }
+            for (const auto &block : potentialExit->blocks)
+            {
+                parents.insert(IDToBlock[block.first]->getParent());
+            }
+            if (parents.size() != 1)
+            {
+                // we have violated the condition that every block in the subgraph must belong to the same function, break
                 break;
             }
             // Now we do case-specific checks
@@ -627,10 +664,10 @@ int main(int argc, char *argv[])
     set<GraphNode, GNCompare> nodes;
     ReadBIN(nodes, InputFilename);
     // combine all trivial node merges
-    TrivialTransforms(nodes);
+    TrivialTransforms(nodes, IDToBlock);
     // Next transform, find conditional branches and turn them into select statements
     // In other words, find subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
-    BranchToSelectTransforms(nodes);
+    BranchToSelectTransforms(nodes, IDToBlock);
 
     for (const auto &node : nodes)
     {
