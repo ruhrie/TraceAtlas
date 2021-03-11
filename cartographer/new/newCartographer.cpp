@@ -23,7 +23,49 @@ cl::opt<string> OutputFilename("o", cl::desc("Specify output json"), cl::value_d
 uint64_t GraphNode::nextNID = 0;
 uint32_t Kernel::nextKID = 0;
 
-void ReadBIN(set<GraphNode, GNCompare> &nodes, const string &filename)
+void AddNode(std::set<GraphNode *, GNCompare> &nodes, const GraphNode &newNode)
+{
+    nodes.insert(new GraphNode(newNode));
+}
+
+void AddNode(std::set<GraphNode *, GNCompare> &nodes, const VKNode &newNode)
+{
+    nodes.insert(new VKNode(newNode));
+}
+
+void RemoveNode(std::set<GraphNode *, GNCompare> &CFG, std::set<Kernel, KCompare> &kernels, GraphNode *removeNode)
+{
+    // first, remove the node in question from any kernels it may belong to
+    // set of kernels that are updated versions of existing kernels, each member will eventually replace the old one in the kernels (input arg) set
+    set<Kernel, KCompare> toRemove;
+    for (const auto &kernel : kernels)
+    {
+        if (kernel.nodes.find(removeNode) != kernel.nodes.end())
+        {
+            // remove the node from the kernel
+            auto newKernel = kernel;
+            newKernel.nodes.erase(removeNode);
+            toRemove.insert(newKernel);
+        }
+    }
+    for (const auto &newKernel : toRemove)
+    {
+        kernels.erase(newKernel.KID);
+        kernels.insert(newKernel);
+    }
+
+    // second, look for any VKNodes in the CFG and update their node sets if applicable
+    set<VKNode, GNCompare> newVKNodes;
+    for (auto node : CFG)
+    {
+        //if( auto VKNode = dynamic_pointer_cast<struct VKNode>(sharedNode) )
+        if (auto VKN = dynamic_cast<VKNode *>(node))
+        {
+        }
+    }
+}
+
+void ReadBIN(set<GraphNode *, GNCompare> &nodes, const string &filename)
 {
     // set that holds the first iteration of the graph
     fstream inputFile;
@@ -65,56 +107,53 @@ void ReadBIN(set<GraphNode, GNCompare> &nodes, const string &filename)
         {
             key.second.second = (double)key.second.first / (double)sum;
         }
-        nodes.insert(currentNode);
+        AddNode(nodes, currentNode);
     }
     inputFile.close();
 
     // now fill in all the predecessor nodes
     for (auto &node : nodes)
     {
-        for (const auto &neighbor : node.neighbors)
+        for (const auto &neighbor : node->neighbors)
         {
             auto successorNode = nodes.find(neighbor.first);
             if (successorNode != nodes.end())
             {
-                GraphNode newNode = *successorNode;
-                newNode.predecessors.insert(node.NID);
-                nodes.erase(*successorNode);
-                nodes.insert(newNode);
+                (*successorNode)->predecessors.insert(node->NID);
             }
         }
     }
 
     for (const auto &node : nodes)
     {
-        spdlog::info("Examining node " + to_string(node.NID));
+        spdlog::info("Examining node " + to_string(node->NID));
         string preds;
-        for (auto pred : node.predecessors)
+        for (auto pred : node->predecessors)
         {
             preds += to_string(pred);
-            if (pred != *prev(node.predecessors.end()))
+            if (pred != *prev(node->predecessors.end()))
             {
                 preds += ",";
             }
         }
         spdlog::info("Predecessors: " + preds);
-        for (const auto &neighbor : node.neighbors)
+        for (const auto &neighbor : node->neighbors)
         {
             spdlog::info("Neighbor " + to_string(neighbor.first) + " has instance count " + to_string(neighbor.second.first) + " and probability " + to_string(neighbor.second.second));
         }
         cout << endl;
-        //spdlog::info("Node " + to_string(node.NID) + " has " + to_string(node.neighbors.size()) + " neighbors.");
+        //spdlog::info("Node " + to_string(node->NID) + " has " + to_string(node->neighbors.size()) + " neighbors.");
     }
 }
 
-vector<uint64_t> Dijkstras(const set<GraphNode, GNCompare> &nodes, uint64_t source, uint64_t sink)
+vector<uint64_t> Dijkstras(const set<GraphNode *, GNCompare> &nodes, uint64_t source, uint64_t sink)
 {
     // maps a node ID to its dijkstra information
     map<uint64_t, DijkstraNode> DMap;
     for (const auto &node : nodes)
     {
         // initialize each dijkstra node to have infinite distance, itself as its predecessor, and the unvisited nodecolor
-        DMap[node.NID] = DijkstraNode(INFINITY, node.NID, std::numeric_limits<uint64_t>::max(), NodeColor::White);
+        DMap[node->NID] = DijkstraNode(INFINITY, node->NID, std::numeric_limits<uint64_t>::max(), NodeColor::White);
     }
     DMap[source] = DijkstraNode(0, source, std::numeric_limits<uint64_t>::max(), NodeColor::White);
     // priority queue that holds all newly discovered nodes. Minimum paths get priority
@@ -128,7 +167,7 @@ vector<uint64_t> Dijkstras(const set<GraphNode, GNCompare> &nodes, uint64_t sour
         // for each neighbor of u, calculate the neighbors new distance
         if (nodes.find(Q.front().NID) != nodes.end())
         {
-            for (const auto &neighbor : nodes.find(Q.front().NID)->neighbors)
+            for (const auto &neighbor : (*nodes.find(Q.front().NID))->neighbors)
             {
                 /*spdlog::info("Priority Q has the following entries in this order:");
                 for( const auto& entry : Q )
@@ -186,115 +225,70 @@ vector<uint64_t> Dijkstras(const set<GraphNode, GNCompare> &nodes, uint64_t sour
                 return newKernel;
             }
             auto prevNode = DN.second.predecessor;
-            newKernel.push_back(nodes.find(prevNode)->NID);
+            newKernel.push_back((*nodes.find(prevNode))->NID);
             while (prevNode != source)
             {
                 prevNode = DMap[prevNode].predecessor;
-                newKernel.push_back(nodes.find(prevNode)->NID);
+                newKernel.push_back((*nodes.find(prevNode))->NID);
             }
             break;
         }
     }
     return newKernel;
 }
-/*
-void AddNode(std::set<GraphNode, GNCompare>& nodes, const GraphNode& newNode)
-{
-    nodes.insert(newNode);
-}
 
-void RemoveNode(std::set<GraphNode, GNCompare>& CFG, std::set<Kernel, KCompare>& kernels, const GraphNode& removeNode)
-{
-    // first, remove the node in question from any kernels it may belong to
-    // set of kernels that are updated versions of existing kernels, each member will eventually replace the old one in the kernels (input arg) set
-    set<Kernel, KCompare> toRemove;
-    for( const auto& kernel : kernels )
-    {
-        if( kernel.nodes.find(removeNode) != kernel.nodes.end() )
-        {
-            // remove the node from the kernel
-            auto newKernel = kernel;
-            newKernel.nodes.erase(removeNode);
-            toRemove.insert(newKernel);
-        }
-    }
-    for( const auto& newKernel : toRemove )
-    {
-        kernels.erase(newKernel.KID);
-        kernels.insert(newKernel);
-    }
-
-    // second, look for any VKNodes in the CFG and update their node sets if applicable
-    set<VKNode, GNCompare> newVKNodes;
-    for( const auto& node : CFG )
-    {
-        if( auto VKNode = dynamic_cast<const struct VKNode&>(node) )
-        {
-
-        }
-    }
-}
-*/
-
-void TrivialTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<int64_t, llvm::BasicBlock *> &IDToBlock)
+void TrivialTransforms(std::set<GraphNode *, GNCompare> &nodes, std::set<Kernel, KCompare> &kernels, std::map<int64_t, llvm::BasicBlock *> &IDToBlock)
 {
     // a trivial node merge must satisfy two conditions
     // 1.) The source node has exactly 1 neighbor with certain probability
     // 2.) The sink node has exactly 1 predecessor (the source node) with certain probability
     // 3.) The edge connecting source and sink must not cross a context level i.e. source and sink must belong to the same function
     // combine all trivial edges
-    vector<GraphNode> tmpNodes(nodes.begin(), nodes.end());
+    vector<GraphNode *> tmpNodes(nodes.begin(), nodes.end());
     for (auto &node : tmpNodes)
     {
-        if (nodes.find(node.NID) == nodes.end())
+        if (nodes.find(node->NID) == nodes.end())
         {
             // we've already been removed, do nothing
             continue;
         }
-        auto currentNode = *nodes.find(node.NID);
+        auto currentNode = *nodes.find(node->NID);
         while (true)
         {
             // first condition, our source node must have 1 certain successor
-            if ((currentNode.neighbors.size() == 1) && (currentNode.neighbors.begin()->second.second > 0.9999))
+            if ((currentNode->neighbors.size() == 1) && (currentNode->neighbors.begin()->second.second > 0.9999))
             {
-                auto succ = nodes.find(currentNode.neighbors.begin()->first);
+                auto succ = nodes.find(currentNode->neighbors.begin()->first);
                 if (succ != nodes.end())
                 {
                     // second condition, the sink node must have 1 certain predecessor
-                    if ((succ->predecessors.size() == 1) && (succ->predecessors.find(currentNode.NID) != succ->predecessors.end()))
+                    if (((*succ)->predecessors.size() == 1) && ((*succ)->predecessors.find(currentNode->NID) != (*succ)->predecessors.end()))
                     {
                         // third condition, edge must not cross a context level
-                        auto sourceBlock = IDToBlock[(int64_t)currentNode.NID];
-                        auto sinkBlock = IDToBlock[(int64_t)succ->NID];
+                        auto sourceBlock = IDToBlock[(int64_t)currentNode->NID];
+                        auto sinkBlock = IDToBlock[(int64_t)(*succ)->NID];
                         if (sourceBlock->getParent() == sinkBlock->getParent())
                         {
                             // trivial merge, we merge into the source node
-                            auto merged = currentNode;
                             // keep the NID, preds
                             // change the neighbors to the sink neighbors AND update the successors of the sink node to include the merged node in their predecessors
-                            merged.neighbors.clear();
-                            for (const auto &n : succ->neighbors)
+                            currentNode->neighbors.clear();
+                            for (const auto &n : (*succ)->neighbors)
                             {
-                                merged.neighbors[n.first] = n.second;
+                                currentNode->neighbors[n.first] = n.second;
                                 auto succ2 = nodes.find(n.first);
                                 if (succ2 != nodes.end())
                                 {
-                                    auto newPreds = *succ2;
-                                    newPreds.predecessors.erase(succ->NID);
-                                    newPreds.predecessors.insert(merged.NID);
-                                    nodes.erase(*succ2);
-                                    nodes.insert(newPreds);
+                                    (*succ2)->predecessors.erase((*succ)->NID);
+                                    (*succ2)->predecessors.insert(currentNode->NID);
+                                    RemoveNode(nodes, kernels, *succ2);
                                 }
                             }
                             // add the successor blocks
-                            merged.addBlocks(succ->blocks);
+                            currentNode->addBlocks((*succ)->blocks);
 
-                            // remove stale nodes from the node set
-                            nodes.erase(currentNode);
-                            nodes.erase(*succ);
-                            nodes.insert(merged);
-
-                            currentNode = merged;
+                            // remove stale node from the node set
+                            RemoveNode(nodes, kernels, *succ);
                         }
                         else
                         {
@@ -319,7 +313,7 @@ void TrivialTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<int64_t, 
     }
 }
 
-void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<int64_t, llvm::BasicBlock *> &IDToBlock)
+void BranchToSelectTransforms(std::set<GraphNode *, GNCompare> &nodes, std::set<Kernel, KCompare> &kernels, std::map<int64_t, llvm::BasicBlock *> &IDToBlock)
 {
     // Vocabulary
     // entrance - first node that will execute in the target subgraph
@@ -330,15 +324,15 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
     // 2.) Exactly one layer of midnodes must exist between entrance and exit. The entrance is allowed to lead directly to the exit
     // 3.) No cycles may exist in the subgraph i.e. Flow can only go from entrance to zero or one midnode to exit
     // 4.) No subgraph edges can cross context levels i.e. the entire subgraph must be contained in one function
-    vector<GraphNode> tmpNodes(nodes.begin(), nodes.end());
+    vector<GraphNode *> tmpNodes(nodes.begin(), nodes.end());
     for (auto &node : tmpNodes)
     {
-        if (nodes.find(node.NID) == nodes.end())
+        if (nodes.find(node->NID) == nodes.end())
         {
             // we've already been removed, do nothing
             continue;
         }
-        auto entrance = *nodes.find(node.NID);
+        auto entrance = *nodes.find(node->NID);
         while (true)
         {
             // block that may be an exit of a transformable subgraph
@@ -355,12 +349,12 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
             // 2.) 1-deep branch->select: entrance cannot go directly to exit
             // holds all neighbors of all midnodes
             std::set<uint64_t> midNodeTargets;
-            for (const auto &midNode : entrance.neighbors)
+            for (const auto &midNode : entrance->neighbors)
             {
                 midNodes.insert(midNode.first);
                 if (nodes.find(midNode.first) != nodes.end())
                 {
-                    for (const auto &neighbor : nodes.find(midNode.first)->neighbors)
+                    for (const auto &neighbor : (*nodes.find(midNode.first))->neighbors)
                     {
                         midNodeTargets.insert(neighbor.first);
                     }
@@ -376,12 +370,12 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
                 auto cornerCase = nodes.find(*midNodeTargets.begin());
                 if (cornerCase != nodes.end())
                 {
-                    if (cornerCase->predecessors.find(entrance.NID) != cornerCase->predecessors.end())
+                    if ((*cornerCase)->predecessors.find(entrance->NID) != (*cornerCase)->predecessors.end())
                     {
                         // the entrance can lead directly to the exit
                         MergeCase = false;
                         potentialExit = cornerCase;
-                        midNodes.erase(potentialExit->NID);
+                        midNodes.erase((*potentialExit)->NID);
                     }
                     else
                     {
@@ -399,12 +393,12 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
             // to find the exit we need to find a neighbor of the entrance which is the lone successor of all other neighbors of the entrance
             else
             {
-                if (entrance.neighbors.size() > 1)
+                if (entrance->neighbors.size() > 1)
                 {
-                    for (auto succ = entrance.neighbors.begin(); succ != entrance.neighbors.end(); succ++)
+                    for (auto succ = entrance->neighbors.begin(); succ != entrance->neighbors.end(); succ++)
                     {
                         bool common = true;
-                        for (auto neighborID = entrance.neighbors.begin(); neighborID != entrance.neighbors.end(); neighborID++)
+                        for (auto neighborID = entrance->neighbors.begin(); neighborID != entrance->neighbors.end(); neighborID++)
                         {
                             if (succ == neighborID)
                             {
@@ -413,7 +407,7 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
                             auto neighbor = nodes.find(neighborID->first);
                             if (neighbor != nodes.end())
                             {
-                                for (const auto &succ2 : neighbor->neighbors)
+                                for (const auto &succ2 : (*neighbor)->neighbors)
                                 {
                                     if (succ2.first != succ->first)
                                     {
@@ -438,13 +432,13 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
             // in order for either case to be true, six conditions must be checked
             // 1.) the entrance can't have the exit or any midnodes as predecessors
             auto tmpMids = midNodes;
-            auto pushed = tmpMids.insert(potentialExit->NID);
+            auto pushed = tmpMids.insert((*potentialExit)->NID);
             if (!pushed.second)
             {
                 // somehow the exit ID is still in the midNodes set
                 throw AtlasException("PotentialExit found in the midNodes set!");
             }
-            for (auto &pred : entrance.predecessors)
+            for (auto &pred : entrance->predecessors)
             {
                 tmpMids.erase(pred);
             }
@@ -459,7 +453,7 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
                 auto midNode = nodes.find(mid);
                 if (midNode != nodes.end())
                 {
-                    if ((midNode->predecessors.size() != 1) || (midNode->predecessors.find(entrance.NID) == midNode->predecessors.end()))
+                    if (((*midNode)->predecessors.size() != 1) || ((*midNode)->predecessors.find(entrance->NID) == (*midNode)->predecessors.end()))
                     {
                         badCondition = true;
                     }
@@ -480,7 +474,7 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
                 auto midNode = nodes.find(mid);
                 if (midNode != nodes.end())
                 {
-                    if ((midNode->neighbors.size() != 1) || (midNode->neighbors.find(potentialExit->NID) == midNode->neighbors.end()))
+                    if (((*midNode)->neighbors.size() != 1) || ((*midNode)->neighbors.find((*potentialExit)->NID) == (*midNode)->neighbors.end()))
                     {
                         badCondition = true;
                     }
@@ -496,9 +490,9 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
             }
             // 4.) potentialExit can only have the midnodes as predecessors
             tmpMids = midNodes;
-            if ((midNodes.size() == potentialExit->predecessors.size()))
+            if ((midNodes.size() == (*potentialExit)->predecessors.size()))
             {
-                for (auto &pred : potentialExit->predecessors)
+                for (auto &pred : (*potentialExit)->predecessors)
                 {
                     tmpMids.erase(pred);
                 }
@@ -510,7 +504,7 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
             // 5.) potentialExit can't have the entrance or any midnodes as successors
             tmpMids = midNodes;
             badCondition = false; // flipped if we find a midnode or entrance in potentialExit successors, or we find a bad node
-            for (const auto &k : potentialExit->neighbors)
+            for (const auto &k : (*potentialExit)->neighbors)
             {
                 if (midNodes.find(k.first) != midNodes.end())
                 {
@@ -524,7 +518,7 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
             }
             // 6.) All nodes in the entire subgraph must be contained within a single function
             /*set<Function *> parents;
-            for (const auto &block : entrance.blocks)
+            for (const auto &block : entrance->blocks)
             {
                 parents.insert(IDToBlock[block.first]->getParent());
             }
@@ -551,7 +545,7 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
                 // 2 conditions must be checked
                 // 1.) entrance only has midnodes as successors
                 tmpMids = midNodes;
-                for (auto &n : entrance.neighbors)
+                for (auto &n : entrance->neighbors)
                 {
                     tmpMids.erase(n.first);
                 }
@@ -560,7 +554,7 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
                     break;
                 }
                 // 2.) potentialExit only has midnodes as predecessors
-                auto tmpPreds = potentialExit->predecessors;
+                auto tmpPreds = (*potentialExit)->predecessors;
                 for (auto &n : midNodes)
                 {
                     tmpPreds.erase(n);
@@ -576,8 +570,8 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
                 // 2 conditions must be checked
                 // 1.) entrance only has midnodes and potentialExit as successors
                 tmpMids = midNodes;
-                tmpMids.insert(potentialExit->NID);
-                for (auto &n : entrance.neighbors)
+                tmpMids.insert((*potentialExit)->NID);
+                for (auto &n : entrance->neighbors)
                 {
                     tmpMids.erase(n.first);
                 }
@@ -586,10 +580,10 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
                     break;
                 }
                 // 2.) potentialExit only has midnodes and entrance as predecessors
-                auto tmpPreds = potentialExit->predecessors;
+                auto tmpPreds = (*potentialExit)->predecessors;
                 tmpMids = midNodes;
-                tmpMids.insert(entrance.NID);
-                for (auto &n : potentialExit->predecessors)
+                tmpMids.insert(entrance->NID);
+                for (auto &n : (*potentialExit)->predecessors)
                 {
                     tmpPreds.erase(n);
                 }
@@ -599,21 +593,18 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
                 }
             }
             // merge entrance, exit, thirdNode into the entrance
-            auto merged = entrance;
             // keep the NID, preds
             // change the neighbors to potentialExit neighbors AND update the successors of potentialExit to include the merged node in their predecessors
-            merged.neighbors.clear();
-            for (const auto &n : potentialExit->neighbors)
+            entrance->neighbors.clear();
+            for (const auto &n : (*potentialExit)->neighbors)
             {
-                merged.neighbors[n.first] = n.second;
+                entrance->neighbors[n.first] = n.second;
                 auto succ2 = nodes.find(n.first);
                 if (succ2 != nodes.end())
                 {
-                    auto newPreds = *succ2;
-                    newPreds.predecessors.erase(potentialExit->NID);
-                    newPreds.predecessors.insert(merged.NID);
-                    nodes.erase(*succ2);
-                    nodes.insert(newPreds);
+                    (*succ2)->predecessors.erase((*potentialExit)->NID);
+                    (*succ2)->predecessors.insert(entrance->NID);
+                    RemoveNode(nodes, kernels, *succ2);
                 }
             }
             // merge midNodes and potentialExit blocks in order
@@ -622,10 +613,10 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
                 auto midNode = nodes.find(n);
                 if (midNode != nodes.end())
                 {
-                    merged.addBlocks(midNode->blocks);
+                    entrance->addBlocks((*midNode)->blocks);
                 }
             }
-            merged.addBlocks(potentialExit->blocks);
+            entrance->addBlocks((*potentialExit)->blocks);
 
             // remove stale nodes from the node set
             nodes.erase(entrance);
@@ -637,50 +628,45 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
                     nodes.erase(*midNode);
                 }
             }
-            nodes.erase(*potentialExit);
-            nodes.insert(merged);
-
-            entrance = merged;
+            RemoveNode(nodes, kernels, *potentialExit);
         }
     }
 }
 
-void VirtualizeKernels(const std::set<Kernel, KCompare>& newKernels, std::set<GraphNode,GNCompare>& nodes)
+void VirtualizeKernels(std::set<Kernel, KCompare> &newKernels, std::set<GraphNode *, GNCompare> &nodes)
 {
-    for( const auto& kernel : newKernels )
+    for (const auto &kernel : newKernels)
     {
         // gather entrance and exit nodes
         auto kernelEntrances = kernel.getEntrances();
-        auto kernelExits     = kernel.getExits(nodes);
-        if( (kernelEntrances.size() == 1) && (kernelExits.size() == 1) )
+        auto kernelExits = kernel.getExits(nodes);
+        if ((kernelEntrances.size() == 1) && (kernelExits.size() == 1))
         {
             // change the neighbors of the entrance node to the neighbors of the exit node
             auto entranceNode = VKNode(*(kernelEntrances.begin()));
-            auto exitNode     = *(kernelExits.begin());
-            entranceNode.neighbors = exitNode.neighbors;
+            auto exitNode = *(kernelExits.begin());
+            entranceNode.neighbors = exitNode->neighbors;
             // for each neighbor of the kernel exit, change its predecessor to the kernel entrance node
-            for( const auto& neighID : exitNode.neighbors )
+            for (const auto &neighID : exitNode->neighbors)
             {
                 auto neighbor = *(nodes.find(neighID.first));
-                neighbor.predecessors.erase(exitNode.NID);
-                neighbor.predecessors.insert(entranceNode.NID);
-                nodes.erase(neighbor.NID);
-                nodes.insert(neighbor);
+                neighbor->predecessors.erase(exitNode->NID);
+                neighbor->predecessors.insert(entranceNode.NID);
             }
             // remove all nodes within the kernel except the entrance node
             auto toRemove = kernel.nodes;
-            for( const auto& node : kernel.getEntrances() )
+            for (const auto &node : kernel.getEntrances())
             {
                 toRemove.erase(node);
             }
-            for( const auto& node : toRemove )
+            for (const auto &node : toRemove)
             {
                 nodes.erase(node);
                 entranceNode.nodes.insert(node);
             }
             // finally replace the old entrance node with the new VKNode
-            nodes.erase(entranceNode.NID);
-            nodes.insert(entranceNode);
+            RemoveNode(nodes, newKernels, *(kernelEntrances.begin()));
+            AddNode(nodes, entranceNode);
         }
     }
 }
@@ -740,34 +726,36 @@ int main(int argc, char *argv[])
     auto CG = getCallGraph(SourceBitcode.get(), blockCallers, BlockToFPtr, IDToBlock);
 
     // Set of nodes that constitute the entire graph
-    set<GraphNode, GNCompare> nodes;
+    set<GraphNode *, GNCompare> nodes;
+    set<Kernel, KCompare> kernels;
+
     ReadBIN(nodes, InputFilename);
     // combine all trivial node merges
-    TrivialTransforms(nodes, IDToBlock);
+    TrivialTransforms(nodes, kernels, IDToBlock);
     // Next transform, find conditional branches and turn them into select statements
     // In other words, find subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
-    BranchToSelectTransforms(nodes, IDToBlock);
+    BranchToSelectTransforms(nodes, kernels, IDToBlock);
 
     for (const auto &node : nodes)
     {
-        spdlog::info("Examining node " + to_string(node.NID));
+        spdlog::info("Examining node " + to_string(node->NID));
         string blocks;
-        for (const auto &b : node.blocks)
+        for (const auto &b : node->blocks)
         {
             blocks += to_string(b.first) + "->" + to_string(b.second) + ",";
         }
         spdlog::info("This node contains blocks: " + blocks);
-        for (const auto &neighbor : node.neighbors)
+        for (const auto &neighbor : node->neighbors)
         {
             spdlog::info("Neighbor " + to_string(neighbor.first) + " has instance count " + to_string(neighbor.second.first) + " and probability " + to_string(neighbor.second.second));
         }
         cout << endl;
-        //spdlog::info("Node " + to_string(node.NID) + " has " + to_string(node.neighbors.size()) + " neighbors.");
+        //spdlog::info("Node " + to_string(node->NID) + " has " + to_string(node->neighbors.size()) + " neighbors.");
     }
 
     // find minimum cycles
     bool done = false;
-    set<Kernel, KCompare> kernels;
+    //set<Kernel, KCompare> kernels;
     while (!done)
     {
         done = true;
@@ -776,7 +764,7 @@ int main(int argc, char *argv[])
         // first, find min paths in the graph
         for (const auto &node : nodes)
         {
-            auto nodeIDs = Dijkstras(nodes, node.NID, node.NID);
+            auto nodeIDs = Dijkstras(nodes, node->NID, node->NID);
             if (!nodeIDs.empty())
             {
                 auto newKernel = Kernel();
@@ -842,9 +830,9 @@ int main(int argc, char *argv[])
         }
         else
         {
+            //VirtualizeKernels(newKernels, nodes);
             kernels.insert(newKernels.begin(), newKernels.end());
             done = false;
-            //VirtualizeKernels(newKernels, nodes);
         }
     }
 
@@ -870,7 +858,7 @@ int main(int argc, char *argv[])
         totalBlocks += (float)kernel.getBlocks().size();
         for (const auto &n : kernel.nodes)
         {
-            outputJson["Kernels"][to_string(id)]["Nodes"].push_back(n.NID);
+            outputJson["Kernels"][to_string(id)]["Nodes"].push_back(n->NID);
         }
         for (const auto &k : kernel.getBlocks())
         {
