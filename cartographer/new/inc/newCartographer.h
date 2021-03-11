@@ -148,6 +148,26 @@ struct GNCompare
     }
 };
 
+/// @brief Virtual Kernel Node 
+///
+/// Represents a virtualized kernel. A virtualized kernel node is a node that represents an entire kernel, and all nodes that once were within the subgraph itself are now contained within this structure
+struct VKNode : GraphNode
+{
+    VKNode() : GraphNode()
+    {
+        nodes = std::set<GraphNode, GNCompare>();
+    }
+    VKNode(const GraphNode& GN)
+    {
+        NID = GN.NID;
+        blocks = GN.blocks;
+        neighbors = GN.neighbors;
+        predecessors = GN.predecessors;
+        nodes = std::set<GraphNode, GNCompare>();
+    }
+    std::set<GraphNode, GNCompare> nodes;
+};
+
 /// @brief Dijkstra implementation inspired by boost library
 std::vector<uint64_t> Dijkstras(const std::set<GraphNode, GNCompare> &nodes, uint64_t source, uint64_t sink);
 
@@ -165,24 +185,32 @@ struct Kernel
         KID = ID;
         nodes = std::set<GraphNode, GNCompare>();
     }
-    /// @brief Returns the IDs of the kernel entrances
-    ///
-    /// @param[in] block     When true, this method will return the ID of the block from the original source code. When false, it returns the GraphNode ID
+    /// Returns the IDs of the kernel entrances
     /// @retval    entrances Vector of IDs that specify which nodes (or blocks) are the kernel entrances. Kernel entrances are the source nodes of edges that enter the kernel
-    /*const std::vector<uint64_t> getEntrances(bool block = false) const
+    std::vector<GraphNode> getEntrances() const
     {
+        std::vector<GraphNode> entrances;
         for( const auto& node : nodes )
         {
-            // need to find out if we can reach this node
+            for( const auto& pred : node.predecessors )
+            {
+                if( nodes.find(pred) == nodes.end() )
+                {
+                    // this node has a predecessor outside of the kernel, so it is considered an entrance node
+                    entrances.push_back(node);
+                    break;
+                }
+            }
         }
-    }*/
+        return entrances;
+    }
     /// @brief Returns the IDs of the kernel exits
     ///
-    /// @param[in] block When true, this method will return the ID of the block from the original source code. When false, it returns the GraphNode ID
+    /// @param[in] allNodes Set of all nodes in the control flow graph. Used to copy the nodes that are the destinations of edges that leave the kernel
     /// @retval    exits Vector of IDs that specify which nodes (or blocks) are the kernel exits. Kernel exits are the destination nodes of edges that leave the kernel
-    const std::set<uint64_t> getExits() const //bool block = false) const
+    std::vector<GraphNode> getExits(const std::set<GraphNode, GNCompare>& allNodes ) const
     {
-        std::set<uint64_t> exitNodes;
+        std::vector<GraphNode> exitNodes;
         for (const auto &node : nodes)
         {
             for (const auto &neighbor : node.neighbors)
@@ -190,18 +218,11 @@ struct Kernel
                 if (nodes.find(neighbor.first) == nodes.end())
                 {
                     // we've found an exit
-                    exitNodes.insert(neighbor.first);
+                    exitNodes.push_back( *(allNodes.find(neighbor.first)) );
+                    break;
                 }
             }
         }
-        /*if( block )
-        {
-            std::set<uint64_t> exits;
-            for( const auto& e : exitNodes )
-            {
-                exits.insert()
-            }
-        }*/
         return exitNodes;
     }
     /// @brief Returns the member blocks (from the source bitcode) of this kernel

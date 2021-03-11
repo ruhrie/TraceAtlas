@@ -197,6 +197,44 @@ vector<uint64_t> Dijkstras(const set<GraphNode, GNCompare> &nodes, uint64_t sour
     }
     return newKernel;
 }
+/*
+void AddNode(std::set<GraphNode, GNCompare>& nodes, const GraphNode& newNode)
+{
+    nodes.insert(newNode);
+}
+
+void RemoveNode(std::set<GraphNode, GNCompare>& CFG, std::set<Kernel, KCompare>& kernels, const GraphNode& removeNode)
+{
+    // first, remove the node in question from any kernels it may belong to
+    // set of kernels that are updated versions of existing kernels, each member will eventually replace the old one in the kernels (input arg) set
+    set<Kernel, KCompare> toRemove;
+    for( const auto& kernel : kernels )
+    {
+        if( kernel.nodes.find(removeNode) != kernel.nodes.end() )
+        {
+            // remove the node from the kernel
+            auto newKernel = kernel;
+            newKernel.nodes.erase(removeNode);
+            toRemove.insert(newKernel);
+        }
+    }
+    for( const auto& newKernel : toRemove )
+    {
+        kernels.erase(newKernel.KID);
+        kernels.insert(newKernel);
+    }
+
+    // second, look for any VKNodes in the CFG and update their node sets if applicable
+    set<VKNode, GNCompare> newVKNodes;
+    for( const auto& node : CFG )
+    {
+        if( auto VKNode = dynamic_cast<const struct VKNode&>(node) )
+        {
+
+        }
+    }
+}
+*/
 
 void TrivialTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<int64_t, llvm::BasicBlock *> &IDToBlock)
 {
@@ -607,6 +645,46 @@ void BranchToSelectTransforms(std::set<GraphNode, GNCompare> &nodes, std::map<in
     }
 }
 
+void VirtualizeKernels(const std::set<Kernel, KCompare>& newKernels, std::set<GraphNode,GNCompare>& nodes)
+{
+    for( const auto& kernel : newKernels )
+    {
+        // gather entrance and exit nodes
+        auto kernelEntrances = kernel.getEntrances();
+        auto kernelExits     = kernel.getExits(nodes);
+        if( (kernelEntrances.size() == 1) && (kernelExits.size() == 1) )
+        {
+            // change the neighbors of the entrance node to the neighbors of the exit node
+            auto entranceNode = VKNode(*(kernelEntrances.begin()));
+            auto exitNode     = *(kernelExits.begin());
+            entranceNode.neighbors = exitNode.neighbors;
+            // for each neighbor of the kernel exit, change its predecessor to the kernel entrance node
+            for( const auto& neighID : exitNode.neighbors )
+            {
+                auto neighbor = *(nodes.find(neighID.first));
+                neighbor.predecessors.erase(exitNode.NID);
+                neighbor.predecessors.insert(entranceNode.NID);
+                nodes.erase(neighbor.NID);
+                nodes.insert(neighbor);
+            }
+            // remove all nodes within the kernel except the entrance node
+            auto toRemove = kernel.nodes;
+            for( const auto& node : kernel.getEntrances() )
+            {
+                toRemove.erase(node);
+            }
+            for( const auto& node : toRemove )
+            {
+                nodes.erase(node);
+                entranceNode.nodes.insert(node);
+            }
+            // finally replace the old entrance node with the new VKNode
+            nodes.erase(entranceNode.NID);
+            nodes.insert(entranceNode);
+        }
+    }
+}
+
 int main(int argc, char *argv[])
 {
     cl::ParseCommandLineOptions(argc, argv);
@@ -689,11 +767,12 @@ int main(int argc, char *argv[])
 
     // find minimum cycles
     bool done = false;
-    size_t numKernels = 0;
     set<Kernel, KCompare> kernels;
     while (!done)
     {
         done = true;
+        // holds kernels parsed from this iteration
+        set<Kernel, KCompare> newKernels;
         // first, find min paths in the graph
         for (const auto &node : nodes)
         {
@@ -705,20 +784,24 @@ int main(int argc, char *argv[])
                 {
                     newKernel.nodes.insert(*(nodes.find(id)));
                 }
-                bool match = false;
+                bool overlap = false;
                 for (const auto &kern : kernels)
                 {
                     auto shared = kern.Compare(newKernel);
                     if (shared.size() == kern.getBlocks().size())
                     {
                         // if perfect overlap, this kernel has already been found
-                        match = true;
+                        overlap = true;
                     }
                     if (!shared.empty())
                     {
-                        // we have an overlap with another kernel, check to see if it is because of a shared function
+                        // we have an overlap with another kernel, there are two cases that we want to look at
+                        // 1.) shared function
+                        // 2.) kernel hierarchy
+
+                        // First, check for shared function
                         // two overlapping functions need to satisfy the following condition in order for a shared function to be identified
-                        // 1.) All shared blocks are children of parent functions that are called within the kernel
+                        // 1.) All shared blocks are children of functions that are called within each kernel
                         // first condition, all shared blocks are children of called functions within the kernel
                         // set of all functions called in each of the two kernels
                         set<Function *> calledFunctions;
@@ -734,27 +817,34 @@ int main(int argc, char *argv[])
                         {
                             if (calledFunctions.find(IDToBlock[block]->getParent()) == calledFunctions.end())
                             {
-                                // this shared block had a parent that was not part of the called functions within the kernel, so mark these two kernels as a match
-                                match = true;
+                                // this shared block had a parent that was not part of the called functions within the kernel, so mark these two kernels as overlapping
+                                overlap = true;
                             }
                         }
+
+                        // Second, check for kernel hierarchy
+                        // We want to try and detect a kernel that is embedded within this one
+                        // This is usually indicated by a kernel whose entrances and exits only exist within the parent kernel
+                        // First we have to figure out which kernel is the child and which kernel is the parent
                     }
                 }
-                if (!match)
+                if (!overlap)
                 {
+                    newKernels.insert(newKernel);
                     kernels.insert(newKernel);
                 }
             }
         }
         // finally, check to see if we found new kernels, and if we didn't we're done
-        if (kernels.size() == numKernels)
+        if (newKernels.empty())
         {
             done = true;
         }
         else
         {
+            kernels.insert(newKernels.begin(), newKernels.end());
             done = false;
-            numKernels = kernels.size();
+            //VirtualizeKernels(newKernels, nodes);
         }
     }
 
