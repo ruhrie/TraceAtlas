@@ -79,7 +79,7 @@ void ReadBIN(set<GraphNode *, GNCompare> &nodes, const string &filename)
         if (nodes.find(key) == nodes.end())
         {
             currentNode = GraphNode(key);
-            // right now, NID and blocks are 1to1
+            // when reading the trace file, NID and blockID are 1to1
             currentNode.blocks[(int64_t)key] = (int64_t)key;
         }
         else
@@ -120,6 +120,16 @@ void ReadBIN(set<GraphNode *, GNCompare> &nodes, const string &filename)
             if (successorNode != nodes.end())
             {
                 (*successorNode)->predecessors.insert(node->NID);
+            }
+            // the trace doesn't include the terminating block of the program (because it has no edges leading from it)
+            // But this creates a problem when defining kernel exits, so look for the node who has a neighbor that is not in the set already and add that neighbor (with correct predecessor)
+            else
+            {
+                // we likely found the terminating block, so add the block and assign the current node to be its predecessor
+                auto programTerminator = GraphNode(neighbor.first);
+                programTerminator.blocks[(int64_t)programTerminator.NID] = (int64_t)programTerminator.NID;
+                programTerminator.predecessors.insert(node->NID);
+                AddNode(nodes, programTerminator);
             }
         }
     }
@@ -830,7 +840,7 @@ int main(int argc, char *argv[])
         }
         else
         {
-            //VirtualizeKernels(newKernels, nodes);
+            VirtualizeKernels(newKernels, nodes);
             kernels.insert(newKernels.begin(), newKernels.end());
             done = false;
         }
