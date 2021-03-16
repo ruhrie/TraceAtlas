@@ -1,27 +1,22 @@
-#include "newCartographer.h"
 #include "AtlasUtil/Format.h"
-#include "AtlasUtil/Path.h"
-#include "llvm/IRReader/IRReader.h"
-#include "llvm/Support/SourceMgr.h"
+#include "AtlasUtil/IO.h"
+#include "Dijkstra.h"
+#include "Kernel.h"
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <llvm/Support/CommandLine.h>
-#include <nlohmann/json.hpp>
 #include <queue>
-#include <spdlog/spdlog.h>
 
 using namespace llvm;
 using namespace std;
+using namespace TraceAtlas::Cartographer;
 using json = nlohmann::json;
 
 cl::opt<string> InputFilename("i", cl::desc("Specify bin file"), cl::value_desc(".bin filename"), cl::Required);
 cl::opt<string> BitcodeFileName("b", cl::desc("Specify bitcode file"), cl::value_desc(".bc filename"), cl::Required);
 cl::opt<string> BlockInfoFilename("bi", cl::desc("Specify BlockInfo.json file"), cl::value_desc(".json filename"), cl::Required);
 cl::opt<string> OutputFilename("o", cl::desc("Specify output json"), cl::value_desc("kernel filename"), cl::Required);
-
-uint64_t GraphNode::nextNID = 0;
-uint32_t Kernel::nextKID = 0;
 
 void AddNode(std::set<GraphNode *, p_GNCompare> &nodes, const GraphNode &newNode)
 {
@@ -99,11 +94,10 @@ void RemoveNode(std::set<GraphNode *, p_GNCompare> &CFG, const GraphNode &remove
     CFG.erase(CFG.find(removeNode.NID));
 }
 
-void ReadBIN(set<GraphNode *, p_GNCompare> &nodes, const string &filename)
+void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filename, bool print = false)
 {
-    // set that holds the first iteration of the graph
-    fstream inputFile;
-    inputFile.open(filename, ios::in | ios::binary);
+    std::fstream inputFile;
+    inputFile.open(filename, std::ios::in | std::ios::binary);
     while (inputFile.peek() != EOF)
     {
         // New block description: BBID,#ofNeighbors (16 bytes per neighbor)
@@ -134,7 +128,7 @@ void ReadBIN(set<GraphNode *, p_GNCompare> &nodes, const string &filename)
             if (val > 0)
             {
                 sum += val;
-                currentNode.neighbors[k2] = pair(val, 0.0);
+                currentNode.neighbors[k2] = std::pair(val, 0.0);
             }
         }
         for (auto &key : currentNode.neighbors)
@@ -168,117 +162,28 @@ void ReadBIN(set<GraphNode *, p_GNCompare> &nodes, const string &filename)
         }
     }
 
-    for (const auto &node : nodes)
+    if (print)
     {
-        spdlog::info("Examining node " + to_string(node->NID));
-        string preds;
-        for (auto pred : node->predecessors)
+        for (const auto &node : nodes)
         {
-            preds += to_string(pred);
-            if (pred != *prev(node->predecessors.end()))
+            spdlog::info("Examining node " + std::to_string(node->NID));
+            std::string preds;
+            for (auto pred : node->predecessors)
             {
-                preds += ",";
-            }
-        }
-        spdlog::info("Predecessors: " + preds);
-        for (const auto &neighbor : node->neighbors)
-        {
-            spdlog::info("Neighbor " + to_string(neighbor.first) + " has instance count " + to_string(neighbor.second.first) + " and probability " + to_string(neighbor.second.second));
-        }
-        cout << endl;
-        //spdlog::info("Node " + to_string(node->NID) + " has " + to_string(node->neighbors.size()) + " neighbors.");
-    }
-}
-
-vector<uint64_t> Dijkstras(const set<GraphNode *, p_GNCompare> &nodes, uint64_t source, uint64_t sink)
-{
-    // maps a node ID to its dijkstra information
-    map<uint64_t, DijkstraNode> DMap;
-    for (const auto &node : nodes)
-    {
-        // initialize each dijkstra node to have infinite distance, itself as its predecessor, and the unvisited nodecolor
-        DMap[node->NID] = DijkstraNode(INFINITY, node->NID, std::numeric_limits<uint64_t>::max(), NodeColor::White);
-    }
-    DMap[source] = DijkstraNode(0, source, std::numeric_limits<uint64_t>::max(), NodeColor::White);
-    // priority queue that holds all newly discovered nodes. Minimum paths get priority
-    // this deque gets sorted before each iteration, emulating the behavior of a priority queue, which is necessary because std::priority_queue does not support DECREASE_KEY operation
-    deque<DijkstraNode> Q;
-    Q.push_back(DMap[source]);
-    while (!Q.empty())
-    {
-        // sort the priority queue
-        std::sort(Q.begin(), Q.end(), DCompare);
-        // for each neighbor of u, calculate the neighbors new distance
-        if (nodes.find(Q.front().NID) != nodes.end())
-        {
-            for (const auto &neighbor : (*nodes.find(Q.front().NID))->neighbors)
-            {
-                /*spdlog::info("Priority Q has the following entries in this order:");
-                for( const auto& entry : Q )
+                preds += std::to_string(pred);
+                if (pred != *prev(node->predecessors.end()))
                 {
-                    spdlog::info(to_string(entry.NID));
-                }*/
-                if (neighbor.first == source)
-                {
-                    // we've found a loop
-                    // the DMap distance will be 0 for the source node so we can't do a comparison of distances on the first go-round
-                    // if the source doesnt yet have a predecessor then update its stats
-                    if (DMap[source].predecessor == std::numeric_limits<uint64_t>::max())
-                    {
-                        DMap[source].predecessor = Q.front().NID;
-                        DMap[source].distance = -log(neighbor.second.second) + DMap[Q.front().NID].distance;
-                    }
-                }
-                if (-log(neighbor.second.second) + Q.front().distance < DMap[neighbor.first].distance)
-                {
-                    DMap[neighbor.first].predecessor = Q.front().NID;
-                    DMap[neighbor.first].distance = -log(neighbor.second.second) + DMap[Q.front().NID].distance;
-                    if (DMap[neighbor.first].color == NodeColor::White)
-                    {
-                        DMap[neighbor.first].color = NodeColor::Grey;
-                        Q.push_back(DMap[neighbor.first]);
-                    }
-                    else if (DMap[neighbor.first].color == NodeColor::Grey)
-                    {
-                        // we have already seen this neighbor, it must be in the queue. We have to find its queue entry and update it
-                        for (auto &node : Q)
-                        {
-                            if (node.NID == DMap[neighbor.first].NID)
-                            {
-                                node.predecessor = DMap[neighbor.first].predecessor;
-                                node.distance = DMap[neighbor.first].distance;
-                            }
-                        }
-                        std::sort(Q.begin(), Q.end(), DCompare);
-                    }
+                    preds += ",";
                 }
             }
-        }
-        DMap[Q.front().NID].color = NodeColor::Black;
-        Q.pop_front();
-    }
-    // now construct the min path
-    vector<uint64_t> newKernel;
-    for (const auto &DN : DMap)
-    {
-        if (DN.first == sink)
-        {
-            if (DN.second.predecessor == std::numeric_limits<uint64_t>::max())
+            spdlog::info("Predecessors: " + preds);
+            for (const auto &neighbor : node->neighbors)
             {
-                // there was no path found between source and sink
-                return newKernel;
+                spdlog::info("Neighbor " + std::to_string(neighbor.first) + " has instance count " + std::to_string(neighbor.second.first) + " and probability " + std::to_string(neighbor.second.second));
             }
-            auto prevNode = DN.second.predecessor;
-            newKernel.push_back((*nodes.find(prevNode))->NID);
-            while (prevNode != source)
-            {
-                prevNode = DMap[prevNode].predecessor;
-                newKernel.push_back((*nodes.find(prevNode))->NID);
-            }
-            break;
+            std::cout << std::endl;
         }
     }
-    return newKernel;
 }
 
 void TrivialTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64_t, llvm::BasicBlock *> &IDToBlock)
@@ -560,19 +465,19 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::ma
                 break;
             }
             // 6.) All nodes in the entire subgraph must be contained within a single function
-            /*set<Function *> parents;
+            set<Function *> parents;
             for (const auto &block : entrance->blocks)
             {
                 parents.insert(IDToBlock[block.first]->getParent());
             }
             for (const auto &mid : midNodes)
             {
-                for (const auto &block : nodes.find(mid)->blocks)
+                for (const auto &block : (*nodes.find(mid))->blocks)
                 {
                     parents.insert(IDToBlock[block.first]->getParent());
                 }
             }
-            for (const auto &block : potentialExit->blocks)
+            for (const auto &block : (*potentialExit)->blocks)
             {
                 parents.insert(IDToBlock[block.first]->getParent());
             }
@@ -580,7 +485,7 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::ma
             {
                 // we have violated the condition that every block in the subgraph must belong to the same function, break
                 break;
-            }*/
+            }
             // Now we do case-specific checks
             if (MergeCase)
             {
@@ -745,14 +650,10 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
 int main(int argc, char *argv[])
 {
     cl::ParseCommandLineOptions(argc, argv);
-
-    // read in bitcode file
-    LLVMContext context;
-    SMDiagnostic smerror;
-    std::unique_ptr<Module> SourceBitcode = parseIRFile(BitcodeFileName, smerror, context);
+    auto blockCallers = ReadBlockInfo(BlockInfoFilename);
+    auto SourceBitcode = ReadBitcode(BitcodeFileName);
     if (SourceBitcode.get() == nullptr)
     {
-        spdlog::critical("Failed to open bitcode file: " + BitcodeFileName);
         return EXIT_FAILURE;
     }
     // Annotate its bitcodes and values
@@ -761,71 +662,28 @@ int main(int argc, char *argv[])
     // construct its callgraph
     map<int64_t, BasicBlock *> IDToBlock;
     map<int64_t, Value *> IDToValue;
-    map<BasicBlock *, Function *> BlockToFPtr;
     InitializeIDMaps(SourceBitcode.get(), IDToBlock, IDToValue);
 
-    // read BlockInfo json
-    ifstream inputJson;
-    nlohmann::json j;
-    try
-    {
-        inputJson.open(BlockInfoFilename);
-        inputJson >> j;
-        inputJson.close();
-    }
-    catch (exception &e)
-    {
-        spdlog::critical("Couldn't open input json file: " + BlockInfoFilename);
-        spdlog::critical(e.what());
-        return EXIT_FAILURE;
-    }
-    map<int64_t, int64_t> blockCallers;
-    for (const auto &bbid : j.items())
-    {
-        auto vec = j[bbid.key()]["BlockCallers"].get<vector<int64_t>>();
-        if (vec.size() == 1)
-        {
-            blockCallers[stol(bbid.key())] = *vec.begin();
-        }
-        else if (vec.size() > 1)
-        {
-            throw AtlasException("Found more than one entry in a blockCaller key!");
-        }
-    }
-
     // Construct bitcode CallGraph
+    map<BasicBlock *, Function *> BlockToFPtr;
     auto CG = getCallGraph(SourceBitcode.get(), blockCallers, BlockToFPtr, IDToBlock);
 
     // Set of nodes that constitute the entire graph
     set<GraphNode *, p_GNCompare> nodes;
-    set<Kernel *, KCompare> kernels;
 
     ReadBIN(nodes, InputFilename);
     // combine all trivial node merges
     TrivialTransforms(nodes, IDToBlock);
-
     // Next transform, find conditional branches and turn them into select statements
     // In other words, find subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
     BranchToSelectTransforms(nodes, IDToBlock);
-    for (const auto &node : nodes)
-    {
-        spdlog::info("Examining node " + to_string(node->NID));
-        string blocks;
-        for (const auto &b : node->blocks)
-        {
-            blocks += to_string(b.first) + "->" + to_string(b.second) + ",";
-        }
-        spdlog::info("This node contains blocks: " + blocks);
-        for (const auto &neighbor : node->neighbors)
-        {
-            spdlog::info("Neighbor " + to_string(neighbor.first) + " has instance count " + to_string(neighbor.second.first) + " and probability " + to_string(neighbor.second.second));
-        }
-        cout << endl;
-        //spdlog::info("Node " + to_string(node->NID) + " has " + to_string(node->neighbors.size()) + " neighbors.");
-    }
+    PrintGraph(nodes);
+
     // find minimum cycles
     bool done = false;
-    //set<Kernel, KCompare> kernels;
+    // master set of kernels, holds all valid kernels parsed from the CFG
+    // each kernel in here is represented in the call graph by a virtual kernel node
+    set<Kernel *, KCompare> kernels;
     while (!done)
     {
         // holds kernels parsed from this iteration
@@ -912,37 +770,7 @@ int main(int argc, char *argv[])
             done = true;
         }
     }
-
-    for (const auto &node : nodes)
-    {
-        spdlog::info("Examining node " + to_string(node->NID));
-        if (auto VKN = dynamic_cast<VKNode *>(node))
-        {
-            spdlog::info("This node is a virtual kernel pointing to ID " + to_string(VKN->kernel->KID));
-        }
-        string blocks;
-        for (const auto &b : node->blocks)
-        {
-            blocks += to_string(b.first) + "->" + to_string(b.second) + ",";
-        }
-        spdlog::info("This node contains blocks: " + blocks);
-        string preds;
-        for (auto pred : node->predecessors)
-        {
-            preds += to_string(pred);
-            if (pred != *prev(node->predecessors.end()))
-            {
-                preds += ",";
-            }
-        }
-        spdlog::info("Predecessors: " + preds);
-        for (const auto &neighbor : node->neighbors)
-        {
-            spdlog::info("Neighbor " + to_string(neighbor.first) + " has instance count " + to_string(neighbor.second.first) + " and probability " + to_string(neighbor.second.second));
-        }
-        cout << endl;
-        //spdlog::info("Node " + to_string(node->NID) + " has " + to_string(node->neighbors.size()) + " neighbors.");
-    }
+    PrintGraph(nodes);
 
     // write kernel file
     json outputJson;
@@ -955,6 +783,7 @@ int main(int argc, char *argv[])
     {
         outputJson["BlockCallers"][to_string(bid.first)] = bid.second;
     }
+    // sequential ID for each kernel
     int id = 0;
     // average nodes per kernel
     float totalNodes = 0.0;

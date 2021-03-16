@@ -1,4 +1,7 @@
 #pragma once
+#include "cartographer/new/inc/GraphNode.h"
+#include "cartographer/new/inc/Kernel.h"
+#include "cartographer/new/inc/VKNode.h"
 #include <exception>
 #include <fstream>
 #include <iostream>
@@ -101,4 +104,37 @@ inline int PrintFile(llvm::Module *M, std::string &file, bool ASCIIFormat, bool 
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
+}
+
+inline void PrintGraph(const std::set<TraceAtlas::Cartographer::GraphNode *, TraceAtlas::Cartographer::p_GNCompare> &nodes)
+{
+    for (const auto &node : nodes)
+    {
+        spdlog::info("Examining node " + std::to_string(node->NID));
+        if (auto VKN = dynamic_cast<TraceAtlas::Cartographer::VKNode *>(node))
+        {
+            spdlog::info("This node is a virtual kernel pointing to ID " + std::to_string(VKN->kernel->KID));
+        }
+        std::string blocks;
+        for (const auto &b : node->blocks)
+        {
+            blocks += std::to_string(b.first) + "->" + std::to_string(b.second) + ",";
+        }
+        spdlog::info("This node contains blocks: " + blocks);
+        std::string preds;
+        for (auto pred : node->predecessors)
+        {
+            preds += std::to_string(pred);
+            if (pred != *prev(node->predecessors.end()))
+            {
+                preds += ",";
+            }
+        }
+        spdlog::info("Predecessors: " + preds);
+        for (const auto &neighbor : node->neighbors)
+        {
+            spdlog::info("Neighbor " + std::to_string(neighbor.first) + " has instance count " + std::to_string(neighbor.second.first) + " and probability " + std::to_string(neighbor.second.second));
+        }
+        std::cout << std::endl;
+    }
 }

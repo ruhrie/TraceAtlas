@@ -1,5 +1,5 @@
 #include "AtlasUtil/Format.h"
-#include "AtlasUtil/Path.h"
+#include "AtlasUtil/IO.h"
 #include "AtlasUtil/Print.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Instruction.h"
@@ -11,7 +11,6 @@
 #include <fstream>
 #include <iomanip>
 #include <map>
-#include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
 using namespace llvm;
@@ -25,41 +24,10 @@ cl::opt<std::string> OutputFilename("o", cl::desc("Specify output json"), cl::va
 int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
-
-    ifstream inputJson;
-    nlohmann::json j;
-    try
-    {
-        inputJson.open(BlockInfo);
-        inputJson >> j;
-        inputJson.close();
-    }
-    catch (exception &e)
-    {
-        spdlog::critical("Couldn't open input json file: " + BlockInfo);
-        spdlog::critical(e.what());
-        return EXIT_FAILURE;
-    }
-    map<int64_t, int64_t> blockCallers;
-    for (const auto &bbid : j.items())
-    {
-        auto vec = j[bbid.key()]["BlockCallers"].get<vector<int64_t>>();
-        if (vec.size() == 1)
-        {
-            blockCallers[stol(bbid.key())] = *vec.begin();
-        }
-        else if (vec.size() > 1)
-        {
-            throw AtlasException("Found more than one entry in a blockCaller key!");
-        }
-    }
-
-    LLVMContext context;
-    SMDiagnostic smerror;
-    std::unique_ptr<Module> SourceBitcode = parseIRFile(InputFilename, smerror, context);
+    auto blockCallers = ReadBlockInfo(BlockInfo);
+    auto SourceBitcode = ReadBitcode(InputFilename);
     if (SourceBitcode.get() == nullptr)
     {
-        spdlog::critical("Failed to open bitcode file: " + InputFilename);
         return EXIT_FAILURE;
     }
 
