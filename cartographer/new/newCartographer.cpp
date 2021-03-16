@@ -23,49 +23,83 @@ cl::opt<string> OutputFilename("o", cl::desc("Specify output json"), cl::value_d
 uint64_t GraphNode::nextNID = 0;
 uint32_t Kernel::nextKID = 0;
 
-void AddNode(std::set<GraphNode *, GNCompare> &nodes, const GraphNode &newNode)
+void AddNode(std::set<GraphNode *, p_GNCompare> &nodes, const GraphNode &newNode)
 {
     nodes.insert(new GraphNode(newNode));
 }
 
-void AddNode(std::set<GraphNode *, GNCompare> &nodes, const VKNode &newNode)
+void AddNode(std::set<GraphNode *, p_GNCompare> &nodes, const VKNode &newNode)
 {
     nodes.insert(new VKNode(newNode));
 }
 
-void RemoveNode(std::set<GraphNode *, GNCompare> &CFG, std::set<Kernel, KCompare> &kernels, GraphNode *removeNode)
+void RemoveNode(std::set<GraphNode *, p_GNCompare> &CFG, GraphNode *removeNode)
 {
     // first, remove the node in question from any kernels it may belong to
     // set of kernels that are updated versions of existing kernels, each member will eventually replace the old one in the kernels (input arg) set
-    set<Kernel, KCompare> toRemove;
-    for (const auto &kernel : kernels)
+    /*for (const auto &kernel : kernels)
     {
-        if (kernel.nodes.find(removeNode) != kernel.nodes.end())
+        if (kernel->nodes.find(removeNode) != kernel->nodes.end())
         {
             // remove the node from the kernel
-            auto newKernel = kernel;
-            newKernel.nodes.erase(removeNode);
-            toRemove.insert(newKernel);
+            kernel->nodes.erase(removeNode);
         }
-    }
-    for (const auto &newKernel : toRemove)
-    {
-        kernels.erase(newKernel.KID);
-        kernels.insert(newKernel);
-    }
-
+    }*/
     // second, look for any VKNodes in the CFG and update their node sets if applicable
-    set<VKNode, GNCompare> newVKNodes;
+    /*set<VKNode,  p_GNCompare> newVKNodes;
     for (auto node : CFG)
     {
         //if( auto VKNode = dynamic_pointer_cast<struct VKNode>(sharedNode) )
         if (auto VKN = dynamic_cast<VKNode *>(node))
         {
+            VKN->nodes.erase(removeNode);
+        }
+    }*/
+
+    // third, remove the node from the graph and update the neighbors of the predecessors and the predecessors of the neighbors
+    /*for( const auto& predID : removeNode->predecessors )
+    {
+        auto pred = CFG.find(predID);
+        if( pred != CFG.end() )
+        {
+            (*pred)->neighbors.erase(removeNode->NID); 
+            for( const auto& neighbor : removeNode->neighbors )
+            {
+                (*pred)->neighbors[neighbor.first] = neighbor.second;
+            }
         }
     }
+    for( const auto& neighborID : removeNode->neighbors )
+    {
+        auto neighbor = CFG.find(neighborID.first);
+        if( neighbor != CFG.end() )
+        {
+            (*neighbor)->predecessors.erase(removeNode->NID);
+            for( const auto& predID : removeNode->predecessors )
+            {
+                (*neighbor)->predecessors.insert(predID);
+            }
+        }
+    }*/
+    // fourth, free
+    CFG.erase(removeNode);
+    delete removeNode;
+}
+/*
+void RemoveNode(std::set<GraphNode *,  p_GNCompare> &CFG, GraphNode *removeNode)
+{
+    // fourth, free
+    CFG.erase(removeNode);
+    delete removeNode;
+}
+*/
+void RemoveNode(std::set<GraphNode *, p_GNCompare> &CFG, const GraphNode &removeNode)
+{
+    // fourth, free
+    CFG.erase(CFG.find(removeNode.NID));
 }
 
-void ReadBIN(set<GraphNode *, GNCompare> &nodes, const string &filename)
+void ReadBIN(set<GraphNode *, p_GNCompare> &nodes, const string &filename)
 {
     // set that holds the first iteration of the graph
     fstream inputFile;
@@ -156,7 +190,7 @@ void ReadBIN(set<GraphNode *, GNCompare> &nodes, const string &filename)
     }
 }
 
-vector<uint64_t> Dijkstras(const set<GraphNode *, GNCompare> &nodes, uint64_t source, uint64_t sink)
+vector<uint64_t> Dijkstras(const set<GraphNode *, p_GNCompare> &nodes, uint64_t source, uint64_t sink)
 {
     // maps a node ID to its dijkstra information
     map<uint64_t, DijkstraNode> DMap;
@@ -247,7 +281,7 @@ vector<uint64_t> Dijkstras(const set<GraphNode *, GNCompare> &nodes, uint64_t so
     return newKernel;
 }
 
-void TrivialTransforms(std::set<GraphNode *, GNCompare> &nodes, std::set<Kernel, KCompare> &kernels, std::map<int64_t, llvm::BasicBlock *> &IDToBlock)
+void TrivialTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64_t, llvm::BasicBlock *> &IDToBlock)
 {
     // a trivial node merge must satisfy two conditions
     // 1.) The source node has exactly 1 neighbor with certain probability
@@ -285,20 +319,19 @@ void TrivialTransforms(std::set<GraphNode *, GNCompare> &nodes, std::set<Kernel,
                             currentNode->neighbors.clear();
                             for (const auto &n : (*succ)->neighbors)
                             {
-                                currentNode->neighbors[n.first] = n.second;
                                 auto succ2 = nodes.find(n.first);
                                 if (succ2 != nodes.end())
                                 {
+                                    currentNode->neighbors[n.first] = n.second;
                                     (*succ2)->predecessors.erase((*succ)->NID);
                                     (*succ2)->predecessors.insert(currentNode->NID);
-                                    RemoveNode(nodes, kernels, *succ2);
                                 }
                             }
                             // add the successor blocks
                             currentNode->addBlocks((*succ)->blocks);
 
                             // remove stale node from the node set
-                            RemoveNode(nodes, kernels, *succ);
+                            RemoveNode(nodes, *succ);
                         }
                         else
                         {
@@ -323,7 +356,7 @@ void TrivialTransforms(std::set<GraphNode *, GNCompare> &nodes, std::set<Kernel,
     }
 }
 
-void BranchToSelectTransforms(std::set<GraphNode *, GNCompare> &nodes, std::set<Kernel, KCompare> &kernels, std::map<int64_t, llvm::BasicBlock *> &IDToBlock)
+void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64_t, llvm::BasicBlock *> &IDToBlock)
 {
     // Vocabulary
     // entrance - first node that will execute in the target subgraph
@@ -614,7 +647,6 @@ void BranchToSelectTransforms(std::set<GraphNode *, GNCompare> &nodes, std::set<
                 {
                     (*succ2)->predecessors.erase((*potentialExit)->NID);
                     (*succ2)->predecessors.insert(entrance->NID);
-                    RemoveNode(nodes, kernels, *succ2);
                 }
             }
             // merge midNodes and potentialExit blocks in order
@@ -629,7 +661,6 @@ void BranchToSelectTransforms(std::set<GraphNode *, GNCompare> &nodes, std::set<
             entrance->addBlocks((*potentialExit)->blocks);
 
             // remove stale nodes from the node set
-            nodes.erase(entrance);
             for (auto n : midNodes)
             {
                 auto midNode = nodes.find(n);
@@ -638,47 +669,77 @@ void BranchToSelectTransforms(std::set<GraphNode *, GNCompare> &nodes, std::set<
                     nodes.erase(*midNode);
                 }
             }
-            RemoveNode(nodes, kernels, *potentialExit);
+            RemoveNode(nodes, *potentialExit);
         }
     }
 }
 
-void VirtualizeKernels(std::set<Kernel, KCompare> &newKernels, std::set<GraphNode *, GNCompare> &nodes)
+std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels, std::set<GraphNode *, p_GNCompare> &nodes)
 {
+    vector<Kernel *> newPointers;
     for (const auto &kernel : newKernels)
     {
         // gather entrance and exit nodes
-        auto kernelEntrances = kernel.getEntrances();
-        auto kernelExits = kernel.getExits(nodes);
-        if ((kernelEntrances.size() == 1) && (kernelExits.size() == 1))
+        auto kernelEntrances = kernel->getEntrances();
+        auto kernelExits = kernel->getExits();
+        try
         {
-            // change the neighbors of the entrance node to the neighbors of the exit node
-            auto entranceNode = VKNode(*(kernelEntrances.begin()));
-            auto exitNode = *(kernelExits.begin());
-            entranceNode.neighbors = exitNode->neighbors;
-            // for each neighbor of the kernel exit, change its predecessor to the kernel entrance node
-            for (const auto &neighID : exitNode->neighbors)
+            if ((kernelEntrances.size() == 1) && (kernelExits.size() == 1))
             {
-                auto neighbor = *(nodes.find(neighID.first));
-                neighbor->predecessors.erase(exitNode->NID);
-                neighbor->predecessors.insert(entranceNode.NID);
+                // change the neighbors of the entrance node to the exit node (because the exit nodes are the first blocks outside the kernel exit edges)
+                auto entranceNode = new VKNode(*kernelEntrances.begin(), kernel);
+                auto exitNode = *(kernelExits.begin());
+                // investigate the neighbors
+                // the only edges leading from the virtual kernel node should be edges out of the kernel
+                // we are given the nodes within the kernel that have neighbors outside the kernel, so here we figure out which exit edges exist
+                // we leave the probabilities the same as the original nodes (this means we will have outgoing edges whose probabilities do not sum to 1, because edges that go back in the kernel are omitted)
+                entranceNode->neighbors.clear();
+                for (const auto &en : exitNode.neighbors)
+                {
+                    if (kernel->nodes.find(en.first) == kernel->nodes.end())
+                    {
+                        auto exitNode = nodes.find(en.first);
+                        if (exitNode != nodes.end())
+                        {
+                            entranceNode->neighbors[en.first] = en.second;
+                        }
+                    }
+                }
+                // now we have to figure out if the
+                // for each neighbor of the kernel exit, change its predecessor to the kernel entrance node
+                for (const auto &neighID : exitNode.neighbors)
+                {
+                    auto neighbor = *(nodes.find(neighID.first));
+                    neighbor->predecessors.erase(exitNode.NID);
+                    neighbor->predecessors.insert(entranceNode->NID);
+                }
+                // remove all nodes within the kernel except the entrance node
+                auto toRemove = kernel->nodes;
+                for (const auto &node : kernel->getEntrances())
+                {
+                    toRemove.erase(node);
+                }
+                for (const auto &node : toRemove)
+                {
+                    RemoveNode(nodes, node);
+                }
+                // finally replace the old entrance node with the new VKNode
+                RemoveNode(nodes, *(kernelEntrances.begin()));
+                nodes.insert(entranceNode);
+                kernel->kernelNode = entranceNode;
+                newPointers.push_back(kernel);
             }
-            // remove all nodes within the kernel except the entrance node
-            auto toRemove = kernel.nodes;
-            for (const auto &node : kernel.getEntrances())
+            else
             {
-                toRemove.erase(node);
+                throw AtlasException("Found a kernel with " + to_string(kernelEntrances.size()) + " entrances and " + to_string(kernelExits.size()) + " exits!");
             }
-            for (const auto &node : toRemove)
-            {
-                nodes.erase(node);
-                entranceNode.nodes.insert(node);
-            }
-            // finally replace the old entrance node with the new VKNode
-            RemoveNode(nodes, newKernels, *(kernelEntrances.begin()));
-            AddNode(nodes, entranceNode);
+        }
+        catch (AtlasException &e)
+        {
+            spdlog::error(e.what());
         }
     }
+    return newPointers;
 }
 
 int main(int argc, char *argv[])
@@ -736,16 +797,16 @@ int main(int argc, char *argv[])
     auto CG = getCallGraph(SourceBitcode.get(), blockCallers, BlockToFPtr, IDToBlock);
 
     // Set of nodes that constitute the entire graph
-    set<GraphNode *, GNCompare> nodes;
-    set<Kernel, KCompare> kernels;
+    set<GraphNode *, p_GNCompare> nodes;
+    set<Kernel *, KCompare> kernels;
 
     ReadBIN(nodes, InputFilename);
     // combine all trivial node merges
-    TrivialTransforms(nodes, kernels, IDToBlock);
+    TrivialTransforms(nodes, IDToBlock);
+
     // Next transform, find conditional branches and turn them into select statements
     // In other words, find subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
-    BranchToSelectTransforms(nodes, kernels, IDToBlock);
-
+    BranchToSelectTransforms(nodes, IDToBlock);
     for (const auto &node : nodes)
     {
         spdlog::info("Examining node " + to_string(node->NID));
@@ -762,31 +823,30 @@ int main(int argc, char *argv[])
         cout << endl;
         //spdlog::info("Node " + to_string(node->NID) + " has " + to_string(node->neighbors.size()) + " neighbors.");
     }
-
     // find minimum cycles
     bool done = false;
     //set<Kernel, KCompare> kernels;
     while (!done)
     {
-        done = true;
         // holds kernels parsed from this iteration
-        set<Kernel, KCompare> newKernels;
+        set<Kernel *, KCompare> newKernels;
         // first, find min paths in the graph
         for (const auto &node : nodes)
         {
             auto nodeIDs = Dijkstras(nodes, node->NID, node->NID);
             if (!nodeIDs.empty())
             {
-                auto newKernel = Kernel();
+                auto newKernel = new Kernel();
                 for (const auto &id : nodeIDs)
                 {
-                    newKernel.nodes.insert(*(nodes.find(id)));
+                    newKernel->nodes.insert(**(nodes.find(id)));
                 }
+                // check for overlap with kernels from this iteration
                 bool overlap = false;
-                for (const auto &kern : kernels)
+                for (const auto &kern : newKernels)
                 {
-                    auto shared = kern.Compare(newKernel);
-                    if (shared.size() == kern.getBlocks().size())
+                    auto shared = kern->Compare(*newKernel);
+                    if (shared.size() == kern->getBlocks().size())
                     {
                         // if perfect overlap, this kernel has already been found
                         overlap = true;
@@ -806,7 +866,7 @@ int main(int argc, char *argv[])
                         for (const auto &caller : blockCallers)
                         {
                             // only check newKernel because it is the kernel in question
-                            if (newKernel.getBlocks().find(caller.first) != newKernel.getBlocks().end())
+                            if (newKernel->getBlocks().find(caller.first) != newKernel->getBlocks().end())
                             {
                                 calledFunctions.insert(IDToBlock[caller.second]->getParent());
                             }
@@ -829,21 +889,59 @@ int main(int argc, char *argv[])
                 if (!overlap)
                 {
                     newKernels.insert(newKernel);
-                    kernels.insert(newKernel);
+                }
+                else
+                {
+                    delete newKernel;
                 }
             }
         }
         // finally, check to see if we found new kernels, and if we didn't we're done
-        if (newKernels.empty())
+        auto newPointers = VirtualizeKernels(newKernels, nodes);
+        if (!newPointers.empty())
         {
-            done = true;
+            for (const auto &p : newPointers)
+            {
+                kernels.insert(p);
+            }
+            done = false;
         }
         else
         {
-            VirtualizeKernels(newKernels, nodes);
-            kernels.insert(newKernels.begin(), newKernels.end());
-            done = false;
+            // we have no new virtualized kernels, which is as good as having no new kernels at all, so we're done
+            done = true;
         }
+    }
+
+    for (const auto &node : nodes)
+    {
+        spdlog::info("Examining node " + to_string(node->NID));
+        if (auto VKN = dynamic_cast<VKNode *>(node))
+        {
+            spdlog::info("This node is a virtual kernel pointing to ID " + to_string(VKN->kernel->KID));
+        }
+        string blocks;
+        for (const auto &b : node->blocks)
+        {
+            blocks += to_string(b.first) + "->" + to_string(b.second) + ",";
+        }
+        spdlog::info("This node contains blocks: " + blocks);
+        string preds;
+        for (auto pred : node->predecessors)
+        {
+            preds += to_string(pred);
+            if (pred != *prev(node->predecessors.end()))
+            {
+                preds += ",";
+            }
+        }
+        spdlog::info("Predecessors: " + preds);
+        for (const auto &neighbor : node->neighbors)
+        {
+            spdlog::info("Neighbor " + to_string(neighbor.first) + " has instance count " + to_string(neighbor.second.first) + " and probability " + to_string(neighbor.second.second));
+        }
+        cout << endl;
+        //spdlog::info("Node " + to_string(node->NID) + " has " + to_string(node->neighbors.size()) + " neighbors.");
     }
 
     // write kernel file
@@ -864,13 +962,13 @@ int main(int argc, char *argv[])
     float totalBlocks = 0.0;
     for (const auto &kernel : kernels)
     {
-        totalNodes += (float)kernel.nodes.size();
-        totalBlocks += (float)kernel.getBlocks().size();
-        for (const auto &n : kernel.nodes)
+        totalNodes += (float)kernel->nodes.size();
+        totalBlocks += (float)kernel->getBlocks().size();
+        for (const auto &n : kernel->nodes)
         {
-            outputJson["Kernels"][to_string(id)]["Nodes"].push_back(n->NID);
+            outputJson["Kernels"][to_string(id)]["Nodes"].push_back(n.NID);
         }
-        for (const auto &k : kernel.getBlocks())
+        for (const auto &k : kernel->getBlocks())
         {
             outputJson["Kernels"][to_string(id)]["Blocks"].push_back(k);
         }

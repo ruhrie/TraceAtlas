@@ -123,7 +123,7 @@ public:
         // 2.) connect that block to the end block
         // 3.) append the rest of the new blocks to the map
     }
-    virtual void addNode(GraphNode *newNode){};
+    virtual void addNodeBlocks(GraphNode *newNode){};
 
 protected:
     static uint64_t nextNID;
@@ -134,7 +134,7 @@ protected:
 };
 
 /// Allows for us to search a set of GraphNodes using an NID
-struct GNCompare
+struct p_GNCompare
 {
     using is_transparent = void;
     bool operator()(const GraphNode *lhs, const GraphNode *rhs) const
@@ -150,6 +150,24 @@ struct GNCompare
         return lhs < rhs->NID;
     }
 };
+struct GNCompare
+{
+    using is_transparent = void;
+    bool operator()(const GraphNode &lhs, const GraphNode &rhs) const
+    {
+        return lhs.NID < rhs.NID;
+    }
+    bool operator()(const GraphNode &lhs, uint64_t rhs) const
+    {
+        return lhs.NID < rhs;
+    }
+    bool operator()(uint64_t lhs, const GraphNode &rhs) const
+    {
+        return lhs < rhs.NID;
+    }
+};
+/// @brief Dijkstra implementation inspired by boost library
+std::vector<uint64_t> Dijkstras(const std::set<GraphNode, GNCompare> &nodes, uint64_t source, uint64_t sink);
 
 /// @brief Virtual Kernel Node
 ///
@@ -157,51 +175,52 @@ struct GNCompare
 class VKNode : public GraphNode
 {
 public:
-    std::set<GraphNode *, GNCompare> nodes;
-    VKNode() : GraphNode()
+    struct Kernel *kernel;
+    VKNode(struct Kernel *p_k) : GraphNode()
     {
-        nodes = std::set<GraphNode *, GNCompare>();
+        kernel = p_k;
     }
-    VKNode(const GraphNode *GN)
+    VKNode(const GraphNode &GN, struct Kernel *p_k)
     {
-        NID = GN->NID;
-        blocks = GN->blocks;
-        neighbors = GN->neighbors;
-        predecessors = GN->predecessors;
-        nodes = std::set<GraphNode *, GNCompare>();
+        NID = GN.NID;
+        kernel = p_k;
+        blocks = GN.blocks;
+        neighbors = GN.neighbors;
+        predecessors = GN.predecessors;
     }
     ~VKNode() = default;
-    void addNode(GraphNode *newNode)
+    void addNodeBlocks(GraphNode *newNode)
     {
-        nodes.insert(newNode);
+        for (const auto &block : newNode->blocks)
+        {
+            blocks[block.first] = block.second;
+        }
     }
 };
 
-/// @brief Dijkstra implementation inspired by boost library
-std::vector<uint64_t> Dijkstras(const std::set<GraphNode, GNCompare> &nodes, uint64_t source, uint64_t sink);
-
 struct Kernel
 {
-    std::set<GraphNode *, GNCompare> nodes;
+    std::set<GraphNode, GNCompare> nodes;
+    VKNode *kernelNode;
     uint32_t KID;
     Kernel()
     {
         KID = getNextKID();
-        nodes = std::set<GraphNode *, GNCompare>();
+        nodes = std::set<GraphNode, GNCompare>();
     }
     Kernel(uint32_t ID)
     {
         KID = ID;
-        nodes = std::set<GraphNode *, GNCompare>();
+        nodes = std::set<GraphNode, GNCompare>();
     }
     /// Returns the IDs of the kernel entrances
     /// @retval    entrances Vector of IDs that specify which nodes (or blocks) are the kernel entrances. Kernel entrances are the source nodes of edges that enter the kernel
-    std::vector<GraphNode *> getEntrances() const
+    std::vector<GraphNode> getEntrances() const
     {
-        std::vector<GraphNode *> entrances;
+        std::vector<GraphNode> entrances;
         for (const auto &node : nodes)
         {
-            for (const auto &pred : node->predecessors)
+            for (const auto &pred : node.predecessors)
             {
                 if (nodes.find(pred) == nodes.end())
                 {
@@ -216,19 +235,18 @@ struct Kernel
     /// @brief Returns the IDs of the kernel exits
     ///
     /// @param[in] allNodes Set of all nodes in the control flow graph. Used to copy the nodes that are the destinations of edges that leave the kernel
-    /// @retval    exits Vector of IDs that specify which nodes (or blocks) are the kernel exits. Kernel exits are the destination nodes of edges that leave the kernel
-    std::vector<GraphNode *> getExits(const std::set<GraphNode *, GNCompare> &allNodes) const
+    /// @retval    exits Vector of IDs that specify which nodes (or blocks) are the kernel exits. Kernel exits are nodes that have a neighbor outside the kernel
+    std::vector<GraphNode> getExits() const
     {
-        std::vector<GraphNode *> exitNodes;
-        for (const auto &node : nodes)
+        std::vector<GraphNode> exitNodes;
+        for (const auto node : nodes)
         {
-            for (const auto &neighbor : node->neighbors)
+            for (const auto &neighbor : node.neighbors)
             {
                 if (nodes.find(neighbor.first) == nodes.end())
                 {
                     // we've found an exit
-                    exitNodes.push_back(*(allNodes.find(neighbor.first)));
-                    break;
+                    exitNodes.push_back(node);
                 }
             }
         }
@@ -240,7 +258,7 @@ struct Kernel
         std::set<int64_t> blocks;
         for (const auto &node : nodes)
         {
-            for (const auto &block : node->blocks)
+            for (const auto &block : node.blocks)
             {
                 blocks.insert(block.first);
             }
@@ -260,7 +278,7 @@ struct Kernel
         {
             if (nodes.find(compNode) != nodes.end())
             {
-                for (const auto &block : compNode->blocks)
+                for (const auto &block : compNode.blocks)
                 {
                     shared.insert(block.first);
                 }
@@ -277,14 +295,14 @@ struct Kernel
             std::map<uint64_t, NodeColor> colors;
             for (const auto &node2 : nodes)
             {
-                colors[node2->NID] = NodeColor::White;
+                colors[node2.NID] = NodeColor::White;
             }
             // holds newly discovered nodes
-            std::deque<GraphNode *> Q;
+            std::deque<GraphNode> Q;
             Q.push_back(node);
             while (!Q.empty())
             {
-                for (const auto &neighbor : Q.front()->neighbors)
+                for (const auto &neighbor : Q.front().neighbors)
                 {
                     // check if this neighbor is within the kernel
                     if (nodes.find(neighbor.first) != nodes.end())
@@ -326,16 +344,16 @@ private:
 struct KCompare
 {
     using is_transparent = void;
-    bool operator()(const Kernel &lhs, const Kernel &rhs) const
+    bool operator()(const Kernel *lhs, const Kernel *rhs) const
     {
-        return lhs.KID < rhs.KID;
+        return lhs->KID < rhs->KID;
     }
-    bool operator()(const Kernel &lhs, uint64_t rhs) const
+    bool operator()(const Kernel *lhs, uint64_t rhs) const
     {
-        return lhs.KID < rhs;
+        return lhs->KID < rhs;
     }
-    bool operator()(uint64_t lhs, const Kernel &rhs) const
+    bool operator()(uint64_t lhs, const Kernel *rhs) const
     {
-        return lhs < rhs.KID;
+        return lhs < rhs->KID;
     }
 };
