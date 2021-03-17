@@ -593,6 +593,11 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
             {
                 // change the neighbors of the entrance node to the exit node (because the exit nodes are the first blocks outside the kernel exit edges)
                 auto entranceNode = new VKNode(*kernelEntrances.begin(), kernel);
+                // remove each node in the kernel that are possibly in the node predecessors
+                for (const auto &node : kernel->nodes)
+                {
+                    entranceNode->predecessors.erase(node.NID);
+                }
                 auto exitNode = *(kernelExits.begin());
                 // investigate the neighbors
                 // the only edges leading from the virtual kernel node should be edges out of the kernel
@@ -601,12 +606,16 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
                 entranceNode->neighbors.clear();
                 for (const auto &en : exitNode.neighbors)
                 {
+                    // nodes within the kernel will not be in the neighbors of the virtual kernel
                     if (kernel->nodes.find(en.first) == kernel->nodes.end())
                     {
-                        auto exitNode = nodes.find(en.first);
-                        if (exitNode != nodes.end())
+                        if (kernel->nodes.find(en.first) == kernel->nodes.end())
                         {
-                            entranceNode->neighbors[en.first] = en.second;
+                            auto exitNode = nodes.find(en.first);
+                            if (exitNode != nodes.end())
+                            {
+                                entranceNode->neighbors[en.first] = en.second;
+                            }
                         }
                     }
                 }
@@ -677,7 +686,6 @@ int main(int argc, char *argv[])
     // Next transform, find conditional branches and turn them into select statements
     // In other words, find subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
     BranchToSelectTransforms(nodes, IDToBlock);
-    PrintGraph(nodes);
 
     // find minimum cycles
     bool done = false;
@@ -701,6 +709,8 @@ int main(int argc, char *argv[])
                 }
                 // check for overlap with kernels from this iteration
                 bool overlap = false;
+                // set of kernels that are being kicked out of the newKernels set
+                set<Kernel *, KCompare> toRemove;
                 for (const auto &kern : newKernels)
                 {
                     auto shared = kern->Compare(*newKernel);
@@ -738,10 +748,17 @@ int main(int argc, char *argv[])
                             }
                         }
 
-                        // Second, check for kernel hierarchy
-                        // We want to try and detect a kernel that is embedded within this one
-                        // This is usually indicated by a kernel whose entrances and exits only exist within the parent kernel
-                        // First we have to figure out which kernel is the child and which kernel is the parent
+                        // Second, compare probability of exit. We will keep the loop that is less probable to exit
+                        if (newKernel->ExitProbability() < kern->ExitProbability())
+                        {
+                            // we keep the new kernel, add the compare kernel to the remove list
+                            toRemove.insert(kern);
+                        }
+                        else
+                        {
+                            // keep the existing kernel, throw out the new one
+                            overlap = true;
+                        }
                     }
                 }
                 if (!overlap)
@@ -751,6 +768,11 @@ int main(int argc, char *argv[])
                 else
                 {
                     delete newKernel;
+                }
+                for (auto remove : toRemove)
+                {
+                    newKernels.erase(remove);
+                    delete remove;
                 }
             }
         }

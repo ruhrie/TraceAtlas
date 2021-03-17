@@ -137,6 +137,25 @@ bool Kernel::FullyConnected() const
     return true;
 }
 
+float Kernel::ExitProbability() const
+{
+    // our convention penalizes kernels with more than one exit
+    // the probabilities of edges that leave the kernel are summed
+    auto exits = getExits();
+    float exitProbability = 0.0;
+    for (const auto &exit : exits)
+    {
+        for (const auto &n : exit.neighbors)
+        {
+            if (nodes.find(n.first) == nodes.end())
+            {
+                exitProbability += (float)n.second.second;
+            }
+        }
+    }
+    return exitProbability;
+}
+
 inline bool Kernel::operator==(const Kernel &rhs) const
 {
     return rhs.KID == KID;

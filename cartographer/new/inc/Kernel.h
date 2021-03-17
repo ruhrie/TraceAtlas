@@ -33,6 +33,8 @@ namespace TraceAtlas::Cartographer
         std::set<int64_t> Compare(const Kernel &compare) const;
         /// Returns true if any node in the kernel can reach every other node in the kernel. False otherwise
         bool FullyConnected() const;
+        /// Returns the probability that this kernel keeps recurring vs. exiting
+        float ExitProbability() const;
         inline bool operator==(const Kernel &rhs) const;
 
     private:

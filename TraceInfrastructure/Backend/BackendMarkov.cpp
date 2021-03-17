@@ -90,6 +90,9 @@ extern "C"
     {
         if (markovInit)
         {
+            // this segfaults in GSL/GSL_projects_L/fft project, when processing MarkovIncrement(i64 399) (fails on the first try, preceded by 391,392,393 loop)
+            // TraceAtlasMarkovMap is definitely not null at this point (shown by gdb)
+            // the line that fails is in libSTL, its when two keys are being compared as equal, x = 398, y=<error reading variable>
             TraceAtlasMarkovMap.base[b][a]++;
         }
         else
