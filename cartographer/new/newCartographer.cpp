@@ -98,6 +98,11 @@ void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filen
 {
     std::fstream inputFile;
     inputFile.open(filename, std::ios::in | std::ios::binary);
+    if( !inputFile.good() )
+    {
+        spdlog::critical("Could not open input file "+filename+" for reading.");
+        return;
+    }
     while (inputFile.peek() != EOF)
     {
         // New block description: BBID,#ofNeighbors (16 bytes per neighbor)
@@ -645,7 +650,7 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
             }
             else
             {
-                throw AtlasException("Found a kernel with " + to_string(kernelEntrances.size()) + " entrances and " + to_string(kernelExits.size()) + " exits!");
+                throw AtlasException("Kernel ID " + to_string(kernel->KID) + " has " + to_string(kernelEntrances.size()) + " entrances and " + to_string(kernelExits.size()) + " exits!");
             }
         }
         catch (AtlasException &e)
@@ -681,6 +686,10 @@ int main(int argc, char *argv[])
     set<GraphNode *, p_GNCompare> nodes;
 
     ReadBIN(nodes, InputFilename);
+    if( nodes.empty() )
+    {
+        return EXIT_FAILURE;
+    }
     // combine all trivial node merges
     TrivialTransforms(nodes, IDToBlock);
     // Next transform, find conditional branches and turn them into select statements
