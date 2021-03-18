@@ -221,6 +221,11 @@ void TrivialTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64
                         // third condition, edge must not cross a context level
                         auto sourceBlock = IDToBlock[(int64_t)currentNode->NID];
                         auto sinkBlock = IDToBlock[(int64_t)(*succ)->NID];
+                        if( sourceBlock == nullptr || sinkBlock == nullptr )
+                        {
+                            spdlog::error("Found a node in the graph whose ID did not map to a basic block pointer in the ID map!");
+                            break;
+                        }
                         if (sourceBlock->getParent() == sinkBlock->getParent())
                         {
                             // trivial merge, we merge into the source node
