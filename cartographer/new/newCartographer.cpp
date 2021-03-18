@@ -98,9 +98,9 @@ void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filen
 {
     std::fstream inputFile;
     inputFile.open(filename, std::ios::in | std::ios::binary);
-    if( !inputFile.good() )
+    if (!inputFile.good())
     {
-        spdlog::critical("Could not open input file "+filename+" for reading.");
+        spdlog::critical("Could not open input file " + filename + " for reading.");
         return;
     }
     while (inputFile.peek() != EOF)
@@ -665,6 +665,7 @@ int main(int argc, char *argv[])
 {
     cl::ParseCommandLineOptions(argc, argv);
     auto blockCallers = ReadBlockInfo(BlockInfoFilename);
+    auto blockLabels = ReadBlockLabels(BlockInfoFilename);
     auto SourceBitcode = ReadBitcode(BitcodeFileName);
     if (SourceBitcode.get() == nullptr)
     {
@@ -686,7 +687,7 @@ int main(int argc, char *argv[])
     set<GraphNode *, p_GNCompare> nodes;
 
     ReadBIN(nodes, InputFilename);
-    if( nodes.empty() )
+    if (nodes.empty())
     {
         return EXIT_FAILURE;
     }
@@ -803,6 +804,50 @@ int main(int argc, char *argv[])
     }
     PrintGraph(nodes);
 
+    // majority label vote for kernels
+    for (const auto &kernel : kernels)
+    {
+        map<string, int64_t> labelVotes;
+        labelVotes[""] = 0;
+        for (const auto &node : kernel->nodes)
+        {
+            for (const auto &block : node.blocks)
+            {
+                auto infoEntry = blockLabels.find(block.first);
+                if (infoEntry != blockLabels.end())
+                {
+                    for (const auto &label : (*infoEntry).second)
+                    {
+                        if (labelVotes.find(label.first) == labelVotes.end())
+                        {
+                            labelVotes[label.first] = label.second;
+                        }
+                        else
+                        {
+                            labelVotes[label.first] += label.second;
+                        }
+                    }
+                }
+                else
+                {
+                    // no entry for this block, so votes for no label
+                    labelVotes[""]++;
+                }
+            }
+        }
+        string maxVoteLabel = "";
+        int64_t maxVoteCount = 0;
+        for (const auto &label : labelVotes)
+        {
+            if (label.second > maxVoteCount)
+            {
+                maxVoteLabel = label.first;
+                maxVoteCount = label.second;
+            }
+        }
+        kernel->Label = maxVoteLabel;
+    }
+
     // write kernel file
     json outputJson;
     outputJson["ValidBlocks"] = std::vector<int64_t>();
@@ -833,7 +878,7 @@ int main(int argc, char *argv[])
             outputJson["Kernels"][to_string(id)]["Blocks"].push_back(k);
         }
         outputJson["Kernels"][to_string(id)]["Labels"] = std::vector<string>();
-        outputJson["Kernels"][to_string(id)]["Labels"].push_back("");
+        outputJson["Kernels"][to_string(id)]["Labels"].push_back(kernel->Label);
         id++;
     }
     if (!kernels.empty())

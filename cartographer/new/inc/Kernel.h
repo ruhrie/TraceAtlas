@@ -12,6 +12,7 @@ namespace TraceAtlas::Cartographer
         std::set<GraphNode, GNCompare> nodes;
         VKNode *kernelNode;
         uint32_t KID;
+        std::string Label;
         Kernel();
         Kernel(uint32_t ID);
         /// Returns the IDs of the kernel entrances

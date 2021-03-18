@@ -67,6 +67,32 @@ inline std::map<int64_t, int64_t> ReadBlockInfo(std::string &BlockInfo)
     }
     return blockCallers;
 }
+
+inline std::map<int64_t, std::map<std::string, int64_t>> ReadBlockLabels(std::string &BlockInfo)
+{
+    std::map<int64_t, std::map<std::string, int64_t>> blockLabels;
+    std::ifstream inputJson;
+    nlohmann::json j;
+    try
+    {
+        inputJson.open(BlockInfo);
+        inputJson >> j;
+        inputJson.close();
+    }
+    catch (std::exception &e)
+    {
+        spdlog::error("Couldn't open BlockInfo json file: " + BlockInfo);
+        spdlog::error(e.what());
+        return blockLabels;
+    }
+    for (const auto &bbid : j.items())
+    {
+        auto labelCounts = j[bbid.key()]["Labels"].get<std::map<std::string, int64_t>>();
+        blockLabels[stol(bbid.key())] = labelCounts;
+    }
+    return blockLabels;
+}
+
 /* This hasn't worked yet because the constructors are undefined symbols at link time for this include file
 void ReadBIN(std::set<TraceAtlas::Cartographer::GraphNode *, TraceAtlas::Cartographer::p_GNCompare> &nodes, const std::string &filename, bool print = false)
 {

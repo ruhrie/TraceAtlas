@@ -10,12 +10,14 @@ Kernel::Kernel()
 {
     KID = getNextKID();
     nodes = std::set<GraphNode, GNCompare>();
+    Label = "";
 }
 
 Kernel::Kernel(uint32_t ID)
 {
     KID = ID;
     nodes = std::set<GraphNode, GNCompare>();
+    Label = "";
 }
 
 /// Returns the IDs of the kernel entrances
