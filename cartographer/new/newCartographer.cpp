@@ -475,6 +475,7 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::ma
                 break;
             }
             // 6.) All nodes in the entire subgraph must be contained within a single function
+            /* This check is turned off for now because it doesn't allow us to convert branch to select subgraphs that have trivially inlinable functions in them
             set<Function *> parents;
             for (const auto &block : entrance->blocks)
             {
@@ -496,6 +497,7 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::ma
                 // we have violated the condition that every block in the subgraph must belong to the same function, break
                 break;
             }
+            */
             // Now we do case-specific checks
             if (MergeCase)
             {
