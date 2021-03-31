@@ -87,7 +87,7 @@ inline std::map<int64_t, std::map<std::string, int64_t>> ReadBlockLabels(std::st
     }
     for (const auto &bbid : j.items())
     {
-        if( j[bbid.key()].find("Labels") != j[bbid.key()].end() )
+        if (j[bbid.key()].find("Labels") != j[bbid.key()].end())
         {
             auto labelCounts = j[bbid.key()]["Labels"].get<std::map<std::string, int64_t>>();
             blockLabels[stol(bbid.key())] = labelCounts;

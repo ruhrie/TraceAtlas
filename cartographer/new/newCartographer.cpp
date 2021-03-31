@@ -190,7 +190,57 @@ void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filen
         }
     }
 }
+/*
+std::vector<std::vector<uint64_t>> FindCycles(const std::set<GraphNode*, p_GNCompare>& nodes, const GraphNode* source, const GraphNode* sink)
+{
+    // depth first search, back edges represent cycles
+    struct TreeNode
+    {
+        uint64_t ID;
+        std::vector<struct TreeNode> children;
+        TreeNode(uint64_t newID)
+        {
+            ID = newID;
+            children = std::vector<struct TreeNode>();
+        }
+    };
+    struct TNCompare
+    {
+        using is_transparent = void;
+        bool operator()(const TreeNode& lhs, const TreeNode& rhs) const
+        {
+            return lhs.ID < rhs.ID;
+        }
+        bool operator()(const TreeNode& lhs, uint64_t rhs) const
+        {
+            return lhs.ID < rhs;
+        }
+        bool operator()(uint64_t lhs, const TreeNode& rhs) const
+        {
+            return lhs < rhs.ID;
+        }
+    };
+    set<TreeNode, TNCompare> tree;
+    std::vector<std::vector<uint64_t>> cycles;
 
+    // current node being investigated
+    auto currentNode = source;
+    while(true)
+    {
+        // 
+        for( const auto& succID : currentNode->neighbors )
+        {
+            if( succID.first == sink->NID )
+            {
+                // we have found the sink, this means the tree should be complete
+            }
+            auto newNode = TreeNode(succID.first);
+
+        }
+    }
+    return cycles;
+}
+*/
 void TrivialTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64_t, llvm::BasicBlock *> &IDToBlock)
 {
     // a trivial node merge must satisfy two conditions
@@ -221,7 +271,7 @@ void TrivialTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64
                         // third condition, edge must not cross a context level
                         auto sourceBlock = IDToBlock[(int64_t)currentNode->NID];
                         auto sinkBlock = IDToBlock[(int64_t)(*succ)->NID];
-                        if( sourceBlock == nullptr || sinkBlock == nullptr )
+                        if (sourceBlock == nullptr || sinkBlock == nullptr)
                         {
                             spdlog::error("Found a node in the graph whose ID did not map to a basic block pointer in the ID map!");
                             break;
@@ -591,6 +641,138 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::ma
     }
 }
 
+void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
+{
+    /// @brief Uses a breadth first search of the subgraph between the source node and sink node to determine whether all paths leading from source must lead through sink
+    /// Queue:         The algorithm keeps a queue of nodes that are currently being searched.
+    ///                push: whenever a new node is discovered
+    ///                pop:  whenever all of a nodes predecessors and successors have been evaluated
+    /// Subgraph:      A set of visited nodes that constitutes the subgraph between source and sink. A node must be a successor of the source node to be in the subgraph
+    /// Steps:
+    /// Initialization:
+    ///   - Copy the entire CFG
+    ///   - Push the source node to the queue
+    ///   - while the queue is not empty...
+    /// 1.) If the current node has already been visited
+    ///   - this means there is a cycle, so quit
+    /// 2.) If the current node is the sink node, the subgraph contains the two required characteristics:
+    ///   a.) All paths leading from source must go through only the sink node (bottleneck)
+    ///   b.) All paths leading into the subgraph msut go through only the source node (bottleneck)
+    /// 3.) Visit each successor of the node in the front of the queue and add them to the subgraph set
+    ///   - if one of these successors is the sink node:
+    ///     -> this node can only have the sink node as a successor, otherwise the subgraph does not bottleneck at the sink node. Quit
+    ///     -> this node can only have predecessors that are in the subgraph, otherwise there are paths not through the source node that can reach this point
+    /// 4.) Check the predecessors of the current node
+    ///   - if a predecessor is not in the subgraph
+    ///     -> there is a path to here that does not go through the source node, quit
+    ///
+    vector<GraphNode *> tmpNodes(nodes.begin(), nodes.end());
+    for (auto sourceIT = tmpNodes.begin(); sourceIT != tmpNodes.end(); sourceIT++)
+    {
+        auto source = *sourceIT;
+        if (nodes.find(source->NID) == nodes.end())
+        {
+            // we've already been removed, do nothing
+            continue;
+        }
+        // get the actual node from the graph
+        source = *nodes.find(source->NID);
+        for (auto sinkIT = sourceIT + 1; sinkIT != tmpNodes.end(); sinkIT++)
+        {
+            auto sink = *sinkIT;
+            if (nodes.find(sink->NID) == nodes.end())
+            {
+                // we've already been removed, do nothing
+                continue;
+            }
+            // get the actual node form the graph
+            sink = *nodes.find(sink->NID);
+
+            bool passed = true;
+            // first check
+            //  - All paths leading into the subgraph must go through source (bottleneck through source)
+            //  - All paths leading out of the subgraph must go through sink (bottleneck through sink)
+            set<GraphNode *, p_GNCompare> subgraph;
+            deque<GraphNode *> Q;
+            Q.push_front(source);
+            subgraph.insert(source);
+            while (!Q.empty())
+            {
+                if (subgraph.find(Q.front()) != subgraph.end())
+                {
+                    // we've already visited this node, so there must be a cycle. Quit
+                    passed = false;
+                    break;
+                }
+                if (Q.front() == sink)
+                {
+                    // first, check if all preds of the sink are in the subgraph. If one is missing, we have an entrance outside the subgraph. Quit
+                    for (const auto &pred : sink->predecessors)
+                    {
+                        if (subgraph.find(pred) == subgraph.end())
+                        {
+                            passed = false;
+                            break;
+                        }
+                    }
+                    // second, since we already checked all nodes between source and sink (breadth first), and we haven't broken yet, we've passed
+                    passed = true;
+                    break;
+                }
+                for (const auto &neighbor : Q.front()->neighbors)
+                {
+                    if (neighbor.first == sink->NID)
+                    {
+                        // this node can only have the sink as a neighbor
+                        if (Q.front()->neighbors.size() != 1)
+                        {
+                            passed = false;
+                            break;
+                        }
+                        //Q.push_back( *nodes.find(neighbor.first) );
+                    }
+                    if (subgraph.find(neighbor.first) == subgraph.end())
+                    {
+                        Q.push_back(*nodes.find(neighbor.first));
+                        subgraph.insert(Q.back());
+                    }
+                    else
+                    {
+                        // we have found a cycle, quit
+                        passed = false;
+                        break;
+                    }
+                }
+                for (const auto &pred : Q.front()->predecessors)
+                {
+                    if (subgraph.find(pred) == subgraph.end())
+                    {
+                        // this node has a pred that is not in the subgraph, thus the subgraph has an entrance that is not the source node. Qhit
+                        passed = false;
+                        break;
+                    }
+                }
+            }
+            /*
+            // secong check: no cycles are allowed to exist within the subgraph
+            if( !FindCycles(nodes, source, sink).empty() )
+            {
+                break;
+            }
+
+            // third check: all function boundaries within the subgraph (if any) must be trivially inlinable
+            */
+
+            // finally, if we passed all checks, condense the subgraph into the source node
+            if (passed)
+            {
+                // condense all into the source node
+                passed = false;
+            }
+        }
+    }
+}
+
 std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels, std::set<GraphNode *, p_GNCompare> &nodes)
 {
     vector<Kernel *> newPointers;
@@ -698,11 +880,28 @@ int main(int argc, char *argv[])
     {
         return EXIT_FAILURE;
     }
-    // combine all trivial node merges
-    TrivialTransforms(nodes, IDToBlock);
-    // Next transform, find conditional branches and turn them into select statements
-    // In other words, find subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
-    BranchToSelectTransforms(nodes, IDToBlock);
+
+    // transform graph in an iterative manner until the size of the graph doesn't change
+    size_t graphSize = nodes.size();
+    while (true)
+    {
+        // combine all trivial node merges
+        TrivialTransforms(nodes, IDToBlock);
+        // Next transform, find conditional branches and turn them into select statements
+        // In other words, find subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
+        BranchToSelectTransforms(nodes, IDToBlock);
+        // Finally, transform the graph bottlenecks to avoid multiple entrance/multiple exit kernels
+        FanInFanOutTransform(nodes);
+        PrintGraph(nodes);
+        if (graphSize == nodes.size())
+        {
+            break;
+        }
+        else
+        {
+            graphSize = nodes.size();
+        }
+    }
 
     // find minimum cycles
     bool done = false;
