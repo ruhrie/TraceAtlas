@@ -677,7 +677,7 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
         }
         // get the actual node from the graph
         source = *nodes.find(source->NID);
-        for (auto sinkIT = sourceIT + 1; sinkIT != tmpNodes.end(); sinkIT++)
+        for (auto sinkIT = next(sourceIT); sinkIT != tmpNodes.end(); sinkIT++)
         {
             auto sink = *sinkIT;
             if (nodes.find(sink->NID) == nodes.end())
@@ -695,30 +695,46 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
             set<GraphNode *, p_GNCompare> subgraph;
             deque<GraphNode *> Q;
             Q.push_front(source);
-            subgraph.insert(source);
             while (!Q.empty())
             {
-                if (subgraph.find(Q.front()) != subgraph.end())
-                {
-                    // we've already visited this node, so there must be a cycle. Quit
-                    passed = false;
-                    break;
-                }
                 if (Q.front() == sink)
                 {
-                    // first, check if all preds of the sink are in the subgraph. If one is missing, we have an entrance outside the subgraph. Quit
-                    for (const auto &pred : sink->predecessors)
+                    // check if the sink is the only entry left in the queue
+                    // if it is, we can check for a passing subgraph
+                    // if it is not, we need to push it to the back of the queue and keep iterating (to ensure our graph is searched breadth first)
+                    if (Q.size() == 1)
                     {
-                        if (subgraph.find(pred) == subgraph.end())
+                        subgraph.insert(sink);
+                        // first, check if all preds of the sink are in the subgraph. If one is missing, we have an entrance outside the subgraph. Quit
+                        for (const auto &pred : sink->predecessors)
+                        {
+                            if (subgraph.find(pred) == subgraph.end())
+                            {
+                                passed = false;
+                            }
+                        }
+                        // second, since we already checked all nodes between source and sink (breadth first), and we haven't broken yet, we've passed
+                        // make sure the subgraph is doing more than just 1 node
+                        /*if( subgraph.size() > 2 )
+                        {
+                            // not sure this is needed
+                            passed = true;
+                        }
+                        else
                         {
                             passed = false;
-                            break;
-                        }
+                        }*/
+                        break;
                     }
-                    // second, since we already checked all nodes between source and sink (breadth first), and we haven't broken yet, we've passed
-                    passed = true;
-                    break;
+                    else
+                    {
+                        // there are still entries in the queue, so push the sink node to the back and iterate
+                        Q.push_back(sink);
+                        Q.pop_front();
+                        continue;
+                    }
                 }
+                subgraph.insert(Q.front());
                 for (const auto &neighbor : Q.front()->neighbors)
                 {
                     if (neighbor.first == sink->NID)
@@ -727,31 +743,46 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
                         if (Q.front()->neighbors.size() != 1)
                         {
                             passed = false;
-                            break;
                         }
                         //Q.push_back( *nodes.find(neighbor.first) );
                     }
                     if (subgraph.find(neighbor.first) == subgraph.end())
                     {
-                        Q.push_back(*nodes.find(neighbor.first));
-                        subgraph.insert(Q.back());
+                        bool found = false;
+                        for (const auto &next : Q)
+                        {
+                            if (next->NID == neighbor.first)
+                            {
+                                found = true;
+                            }
+                        }
+                        if (!found)
+                        {
+                            Q.push_back(*nodes.find(neighbor.first));
+                        }
                     }
                     else
                     {
                         // we have found a cycle, quit
                         passed = false;
-                        break;
                     }
                 }
                 for (const auto &pred : Q.front()->predecessors)
                 {
                     if (subgraph.find(pred) == subgraph.end())
                     {
-                        // this node has a pred that is not in the subgraph, thus the subgraph has an entrance that is not the source node. Qhit
-                        passed = false;
-                        break;
+                        // this node has a pred that is not in the subgraph, if it is the source node this is allowed, otherwise the subgraph has an entrance that is not the source node. Quit
+                        if (Q.front()->NID != source->NID)
+                        {
+                            passed = false;
+                        }
                     }
                 }
+                if (!passed)
+                {
+                    break;
+                }
+                Q.pop_front();
             }
             /*
             // secong check: no cycles are allowed to exist within the subgraph
@@ -766,8 +797,23 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
             // finally, if we passed all checks, condense the subgraph into the source node
             if (passed)
             {
+                subgraph.erase(source);
                 // condense all into the source node
-                passed = false;
+                for (const auto &node : subgraph)
+                {
+                    source->addBlocks(node->blocks);
+                }
+                source->neighbors = sink->neighbors;
+                for (const auto &nei : source->neighbors)
+                {
+                    auto neighbor = *nodes.find(nei.first);
+                    neighbor->predecessors.erase(sink->NID);
+                    neighbor->predecessors.insert(source->NID);
+                }
+                for (const auto &node : subgraph)
+                {
+                    nodes.erase(node);
+                }
             }
         }
     }
