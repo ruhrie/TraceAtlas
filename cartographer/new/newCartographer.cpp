@@ -896,6 +896,61 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
     return newPointers;
 }
 
+float EntropyCalculation(std::set<GraphNode *, p_GNCompare> &nodes)
+{
+    // first, calculate the stationary distribution for each existing node
+    // stationary distribution is the probability that I am in a certain state at any given time (it's an asymptotic measure)
+    vector<float> stationaryDistribution(nodes.size(), 0.0);
+    for (unsigned int i = 0; i < nodes.size(); i++)
+    {
+        auto it = nodes.begin();
+        advance(it, i);
+        // we sum along the columns (the probabilities of going to the current node), so we use the edge weight coming from each predecessor to this node
+        for (const auto &pred : (*it)->predecessors)
+        {
+            auto predecessor = nodes.find(pred);
+            // find the edge of the predecessor that goes to the current node
+            for (const auto &nei : (*predecessor)->neighbors)
+            {
+                if (nei.first == (*it)->NID)
+                {
+                    // retrieve the edge probability and accumulate it to this node
+                    stationaryDistribution[i] += nei.second.second;
+                }
+            }
+        }
+    }
+    // normalize each stationaryDistribution entry by the total edge weights in the state transition matrix
+    float totalEdgeWeights = 0.0;
+    uint64_t nodeCount = nodes.size();
+    uint64_t edgeCount = 0;
+    for (const auto &node : nodes)
+    {
+        for (const auto &nei : node->neighbors)
+        {
+            totalEdgeWeights += nei.second.second;
+            edgeCount += 1;
+        }
+    }
+    for (auto &entry : stationaryDistribution)
+    {
+        entry /= totalEdgeWeights;
+    }
+
+    // second, calculate the average entropy of each node (the entropy rate)
+    float entropyRate = 0.0;
+    for (unsigned int i = 0; i < stationaryDistribution.size(); i++)
+    {
+        auto it = nodes.begin();
+        advance(it, i);
+        for (const auto &nei : (*it)->neighbors)
+        {
+            entropyRate += stationaryDistribution[i] * nei.second.second * log2(1 / nei.second.second);
+        }
+    }
+    return entropyRate;
+}
+
 int main(int argc, char *argv[])
 {
     cl::ParseCommandLineOptions(argc, argv);
@@ -933,11 +988,14 @@ int main(int argc, char *argv[])
     {
         // combine all trivial node merges
         TrivialTransforms(nodes, IDToBlock);
+        auto entropyRate = EntropyCalculation(nodes);
         // Next transform, find conditional branches and turn them into select statements
         // In other words, find subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
         BranchToSelectTransforms(nodes, IDToBlock);
+        entropyRate = EntropyCalculation(nodes);
         // Finally, transform the graph bottlenecks to avoid multiple entrance/multiple exit kernels
         FanInFanOutTransform(nodes);
+        entropyRate = EntropyCalculation(nodes);
         PrintGraph(nodes);
         if (graphSize == nodes.size())
         {
