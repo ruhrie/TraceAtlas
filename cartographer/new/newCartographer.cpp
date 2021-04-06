@@ -945,7 +945,7 @@ float EntropyCalculation(std::set<GraphNode *, p_GNCompare> &nodes)
         advance(it, i);
         for (const auto &nei : (*it)->neighbors)
         {
-            entropyRate += stationaryDistribution[i] * nei.second.second * log2(1 / nei.second.second);
+            entropyRate += stationaryDistribution[i] * nei.second.second * (float)log2(1 / nei.second.second);
         }
     }
     return entropyRate;
@@ -984,18 +984,22 @@ int main(int argc, char *argv[])
 
     // transform graph in an iterative manner until the size of the graph doesn't change
     size_t graphSize = nodes.size();
+    auto startEntropy = EntropyCalculation(nodes);
+    auto startNodes = nodes.size();
+    uint64_t startEdges = 0;
+    for (const auto &node : nodes)
+    {
+        startEdges += node->neighbors.size();
+    }
     while (true)
     {
         // combine all trivial node merges
         TrivialTransforms(nodes, IDToBlock);
-        auto entropyRate = EntropyCalculation(nodes);
         // Next transform, find conditional branches and turn them into select statements
         // In other words, find subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
         BranchToSelectTransforms(nodes, IDToBlock);
-        entropyRate = EntropyCalculation(nodes);
         // Finally, transform the graph bottlenecks to avoid multiple entrance/multiple exit kernels
         FanInFanOutTransform(nodes);
-        entropyRate = EntropyCalculation(nodes);
         PrintGraph(nodes);
         if (graphSize == nodes.size())
         {
@@ -1005,6 +1009,13 @@ int main(int argc, char *argv[])
         {
             graphSize = nodes.size();
         }
+    }
+    auto endEntropy = EntropyCalculation(nodes);
+    auto endNodes = nodes.size();
+    uint64_t endEdges = 0;
+    for (const auto &node : nodes)
+    {
+        endEdges += node->neighbors.size();
     }
 
     // find minimum cycles
@@ -1160,6 +1171,7 @@ int main(int argc, char *argv[])
 
     // write kernel file
     json outputJson;
+    // valid blocks and block callers sections provide tik with necessary info about the CFG
     outputJson["ValidBlocks"] = std::vector<int64_t>();
     for (const auto &id : IDToBlock)
     {
@@ -1169,6 +1181,15 @@ int main(int argc, char *argv[])
     {
         outputJson["BlockCallers"][to_string(bid.first)] = bid.second;
     }
+    // Entropy information
+    outputJson["Entropy"] = map<string, map<string, uint64_t>>();
+    outputJson["Entropy"]["Start"]["Entropy Rate"] = startEntropy;
+    outputJson["Entropy"]["Start"]["Nodes"] = startNodes;
+    outputJson["Entropy"]["Start"]["Edges"] = startEdges;
+    outputJson["Entropy"]["End"]["Entropy Rate"] = endEntropy;
+    outputJson["Entropy"]["End"]["Nodes"] = endNodes;
+    outputJson["Entropy"]["End"]["Edges"] = endEdges;
+
     // sequential ID for each kernel
     int id = 0;
     // average nodes per kernel
