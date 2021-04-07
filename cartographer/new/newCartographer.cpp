@@ -190,57 +190,64 @@ void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filen
         }
     }
 }
-/*
-std::vector<std::vector<uint64_t>> FindCycles(const std::set<GraphNode*, p_GNCompare>& nodes, const GraphNode* source, const GraphNode* sink)
+
+/// Returns true if one or more cycles exist in the graph specified by nodes, false otherwise
+bool FindCycles(const std::set<GraphNode *, p_GNCompare> &nodes, const GraphNode *source, const GraphNode *sink)
 {
-    // depth first search, back edges represent cycles
-    struct TreeNode
+    // algorithm inspired by https://www.baeldung.com/cs/detecting-cycles-in-directed-graph
+    // queue of nodes that have been touched but their neighbors have not been fully evaluated yet
+    deque<const GraphNode *> Q;
+    // set of nodes that are DONE, aka all edges leading from them have been visited
+    set<const GraphNode *, p_GNCompare> done;
+    // flag in which the DFS may flip if a cycle is found
+    bool cycle = false;
+    // start with the source
+    Q.push_front(source);
+    while (!Q.empty())
     {
-        uint64_t ID;
-        std::vector<struct TreeNode> children;
-        TreeNode(uint64_t newID)
+        // flag that tracks whether or not the node in the front of the queue pushes a new entry to the queue
+        // if it doesn't the node is done, else it stays in the queue
+        bool pushed = false;
+        for (const auto &n : Q.front()->neighbors)
         {
-            ID = newID;
-            children = std::vector<struct TreeNode>();
-        }
-    };
-    struct TNCompare
-    {
-        using is_transparent = void;
-        bool operator()(const TreeNode& lhs, const TreeNode& rhs) const
-        {
-            return lhs.ID < rhs.ID;
-        }
-        bool operator()(const TreeNode& lhs, uint64_t rhs) const
-        {
-            return lhs.ID < rhs;
-        }
-        bool operator()(uint64_t lhs, const TreeNode& rhs) const
-        {
-            return lhs < rhs.ID;
-        }
-    };
-    set<TreeNode, TNCompare> tree;
-    std::vector<std::vector<uint64_t>> cycles;
-
-    // current node being investigated
-    auto currentNode = source;
-    while(true)
-    {
-        // 
-        for( const auto& succID : currentNode->neighbors )
-        {
-            if( succID.first == sink->NID )
+            if (nodes.find(n.first) == nodes.end())
             {
-                // we have found the sink, this means the tree should be complete
+                // this node is outside the boundaries of the subgraph, skip
+                continue;
             }
-            auto newNode = TreeNode(succID.first);
-
+            auto neighbor = *nodes.find(n.first);
+            bool inqueue = false;
+            for (const auto &entry : Q)
+            {
+                if (entry == neighbor)
+                {
+                    inqueue = true;
+                    break;
+                }
+            }
+            if (inqueue)
+            {
+                // we have found a cycle
+                cycle = true;
+                break;
+            }
+            else if (done.find(neighbor) == done.end())
+            {
+                Q.push_front(neighbor);
+                pushed = true;
+                // process neighbors one at a time, we will eventually circle back to this node in the queue
+                break;
+            }
+        }
+        if (!pushed)
+        {
+            done.insert(Q.front());
+            Q.pop_front();
         }
     }
-    return cycles;
+    return cycle;
 }
-*/
+
 void TrivialTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64_t, llvm::BasicBlock *> &IDToBlock)
 {
     // a trivial node merge must satisfy two conditions
@@ -774,7 +781,7 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
                     else
                     {
                         // we have found a cycle, quit
-                        passed = false;
+                        //passed = false;
                     }
                 }
                 for (const auto &pred : Q.front()->predecessors)
@@ -794,15 +801,14 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
                 }
                 Q.pop_front();
             }
-            /*
+
             // secong check: no cycles are allowed to exist within the subgraph
-            if( !FindCycles(nodes, source, sink).empty() )
+            if (FindCycles(subgraph, source, sink))
             {
                 break;
             }
 
             // third check: all function boundaries within the subgraph (if any) must be trivially inlinable
-            */
 
             // finally, if we passed all checks, condense the subgraph into the source node
             if (passed && sinkFound)
@@ -911,11 +917,11 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
     return newPointers;
 }
 
-float EntropyCalculation(std::set<GraphNode *, p_GNCompare> &nodes)
+double EntropyCalculation(std::set<GraphNode *, p_GNCompare> &nodes)
 {
     // first, calculate the stationary distribution for each existing node
     // stationary distribution is the probability that I am in a certain state at any given time (it's an asymptotic measure)
-    vector<float> stationaryDistribution(nodes.size(), 0.0);
+    vector<double> stationaryDistribution(nodes.size(), 0.0);
     for (unsigned int i = 0; i < nodes.size(); i++)
     {
         auto it = nodes.begin();
@@ -930,18 +936,18 @@ float EntropyCalculation(std::set<GraphNode *, p_GNCompare> &nodes)
                 if (nei.first == (*it)->NID)
                 {
                     // retrieve the edge probability and accumulate it to this node
-                    stationaryDistribution[i] += (float)nei.second.second;
+                    stationaryDistribution[i] += nei.second.second;
                 }
             }
         }
     }
     // normalize each stationaryDistribution entry by the total edge weights in the state transition matrix
-    float totalEdgeWeights = 0.0;
+    double totalEdgeWeights = 0.0;
     for (const auto &node : nodes)
     {
         for (const auto &nei : node->neighbors)
         {
-            totalEdgeWeights += (float)nei.second.second;
+            totalEdgeWeights += nei.second.second;
         }
     }
     for (auto &entry : stationaryDistribution)
@@ -950,14 +956,14 @@ float EntropyCalculation(std::set<GraphNode *, p_GNCompare> &nodes)
     }
 
     // second, calculate the average entropy of each node (the entropy rate)
-    float entropyRate = 0.0;
+    double entropyRate = 0.0;
     for (unsigned int i = 0; i < stationaryDistribution.size(); i++)
     {
         auto it = nodes.begin();
         advance(it, i);
         for (const auto &nei : (*it)->neighbors)
         {
-            entropyRate += stationaryDistribution[i] * nei.second.second * (float)log2(1.0 / nei.second.second);
+            entropyRate -= stationaryDistribution[i] * nei.second.second * log2(nei.second.second);
         }
     }
     return entropyRate;
