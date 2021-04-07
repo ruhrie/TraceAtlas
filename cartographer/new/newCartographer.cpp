@@ -498,16 +498,18 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::ma
             }
             // 4.) potentialExit can only have the midnodes as predecessors
             tmpMids = midNodes;
-            if ((midNodes.size() == (*potentialExit)->predecessors.size()))
+            badCondition = false;
+            for (auto &pred : (*potentialExit)->predecessors)
             {
-                for (auto &pred : (*potentialExit)->predecessors)
+                if (midNodes.find(pred) == midNodes.end())
                 {
-                    tmpMids.erase(pred);
-                }
-                if (!tmpMids.empty())
-                {
+                    badCondition = true;
                     break;
                 }
+            }
+            if (badCondition)
+            {
+                break;
             }
             // 5.) potentialExit can't have the entrance or any midnodes as successors
             tmpMids = midNodes;
@@ -688,7 +690,10 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
             // get the actual node form the graph
             sink = *nodes.find(sink->NID);
 
+            // indicates whether all rules have been satisfied
             bool passed = true;
+            // indicates whether the BFS found the sink node (aka there is a path between source and sink)
+            bool sinkFound = false;
             // first check
             //  - All paths leading into the subgraph must go through source (bottleneck through source)
             //  - All paths leading out of the subgraph must go through sink (bottleneck through sink)
@@ -699,6 +704,7 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
             {
                 if (Q.front() == sink)
                 {
+                    sinkFound = true;
                     // check if the sink is the only entry left in the queue
                     // if it is, we can check for a passing subgraph
                     // if it is not, we need to push it to the back of the queue and keep iterating (to ensure our graph is searched breadth first)
@@ -758,6 +764,10 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
                         }
                         if (!found)
                         {
+                            if (nodes.find(neighbor.first) == nodes.end())
+                            {
+                                spdlog::error("Found a neighbor that does not exist within the graph!");
+                            }
                             Q.push_back(*nodes.find(neighbor.first));
                         }
                     }
@@ -795,7 +805,7 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
             */
 
             // finally, if we passed all checks, condense the subgraph into the source node
-            if (passed)
+            if (passed && sinkFound)
             {
                 subgraph.erase(source);
                 // condense all into the source node
@@ -807,6 +817,11 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
                 for (const auto &nei : source->neighbors)
                 {
                     auto neighbor = *nodes.find(nei.first);
+                    if (nodes.find(nei.first) == nodes.end())
+                    {
+                        spdlog::error("Found a neighbor that does not exist in the graph!");
+                        continue;
+                    }
                     neighbor->predecessors.erase(sink->NID);
                     neighbor->predecessors.insert(source->NID);
                 }
@@ -915,21 +930,18 @@ float EntropyCalculation(std::set<GraphNode *, p_GNCompare> &nodes)
                 if (nei.first == (*it)->NID)
                 {
                     // retrieve the edge probability and accumulate it to this node
-                    stationaryDistribution[i] += nei.second.second;
+                    stationaryDistribution[i] += (float)nei.second.second;
                 }
             }
         }
     }
     // normalize each stationaryDistribution entry by the total edge weights in the state transition matrix
     float totalEdgeWeights = 0.0;
-    uint64_t nodeCount = nodes.size();
-    uint64_t edgeCount = 0;
     for (const auto &node : nodes)
     {
         for (const auto &nei : node->neighbors)
         {
-            totalEdgeWeights += nei.second.second;
-            edgeCount += 1;
+            totalEdgeWeights += (float)nei.second.second;
         }
     }
     for (auto &entry : stationaryDistribution)
@@ -945,7 +957,7 @@ float EntropyCalculation(std::set<GraphNode *, p_GNCompare> &nodes)
         advance(it, i);
         for (const auto &nei : (*it)->neighbors)
         {
-            entropyRate += stationaryDistribution[i] * nei.second.second * (float)log2(1 / nei.second.second);
+            entropyRate += stationaryDistribution[i] * nei.second.second * (float)log2(1.0 / nei.second.second);
         }
     }
     return entropyRate;
@@ -995,9 +1007,11 @@ int main(int argc, char *argv[])
     {
         // combine all trivial node merges
         TrivialTransforms(nodes, IDToBlock);
+        PrintGraph(nodes);
         // Next transform, find conditional branches and turn them into select statements
         // In other words, find subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
         BranchToSelectTransforms(nodes, IDToBlock);
+        PrintGraph(nodes);
         // Finally, transform the graph bottlenecks to avoid multiple entrance/multiple exit kernels
         FanInFanOutTransform(nodes);
         PrintGraph(nodes);
