@@ -49,8 +49,8 @@ int main(int argc, char **argv)
         }
     }
 
-    nlohmann::json blocks = j["ValidBlocks"];
-    ValidBlock = blocks.get<set<int64_t>>();
+    // nlohmann::json blocks = j["ValidBlocks"];
+    // ValidBlock = blocks.get<set<int64_t>>();
 
 
     // build memory instructions to data size map
@@ -78,29 +78,29 @@ int main(int argc, char **argv)
         {
             auto *bb = cast<BasicBlock>(fi);
             auto dl = bb->getModule()->getDataLayout();
-            int64_t id = GetBlockID(bb);
-            if (ValidBlock.find(id) != ValidBlock.end())
-            {
-                for (auto bi = fi->begin(); bi != fi->end(); bi++)
-                {
-                    if (auto *inst = dyn_cast<LoadInst>(bi))
-                    {
-                        //errs()<< *inst<<"\n";
-                        auto *type = inst->getPointerOperand()->getType()->getContainedType(0);
-                        uint64_t dataSize = dl.getTypeAllocSize(type);
-                        //errs()<< dataSize<<"\n";
-                        BBMemInstSize[id].push_back(dataSize);
-                    }
-                    else if(auto *inst = dyn_cast<StoreInst>(bi))
-                    {
-                        auto *type = inst->getPointerOperand()->getType()->getContainedType(0);
-                        uint64_t dataSize = dl.getTypeAllocSize(type);
-                        //errs()<< *inst<<"\n";
-                        //BBMemInstSize[id]
-                        BBMemInstSize[id].push_back(dataSize);
-                    }
-                }              
-            }
+            //int64_t id = GetBlockID(bb);
+            // if (ValidBlock.find(id) != ValidBlock.end())
+            // {
+            //     for (auto bi = fi->begin(); bi != fi->end(); bi++)
+            //     {
+            //         if (auto *inst = dyn_cast<LoadInst>(bi))
+            //         {
+            //             //errs()<< *inst<<"\n";
+            //             auto *type = inst->getPointerOperand()->getType()->getContainedType(0);
+            //             uint64_t dataSize = dl.getTypeAllocSize(type);
+            //             //errs()<< dataSize<<"\n";
+            //             BBMemInstSize[id].push_back(dataSize);
+            //         }
+            //         else if(auto *inst = dyn_cast<StoreInst>(bi))
+            //         {
+            //             auto *type = inst->getPointerOperand()->getType()->getContainedType(0);
+            //             uint64_t dataSize = dl.getTypeAllocSize(type);
+            //             //errs()<< *inst<<"\n";
+            //             //BBMemInstSize[id]
+            //             BBMemInstSize[id].push_back(dataSize);
+            //         }
+            //     }              
+            // }
         }
     }
 

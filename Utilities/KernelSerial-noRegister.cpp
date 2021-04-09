@@ -159,22 +159,10 @@ int64_t instCounter = 0;
 
 map<uint64_t,uint64_t> registerBuffer;
 set<uint64_t> registerVariable;
-uint64_t memfootPrintInKI;
-int NumTrivialMerge = 0;
-int NumNonTrivialMerge = 0;
-int NontriTh = 5;
-int instNum = 0;
-
-
 
 bool overlap (wsTuple a, wsTuple b,int64_t error)
 {
-    return (max(a.start, b.start) <= (min(a.end, b.end))+error);
-}
-
-bool included (wsTuple newer, wsTuple existed)
-{
-    return (newer.start >= existed.start && newer.end <= existed.end &&(newer.start+ newer.end-existed.end- existed.start !=0) );
+    return (max(a.start, b.start) <= (min(a.end, b.end) + error));
 }
 
 wsTuple tp_or (wsTuple a, wsTuple b, bool dynamic,set <int> &lastHitTimeSet)
@@ -227,8 +215,7 @@ wsTuple tp_or (wsTuple a, wsTuple b, bool dynamic,set <int> &lastHitTimeSet)
         reuse_distance = (a.regular *a.ref_count + b.regular * b.ref_count);
         reuse_distance = reuse_distance/(a.ref_count+b.ref_count);
     }
-    // todo might need to be changed
-    memfootPrintInKI += 8;
+    
     wksTuple = (wsTuple){min(a.start, b.start), max(a.end, b.end), a.byte_count+b.byte_count,a.ref_count + b.ref_count,reuse_distance,timing};
     return wksTuple;
 }
@@ -277,60 +264,19 @@ wsTuple tp_or (wsTuple a, wsTuple b, bool dynamic,set <int> &lastHitTimeSet)
 
 
 // online changing the map to speed up the processing
-int updateRegister = 0;
-void registerUpdate(wsTuple t_new)
-{
-    
-    float registerFlushT = 0.8;
-    int accessTh = 1000;
-    vector<uint64_t> remove;
-    if (registerBuffer.find(t_new.start)== registerBuffer.end())
-    {
-        updateRegister++;
-        registerBuffer[t_new.start] = 1;
-    }
-    else
-    {
-        updateRegister++;
-        registerBuffer[t_new.start]++;
-    }
-
-    if (registerBuffer.size()> registerFlushT * memfootPrintInKI)
-    {
-        int avg = updateRegister/registerBuffer.size();
-        for (auto it: registerBuffer)
-        {
-            if (it.second < avg)
-            {
-                remove.push_back(it.first);
-            }
-        }
-        for (auto it: remove)
-        {
-            registerBuffer.erase(it);
-        }
-    }
-
-    if (registerBuffer[t_new.start]>accessTh)
-    {
-        registerBuffer.erase(t_new.start);
-        registerVariable.insert(t_new.start);
-    }
-    
-
-}
-void trivialMergeOptRegister (wsTupleMap &processMap, wsTuple t_new, set <int>&lastHitTimeSet)
+void trivialMergeOpt (wsTupleMap &processMap, wsTuple t_new, set <int>&lastHitTimeSet)
 {
       
     // locating
     if (processMap.size() == 0)
-    {    
+    {
+
+        
         timingIn = t_new.start;
         timing++;
         t_new.timing = timing;
         lastHitTimeSet.insert(timing);
         processMap[t_new.start] = t_new;
-        memfootPrintInKI += t_new.ref_count;
     }
     else if (processMap.size() == 1)
     {
@@ -338,20 +284,12 @@ void trivialMergeOptRegister (wsTupleMap &processMap, wsTuple t_new, set <int>&l
         // the condition to decide (add and delete) or update
         if (overlap(t_new,iter->second,0))
         {
-            if (included(t_new,iter->second))
+            t_new = tp_or (t_new, iter->second,true,lastHitTimeSet);
+            processMap[t_new.start] = t_new;
+            if (t_new.start != iter->first)
             {
-                registerUpdate(t_new);
-                return;
+                processMap.erase(iter);
             }
-            else
-            {
-                t_new = tp_or (t_new, iter->second,true,lastHitTimeSet);
-                processMap[t_new.start] = t_new;
-                if (t_new.start != iter->first)
-                {
-                    processMap.erase(iter);
-                }
-            }           
         }
         else
         {
@@ -361,7 +299,6 @@ void trivialMergeOptRegister (wsTupleMap &processMap, wsTuple t_new, set <int>&l
             t_new.timing = timing;
             lastHitTimeSet.insert(timing);
             processMap[t_new.start] = t_new;
-            memfootPrintInKI += t_new.ref_count;
         }
 
     }
@@ -372,13 +309,6 @@ void trivialMergeOptRegister (wsTupleMap &processMap, wsTuple t_new, set <int>&l
             processMap[t_new.start] = t_new;
             auto iter = processMap.find(t_new.start);
             // need to delete someone
-
-            if(processMap.find(prev(iter)->first) !=processMap.end() && included(t_new,prev(iter)->second))
-            {
-                registerUpdate(t_new);
-                processMap.erase(t_new.start);
-                return;
-            }
             if (processMap.find(prev(iter)->first) !=processMap.end() && overlap(processMap[t_new.start],prev(iter)->second,0)&& 
             processMap.find(next(iter)->first) !=processMap.end() && overlap(processMap[t_new.start],next(iter)->second,0))
             {
@@ -404,16 +334,10 @@ void trivialMergeOptRegister (wsTupleMap &processMap, wsTuple t_new, set <int>&l
                 timing++;
                 lastHitTimeSet.insert(timing);
                 processMap[t_new.start].timing = timing;
-                memfootPrintInKI += t_new.ref_count;
             }            
         }
         else
         {   auto iter = processMap.find(t_new.start);
-            if(included(t_new,processMap[t_new.start]))
-            {
-                registerUpdate(t_new);
-                return;
-            }
             processMap[t_new.start] = tp_or (t_new, processMap[t_new.start],true,lastHitTimeSet);
             if (processMap.find(next(iter)->first) !=processMap.end() && overlap(processMap[t_new.start],next(iter)->second,0))
             {
@@ -426,7 +350,7 @@ void trivialMergeOptRegister (wsTupleMap &processMap, wsTuple t_new, set <int>&l
 
 
 
-void trivialMergeOpt (wsTupleMap &processMap, wsTuple t_new, set <int>&lastHitTimeSet)
+void trivialMergeOptRegister (wsTupleMap &processMap, wsTuple t_new, set <int>&lastHitTimeSet)
 {
       
     // locating
@@ -674,16 +598,12 @@ void trivialMergeOpt (wsTupleMap &processMap, wsTuple t_new, set <int>&lastHitTi
 void nontrivialMerge (wsTupleMap &processMap)
 {
 
-    if(processMap.size() < 2)
-    {
-        return;
-    }
     auto iter = processMap.begin();
     auto iterNext = next(iter);
 
     while(iterNext != processMap.end())
     {
-        if (processMap.find(iterNext->first) !=processMap.end() && overlap(iter->second, iterNext->second,0.5*(iterNext->second.end - iter->second.start)))
+        if (processMap.find(iterNext->first) !=processMap.end() && overlap(iter->second, iterNext->second,20))
         {
             set<int>lastHitTimeSet;
             processMap[iter->first] = tp_or(iter->second,iterNext->second,false,lastHitTimeSet);
@@ -718,7 +638,14 @@ void LoadAterStore (wsTupleMap storeMap, wsTuple t_new, wsTupleMap &loadAfterSto
             overlaps = true;
         }
     }
-
+    // for (auto it : storeMap)
+    // {
+    //     if (overlap(it.second,t_new,0))
+    //     {
+    //         overlaps = true;
+    //         break;
+    //     }
+    // }
     if (overlaps)
     {
         trivialMergeOpt (loadAfterStore, t_new,loadAfterStorelastHitTimeSet);
@@ -763,18 +690,12 @@ void LivingStore(uint64_t addrIndex, int64_t t, bool fromStore)
 
 
 
-
-
-
-
-
 void Process(string &key, string &value)
 {
     //kernel instance detection
     //printf("key:%s, value:%s \n",key.c_str(),value.c_str());
     
     // timing to calculate the reuse distance in one kernel instance
-
      
     if (key == "BBEnter")
     {
@@ -830,6 +751,7 @@ void Process(string &key, string &value)
                     }
                 }
                 maxLivenessPerKI[currentUid] = maxinternal;
+
                 
                 currentUid = -1-mUID;
                 mUID++;
@@ -845,13 +767,7 @@ void Process(string &key, string &value)
                 loadlastHitTimeSet.clear();
                 storelastHitTimeSet.clear();
                 loadAfterStorelastHitTimeSet.clear();
-                registerVariable.clear();
-                registerBuffer.clear();
-                memfootPrintInKI = 0;
-                NumTrivialMerge =0;
-                NumNonTrivialMerge = 0;
-                NontriTh = 8;
-                instNum = 0;
+                
                 // loadAftertorewsTuples.clear();
                 // loadwsTuples.clear();
                 // storewsTuples.clear();
@@ -884,7 +800,7 @@ void Process(string &key, string &value)
                     }
                 }
                 maxLivenessPerKI[currentUid] = maxinternal;
-                
+
 
                 currentUid = UID;
                 // kernelIdMap records the map from kernel instance id to kernel id
@@ -903,14 +819,7 @@ void Process(string &key, string &value)
                 loadlastHitTimeSet.clear();
                 storelastHitTimeSet.clear();
                 loadAfterStorelastHitTimeSet.clear();
-                registerVariable.clear();
-                registerBuffer.clear();
-                memfootPrintInKI = 0;
-                NumTrivialMerge =0;
-                NumNonTrivialMerge = 0;
-                NontriTh = 8;
-                instNum = 0;
-
+                
             }
         }
     }
@@ -918,10 +827,6 @@ void Process(string &key, string &value)
     {
         //printf("key:%s, value:%ld \n",key.c_str(),stoul(value, nullptr, 0));
         uint64_t address = stoul(value, nullptr, 0);      
-        if (registerVariable.find(address)!= registerVariable.end())
-        {
-            return;
-        }
         if (noerrorInTrance)
         {
 
@@ -934,25 +839,10 @@ void Process(string &key, string &value)
                    
             LivingStore(address, livenessTiming, true);
             
-            // NumTrivialMerge++;
-            trivialMergeOptRegister (storewsTupleMap[currentUid], storewksTuple,storelastHitTimeSet);
-            // if (currentUid == 2)
-            // {
-            //     cout<< timing<< " " <<storewsTupleMap[currentUid].size()<<endl;
-            // }
-            
+            trivialMergeOpt (storewsTupleMap[currentUid], storewksTuple,storelastHitTimeSet);
             if (storewsTupleMap[currentUid].size() > 10)
             {
                 nontrivialMerge(storewsTupleMap[currentUid]);
-                // if(NumTrivialMerge < NontriTh && NontriTh < 50)
-                // {
-                //     NontriTh++;
-                // }
-                // else if (NumTrivialMerge > NontriTh && NontriTh > 10)
-                // {
-                //     NontriTh--;
-                // }
-                // NumTrivialMerge =0;
             }
 
             livenessTiming++;
@@ -960,13 +850,8 @@ void Process(string &key, string &value)
     }
     else if (key == "LoadAddress")
     {
-        
         //printf("key:%s, value:%ld \n",key.c_str(),stoul(value, nullptr, 0));
         uint64_t address = stoul(value, nullptr, 0);
-        if (registerVariable.find(address)!= registerVariable.end())
-        {
-            return;
-        }
         //Maintain a read-map that maps from the addresses that are loaded from
         if (noerrorInTrance)
         {
@@ -979,30 +864,12 @@ void Process(string &key, string &value)
             {
                 livenessTupleVec[livenessUpdate[address]].end = livenessTiming;
             }
-            instNum++;
-            NumTrivialMerge++;
-            trivialMergeOptRegister(loadwsTupleMap[currentUid], loadwksTuple,loadlastHitTimeSet);            
+
+            trivialMergeOpt(loadwsTupleMap[currentUid], loadwksTuple,loadlastHitTimeSet);            
             //LoadAterStore(storewsTupleMap[currentUid], loadwksTuple,loadAftertorewsTupleMap[currentUid]);
-
-
-            if (currentUid == 0)
+            if (loadwsTupleMap[currentUid].size() > 10)
             {
-                cout<< instNum<< " " <<loadwsTupleMap[currentUid].size()<<endl;
-            }
-
-            if (loadwsTupleMap[currentUid].size() > NontriTh)
-            {
-                NumNonTrivialMerge++;
                 nontrivialMerge(loadwsTupleMap[currentUid]);
-                if(NumTrivialMerge < NontriTh && NontriTh < 10)
-                {
-                    NontriTh = NontriTh+1;
-                }
-                else if (NumTrivialMerge > NontriTh && NontriTh > 5)
-                {
-                    NontriTh = NontriTh-1;
-                }
-                NumTrivialMerge =0;
             }
             livenessTiming++;          
         }
@@ -1298,16 +1165,6 @@ int main(int argc, char **argv)
     parsingKernelInfo(KernelFilename);
     application a;
     ProcessTrace(InputFilename, Process, "Generating DAG");
-
-
-    for (auto &i : storewsTupleMap)
-    {
-        nontrivialMerge(i.second);
-    }
-    for (auto &i : loadwsTupleMap)
-    {
-        nontrivialMerge(i.second);
-    }
 
     map<int64_t, wsTupleMap> aggreated;
     map<string, wsTupleMap> aggreatedKernel;

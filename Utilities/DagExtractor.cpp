@@ -23,13 +23,14 @@ llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::val
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 cl::opt<string> DotFile("d", cl::desc("Specify dot filename"), cl::value_desc("dot file"));
-static int UID = 0;
+static int UID = 1;
 
-string currentKernel = "-1";
+static string currentKernel = "-1";
 int currentUid = -1;
 
-//maps
+////maps
 map<uint64_t, int> writeMap;
+map<uint64_t, int> readMap;
 map<int, string> kernelIdMap;
 map<string, set<int>> kernelMap;
 map<string, set<string>> parentMap;
@@ -68,11 +69,16 @@ void Process(string &key, string &value)
 {
     if (key == "BBEnter")
     {
+        
         int block = stoi(value, nullptr, 0);
+        //printf("current block: %d \n",block);
         if (currentKernel == "-1" || kernelMap[currentKernel].find(block) == kernelMap[currentKernel].end())
         {
+            
+            //printf("current kernel: %s , current block: %d \n", currentKernel.c_str(), block);
             //we aren't in the same kernel as last time
             string innerKernel = "-1";
+            //string innerKernel = currentKernel;
             for (auto k : kernelMap)
             {
                 if (k.second.find(block) != k.second.end())
@@ -88,21 +94,33 @@ void Process(string &key, string &value)
                 currentUid = UID;
                 kernelIdMap[UID++] = currentKernel;
             }
+            else
+            {
+                currentUid = -1;
+            }
+            
+            //printf("new instance currentUid: %d\n",currentUid);
         }
     }
     else if (key == "LoadAddress")
     {
         uint64_t address = stoul(value, nullptr, 0);
-        int prodUid = writeMap[address];
-        if (prodUid != -1 && prodUid != currentUid)
+        readMap[address] = currentUid;
+        int prodUid = writeMap[address];       
+        if (prodUid != -1 &&prodUid != 0 && prodUid != currentUid)
         {
+            //printf("addr: %lu , current id: %d, pro id : %d, test id : %d \n",address, currentUid, prodUid,test);
             consumerMap[currentUid].insert(prodUid);
         }
     }
     else if (key == "StoreAddress")
     {
+        //if (currentKernel != "-1")
+        //{
         uint64_t address = stoul(value, nullptr, 0);
+        //printf("store addr: %lu , current id: %d \n",address, currentUid);
         writeMap[address] = currentUid;
+        //}
     }
 }
 
@@ -203,6 +221,7 @@ int main(int argc, char **argv)
     nlohmann::json jOut;
     jOut["KernelInstanceMap"] = kernelIdMap;
     jOut["ConsumerMap"] = consumerMap;
+
 
     std::ofstream file;
     file.open(OutputFilename);

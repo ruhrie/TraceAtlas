@@ -37,9 +37,11 @@ namespace DashTracer::Passes
             firstBuilder.CreateCall(BB_ID, args);
             args.pop_back();
             args.push_back(falseConst);
+            errs()<<"BB-ID:"<<id<<"\n";
             for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
             {
                 auto *CI = dyn_cast<Instruction>(BI);
+                errs()<< *CI<< "\n";
                 if (DumpLoads)
                 {
                     if (auto *load = dyn_cast<LoadInst>(CI))

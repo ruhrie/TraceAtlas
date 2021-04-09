@@ -14,6 +14,7 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
     std::cout << "\e[?25l";
     indicators::ProgressBar bar;
     int previousCount = 0;
+    //noBar = true;
     if (!noBar)
     {
         bar.set_option(indicators::option::PrefixText{barPrefix});

@@ -45,10 +45,10 @@ int main(int argc, char *argv[])
 	double *dftMatrix = malloc(2* dft_size * dft_size * sizeof(double));
 	FILE *fp;
 
-	for (size_t i = 0; i < dft_size * 2; i+=2)
+	for (size_t i = 0; i < dft_size * dft_size * 2; i+=2)
 	{
-		dftMatrix[i] = cos(M_PI*i/dft_size);
-		dftMatrix[i + 1] = -sin(M_PI* i/dft_size);
+		dftMatrix[i] = cos(2*M_PI/dft_size*i);
+		dftMatrix[i + 1] = -sin(2 * M_PI / dft_size * i);
 	}
 
 
@@ -75,32 +75,9 @@ int main(int argc, char *argv[])
     KernelEnter("k1");
 	for (size_t i = 0; i < 2 * len; i += 2)
 	{
-		if (i / 2 > n_samples - 1)
-		{
-			c[i] = gen_wave[x_count];
-			c[i + 1] = gen_wave[x_count + 1];
-			x_count += 2;
-		}
-		else
-		{
-			c[i] = 0;
-			c[i + 1] = 0;
-		}
+		(i / 2 > n_samples - 1) && ((c[i] = gen_wave[x_count], c[i + 1] = gen_wave[x_count + 1], x_count += 2) || 1) || (c[i] = 0, c[i + 1] = 0);
 
-		if (i > n_samples)
-		{
-			d[i] = 0;
-			d[i + 1] = 0;
-		}
-		else
-		{
-			d[i] = received[y_count];
-			d[i + 1] = received[y_count + 1];
-			y_count += 2;
-		}
-
-		//(i / 2 > n_samples - 1) && ((c[i] = gen_wave[x_count], c[i + 1] = gen_wave[x_count + 1], x_count += 2) || 1) || (c[i] = 0, c[i + 1] = 0);
-		//(i > n_samples) && ((d[i] = 0, d[i + 1] = 0) || 1) || (d[i] = received[y_count], d[i + 1] = received[y_count + 1], y_count += 2);
+		(i > n_samples) && ((d[i] = 0, d[i + 1] = 0) || 1) || (d[i] = received[y_count], d[i + 1] = received[y_count + 1], y_count += 2);
 
 	}
     KernelExit("k1");
@@ -110,55 +87,55 @@ int main(int argc, char *argv[])
 	int row;
 	int column;
     KernelEnter("k2");
-	for (size_t i = 0; i < dft_size *2; i += 2)
+	for (size_t i = 0; i < dft_size * dft_size *2; i += 2)
 	{
-		row = i /(dft_size *2);
-		column = i % (dft_size *2);
-		X1[2*row] += dftMatrix[column+row] * c[column];
-		X1[2*row+1] += dftMatrix[column+row+1] * c[column+1];
+		row = i /512;
+		column = i % 512;
+		X1[2*row] += dftMatrix[i] * c[column];
+		X1[2*row+1] += dftMatrix[i+1] * c[column+1];
 	}
     KernelExit("k2");
 
-    // KernelEnter("k3");
-	// for (size_t i = 0; i < dft_size * dft_size * 2; i += 2)
-	// {
-	// 	row = i / 512;
-	// 	column = i % 512;
-	// 	X2[2 * row] += dftMatrix[i] * d[column];
-	// 	X2[2 * row + 1] += dftMatrix[i + 1] * d[column + 1];
-	// }
-    // KernelExit("k3");
+    KernelEnter("k3");
+	for (size_t i = 0; i < dft_size * dft_size * 2; i += 2)
+	{
+		row = i / 512;
+		column = i % 512;
+		X2[2 * row] += dftMatrix[i] * d[column];
+		X2[2 * row + 1] += dftMatrix[i + 1] * d[column + 1];
+	}
+    KernelExit("k3");
 
-    // KernelEnter("k4");
-	// for (size_t i = 0; i < 2 * len; i += 2)
-	// {
-	// 	corr_freq[i] = (X1[i] * X2[i]) + (X1[i + 1] * X2[i + 1]);
-	// 	corr_freq[i + 1] = (X1[i + 1] * X2[i]) - (X1[i] * X2[i + 1]);
-	// }
-    // KernelExit("k4");
+    KernelEnter("k4");
+	for (size_t i = 0; i < 2 * len; i += 2)
+	{
+		corr_freq[i] = (X1[i] * X2[i]) + (X1[i + 1] * X2[i + 1]);
+		corr_freq[i + 1] = (X1[i + 1] * X2[i]) - (X1[i] * X2[i + 1]);
+	}
+    KernelExit("k4");
 
-    // KernelEnter("k5");
-	// for (size_t i = 0; i < dft_size * dft_size * 2; i += 2)
-	// {
-	// 	row = i / 512;
-	// 	column = i % 512;
-	// 	corr[2 * row] += dftMatrix[i] * corr_freq[column]/511;
-	// 	corr[2 * row + 1] -= dftMatrix[i + 1] * corr_freq[column + 1] / 511;
-	// }
-    // KernelExit("k5");
+    KernelEnter("k5");
+	for (size_t i = 0; i < dft_size * dft_size * 2; i += 2)
+	{
+		row = i / 512;
+		column = i % 512;
+		corr[2 * row] += dftMatrix[i] * corr_freq[column]/511;
+		corr[2 * row + 1] -= dftMatrix[i + 1] * corr_freq[column + 1] / 511;
+	}
+    KernelExit("k5");
 
-    // KernelEnter("k6");
-	// //Code to find maximum
-	// double max_corr = 0;
-	// double index = 0;
-	// for (size_t i = 0; i < 2 * (2 * n_samples - 1); i += 2)
-	// {
-	// 	// Only finding maximum of real part of correlation
-	// 	(corr[i] > max_corr) && (max_corr = corr[i], index = i / 2);
+    KernelEnter("k6");
+	//Code to find maximum
+	double max_corr = 0;
+	double index = 0;
+	for (size_t i = 0; i < 2 * (2 * n_samples - 1); i += 2)
+	{
+		// Only finding maximum of real part of correlation
+		(corr[i] > max_corr) && (max_corr = corr[i], index = i / 2);
 
-	// }
-	// lag = (n_samples - index) / sampling_rate;
-    // KernelExit("k6");
+	}
+	lag = (n_samples - index) / sampling_rate;
+    KernelExit("k6");
 
 	printf("Lag Value is: %lf \n", lag);
 }
