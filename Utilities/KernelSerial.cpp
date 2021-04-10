@@ -35,7 +35,7 @@ typedef struct wsTuple
     uint64_t end;
     uint64_t byte_count;
     uint64_t ref_count;
-    float regular;
+    float reuse_distance;
     uint64_t timing;
 } wsTuple;
 typedef map<int64_t, wsTuple> wsTupleMap;
@@ -210,21 +210,21 @@ wsTuple tp_or (wsTuple a, wsTuple b, bool dynamic,set <int> &lastHitTimeSet)
 
             
                 
-            reuse_distance = (reuse_distance+a.regular*a.ref_count + b.regular* b.ref_count)/(a.ref_count+b.ref_count);
+            reuse_distance = (reuse_distance+a.reuse_distance*a.ref_count + b.reuse_distance* b.ref_count)/(a.ref_count+b.ref_count);
 
             lastHitTimeSet.erase(timingRemove);           
             
         }// last time hit tuple is the same with current tuple
         else
         {
-            reuse_distance = (reuse_distance+a.regular*a.ref_count + b.regular* b.ref_count)/(a.ref_count+b.ref_count);
+            reuse_distance = (reuse_distance+a.reuse_distance*a.ref_count + b.reuse_distance* b.ref_count)/(a.ref_count+b.ref_count);
         }
         timingIn = min(a.start, b.start);
     }
     else
     {
         //Todo: this should be memory weighted 
-        reuse_distance = (a.regular *a.ref_count + b.regular * b.ref_count);
+        reuse_distance = (a.reuse_distance *a.ref_count + b.reuse_distance * b.ref_count);
         reuse_distance = reuse_distance/(a.ref_count+b.ref_count);
     }
     // todo might need to be changed
@@ -918,10 +918,10 @@ void Process(string &key, string &value)
     {
         //printf("key:%s, value:%ld \n",key.c_str(),stoul(value, nullptr, 0));
         uint64_t address = stoul(value, nullptr, 0);      
-        if (registerVariable.find(address)!= registerVariable.end())
-        {
-            return;
-        }
+        // if (registerVariable.find(address)!= registerVariable.end())
+        // {
+        //     return;
+        // }
         if (noerrorInTrance)
         {
 
@@ -943,7 +943,7 @@ void Process(string &key, string &value)
             
             if (storewsTupleMap[currentUid].size() > 10)
             {
-                nontrivialMerge(storewsTupleMap[currentUid]);
+                //nontrivialMerge(storewsTupleMap[currentUid]);
                 // if(NumTrivialMerge < NontriTh && NontriTh < 50)
                 // {
                 //     NontriTh++;
@@ -963,10 +963,10 @@ void Process(string &key, string &value)
         
         //printf("key:%s, value:%ld \n",key.c_str(),stoul(value, nullptr, 0));
         uint64_t address = stoul(value, nullptr, 0);
-        if (registerVariable.find(address)!= registerVariable.end())
-        {
-            return;
-        }
+        // if (registerVariable.find(address)!= registerVariable.end())
+        // {
+        //     return;
+        // }
         //Maintain a read-map that maps from the addresses that are loaded from
         if (noerrorInTrance)
         {
@@ -985,7 +985,7 @@ void Process(string &key, string &value)
             //LoadAterStore(storewsTupleMap[currentUid], loadwksTuple,loadAftertorewsTupleMap[currentUid]);
 
 
-            if (currentUid == 0)
+            if (currentUid == 2)
             {
                 cout<< instNum<< " " <<loadwsTupleMap[currentUid].size()<<endl;
             }
@@ -993,7 +993,7 @@ void Process(string &key, string &value)
             if (loadwsTupleMap[currentUid].size() > NontriTh)
             {
                 NumNonTrivialMerge++;
-                nontrivialMerge(loadwsTupleMap[currentUid]);
+                //nontrivialMerge(loadwsTupleMap[currentUid]);
                 if(NumTrivialMerge < NontriTh && NontriTh < 10)
                 {
                     NontriTh = NontriTh+1;
@@ -1196,7 +1196,7 @@ wsTuple intersectionTuple(wsTuple load,wsTuple store)
     float str = float(result.end -result.start)/ float(store.end- store.start);
     result.byte_count  = load.byte_count* ldr + store.byte_count* str;
     result.ref_count = load.ref_count* ldr + store.ref_count* str;
-    result.regular = load.regular* ldr + store.regular* str;
+    result.reuse_distance = load.reuse_distance* ldr + store.reuse_distance* str;
     result.timing = 0;     
     return result;
 }
@@ -1282,7 +1282,7 @@ tuple<int,int,float,int> calTotalSize(wsTupleMap a,int liveness)
     for (auto i : a)
     {
         size += i.second.end - i.second.start;                
-        locality = (locality *access + i.second.regular *i.second.ref_count);
+        locality = (locality *access + i.second.reuse_distance *i.second.ref_count);
         locality = locality/(access+i.second.ref_count);
         access += i.second.ref_count;       
     }
@@ -1353,7 +1353,7 @@ int main(int argc, char **argv)
             jOut["tuplePerInstance"]["store"][to_string(sti.first)][to_string(stii.first)]["2"] = stii.second.end;
             jOut["tuplePerInstance"]["store"][to_string(sti.first)][to_string(stii.first)]["3"] = stii.second.byte_count;
             jOut["tuplePerInstance"]["store"][to_string(sti.first)][to_string(stii.first)]["4"] = stii.second.ref_count;
-            jOut["tuplePerInstance"]["store"][to_string(sti.first)][to_string(stii.first)]["5"] = stii.second.regular;
+            jOut["tuplePerInstance"]["store"][to_string(sti.first)][to_string(stii.first)]["5"] = stii.second.reuse_distance;
         }
     }
     for (auto sti :loadwsTupleMap)
@@ -1364,7 +1364,7 @@ int main(int argc, char **argv)
             jOut["tuplePerInstance"]["load"][to_string(sti.first)][to_string(stii.first)]["2"] = stii.second.end;
             jOut["tuplePerInstance"]["load"][to_string(sti.first)][to_string(stii.first)]["3"] = stii.second.byte_count;
             jOut["tuplePerInstance"]["load"][to_string(sti.first)][to_string(stii.first)]["4"] = stii.second.ref_count;
-            jOut["tuplePerInstance"]["load"][to_string(sti.first)][to_string(stii.first)]["5"] = stii.second.regular;
+            jOut["tuplePerInstance"]["load"][to_string(sti.first)][to_string(stii.first)]["5"] = stii.second.reuse_distance;
         }
     }
 
@@ -1376,7 +1376,7 @@ int main(int argc, char **argv)
             jOut["tuplePerInstance"]["store-load"][to_string(sti.first)][to_string(stii.first)]["2"] = stii.second.end;
             jOut["tuplePerInstance"]["store-load"][to_string(sti.first)][to_string(stii.first)]["3"] = stii.second.byte_count;
             jOut["tuplePerInstance"]["store-load"][to_string(sti.first)][to_string(stii.first)]["4"] = stii.second.ref_count;
-            jOut["tuplePerInstance"]["store-load"][to_string(sti.first)][to_string(stii.first)]["5"] = stii.second.regular;
+            jOut["tuplePerInstance"]["store-load"][to_string(sti.first)][to_string(stii.first)]["5"] = stii.second.reuse_distance;
         }
     } 
     
@@ -1390,7 +1390,7 @@ int main(int argc, char **argv)
                 jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["2"] = dii.second.end;
                 jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["3"] = dii.second.byte_count;
                 jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["4"] = dii.second.ref_count;
-                jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["5"] = dii.second.regular;
+                jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["5"] = dii.second.reuse_distance;
             }          
         }
     }
