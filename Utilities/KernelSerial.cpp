@@ -156,16 +156,19 @@ int64_t instCounter = 0;
 
 
 
-
+// for register address prediction
 map<uint64_t,uint64_t> registerBuffer;
 set<uint64_t> registerVariable;
-uint64_t memfootPrintInKI;
+uint64_t memfootPrintInKI; //memory footprint recording for register buffer cleaning
+
+
+// for non-trivial merge performance testing
 int NumTrivialMerge = 0;
 int NumNonTrivialMerge = 0;
 int NontriTh = 5;
 int instNum = 0;
-
-
+int peakStoreTNum = 0;
+int peakLoadTNum = 0;
 
 bool overlap (wsTuple a, wsTuple b,int64_t error)
 {
@@ -341,7 +344,7 @@ void trivialMergeOptRegister (wsTupleMap &processMap, wsTuple t_new, set <int>&l
             if (included(t_new,iter->second))
             {
                 registerUpdate(t_new);
-                return;
+                // return;
             }
             else
             {
@@ -376,8 +379,8 @@ void trivialMergeOptRegister (wsTupleMap &processMap, wsTuple t_new, set <int>&l
             if(processMap.find(prev(iter)->first) !=processMap.end() && included(t_new,prev(iter)->second))
             {
                 registerUpdate(t_new);
-                processMap.erase(t_new.start);
-                return;
+                // processMap.erase(t_new.start);
+                // return;
             }
             if (processMap.find(prev(iter)->first) !=processMap.end() && overlap(processMap[t_new.start],prev(iter)->second,0)&& 
             processMap.find(next(iter)->first) !=processMap.end() && overlap(processMap[t_new.start],next(iter)->second,0))
@@ -412,7 +415,7 @@ void trivialMergeOptRegister (wsTupleMap &processMap, wsTuple t_new, set <int>&l
             if(included(t_new,processMap[t_new.start]))
             {
                 registerUpdate(t_new);
-                return;
+                // return;
             }
             processMap[t_new.start] = tp_or (t_new, processMap[t_new.start],true,lastHitTimeSet);
             if (processMap.find(next(iter)->first) !=processMap.end() && overlap(processMap[t_new.start],next(iter)->second,0))
@@ -782,6 +785,11 @@ void Process(string &key, string &value)
         // block represents current processed block id in the trace
         instCounter = 0;
         int block = stoi(value, nullptr, 0);
+
+
+        if(currentUid == 2)
+        cout << "bb id:"<< block<< endl;
+        
         vBlock = block;
         if (BBMemInstSize.find(vBlock) != BBMemInstSize.end())
         {
@@ -924,15 +932,27 @@ void Process(string &key, string &value)
         // }
         if (noerrorInTrance)
         {
+            
+
 
             // construct the tuple
             uint64_t dataSize = BBMemInstSize[vBlock][instCounter];
+            
+            
+            
+            if(currentUid == 2)
+            cout << "store:"<< address << " size:"<< dataSize << endl;
+
+
+
+
             instCounter++;
             wsTuple storewksTuple;           
             storewksTuple = (wsTuple){address, address + dataSize, dataSize,1,0,0};
             
                    
             LivingStore(address, livenessTiming, true);
+            livenessTiming++;
             
             // NumTrivialMerge++;
             trivialMergeOptRegister (storewsTupleMap[currentUid], storewksTuple,storelastHitTimeSet);
@@ -941,8 +961,8 @@ void Process(string &key, string &value)
             //     cout<< timing<< " " <<storewsTupleMap[currentUid].size()<<endl;
             // }
             
-            if (storewsTupleMap[currentUid].size() > 10)
-            {
+            // if (storewsTupleMap[currentUid].size() > 10)
+            // {
                 //nontrivialMerge(storewsTupleMap[currentUid]);
                 // if(NumTrivialMerge < NontriTh && NontriTh < 50)
                 // {
@@ -953,15 +973,22 @@ void Process(string &key, string &value)
                 //     NontriTh--;
                 // }
                 // NumTrivialMerge =0;
-            }
+            //}
 
-            livenessTiming++;
+            
+
+            if (storewsTupleMap[currentUid].size() > peakStoreTNum)
+            {
+                peakStoreTNum = storewsTupleMap[currentUid].size();
+            }
+            
+            
         }
     }
     else if (key == "LoadAddress")
     {
         
-        //printf("key:%s, value:%ld \n",key.c_str(),stoul(value, nullptr, 0));
+        
         uint64_t address = stoul(value, nullptr, 0);
         // if (registerVariable.find(address)!= registerVariable.end())
         // {
@@ -970,7 +997,19 @@ void Process(string &key, string &value)
         //Maintain a read-map that maps from the addresses that are loaded from
         if (noerrorInTrance)
         {
+
+            
+
+
+
             uint64_t dataSize = BBMemInstSize[vBlock][instCounter];
+
+
+            if(currentUid == 2)
+            cout << "load:"<< address << " size:"<< dataSize << endl;
+
+
+            
             instCounter++;
             wsTuple loadwksTuple;
             loadwksTuple = (wsTuple){address, address + dataSize, dataSize,1,0,0};
@@ -979,32 +1018,43 @@ void Process(string &key, string &value)
             {
                 livenessTupleVec[livenessUpdate[address]].end = livenessTiming;
             }
+            livenessTiming++; 
+
+
+
             instNum++;
             NumTrivialMerge++;
             trivialMergeOptRegister(loadwsTupleMap[currentUid], loadwksTuple,loadlastHitTimeSet);            
             //LoadAterStore(storewsTupleMap[currentUid], loadwksTuple,loadAftertorewsTupleMap[currentUid]);
 
 
-            if (currentUid == 2)
+            // if (currentUid == 2)
+            // {
+            //     cout<< instNum<< " " <<loadwsTupleMap[currentUid].size()<<endl;
+            // }
+
+            // if (loadwsTupleMap[currentUid].size() > NontriTh)
+            // {
+            //     NumNonTrivialMerge++;
+                //nontrivialMerge(loadwsTupleMap[currentUid]);
+            //     if(NumTrivialMerge < NontriTh && NontriTh < 10)
+            //     {
+            //         NontriTh = NontriTh+1;
+            //     }
+            //     else if (NumTrivialMerge > NontriTh && NontriTh > 5)
+            //     {
+            //         NontriTh = NontriTh-1;
+            //     }
+            //     NumTrivialMerge =0;
+            // }
+
+        
+            if (loadwsTupleMap[currentUid].size() > peakLoadTNum)
             {
-                cout<< instNum<< " " <<loadwsTupleMap[currentUid].size()<<endl;
+                peakLoadTNum = loadwsTupleMap[currentUid].size();
             }
 
-            if (loadwsTupleMap[currentUid].size() > NontriTh)
-            {
-                NumNonTrivialMerge++;
-                //nontrivialMerge(loadwsTupleMap[currentUid]);
-                if(NumTrivialMerge < NontriTh && NontriTh < 10)
-                {
-                    NontriTh = NontriTh+1;
-                }
-                else if (NumTrivialMerge > NontriTh && NontriTh > 5)
-                {
-                    NontriTh = NontriTh-1;
-                }
-                NumTrivialMerge =0;
-            }
-            livenessTiming++;          
+
         }
     }
 }

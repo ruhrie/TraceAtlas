@@ -45,10 +45,10 @@ int main(int argc, char *argv[])
 	double *dftMatrix = malloc(2* dft_size * dft_size * sizeof(double));
 	FILE *fp;
 
-	for (size_t i = 0; i < dft_size * 2; i+=2)
+	for (size_t i = 0; i < dft_size *dft_size * 2; i+=2)
 	{
-		dftMatrix[i] = cos(M_PI*i/dft_size);
-		dftMatrix[i + 1] = -sin(M_PI* i/dft_size);
+		dftMatrix[i] = cos( M_PI * i/dft_size);
+		dftMatrix[i + 1] = -sin( M_PI * i/dft_size);
 	}
 
 
@@ -61,19 +61,18 @@ int main(int argc, char *argv[])
 		gen_wave[i] = cos(M_PI * B / T * pow(time[i / 2], 2));
 		gen_wave[i + 1] = sin(M_PI * B / T * pow(time[i / 2], 2));
 	}
-	//Add code for zero-padding, to make sure signals are of same length
+	//Add code for zero-padding, to make sure signals are of same dft_sizegth
 
-	size_t len = 2 * n_samples - 1;
 
-	double* c = malloc(2 * len * sizeof(double));
-	double* d = malloc(2 * len * sizeof(double));
+	double* c = malloc(2 * dft_size * sizeof(double));
+	double* d = malloc(2 * dft_size * sizeof(double));
 
 	size_t x_count = 0;
 	size_t y_count = 0;
     KernelExit("randomInit");
 
     KernelEnter("k1");
-	for (size_t i = 0; i < 2 * len; i += 2)
+	for (size_t i = 0; i < 2 * dft_size; i += 2)
 	{
 		if (i / 2 > n_samples - 1)
 		{
@@ -104,18 +103,18 @@ int main(int argc, char *argv[])
 
 	}
     KernelExit("k1");
-	double* X1 = malloc(2 * len * sizeof(double));
-	double* X2 = malloc(2 * len * sizeof(double));
-	double* corr_freq = malloc(2 * len * sizeof(double));
+	double* X1 = malloc(2 * dft_size * sizeof(double));
+	double* X2 = malloc(2 * dft_size * sizeof(double));
+	double* corr_freq = malloc(2 * dft_size * sizeof(double));
 	int row;
 	int column;
     KernelEnter("k2");
-	for (size_t i = 0; i < dft_size *2; i += 2)
-	{
+	for (size_t i = 0; i <  dft_size * dft_size * 2; i += 2)
+	{ 
 		row = i /(dft_size *2);
 		column = i % (dft_size *2);
-		X1[2*row] += dftMatrix[column+row] * c[column];
-		X1[2*row+1] += dftMatrix[column+row+1] * c[column+1];
+		X1[2*row] += dftMatrix[i] * c[column];
+		X1[2*row+1] += dftMatrix[i+1] * c[column+1];
 	}
     KernelExit("k2");
 
@@ -131,7 +130,7 @@ int main(int argc, char *argv[])
     // KernelExit("k3");
 
     // KernelEnter("k4");
-	// for (size_t i = 0; i < 2 * len; i += 2)
+	// for (size_t i = 0; i < 2 * dft_size; i += 2)
 	// {
 	// 	corr_freq[i] = (X1[i] * X2[i]) + (X1[i + 1] * X2[i + 1]);
 	// 	corr_freq[i + 1] = (X1[i + 1] * X2[i]) - (X1[i] * X2[i + 1]);
