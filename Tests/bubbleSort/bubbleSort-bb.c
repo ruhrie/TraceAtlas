@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
     {
         SIZE = 10; 
     }
-    
+    SIZE = 512; 
     printf("\nSIZE = %d", SIZE);
     int *in = (int *)malloc(sizeof(int) * 1000);
     
