@@ -954,7 +954,6 @@ double EntropyCalculation(std::set<GraphNode *, p_GNCompare> &nodes)
     {
         entry /= totalEdgeWeights;
     }
-
     // second, calculate the average entropy of each node (the entropy rate)
     double entropyRate = 0.0;
     for (unsigned int i = 0; i < stationaryDistribution.size(); i++)
@@ -967,6 +966,19 @@ double EntropyCalculation(std::set<GraphNode *, p_GNCompare> &nodes)
         }
     }
     return entropyRate;
+}
+
+double TotalEntropy(std::set<GraphNode *, p_GNCompare> &nodes)
+{
+    double accumulatedEntropy = 0.0;
+    for( const auto& node : nodes )
+    {
+        for (const auto &nei : node->neighbors)
+        {
+            accumulatedEntropy -= nei.second.second * log2(nei.second.second);
+        }
+    }
+    return accumulatedEntropy;
 }
 
 int main(int argc, char *argv[])
@@ -1003,6 +1015,7 @@ int main(int argc, char *argv[])
     // transform graph in an iterative manner until the size of the graph doesn't change
     size_t graphSize = nodes.size();
     auto startEntropy = EntropyCalculation(nodes);
+    auto startTotalEntropy = TotalEntropy(nodes);
     auto startNodes = nodes.size();
     uint64_t startEdges = 0;
     for (const auto &node : nodes)
@@ -1013,14 +1026,11 @@ int main(int argc, char *argv[])
     {
         // combine all trivial node merges
         TrivialTransforms(nodes, IDToBlock);
-        PrintGraph(nodes);
         // Next transform, find conditional branches and turn them into select statements
         // In other words, find subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
         BranchToSelectTransforms(nodes, IDToBlock);
-        PrintGraph(nodes);
         // Finally, transform the graph bottlenecks to avoid multiple entrance/multiple exit kernels
         FanInFanOutTransform(nodes);
-        PrintGraph(nodes);
         if (graphSize == nodes.size())
         {
             break;
@@ -1031,6 +1041,7 @@ int main(int argc, char *argv[])
         }
     }
     auto endEntropy = EntropyCalculation(nodes);
+    auto endTotalEntropy = TotalEntropy(nodes);
     auto endNodes = nodes.size();
     uint64_t endEdges = 0;
     for (const auto &node : nodes)
@@ -1204,9 +1215,11 @@ int main(int argc, char *argv[])
     // Entropy information
     outputJson["Entropy"] = map<string, map<string, uint64_t>>();
     outputJson["Entropy"]["Start"]["Entropy Rate"] = startEntropy;
+    outputJson["Entropy"]["Start"]["Total Entropy"] = startTotalEntropy;
     outputJson["Entropy"]["Start"]["Nodes"] = startNodes;
     outputJson["Entropy"]["Start"]["Edges"] = startEdges;
     outputJson["Entropy"]["End"]["Entropy Rate"] = endEntropy;
+    outputJson["Entropy"]["End"]["Total Entropy"] = endTotalEntropy;
     outputJson["Entropy"]["End"]["Nodes"] = endNodes;
     outputJson["Entropy"]["End"]["Edges"] = endEdges;
 
