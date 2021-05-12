@@ -179,7 +179,7 @@ float NonTriErrTh = 0.5;
 
 bool overlap (wsTuple a, wsTuple b,int64_t error)
 {
-    if (max(a.start, b.start) <= (min(a.end, b.end))+error)
+    if (max(a.start, b.start) <= (min(a.end, b.end))+error )
     {
         return true;
     }
@@ -357,7 +357,7 @@ void trivialMergeOptRegister (wsTupleMap &processMap, wsTuple t_new, set <int>&l
         {
             if (included(t_new,iter->second))
             {
-                registerUpdate(t_new);
+                //registerUpdate(t_new);
                 // return;
             }
             else
@@ -392,7 +392,7 @@ void trivialMergeOptRegister (wsTupleMap &processMap, wsTuple t_new, set <int>&l
 
             if(processMap.find(prev(iter)->first) !=processMap.end() && included(t_new,prev(iter)->second))
             {
-                registerUpdate(t_new);
+                //registerUpdate(t_new);
                 // processMap.erase(t_new.start);
                 // return;
             }
@@ -428,7 +428,7 @@ void trivialMergeOptRegister (wsTupleMap &processMap, wsTuple t_new, set <int>&l
         {   auto iter = processMap.find(t_new.start);
             if(included(t_new,processMap[t_new.start]))
             {
-                registerUpdate(t_new);
+                //registerUpdate(t_new);
                 // return;
             }
             processMap[t_new.start] = tp_or (t_new, processMap[t_new.start],true,lastHitTimeSet);
@@ -712,7 +712,7 @@ void nontrivialMerge (wsTupleMap &processMap)
 
     while(iterNext != processMap.end())
     {
-        if (processMap.find(iterNext->first) !=processMap.end() && overlap(iter->second, iterNext->second,0.1*(iterNext->second.end - iter->second.start)))
+        if (processMap.find(iterNext->first) !=processMap.end() && overlap(iter->second, iterNext->second,0.5*(iterNext->second.end - iter->second.start)))
         {
             set<int>lastHitTimeSet;
             processMap[iter->first] = tp_or(iter->second,iterNext->second,false,lastHitTimeSet);
@@ -839,7 +839,7 @@ void Process(string &key, string &value)
                 }
             }
 
-            // non-kerenl
+            // non-kerenl, only from kernel-> non-kernel will this branch be triggered
             if(currentKernel != "-1" &&innerKernel == "-1")
             {
                 uint64_t maxinternal = 0;
@@ -862,11 +862,8 @@ void Process(string &key, string &value)
                 }
                 maxLivenessPerKI[currentUid] = maxinternal;
                 
-                currentUid = -1-mUID;
-                mUID++;
-
-
-                
+                currentUid = UID;
+                kernelIdMap[UID++] = innerKernel;
 
                 timing = 0;
                 timingIn = 0;
@@ -920,13 +917,13 @@ void Process(string &key, string &value)
 
                 currentUid = UID;
                 // kernelIdMap records the map from kernel instance id to kernel id
-                kernelIdMap[UID++] = currentKernel;
+                kernelIdMap[UID++] = currentKernel;  
 
 
-               
-                   
-                   
-                
+
+
+
+
                 //printf("maxinternal: %lu \n",maxinternal);
                 
                 livenessUpdate.clear();
@@ -956,9 +953,13 @@ void Process(string &key, string &value)
         // }
         if (noerrorInTrance)
         {
+            if (BBMemInstSize[vBlock].size() <= instCounter)
+            {
+                return;
+            }
 
             // construct the tuple
-            uint64_t dataSize = BBMemInstSize[vBlock][instCounter];           
+            uint64_t dataSize = BBMemInstSize[vBlock][instCounter]; 
             //if(currentUid == 2)
             // cout << "store:"<< address << " size:"<< dataSize << endl;
             instCounter++;
@@ -982,16 +983,16 @@ void Process(string &key, string &value)
             if (storewsTupleMap[currentUid].size() > 10)
             {
                 nontrivialMerge(storewsTupleMap[currentUid]);
-                TupleNumChangedNonTri = beforeSize - storewsTupleMap[currentUid].size();
-                if(NumTrivialMerge < NontriTh && NontriTh < 15)
-                {
-                    NontriTh++;
-                }
-                else if (NumTrivialMerge > NontriTh && NontriTh > 5)
-                {
-                    NontriTh--;
-                }
-                NumTrivialMerge =0;
+                // TupleNumChangedNonTri = beforeSize - storewsTupleMap[currentUid].size();
+                // if(NumTrivialMerge < NontriTh && NontriTh < 15)
+                // {
+                //     NontriTh++;
+                // }
+                // else if (NumTrivialMerge > NontriTh && NontriTh > 5)
+                // {
+                //     NontriTh--;
+                // }
+                // NumTrivialMerge =0;
             }
 
             
@@ -1022,8 +1023,11 @@ void Process(string &key, string &value)
 
 
             uint64_t dataSize = BBMemInstSize[vBlock][instCounter];
-
-
+            if (BBMemInstSize[vBlock].size() <= instCounter)
+            {
+                return;
+            }
+            
             //if(currentUid == 2)
             // cout << "load:"<< address << " size:"<< dataSize << endl;
 
@@ -1047,12 +1051,9 @@ void Process(string &key, string &value)
             //LoadAterStore(storewsTupleMap[currentUid], loadwksTuple,loadAftertorewsTupleMap[currentUid]);
 
 
-            // if (currentUid == 0)
-            // {
-            //     cout<< instNum<< " " <<loadwsTupleMap[currentUid].size()<<endl;
-            // }
+            
 
-            if (loadwsTupleMap[currentUid].size() > NontriTh)
+            if (loadwsTupleMap[currentUid].size() > 10)
             {
                 NumNonTrivialMerge++;
                 nontrivialMerge(loadwsTupleMap[currentUid]);
@@ -1116,7 +1117,7 @@ int parsingKernelInfo(string KernelFilename)
             auto *bb = cast<BasicBlock>(fi);
             auto dl = bb->getModule()->getDataLayout();
             int64_t id = GetBlockID(bb);
-
+           
             for (auto bi = fi->begin(); bi != fi->end(); bi++)
             {
                 if (auto *inst = dyn_cast<LoadInst>(bi))
@@ -1368,6 +1369,7 @@ int main(int argc, char **argv)
     //read the json
     parsingKernelInfo(KernelFilename);
     application a;
+    kernelIdMap[-1] = "-1";
     ProcessTrace(InputFilename, Process, "Generating DAG",noBar);
 
     end_time = clock();
@@ -1383,41 +1385,41 @@ int main(int argc, char **argv)
         nontrivialMerge(i.second);
     }
 
-    map<int64_t, wsTupleMap> aggreated;
-    map<string, wsTupleMap> aggreatedKernel;
-    // aggregate sizes and access number
-    map<int64_t,tuple<int,int,float,int>> aggreatedSize;
-    map<string,tuple<int,int,float,int>> aggreatedSizeKernel;
-    for (auto i :loadwsTupleMap)
-    {
-        //todo here and notrivial is too complicated wtring
-        aggreated[i.first] = Aggregate(i.second,storewsTupleMap[i.first]);
-        nontrivialMerge(aggreated[i.first]);
-        aggreatedSize[i.first] = calTotalSize(aggreated[i.first],maxLivenessPerKI[i.first]);
-    }
+    // map<int64_t, wsTupleMap> aggreated;
+    // map<string, wsTupleMap> aggreatedKernel;
+    // // aggregate sizes and access number
+    // map<int64_t,tuple<int,int,float,int>> aggreatedSize;
+    // map<string,tuple<int,int,float,int>> aggreatedSizeKernel;
+    // for (auto i :loadwsTupleMap)
+    // {
+    //     //todo here and notrivial is too complicated wtring
+    //     aggreated[i.first] = Aggregate(i.second,storewsTupleMap[i.first]);
+    //     nontrivialMerge(aggreated[i.first]);
+    //     aggreatedSize[i.first] = calTotalSize(aggreated[i.first],maxLivenessPerKI[i.first]);
+    // }
 
-    //map<int, string> kernelIdMap;
+    // //map<int, string> kernelIdMap;
 
-    for(auto i : aggreated)
-    {
-        string kernelid = kernelIdMap[i.first];
-        for (auto itp :i.second)
-        {
-            aggreatedKernel[kernelid] = Aggregate(i.second,aggreated[i.first]);
-        }
-    }
+    // for(auto i : aggreated)
+    // {
+    //     string kernelid = kernelIdMap[i.first];
+    //     for (auto itp :i.second)
+    //     {
+    //         aggreatedKernel[kernelid] = Aggregate(i.second,aggreated[i.first]);
+    //     }
+    // }
 
     
     // map<int, vector<pair<int64_t, int64_t>>> addrTouchedPerInst;
     // map<int, int64_t> totalMemUsage;    
     // calMemUsePerIns (totalMemUsage, addrTouchedPerInst);
     // // ki1: kernel instance, ki2: the former , map of (first addr, tuple)
-    map<int, map<int, wsTupleMap>> dependency;
-    calDependency(dependency);
+    // map<int, map<int, wsTupleMap>> dependency;
+    // calDependency(dependency);
 
     nlohmann::json jOut;
     jOut["KernelInstanceMap"] = kernelIdMap;
-    jOut["aggreatedSize"] = aggreatedSize;
+    // jOut["aggreatedSize"] = aggreatedSize;
   
     for (auto sti :storewsTupleMap)
     {
@@ -1454,20 +1456,20 @@ int main(int argc, char **argv)
         }
     } 
     
-    for (auto d :dependency)
-    {
-        for (auto di: d.second)
-        {
-            for (auto dii: di.second)            
-            {
-                jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["1"] = dii.second.start;
-                jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["2"] = dii.second.end;
-                jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["3"] = dii.second.byte_count;
-                jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["4"] = dii.second.ref_count;
-                jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["5"] = dii.second.reuse_distance;
-            }          
-        }
-    }
+    // for (auto d :dependency)
+    // {
+    //     for (auto di: d.second)
+    //     {
+    //         for (auto dii: di.second)            
+    //         {
+    //             jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["1"] = dii.second.start;
+    //             jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["2"] = dii.second.end;
+    //             jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["3"] = dii.second.byte_count;
+    //             jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["4"] = dii.second.ref_count;
+    //             jOut["dependency"][to_string(d.first)][to_string(di.first)][to_string(dii.first)]["5"] = dii.second.reuse_distance;
+    //         }          
+    //     }
+    // }
 
 
     std::ofstream file;

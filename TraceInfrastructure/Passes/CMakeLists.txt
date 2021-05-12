@@ -1,4 +1,4 @@
-add_library(AtlasPasses MODULE Trace.cpp TraceMem.cpp TraceMemIO.cpp Annotate.cpp TraceIO.cpp CommandArgs.cpp PapiExport.cpp PapiIO.cpp Functions.cpp AddLibrary.cpp)
+add_library(AtlasPasses MODULE Trace.cpp TraceMem.cpp TraceMemIO.cpp Annotate.cpp TraceIO.cpp CommandArgs.cpp PapiExport.cpp PapiIO.cpp Functions.cpp AddLibrary.cpp SplitKernExitEnter.cpp)
 target_link_libraries(AtlasPasses PRIVATE nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
 target_compile_definitions(AtlasPasses PRIVATE ${LLVM_DEFINITIONS})
 if(WIN32)

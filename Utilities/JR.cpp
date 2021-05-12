@@ -17,10 +17,14 @@ llvm::cl::opt<bool> noBar("nb", llvm::cl::desc("No progress bar"), llvm::cl::val
 map<int64_t, set<string>> labels;
 set<string> currentLabels;
 map<string,set<int64_t>> labelsToblock;
-
+int64_t currentblock;
 void Process(string &key, string &value)
 {
-    if (key == "BBExit")
+    if (key == "BBEnter")
+    {
+       currentblock = stol(value, nullptr, 0);
+    }
+    else if (key == "BBExit")
     {
         int64_t block = stol(value, nullptr, 0);
         labels[block].insert(currentLabels.begin(), currentLabels.end());
@@ -36,6 +40,11 @@ void Process(string &key, string &value)
     }
     else if (key == "KernelExit")
     {
+        labels[currentblock].insert(currentLabels.begin(), currentLabels.end());
+        for (auto i : currentLabels)
+        {
+            labelsToblock[i].insert(currentblock);
+        }
         currentLabels.erase(value);
     }
 }
