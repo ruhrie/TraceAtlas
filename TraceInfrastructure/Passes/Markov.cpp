@@ -48,16 +48,17 @@ namespace DashTracer::Passes
             Value *idValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), (uint64_t)id);
             std::vector<Value *> args;
             args.push_back(idValue);
-            firstBuilder.CreateCall(MarkovIncrement, args);
-
+            auto call = firstBuilder.CreateCall(MarkovIncrement, args);
+            call->setDebugLoc(NULL);
             /*for (const auto &call : blockCalls)
             {
                 auto nextCall = firstBuilder.CreateCall(MarkovIncrement, args);
                 nextCall->moveAfter(call);
             }*/
 
-            auto call = firstBuilder.CreateCall(MarkovExit);
+            call = firstBuilder.CreateCall(MarkovExit);
             call->moveBefore(lastInsertion);
+            call->setDebugLoc(NULL);
         }
         return true;
     }
