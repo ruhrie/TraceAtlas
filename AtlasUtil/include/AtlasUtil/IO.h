@@ -1,6 +1,7 @@
 #pragma once
 #include "AtlasUtil/Graph/Graph.h"
 #include "AtlasUtil/Print.h"
+#include "AtlasUtil/Annotate.h"
 #include "llvm/Analysis/CallGraph.h"
 #include <fstream>
 #include <llvm/IR/Module.h>
@@ -62,7 +63,7 @@ inline std::map<int64_t, int64_t> ReadBlockInfo(std::string &BlockInfo)
         }
         else if (vec.size() > 1)
         {
-            throw AtlasException("Found more than one entry in a blockCaller key!");
+            //throw AtlasException("Found more than one entry in a blockCaller key!");
         }
     }
     return blockCallers;
