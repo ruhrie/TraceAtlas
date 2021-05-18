@@ -185,7 +185,7 @@ void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filen
 }
 
 /// Returns true if one or more cycles exist in the graph specified by nodes, false otherwise
-bool FindCycles(const std::set<GraphNode *, p_GNCompare> &nodes, const GraphNode *source, const GraphNode *sink)
+bool FindCycles(const std::set<GraphNode *, p_GNCompare> &nodes, const GraphNode *source)
 {
     // algorithm inspired by https://www.baeldung.com/cs/detecting-cycles-in-directed-graph
     // queue of nodes that have been touched but their neighbors have not been fully evaluated yet
@@ -321,7 +321,7 @@ void TrivialTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64
     }
 }
 
-void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64_t, llvm::BasicBlock *> &IDToBlock)
+void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
 {
     // Vocabulary
     // entrance - first node that will execute in the target subgraph
@@ -796,7 +796,7 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
             }
 
             // secong check: no cycles are allowed to exist within the subgraph
-            if (FindCycles(subgraph, source, sink))
+            if (FindCycles(subgraph, source))
             {
                 break;
             }
@@ -1021,7 +1021,7 @@ int main(int argc, char *argv[])
         TrivialTransforms(nodes, IDToBlock);
         // Next transform, find conditional branches and turn them into select statements
         // In other words, find subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
-        BranchToSelectTransforms(nodes, IDToBlock);
+        BranchToSelectTransforms(nodes);
         // Finally, transform the graph bottlenecks to avoid multiple entrance/multiple exit kernels
         FanInFanOutTransform(nodes);
         if (graphSize == nodes.size())
