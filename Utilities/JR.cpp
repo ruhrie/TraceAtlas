@@ -19,9 +19,9 @@ int main(int argc, char **argv)
     {
         uint64_t max = 0;
         string maxLabel = "";
-        for( const auto& label : block.second )
+        for (const auto &label : block.second)
         {
-            if( label.second > max )
+            if (label.second > max)
             {
                 maxLabel = label.first;
             }

@@ -80,14 +80,7 @@ void RemoveNode(std::set<GraphNode *, p_GNCompare> &CFG, GraphNode *removeNode)
     CFG.erase(removeNode);
     delete removeNode;
 }
-/*
-void RemoveNode(std::set<GraphNode *,  p_GNCompare> &CFG, GraphNode *removeNode)
-{
-    // fourth, free
-    CFG.erase(removeNode);
-    delete removeNode;
-}
-*/
+
 void RemoveNode(std::set<GraphNode *, p_GNCompare> &CFG, const GraphNode &removeNode)
 {
     // fourth, free
@@ -971,7 +964,7 @@ double EntropyCalculation(std::set<GraphNode *, p_GNCompare> &nodes)
 double TotalEntropy(std::set<GraphNode *, p_GNCompare> &nodes)
 {
     double accumulatedEntropy = 0.0;
-    for( const auto& node : nodes )
+    for (const auto &node : nodes)
     {
         for (const auto &nei : node->neighbors)
         {

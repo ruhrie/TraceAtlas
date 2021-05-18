@@ -88,11 +88,4 @@ target_include_directories(CallGraph SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
 target_compile_definitions(CallGraph PRIVATE ${LLVM_DEFINITIONS})
 set_target_properties(CallGraph PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-OPTION(BUILD_EXPERIMENTAL "Build experimental tools" OFF)
-
-if(${BUILD_EXPERIMENTAL})
-    add_executable(nc nc.cpp)
-    target_link_libraries(nc PRIVATE ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
-    set_target_properties(nc PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
-endif()
 add_subdirectory(WorkingSet)
