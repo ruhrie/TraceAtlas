@@ -1,6 +1,4 @@
-#ifndef FUNCTIONS_H
-#define FUNCTIONS_H
-
+#pragma once
 #include <llvm/IR/Function.h>
 
 using namespace llvm;
@@ -18,7 +16,9 @@ namespace DashTracer
         extern Function *DumpLoadValue;
         extern Function *fullFunc;
         extern Function *fullAddrFunc;
+        extern Function *MarkovOpen;
+        extern Function *MarkovClose;
+        extern Function *MarkovIncrement;
+        extern Function *MarkovExit;
     } // namespace Passes
 } // namespace DashTracer
-
-#endif

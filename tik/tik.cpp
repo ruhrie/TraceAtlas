@@ -1,23 +1,20 @@
-#include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
+#include "AtlasUtil/Format.h"
 #include "AtlasUtil/Print.h"
 #include "tik/CartographerKernel.h"
 #include "tik/Header.h"
 #include "tik/Util.h"
 #include "tik/libtik.h"
 #include <fstream>
-#include <iostream>
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/AssemblyAnnotationWriter.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/Module.h>
-#include <llvm/IR/Verifier.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/SourceMgr.h>
-#include <llvm/Support/raw_os_ostream.h>
 #include <llvm/Support/raw_ostream.h>
 #include <nlohmann/json.hpp>
 #include <set>
@@ -48,6 +45,7 @@ cl::opt<string> OutputType("f", cl::desc("Specify output file format. Can be LLV
 cl::opt<bool> ASCIIFormat("S", cl::desc("output json as human-readable ASCII text"));
 cl::opt<string> LogFile("l", cl::desc("Specify log filename"), cl::value_desc("log file"));
 cl::opt<int> LogLevel("v", cl::desc("Logging level"), cl::value_desc("logging level"), cl::init(4));
+cl::opt<bool> Preformat("pf", llvm::cl::desc("Bitcode is preformatted"), llvm::cl::value_desc("Bitcode is preformatted"));
 
 int main(int argc, char *argv[])
 {
@@ -89,6 +87,7 @@ int main(int argc, char *argv[])
         case 5:
         {
             spdlog::set_level(spdlog::level::debug);
+            break;
         }
         case 6:
         {
@@ -98,6 +97,7 @@ int main(int argc, char *argv[])
         default:
         {
             spdlog::warn("Invalid logging level: " + to_string(LogLevel));
+            break;
         }
     }
     ifstream inputJson;
@@ -121,9 +121,7 @@ int main(int argc, char *argv[])
 
     for (auto &[k, l] : j["Kernels"].items())
     {
-        string index = k;
-        nlohmann::json kernel = l["Blocks"];
-        kernels[index] = kernel.get<vector<int64_t>>();
+        kernels[k] = l["Blocks"].get<vector<int64_t>>();
     }
     ValidBlocks = j["ValidBlocks"].get<set<int64_t>>();
 
@@ -173,14 +171,20 @@ int main(int argc, char *argv[])
 
     Module *base = sourceBitcode.get();
 
-    CleanModule(base);
+    //CleanModule(base);
 
     //annotate it with the same algorithm used in the tracer
-    Annotate(base);
+    if (!Preformat)
+    {
+        Format(base);
+    }
+
+    /// Initialize our IDtoX maps
+    InitializeIDMaps(base, IDToBlock, IDToValue);
 
     TikModule = new Module(InputFile, context);
-    TikModule->setDataLayout(sourceBitcode->getDataLayout());
-    TikModule->setTargetTriple(sourceBitcode->getTargetTriple());
+    TikModule->setDataLayout(base->getDataLayout());
+    TikModule->setTargetTriple(base->getTargetTriple());
 
     //we now process all kernels who have no children and then remove them as we go
     std::vector<shared_ptr<Kernel>> results;
@@ -199,7 +203,7 @@ int main(int argc, char *argv[])
             if (childParentMapping.find(kernel.first) == childParentMapping.end())
             {
                 //this kernel has no unexplained parents
-                auto kern = make_shared<CartographerKernel>(kernel.second, sourceBitcode.get(), kernel.first);
+                auto kern = make_shared<CartographerKernel>(kernel.second, kernel.first);
                 if (!kern->Valid)
                 {
                     failedKernels.insert(kernel.second);
@@ -242,6 +246,10 @@ int main(int argc, char *argv[])
                     //and remove it from kernels
                     auto it = find(kernels.begin(), kernels.end(), kernel);
                     kernels.erase(it);
+                    if (kern->DeadCode)
+                    {
+                        spdlog::warn("Kernel " + kernel.first + " contains code suspected to be dead.");
+                    }
                     spdlog::info("Successfully converted kernel: " + kernel.first);
                     //and restart the iterator to ensure cohesion
                     break;
@@ -285,7 +293,7 @@ int main(int argc, char *argv[])
     {
 #ifdef DEBUG
         auto err = rso.str();
-        spdlog::critical("Tik Module Corrupted: " + err);
+        spdlog::critical("Tik Module Corrupted:\n" + err);
         error = true;
 #else
         spdlog::critical("Tik Module Corrupted");
@@ -293,44 +301,11 @@ int main(int argc, char *argv[])
 #endif
     }
 
-    // writing part
-    try
-    {
-        if (ASCIIFormat)
-        {
-            // print human readable tik module to file
-            auto *write = new llvm::AssemblyAnnotationWriter();
-            std::string str;
-            llvm::raw_string_ostream rso(str);
-            std::filebuf f0;
-            f0.open(OutputFile, std::ios::out);
-            TikModule->print(rso, write);
-            std::ostream readableStream(&f0);
-            readableStream << str;
-            f0.close();
-        }
-        else
-        {
-            // non-human readable IR
-            std::filebuf f;
-            f.open(OutputFile, std::ios::out);
-            std::ostream rawStream(&f);
-            raw_os_ostream raw_stream(rawStream);
-            WriteBitcodeToFile(*TikModule, raw_stream);
-        }
-
-        spdlog::info("Successfully wrote tik to file");
-    }
-    catch (exception &e)
-    {
-        std::cerr << "Failed to open output file: " << OutputFile << "\n";
-        std::cerr << e.what() << '\n';
-        spdlog::critical("Failed to write tik to output file: " + OutputFile);
-        return EXIT_FAILURE;
-    }
+    // write bitcode to file
+    PrintFile(TikModule, OutputFile, ASCIIFormat, false);
     if (error)
     {
-        return EXIT_FAILURE;
+        spdlog::error("Exported module does not contain all cartographer kernels.");
     }
     return EXIT_SUCCESS;
 }

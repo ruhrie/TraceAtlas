@@ -7,7 +7,7 @@
 #define TRACING 0
 #endif
 
-#define SIZE 512
+const int SIZE = 512;
 
 int main()
 {

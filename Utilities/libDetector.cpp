@@ -1,4 +1,4 @@
-#include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Format.h"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -15,6 +15,7 @@ using namespace llvm;
 cl::opt<string> JsonFile("k", cl::desc("Specify input kernel json filename"), cl::value_desc("kernel filename"));
 cl::opt<string> InputFile("i", cl::desc("Specify input bitcode filename"), cl::value_desc("bitcode filename"));
 cl::opt<string> OutputFile("o", cl::desc("Specify output json filename"), cl::value_desc("json filename"));
+cl::opt<bool> Preformat("pf", llvm::cl::desc("Bitcode is preformatted"), llvm::cl::value_desc("Bitcode is preformatted"));
 
 int main(int argc, char *argv[])
 {
@@ -38,7 +39,10 @@ int main(int argc, char *argv[])
     SMDiagnostic smerror;
     unique_ptr<Module> sourceBitcode = parseIRFile(InputFile, smerror, context);
     //annotate it with the same algorithm used in the tracer
-    Annotate(sourceBitcode.get());
+    if (!Preformat)
+    {
+        Format(sourceBitcode.get());
+    }
     map<string, set<string>> kernelParents;
     for (Module::iterator F = sourceBitcode->begin(), E = sourceBitcode->end(); F != E; ++F)
     {

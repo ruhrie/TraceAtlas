@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
-project(TraceAtlas VERSION 0.3.2)
+project(TraceAtlas VERSION 0.4.0)
 
 SET(CMAKE_CXX_STANDARD 17)
 SET(CMAKE_C_STANDARD 11)
@@ -43,12 +43,12 @@ if(${ENABLE_LINTER})
     set(CMAKE_CXX_CLANG_TIDY 
         ${TIDY};
         --warnings-as-errors=*;
-        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type;
+        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,modernize-*,-modernize-use-trailing-return-type,-readability-uppercase-literal-suffix;
         )
     set(CMAKE_C_CLANG_TIDY 
         ${TIDY};
         --warnings-as-errors=*;
-        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,-clang-analyzer-security.insecureAPI.*;
+        --checks=readability-*,-readability-magic-numbers,performance-*,portability-*,-clang-analyzer-security.insecureAPI.*,-readability-uppercase-literal-suffix;
         )
     add_compile_options(-Werror)
 endif()
@@ -62,14 +62,16 @@ add_subdirectory("cartographer")
 add_subdirectory("TraceInfrastructure")
 add_subdirectory("tik")
 add_subdirectory("deat")
+add_subdirectory("kar")
 add_subdirectory("Utilities")
+add_subdirectory("hydra")
 
-#repsonsible for injecting the tracer. Fairly fragile so be careful
+#responsible for injecting the tracer. Fairly fragile so be careful
 function(InjectTracer tar)
-    target_compile_options(${tar} PRIVATE "-flto")
+    target_compile_options(${tar} PRIVATE "-flto" "-g")
     set_target_properties(${tar} PROPERTIES LINK_FLAGS "-fuse-ld=lld -Wl,--plugin-opt=emit-llvm")
     add_custom_command(OUTPUT opt.bc
-        COMMAND ${LLVM_INSTALL_PREFIX}/bin/opt -load $<TARGET_FILE:AtlasPasses> -EncodedTrace $<TARGET_FILE:${tar}> -o opt.bc
+        COMMAND ${LLVM_INSTALL_PREFIX}/bin/opt -load $<TARGET_FILE:AtlasPasses> -Markov $<TARGET_FILE:${tar}> -o opt.bc
         DEPENDS $<TARGET_FILE:${tar}>
     )
     set_source_files_properties(
@@ -98,7 +100,7 @@ if(DOXYGEN_FOUND)
     add_custom_target(doc COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile)
 endif(DOXYGEN_FOUND)
 
-#stollen from https://github.com/ttroy50/cmake-examples/blob/master/04-static-analysis/clang-format/cmake/modules/clang-format.cmake
+#stolen from https://github.com/ttroy50/cmake-examples/blob/master/04-static-analysis/clang-format/cmake/modules/clang-format.cmake
 #used to run clang-format on the entire source tree
 find_program(FORMAT NAMES clang-format-9 clang-format)
 if(${FORMAT} STREQUAL "FORMAT-NOTFOUND")
@@ -124,4 +126,3 @@ else()
         ${ALL_SOURCE_FILES}
     )
 endif()
-

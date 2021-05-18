@@ -12,7 +12,7 @@ namespace TypeOne
     std::map<int64_t, std::map<int64_t, uint64_t>> blockMap;
     std::map<int64_t, uint64_t> blockCount;
     std::deque<int64_t> priorBlocks;
-    uint32_t radius = 5;
+    const uint32_t radius = 5;
     void Process(std::string &key, std::string &value)
     {
         if (key == "BBEnter")
@@ -111,6 +111,8 @@ namespace TypeOne
                         return result;
                     });
                     std::set<int64_t> kernel;
+                    kernel.insert(it.first);
+                    covered.insert(it.first);
                     while (sum < threshold)
                     {
                         std::pair<int64_t, float> entry = values[0];

@@ -8,7 +8,52 @@
 #include <string>
 #include <zlib.h>
 
-#define BLOCK_SIZE 4096
+const int BLOCK_SIZE = 128 * 1024;
+
+static void ProcessTraceBytes(char *message, std::string &priorLine, const std::function<void(std::string &, std::string &)> &LogicFunction, uint64_t length)
+{
+    std::string bufferString(message, length);
+    std::stringstream stringStream(bufferString);
+    std::string segment;
+    std::getline(stringStream, segment, '\n');
+    char back = bufferString.back();
+    bool seenFirst = false;
+    while (true)
+    {
+        if (!seenFirst)
+        {
+            segment = priorLine.append(segment);
+            seenFirst = true;
+        }
+        // split it by the colon between the instruction and value
+        std::stringstream itstream(segment);
+        std::string key;
+        std::string value;
+        std::string error;
+        std::getline(itstream, key, ':');
+        std::getline(itstream, value, ':');
+        bool fin = false;
+        if (!std::getline(stringStream, segment, '\n'))
+        {
+            if (back == '\n')
+            {
+                fin = true;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        //process the line here
+        LogicFunction(key, value);
+        if (fin)
+        {
+            break;
+        }
+    }
+    priorLine = segment;
+}
 
 static void ProcessTrace(const std::string &TraceFile, const std::function<void(std::string &, std::string &)> &LogicFunction, const std::string &barPrefix = "", bool noBar = false)
 {
@@ -24,101 +69,100 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
     }
 
     std::ifstream inputTrace;
-    char dataArray[BLOCK_SIZE];
-    char decompressedArray[BLOCK_SIZE];
+    char dataArray[BLOCK_SIZE] = {0};
+    char decompressedArray[BLOCK_SIZE] = {0};
+    bool compressed = false;
     z_stream strm;
     int ret;
-
-    //init zlib
-    strm.zalloc = Z_NULL;
-    strm.zfree = Z_NULL;
-    strm.opaque = Z_NULL;
-    ret = inflateInit(&strm);
-    assert(ret == Z_OK);
 
     int index = 0;
 
     //open the file
     inputTrace.open(TraceFile);
 
-    if (!inputTrace)
-    {
-        throw AtlasException("Failed to open trace file");
-    }
-
-    //get the file size
+    //get the file sizeF
     inputTrace.seekg(0, std::ios_base::end);
     int64_t size = inputTrace.tellg();
     inputTrace.seekg(0, std::ios_base::beg);
     int64_t blocks = size / BLOCK_SIZE + 1;
 
+    //check the signiture
+    /*
+    char firstChar;
+    inputTrace.readsome(&firstChar, 1);
+    inputTrace.seekg(0, std::ios_base::beg);
+    if (firstChar == 'T') //uncompressed
+    {
+        compressed = false;
+    }
+    else if (firstChar == 'x') // compressed
+    {
+        //init zlib
+        strm.zalloc = Z_NULL;
+        strm.zfree = Z_NULL;
+        strm.opaque = Z_NULL;
+        strm.next_out = (Bytef *)decompressedArray;
+        strm.avail_out = BLOCK_SIZE;
+        ret = inflateInit(&strm);
+        assert(ret == Z_OK);
+        compressed = true;
+    }
+    else
+    {
+        throw AtlasException("Trace signiture malformed");
+    }
+    */
+    if (TraceFile.substr(TraceFile.find_last_of(".") + 1) == "trc")
+    {
+        strm.zalloc = Z_NULL;
+        strm.zfree = Z_NULL;
+        strm.opaque = Z_NULL;
+        strm.next_out = (Bytef *)decompressedArray;
+        strm.avail_out = BLOCK_SIZE;
+        ret = inflateInit(&strm);
+        assert(ret == Z_OK);
+        compressed = true;
+    }
+
+    if (!inputTrace)
+    {
+        throw AtlasException("Failed to open trace file");
+    }
+
     bool notDone = true;
-    bool seenFirst;
     std::string priorLine;
 
     while (notDone)
     {
         // read a block size of the trace
+        ret = Z_OK;
         inputTrace.read(dataArray, BLOCK_SIZE);
         int64_t bytesRead = inputTrace.gcount();
-        strm.next_in = (Bytef *)dataArray;   // input data to z_lib for decompression
-        strm.avail_in = (uint32_t)bytesRead; // remaining characters in the compressed inputTrace
-        while (strm.avail_in != 0)
+        if (compressed)
         {
-            // decompress our data
-            strm.next_out = (Bytef *)decompressedArray; // pointer where uncompressed data is written to
-            strm.avail_out = BLOCK_SIZE - 1;            // remaining space in decompressedArray
-            ret = inflate(&strm, Z_NO_FLUSH);
-            assert(ret != Z_STREAM_ERROR);
-
-            // put decompressed data into a string for splitting
-            unsigned int have = BLOCK_SIZE - strm.avail_out;
-            decompressedArray[have - 1] = '\0';
-            std::string bufferString(decompressedArray);
-            std::stringstream stringStream(bufferString);
-            std::string segment;
-            std::getline(stringStream, segment, '\n');
-            char back = bufferString.back();
-            seenFirst = false;
-            while (true)
+            strm.next_in = (Bytef *)dataArray;   // input data to z_lib for decompression
+            strm.avail_in = (uint32_t)bytesRead; // remaining characters in the compressed inputTrace
+            while (strm.avail_in != 0)
             {
-                if (!seenFirst)
+                // decompress our data
+                ret = inflate(&strm, Z_PARTIAL_FLUSH);
+                assert(ret != Z_STREAM_ERROR);
+                if (strm.avail_out == 0)
                 {
-                    segment = priorLine.append(segment);
-                    seenFirst = true;
-                }
-                // split it by the colon between the instruction and value
-                std::stringstream itstream(segment);
-                std::string key;
-                std::string value;
-                std::string error;
-                std::getline(itstream, key, ':');
-                std::getline(itstream, value, ':');
-                bool fin = false;
-                if (!std::getline(stringStream, segment, '\n'))
-                {
-                    if (back == '\n')
-                    {
-                        fin = true;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-
-                //process the line here
-                LogicFunction(key, value);
-                if (fin)
-                {
-                    break;
+                    ProcessTraceBytes(decompressedArray, priorLine, LogicFunction, BLOCK_SIZE);
+                    strm.next_out = (Bytef *)decompressedArray; // pointer where uncompressed data is written to
+                    strm.avail_out = BLOCK_SIZE;                // remaining space in decompressedArray
                 }
             }
-            priorLine = segment;
         }
+        else
+        {
+            ProcessTraceBytes(dataArray, priorLine, LogicFunction, (uint64_t)bytesRead);
+        }
+
         index++;
-        notDone = (ret != Z_STREAM_END);
-        if (index > blocks)
+        //notDone = (ret != Z_STREAM_END);
+        if (index > blocks || ret == Z_STREAM_END)
         {
             notDone = false;
         }
@@ -143,8 +187,12 @@ static void ProcessTrace(const std::string &TraceFile, const std::function<void(
     {
         bar.mark_as_completed();
     }
-
-    inflateEnd(&strm);
+    if (compressed)
+    {
+        unsigned int have = BLOCK_SIZE - strm.avail_out;
+        ProcessTraceBytes(decompressedArray, priorLine, LogicFunction, have);
+        inflateEnd(&strm);
+    }
     inputTrace.close();
     std::cout << "\e[?25h";
 }

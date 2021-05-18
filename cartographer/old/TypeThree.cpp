@@ -4,11 +4,13 @@
 #include <indicators/progress_bar.hpp>
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/Instructions.h>
+#include <spdlog/spdlog.h>
 
 using namespace std;
 using namespace llvm;
 namespace TypeThree
 {
+    set<int64_t> warnedBlocks;
     std::set<std::set<int64_t>> Process(const std::set<std::set<int64_t>> &type25Kernels)
     {
         indicators::ProgressBar bar;
@@ -33,13 +35,22 @@ namespace TypeThree
                 for (auto block : kernel)
                 {
                     BasicBlock *base = blockMap[block];
+                    if (base == nullptr)
+                    {
+                        if (warnedBlocks.find(block) == warnedBlocks.end())
+                        {
+                            spdlog::warn("Failed to find block {} from a kernel in the LLVM IR. Ignoring.", block);
+                            warnedBlocks.insert(block);
+                        }
+                        continue;
+                    }
                     Function *F = base->getParent();
                     Instruction *term = base->getTerminator();
                     bool preFound = false;
                     bool sucFound = false;
                     if (base == &F->getEntryBlock())
                     {
-                        for (auto user : F->users())
+                        for (auto *user : F->users())
                         {
                             if (auto *cb = dyn_cast<CallBase>(user))
                             {
@@ -57,7 +68,7 @@ namespace TypeThree
                     {
                         //check if there is a valid predecessor
                         //aka mandate that everything has to be a part of the loop
-                        for (auto pred : predecessors(base))
+                        for (auto *pred : predecessors(base))
                         {
                             int64_t id = GetBlockID(pred);
                             if (kernel.find(id) != kernel.end())
@@ -70,7 +81,7 @@ namespace TypeThree
 
                     if (isa<ReturnInst>(term)) //check if a ret
                     {
-                        for (auto user : F->users())
+                        for (auto *user : F->users())
                         {
                             if (auto *cb = dyn_cast<CallBase>(user))
                             {
@@ -88,7 +99,7 @@ namespace TypeThree
                     {
                         //check if there is a valid successor
                         //aka mandate that everything has to be a part of the loop
-                        for (auto suc : successors(base))
+                        for (auto *suc : successors(base))
                         {
                             int64_t id = GetBlockID(suc);
                             if (kernel.find(id) != kernel.end())

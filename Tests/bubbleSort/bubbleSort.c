@@ -1,4 +1,4 @@
-#include "Backend/BackendTrace.h"
+#include "Backend/BackendMarkov.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -25,11 +25,13 @@ int main(int argc, char *argv[])
         SIZE = 1000;
     }
     printf("\nSIZE = %d", SIZE);
+    TraceAtlasMarkovKernelEnter("randInit");
     int *in = get_input(SIZE);
+    TraceAtlasMarkovKernelExit("randInit");
 
     // bubble sort
-    KernelEnter("bubbleSort");
     int swap;
+    TraceAtlasMarkovKernelEnter("Bubblesort");
     for (int i = 0; i < SIZE; i++)
     {
         for (int j = i; j < SIZE; j++)
@@ -42,8 +44,7 @@ int main(int argc, char *argv[])
             }
         }
     }
-    KernelExit("bubbleSort");
-
+    TraceAtlasMarkovKernelExit("Bubblesort");
     printf("\nSorting Done");
     free(in);
     return 0;

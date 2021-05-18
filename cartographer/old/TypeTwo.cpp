@@ -1,4 +1,5 @@
 #include "TypeTwo.h"
+#include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
 #include "cartographer.h"
 #include <set>
@@ -9,7 +10,7 @@ using namespace llvm;
 
 namespace TypeTwo
 {
-    uint64_t blockCount = 0;
+    int32_t openIndicator = -1;
 
     int *openCount = nullptr;
     set<int64_t> *finalBlocks = nullptr;
@@ -18,30 +19,43 @@ namespace TypeTwo
     int *kernelStarts = nullptr;
     set<int64_t> *blocks = nullptr;
 
+    std::set<int32_t> *blockCaller = nullptr;
+
     bool blocksLabeled = false;
     vector<string> currentKernel;
     std::set<std::set<int64_t>> kernels;
-    void Setup(llvm::Module *bitcode, std::set<std::set<int64_t>> k)
+    void Setup(vector<llvm::Module *> &bitcodes, std::set<std::set<int64_t>> k)
     {
-        for (auto &mi : *bitcode)
+        uint64_t maxBlockId = 0;
+        for (auto &bitcode : bitcodes)
         {
-            for (auto fi = mi.begin(); fi != mi.end(); fi++)
+            for (auto &mi : *bitcode)
             {
-                blockCount++;
+                for (auto fi = mi.begin(); fi != mi.end(); fi++)
+                {
+                    auto *b = cast<BasicBlock>(fi);
+                    auto id = GetBlockID(b);
+                    if (id != -1)
+                    {
+                        maxBlockId = max((uint64_t)id, maxBlockId);
+                    }
+                }
             }
         }
 
         kernels = move(k);
 
-        openCount = (int *)calloc(sizeof(int), blockCount);                         // counter to know where we are in the callstack
+        openCount = (int *)calloc(sizeof(int), (uint64_t)maxBlockId + 1);           // counter to know where we are in the callstack
         finalBlocks = (set<int64_t> *)calloc(sizeof(set<int64_t>), kernels.size()); // final kernel definitions
         kernelStarts = (int *)calloc(sizeof(int), kernels.size());                  // map of a kernel index to the first block seen
         blocks = (set<int64_t> *)calloc(sizeof(set<int64_t>), kernels.size());      // temporary kernel blocks
-        kernelMap = (set<int> *)calloc(sizeof(set<int>), blockCount);
-        for (uint32_t i = 0; i < blockCount; i++)
+        kernelMap = (set<int> *)calloc(sizeof(set<int>), (uint64_t)maxBlockId + 1);
+        blockCaller = (set<int32_t> *)calloc(sizeof(set<int32_t>), (uint64_t)maxBlockId + 1);
+        for (uint32_t i = 0; i < (uint64_t)maxBlockId + 1; i++)
         {
             kernelMap[i] = set<int>();
             openCount[i] = 0;
+            blockCaller[i] = set<int32_t>();
         }
         for (uint32_t i = 0; i < kernels.size(); i++)
         {
@@ -63,9 +77,15 @@ namespace TypeTwo
     {
         if (key == "BBEnter")
         {
-            int block = stoi(value, nullptr, 0);
+            int32_t block = stoi(value, nullptr, 0);
             openCount[block]++; //mark this block as being entered
             openBlocks.insert(block);
+
+            if (openIndicator != -1)
+            {
+                blockCaller[openIndicator].insert(block);
+            }
+            openIndicator = block;
 
             for (uint64_t i = 0; i < kernels.size(); i++)
             {
@@ -110,6 +130,7 @@ namespace TypeTwo
             {
                 openBlocks.erase(block);
             }
+            openIndicator = -1;
         }
         else if (key == "KernelEnter")
         {

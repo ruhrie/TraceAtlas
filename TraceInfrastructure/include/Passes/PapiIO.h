@@ -1,14 +1,7 @@
-#ifndef PAPIIO_H
-#define PAPIIO_H
+#pragma once
 #include <llvm/IR/Function.h>
 #include <llvm/Pass.h>
 using namespace llvm;
-
-namespace DashTracer
-{
-    void Annotate(Function *F);
-}
-
 namespace DashTracer
 {
     namespace Passes
@@ -23,5 +16,3 @@ namespace DashTracer
         };
     } // namespace Passes
 } // namespace DashTracer
-
-#endif

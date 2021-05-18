@@ -1,9 +1,9 @@
 #include "TypeFour.h"
 #include "AtlasUtil/Annotate.h"
 #include "AtlasUtil/Exceptions.h"
+#include "AtlasUtil/Path.h"
 #include "AtlasUtil/Print.h"
 #include "cartographer.h"
-#include "tik/Util.h"
 #include <indicators/progress_bar.hpp>
 #include <queue>
 #include <spdlog/spdlog.h>
@@ -37,7 +37,7 @@ namespace TypeFour
             {
                 //we need to see if this block can ever reach itself
                 BasicBlock *base = blockMap[block];
-                if (TraceAtlas::tik::IsSelfReachable(base, kernel))
+                if (IsSelfReachable(base, kernel))
                 {
                     blocks.insert(block);
                 }
@@ -50,13 +50,13 @@ namespace TypeFour
                 blockSet.insert(blockMap[block]);
             }
 
-            set<BasicBlock *> entrances = TraceAtlas::tik::GetEntrances(blockSet);
+            set<BasicBlock *> entrances = GetEntrances(blockSet);
 
-            for (auto ent : entrances)
+            for (auto *ent : entrances)
             {
-                auto a = TraceAtlas::tik::GetReachable(ent, blocks);
+                auto a = GetReachable(ent, blocks);
                 set<int64_t> b;
-                for (auto as : a)
+                for (auto *as : a)
                 {
                     b.insert(GetBlockID(as));
                 }

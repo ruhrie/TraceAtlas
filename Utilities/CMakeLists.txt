@@ -11,7 +11,7 @@ add_executable(kernelHasher KernelHasher.cpp)
 
 set_target_properties(kernelHasher PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 target_compile_definitions(kernelHasher PUBLIC ${LLVM_DEFINITIONS})
-target_link_libraries(kernelHasher ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json)
+target_link_libraries(kernelHasher ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
 target_include_directories(kernelHasher SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
 
 install(TARGETS kernelHasher RUNTIME DESTINATION bin)
@@ -20,7 +20,7 @@ add_executable(dagExtractor DagExtractor.cpp)
 
 set_target_properties(dagExtractor PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 target_compile_definitions(dagExtractor PUBLIC ${LLVM_DEFINITIONS})
-target_link_libraries(dagExtractor ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json  AtlasUtil)
+target_link_libraries(dagExtractor ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
 target_include_directories(dagExtractor SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
 
 install(TARGETS dagExtractor RUNTIME DESTINATION bin)
@@ -58,6 +58,18 @@ set_target_properties(KernelVerifier
 
 install(TARGETS KernelVerifier RUNTIME DESTINATION bin)
 
+add_executable(kernelSourceMapper kernelSourceMapper.cpp)
+target_link_libraries(kernelSourceMapper ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil libtik)
+target_include_directories(kernelSourceMapper SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(kernelSourceMapper PRIVATE ${LLVM_DEFINITIONS})
+
+set_target_properties(kernelSourceMapper
+	PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin" 
+)
+
+install(TARGETS kernelSourceMapper RUNTIME DESTINATION bin)
+
 add_executable(JR JR.cpp)
 target_link_libraries(JR ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
 target_include_directories(JR SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
@@ -69,3 +81,11 @@ set_target_properties(JR
 )
 
 install(TARGETS JR RUNTIME DESTINATION bin)
+
+add_executable(CallGraph CallGraph.cpp)
+target_link_libraries(CallGraph ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
+target_include_directories(CallGraph SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(CallGraph PRIVATE ${LLVM_DEFINITIONS})
+set_target_properties(CallGraph PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+add_subdirectory(WorkingSet)

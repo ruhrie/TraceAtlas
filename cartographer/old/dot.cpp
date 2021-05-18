@@ -85,8 +85,8 @@ string GenerateDot(const set<set<int64_t>> &kernels)
     }
     for (auto b : allBlocks)
     {
-        auto block = blockMap[b];
-        for (auto suc : successors(block))
+        auto *block = blockMap[b];
+        for (auto *suc : successors(block))
         {
             auto sucBlock = GetBlockID(suc);
             if (allBlocks.find(sucBlock) != allBlocks.end())
@@ -96,9 +96,9 @@ string GenerateDot(const set<set<int64_t>> &kernels)
         }
         for (auto bi = block->begin(); bi != block->end(); bi++)
         {
-            if (auto ci = dyn_cast<CallInst>(bi))
+            if (auto *ci = dyn_cast<CallInst>(bi))
             {
-                auto F = ci->getCalledFunction();
+                auto *F = ci->getCalledFunction();
                 if (F != nullptr && !F->empty())
                 {
                     BasicBlock *entry = &F->getEntryBlock();

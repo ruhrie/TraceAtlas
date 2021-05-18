@@ -6,3 +6,4 @@ testing/
 .vs/
 CMakeSettings.json
 out/
+kar/passwd.json

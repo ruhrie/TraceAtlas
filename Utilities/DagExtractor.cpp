@@ -14,8 +14,6 @@
 using namespace llvm;
 using namespace std;
 
-#define BLOCK_SIZE 4096
-
 cl::opt<std::string> InputFilename("t", cl::desc("Specify input trace"), cl::value_desc("trace filename"), cl::Required);
 cl::opt<std::string> OutputFilename("o", cl::desc("Specify output json"), cl::value_desc("output filename"), cl::Required);
 cl::opt<std::string> KernelFilename("k", cl::desc("Specify kernel json"), cl::value_desc("kernel filename"), cl::Required);
@@ -41,7 +39,7 @@ string GenerateGraph(map<int, string> instanceMap, const map<int, set<int>> &con
 
     for (int i = 0; i < instanceMap.size(); i++)
     {
-        result += "\t" + to_string(i) + " [label=" + instanceMap[i] + "]\n";
+        result += "\t" + to_string(i) + " [label=\"" + instanceMap[i] + "\"]\n";
     }
 
     if (instanceMap.size() > 1)
@@ -56,7 +54,7 @@ string GenerateGraph(map<int, string> instanceMap, const map<int, set<int>> &con
     {
         for (auto c : cons.second)
         {
-            result += "\t" + instanceMap[cons.first] + " -> " + to_string(c) + " [style=dashed];\n";
+            result += "\t" + to_string(cons.first) + " -> " + to_string(c) + " [style=dashed];\n";
         }
     }
 
@@ -109,6 +107,13 @@ void Process(string &key, string &value)
 int main(int argc, char **argv)
 {
     cl::ParseCommandLineOptions(argc, argv);
+
+    auto f = ifstream(InputFilename);
+    if (!f)
+    {
+        spdlog::critical("Input trace file not found!");
+        return EXIT_FAILURE;
+    }
 
     if (!LogFile.empty())
     {
@@ -199,6 +204,20 @@ int main(int argc, char **argv)
     }
 
     ProcessTrace(InputFilename, Process, "Generating DAG", noBar);
+
+    // apply label to instance map if one exists
+    for (const auto &id : j["Kernels"].items())
+    {
+        if (id.value().find("Label") != id.value().end())
+        {
+            int index = stoi(id.key());
+            string label = id.value()["Label"];
+            if (!label.empty() && kernelIdMap.find(index) != kernelIdMap.end())
+            {
+                kernelIdMap[index] = label;
+            }
+        }
+    }
 
     nlohmann::json jOut;
     jOut["KernelInstanceMap"] = kernelIdMap;

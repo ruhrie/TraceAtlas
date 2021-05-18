@@ -17,13 +17,13 @@ namespace TraceAtlas::tik
         {
             throw AtlasException("Expected a single conditoinal");
         }
-        for (auto cond : kernel->Conditional)
+        for (auto *cond : kernel->Conditional)
         {
 
-            auto term = cond->getTerminator();
+            auto *term = cond->getTerminator();
             Value *condition;
             //bool shouldTrue = false; //we should continue if true
-            if (auto c = dyn_cast<BranchInst>(term))
+            if (auto *c = dyn_cast<BranchInst>(term))
             {
                 condition = c->getCondition();
                 if (c->getSuccessor(1) == kernel->Exit)
@@ -38,8 +38,8 @@ namespace TraceAtlas::tik
 
             if (auto *cmp = dyn_cast<ICmpInst>(condition))
             {
-                auto left = cmp->getOperand(0);
-                auto right = cmp->getOperand(1);
+                auto *left = cmp->getOperand(0);
+                auto *right = cmp->getOperand(1);
                 //if either of these are constant we know this is a dynamic limit
                 bool leftConst = isa<Constant>(left);
                 bool rightConst = isa<Constant>(right);
