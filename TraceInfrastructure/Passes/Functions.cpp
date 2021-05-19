@@ -15,6 +15,8 @@ namespace DashTracer::Passes
     Function *fullAddrFunc;
     Function *MarkovOpen;
     Function *MarkovClose;
+    Function *MarkovInit;
+    Function *MarkovDestroy;
     Function *MarkovIncrement;
     Function *MarkovExit;
 } // namespace DashTracer::Passes

@@ -18,6 +18,8 @@ namespace DashTracer
         extern Function *fullAddrFunc;
         extern Function *MarkovOpen;
         extern Function *MarkovClose;
+        extern Function *MarkovInit;
+        extern Function *MarkovDestroy;
         extern Function *MarkovIncrement;
         extern Function *MarkovExit;
     } // namespace Passes

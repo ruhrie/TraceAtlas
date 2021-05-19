@@ -12,7 +12,7 @@
 using namespace std;
 using json = nlohmann::json;
 
-class dict
+/*class dict
 {
 public:
     unordered_map<uint64_t, unordered_map<uint64_t, uint64_t>> base;
@@ -42,12 +42,12 @@ public:
         }
         fp.close();
     }
-};
+};*/
 
 long openIndicator = -1;
 map<string, set<uint64_t>> blockCallers;
 
-struct labelMap
+/*struct labelMap
 {
     map<string, map<string, uint64_t>> blockLabels;
     ~labelMap()
@@ -74,63 +74,84 @@ struct labelMap
         file << setw(4) << labelMap;
         file.close();
     }
-};
+};*/
 
 uint64_t b;
+uint64_t size_TAMM;
 uint64_t *markovResult;
-bool markovInit = false;
-dict TraceAtlasMarkovMap;
-labelMap TraceAtlasLabelMap;
-vector<char *> labelList;
+bool markovActive = false;
+uint64_t *TraceAtlasMarkovMap;
+//dict TraceAtlasMarkovMap;
+//labelMap TraceAtlasLabelMap;
+//vector<char *> labelList;
 
 extern "C"
 {
     extern uint64_t MarkovBlockCount;
+    void MarkovInit(uint64_t blockCount)
+    {
+        TraceAtlasMarkovMap = (uint64_t *)malloc(blockCount * sizeof(uint64_t));
+        size_TAMM = blockCount;
+        markovActive = true;
+    }
+    void MarkovDestroy()
+    {
+        char *p = getenv("MARKOV_FILE");
+        FILE *f;
+        if (p == NULL)
+        {
+            f = fopen("markov.bin", "wb");
+        }
+        else
+        {
+            f = fopen(p, "wb");
+        }
+        fwrite(TraceAtlasMarkovMap, sizeof(uint64_t) * size_TAMM, 1, f);
+        fclose(f);
+        free(TraceAtlasMarkovMap);
+        markovActive = false;
+    }
     void MarkovIncrement(uint64_t a)
     {
-        if (markovInit)
+        if (markovActive)
         {
             // this segfaults in GSL/GSL_projects_L/fft project, when processing MarkovIncrement(i64 399) (fails on the first try, preceded by 391,392,393 loop)
             // TraceAtlasMarkovMap is definitely not null at this point (shown by gdb)
             // the line that fails is in libSTL, its when two keys are being compared as equal, x = 398, y=<error reading variable>
-            TraceAtlasMarkovMap.base[b][a]++;
-        }
-        else
-        {
-            markovInit = true;
-        }
-        b = a;
-        if (!labelList.empty())
-        {
-            string labelName(labelList.back());
-            if (TraceAtlasLabelMap.blockLabels.find(to_string(a)) == TraceAtlasLabelMap.blockLabels.end())
+            TraceAtlasMarkovMap[a]++;
+            b = a;
+            /*if (!labelList.empty())
             {
-                TraceAtlasLabelMap.blockLabels[to_string(a)] = map<string, uint64_t>();
-                blockCallers[to_string(a)] = set<uint64_t>();
+                string labelName(labelList.back());
+                if (TraceAtlasLabelMap.blockLabels.find(to_string(a)) == TraceAtlasLabelMap.blockLabels.end())
+                {
+                    TraceAtlasLabelMap.blockLabels[to_string(a)] = map<string, uint64_t>();
+                    blockCallers[to_string(a)] = set<uint64_t>();
+                }
+                if (TraceAtlasLabelMap.blockLabels[to_string(a)].find(labelName) == TraceAtlasLabelMap.blockLabels[to_string(a)].end())
+                {
+                    TraceAtlasLabelMap.blockLabels[to_string(a)][labelName] = 0;
+                }
+                TraceAtlasLabelMap.blockLabels[to_string(a)][labelName]++;
             }
-            if (TraceAtlasLabelMap.blockLabels[to_string(a)].find(labelName) == TraceAtlasLabelMap.blockLabels[to_string(a)].end())
+            // mark our block caller, if necessary
+            if (openIndicator != -1)
             {
-                TraceAtlasLabelMap.blockLabels[to_string(a)][labelName] = 0;
+                blockCallers[to_string(openIndicator)].insert(a);
             }
-            TraceAtlasLabelMap.blockLabels[to_string(a)][labelName]++;
+            openIndicator = (long)a;*/
         }
-        // mark our block caller, if necessary
-        if (openIndicator != -1)
-        {
-            blockCallers[to_string(openIndicator)].insert(a);
-        }
-        openIndicator = (long)a;
     }
     void MarkovExit()
     {
-        openIndicator = -1;
+        //openIndicator = -1;
     }
     void TraceAtlasMarkovKernelEnter(char *label)
     {
-        labelList.push_back(label);
+        //labelList.push_back(label);
     }
     void TraceAtlasMarkovKernelExit()
     {
-        labelList.pop_back();
+        //labelList.pop_back();
     }
 }

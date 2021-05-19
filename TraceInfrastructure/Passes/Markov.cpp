@@ -35,12 +35,7 @@ namespace DashTracer::Passes
             {
                 if (auto CI = dyn_cast<CallBase>(bi))
                 {
-                    // check to see if the function will be compiled into bitcode
-                    // if the function won't be bitcode, it won't call MarkovIncrement. The graph will have this node pointing to itself which makes no sense
-                    //if (CI->getCalledFunction()->isLocalLinkage())
-                    //{
                     blockCalls.push_back(CI);
-                    //}
                 }
             }
 
@@ -50,21 +45,50 @@ namespace DashTracer::Passes
             args.push_back(idValue);
             auto call = firstBuilder.CreateCall(MarkovIncrement, args);
             call->setDebugLoc(NULL);
-            /*for (const auto &call : blockCalls)
-            {
-                auto nextCall = firstBuilder.CreateCall(MarkovIncrement, args);
-                nextCall->moveAfter(call);
-            }*/
 
-            call = firstBuilder.CreateCall(MarkovExit);
-            call->moveBefore(lastInsertion);
-            call->setDebugLoc(NULL);
+            auto exitCall = firstBuilder.CreateCall(MarkovExit);
+            exitCall->moveBefore(lastInsertion);
+            exitCall->setDebugLoc(NULL);
+
+            // two things to check
+            // first, see if this is the first block of main, and if it is, insert MarkovInit to the first instruction of the block
+            // second, see if there is a return from main here, and if it is, insert MarkovDestroy and move it right before the ReturnInst
+            if (F.getName() == "main")
+            {
+                // MarkovInit
+                if (fi == F.begin())
+                {
+                    firstInsertion = BB->getFirstInsertionPt();
+                    firstInst = cast<Instruction>(firstInsertion);
+                    IRBuilder<> initBuilder(firstInst);
+                    uint64_t blockCount = GetBlockCount(F.getParent());
+                    Value *countValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), blockCount);
+                    std::vector<Value *> args;
+                    args.push_back(countValue);
+                    auto call = initBuilder.CreateCall(MarkovInit, args);
+                    call->setDebugLoc(NULL);
+                }
+                // MarkovDestroy
+                // Place this before any return from main
+                else if (auto retInst = dyn_cast<ReturnInst>(fi->getTerminator()))
+                {
+                    auto endInsertion = BB->getTerminator();
+                    auto *lastInst = cast<Instruction>(endInsertion);
+                    IRBuilder<> lastBuilder(lastInst);
+
+                    call = lastBuilder.CreateCall(MarkovDestroy);
+                    call->moveBefore(lastInst);
+                    call->setDebugLoc(NULL);
+                }
+            }
         }
         return true;
     }
 
     bool Markov::doInitialization(Module &M)
     {
+        MarkovInit = cast<Function>(M.getOrInsertFunction("MarkovInit", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext())).getCallee());
+        MarkovDestroy = cast<Function>(M.getOrInsertFunction("MarkovDestroy", Type::getVoidTy(M.getContext())).getCallee());
         MarkovIncrement = cast<Function>(M.getOrInsertFunction("MarkovIncrement", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext())).getCallee());
         MarkovExit = cast<Function>(M.getOrInsertFunction("MarkovExit", Type::getVoidTy(M.getContext())).getCallee());
         return false;
