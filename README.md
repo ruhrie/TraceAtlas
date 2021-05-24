@@ -33,4 +33,5 @@ Cartographer (step 5) is our program segmenter. It exploits cycles within the co
 There is a memory problem with the profiling tool when allocating memory for its backend data structures. It has only been observed when profiling programs that use OpenCV and Microsoft SEAL. This error can manifest as
 * a segfault before the main() function occurs
 * a segfault after main returns
+
 Both types should occur when calling constructors/destructors on C++ STL containers (specifically been observed with std::map, std::unordered_map, std::vector). Please submit an issue if you ever encounter this bug yourself with as much information as your debugger can give you.
