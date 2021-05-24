@@ -26,7 +26,7 @@ int main(int argc, char **argv)
     cl::ParseCommandLineOptions(argc, argv);
     auto blockCallers = ReadBlockInfo(BlockInfo);
     auto SourceBitcode = ReadBitcode(InputFilename);
-    if (SourceBitcode.get() == nullptr)
+    if (SourceBitcode == nullptr)
     {
         return EXIT_FAILURE;
     }

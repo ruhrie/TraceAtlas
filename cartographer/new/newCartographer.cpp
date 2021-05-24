@@ -224,7 +224,7 @@ bool FindCycles(const std::set<GraphNode *, p_GNCompare> &nodes, const GraphNode
                 cycle = true;
                 break;
             }
-            else if (done.find(neighbor) == done.end())
+            if (done.find(neighbor) == done.end())
             {
                 Q.push_front(neighbor);
                 pushed = true;
@@ -732,13 +732,10 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
                         }*/
                         break;
                     }
-                    else
-                    {
-                        // there are still entries in the queue, so push the sink node to the back and iterate
-                        Q.push_back(sink);
-                        Q.pop_front();
-                        continue;
-                    }
+                    // there are still entries in the queue, so push the sink node to the back and iterate
+                    Q.push_back(sink);
+                    Q.pop_front();
+                    continue;
                 }
                 subgraph.insert(Q.front());
                 for (const auto &neighbor : Q.front()->neighbors)
@@ -980,7 +977,7 @@ int main(int argc, char *argv[])
     auto blockCallers = ReadBlockInfo(BlockInfoFilename);
     auto blockLabels = ReadBlockLabels(BlockInfoFilename);
     auto SourceBitcode = ReadBitcode(BitcodeFileName);
-    if (SourceBitcode.get() == nullptr)
+    if (SourceBitcode == nullptr)
     {
         return EXIT_FAILURE;
     }
@@ -1028,10 +1025,7 @@ int main(int argc, char *argv[])
         {
             break;
         }
-        else
-        {
-            graphSize = nodes.size();
-        }
+        graphSize = nodes.size();
     }
     auto endEntropy = EntropyCalculation(nodes);
     auto endTotalEntropy = TotalEntropy(nodes);
@@ -1182,7 +1176,7 @@ int main(int argc, char *argv[])
                 }
             }
         }
-        string maxVoteLabel = "";
+        string maxVoteLabel;
         int64_t maxVoteCount = 0;
         for (const auto &label : labelVotes)
         {

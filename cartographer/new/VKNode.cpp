@@ -2,7 +2,7 @@
 
 using namespace TraceAtlas::Cartographer;
 
-VKNode::VKNode(struct Kernel *p_k) : GraphNode()
+VKNode::VKNode(struct Kernel *p_k)
 {
     kernel = p_k;
 }

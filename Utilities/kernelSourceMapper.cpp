@@ -64,18 +64,19 @@ int main(int argc, char **argv)
         for (const auto &BID : value["Blocks"])
         {
             auto block = IDToBlock[BID];
-            for (auto bb = block->begin(); bb != block->end(); bb++)
+            for (auto &bb : *block) //->begin(); bb != block->end(); bb++)
             {
-                if (bb->hasMetadata())
+                if (bb.hasMetadata())
                 {
-                    auto LOC = bb->getDebugLoc();
+                    const auto &LOC = bb.getDebugLoc();
                     if (LOC.getAsMDNode() != nullptr)
                     {
                         if (auto scope = dyn_cast<DIScope>(LOC.getScope()))
                         {
-                            string file = scope->getFile()->getFilename();
                             string dir = scope->getFile()->getDirectory();
-                            sourceLines[dir + "/" + file].insert(LOC.getLine());
+                            dir.append("/");
+                            dir.append(scope->getFile()->getFilename());
+                            sourceLines[dir].insert(LOC.getLine());
                         }
                     }
                 }

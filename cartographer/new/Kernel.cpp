@@ -47,7 +47,7 @@ std::vector<GraphNode> Kernel::getEntrances() const
 std::vector<GraphNode> Kernel::getExits() const
 {
     std::vector<GraphNode> exitNodes;
-    for (const auto node : nodes)
+    for (const auto &node : nodes)
     {
         for (const auto &neighbor : node.neighbors)
         {
@@ -62,7 +62,7 @@ std::vector<GraphNode> Kernel::getExits() const
 }
 
 /// @brief Returns the member blocks (from the source bitcode) of this kernel
-const std::set<int64_t> Kernel::getBlocks() const
+std::set<int64_t> Kernel::getBlocks() const
 {
     std::set<int64_t> blocks;
     for (const auto &node : nodes)

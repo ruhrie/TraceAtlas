@@ -20,9 +20,7 @@ GraphNode::GraphNode(uint64_t ID)
     predecessors = std::set<uint64_t>();
 }
 
-GraphNode::~GraphNode()
-{
-}
+GraphNode::~GraphNode() = default;
 
 void GraphNode::addBlock(int64_t newBlock)
 {

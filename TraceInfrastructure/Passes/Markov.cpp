@@ -49,7 +49,7 @@ namespace DashTracer::Passes
             std::vector<Value *> args;
             args.push_back(idValue);
             auto call = firstBuilder.CreateCall(MarkovIncrement, args);
-            call->setDebugLoc(NULL);
+            call->setDebugLoc(nullptr);
             /*for (const auto &call : blockCalls)
             {
                 auto nextCall = firstBuilder.CreateCall(MarkovIncrement, args);
@@ -58,7 +58,7 @@ namespace DashTracer::Passes
 
             call = firstBuilder.CreateCall(MarkovExit);
             call->moveBefore(lastInsertion);
-            call->setDebugLoc(NULL);
+            call->setDebugLoc(nullptr);
         }
         return true;
     }
