@@ -1,3 +1,11 @@
+if(${CMAKE_BUILD_TYPE} STREQUAL "DEBUG")
+	message(STATUS "Setting DEBUG macro")
+	add_compile_definitions(DEBUG)
+elseif(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+	message(STATUS "Setting DEBUG macro")
+	add_compile_definitions(DEBUG)
+endif()
+
 file(GLOB SOURCES "*.cpp")
 add_executable(newCartographer ${SOURCES})
 

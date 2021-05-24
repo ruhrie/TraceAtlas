@@ -1147,7 +1147,9 @@ int main(int argc, char *argv[])
             done = true;
         }
     }
-    PrintGraph(nodes);
+    #ifdef DEBUG
+        PrintGraph(nodes);
+    #endif
 
     // majority label vote for kernels
     for (const auto &kernel : kernels)
