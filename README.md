@@ -28,3 +28,9 @@ The profiling tool and cartographer are the main tools within TraceAtlas. To use
 $(ARCHIVES) should be a variable that contains all static LLVM bitcode libraries your application can link against. This step contains all code that will be profiled i.e. the profiler only observes LLVM IR bitcode. $(SHARED_OBJECTS) enumerates all dynamic links that are required by the target program (for example, any dependencies that are not available in LLVM IR). There are two output files from the resulting executable: `MARKOV_FILE` which specifies the name of the resultant profile (default is `markov.bin`) and `BLOCK_FILE` which specifies the Json output file (contains information about the profile, default is `BlockInfo.json`). These two output files feed the cartographer.
 
 Cartographer (step 5) is our program segmenter. It exploits cycles within the control flow to parse an input profile into its concurrent tasks. We define a kernel to be a concurrent task. Call cartographer with the input profile specified by `-i`, the input BlockInfo.json file with `-bi` and the output kernel file with `-o`. The result is a dictionary containing information about the profile of the program, the kernels within the program, and statistics about those kernels.
+
+## Known profiler bug
+There is a memory problem with the profiling tool when allocating memory for its backend data structures. It has only been observed when profiling programs that use OpenCV and Microsoft SEAL. This error can manifest as
+* a segfault before the main() function occurs
+* a segfault after main returns
+Both types should occur when calling constructors/destructors on C++ STL containers (specifically been observed with std::map, std::unordered_map, std::vector). Please submit an issue if you ever encounter this bug yourself with as much information as your debugger can give you.
