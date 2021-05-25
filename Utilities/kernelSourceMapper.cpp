@@ -64,7 +64,7 @@ int main(int argc, char **argv)
         for (const auto &BID : value["Blocks"])
         {
             auto block = IDToBlock[BID];
-            for (auto &bb : *block) //->begin(); bb != block->end(); bb++)
+            for (auto &bb : *block)
             {
                 if (bb.hasMetadata())
                 {
