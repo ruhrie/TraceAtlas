@@ -80,6 +80,16 @@ namespace DashTracer::Passes
                     call->moveBefore(lastInst);
                     call->setDebugLoc(NULL);
                 }
+                else if (auto resumeInst = dyn_cast<ResumeInst>(fi->getTerminator()))
+                {
+                    auto endInsertion = BB->getTerminator();
+                    auto *lastInst = cast<Instruction>(endInsertion);
+                    IRBuilder<> lastBuilder(lastInst);
+
+                    call = lastBuilder.CreateCall(MarkovDestroy);
+                    call->moveBefore(lastInst);
+                    call->setDebugLoc(NULL);
+                }
             }
         }
         return true;

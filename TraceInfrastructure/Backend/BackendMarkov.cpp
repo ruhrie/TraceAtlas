@@ -44,7 +44,7 @@ public:
     }
 };*/
 
-long openIndicator = -1;
+//long openIndicator = -1;
 //map<string, set<uint64_t>> blockCallers;
 
 /*struct labelMap
