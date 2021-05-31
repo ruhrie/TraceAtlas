@@ -941,10 +941,7 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
         }
         // remove all nodes within the kernel except the entrance node
         auto toRemove = kernel->nodes;
-        for (const auto &node : kernel->getEntrances())
-        {
-            toRemove.erase(node);
-        }
+        toRemove.erase(*kernelEntrances.begin());
         for (const auto &node : toRemove)
         {
             RemoveNode(nodes, node);

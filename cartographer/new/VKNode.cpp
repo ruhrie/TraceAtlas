@@ -13,7 +13,7 @@ VKNode::VKNode(struct Kernel *p_k)
 
 VKNode::VKNode(const GraphNode &GN, struct Kernel *p_k)
 {
-    NID = GN.NID;
+    NID = getNextNID();
     kernel = p_k;
     for (const auto &node : kernel->nodes)
     {
