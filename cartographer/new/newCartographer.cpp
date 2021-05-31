@@ -1050,6 +1050,11 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+#ifdef DEBUG
+    spdlog::info("\n\nInput control flow graph:");
+    PrintGraph(nodes);
+#endif
+
     // transform graph in an iterative manner until the size of the graph doesn't change
     size_t graphSize = nodes.size();
     auto startEntropy = EntropyCalculation(nodes);
@@ -1075,6 +1080,12 @@ int main(int argc, char *argv[])
         }
         graphSize = nodes.size();
     }
+
+#ifdef DEBUG
+    spdlog::info("\n\nTransformed Graph:");
+    PrintGraph(nodes);
+#endif
+
     auto endEntropy = EntropyCalculation(nodes);
     auto endTotalEntropy = TotalEntropy(nodes);
     auto endNodes = nodes.size();
@@ -1153,7 +1164,6 @@ int main(int argc, char *argv[])
                         }
                         else
                         {
-                            // keep the existing kernel, throw out the new one
                             overlap = true;
                         }
                     }
@@ -1189,7 +1199,9 @@ int main(int argc, char *argv[])
             done = true;
         }
     }
+
 #ifdef DEBUG
+    spdlog::info("\n\nResulting DAG:");
     PrintGraph(nodes);
 #endif
 
@@ -1295,6 +1307,13 @@ int main(int argc, char *argv[])
     ofstream oStream(OutputFilename);
     oStream << setw(4) << outputJson;
     oStream.close();
+
+    // free kernel set
+    for (const auto &kern : kernels)
+    {
+        delete kern;
+    }
+
     return 0;
 }
 
