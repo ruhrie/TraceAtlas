@@ -9,7 +9,7 @@ namespace TraceAtlas::Cartographer
     struct Kernel
     {
         std::set<GraphNode, GNCompare> nodes;
-        VKNode *kernelNode;
+        VKNode *virtualNode;
         uint32_t KID;
         std::string Label;
         Kernel();

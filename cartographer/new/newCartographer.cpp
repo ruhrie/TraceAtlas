@@ -838,71 +838,89 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
         // gather entrance and exit nodes
         auto kernelEntrances = kernel->getEntrances();
         auto kernelExits = kernel->getExits();
-        try
+
+        // steps
+        // first: select a node to become the VKNode (for now this is just the entrance at the front of the list)
+        // second: for each entrance, change the neighbor of each predecessor with the VKnode
+        // third: collect all edges that lead of out the kernel to the exits, and add all these edges to the VKnode neighbors
+        // fourth:
+
+        auto kernelNode = new VKNode(*kernelEntrances.begin(), kernel);
+        // remove each node in the kernel that are possibly in the entrance predecessors
+        // this removes all edges in the graph that can lead to the kernel other than the kernel entrance predecessors
+        for (const auto &node : kernel->nodes)
         {
-            if ((kernelEntrances.size() == 1) && (kernelExits.size() == 1))
+            kernelNode->predecessors.erase(node.NID);
+        }
+
+        // for each entrance, fix its predecessors
+        //  - make new entry pointing to the VKnode (this will duplicate the value from the original entrance node)
+        //  - add this entrance to the predecessors of the VKnode
+        for (const auto &ent : kernelEntrances)
+        {
+            for (const auto &predID : ent.predecessors)
             {
-                // change the neighbors of the entrance node to the exit node (because the exit nodes are the first blocks outside the kernel exit edges)
-                auto entranceNode = new VKNode(*kernelEntrances.begin(), kernel);
-                // remove each node in the kernel that are possibly in the node predecessors
-                for (const auto &node : kernel->nodes)
+                auto pred = nodes.find(predID);
+                if (pred != nodes.end())
                 {
-                    entranceNode->predecessors.erase(node.NID);
+                    (*pred)->neighbors[kernelNode->NID] = (*pred)->neighbors[ent.NID];
+                    (*pred)->neighbors.erase(ent.NID);
+                    kernelNode->predecessors.insert(predID);
                 }
-                auto exitNode = *(kernelExits.begin());
-                // investigate the neighbors
-                // the only edges leading from the virtual kernel node should be edges out of the kernel
-                // we are given the nodes within the kernel that have neighbors outside the kernel, so here we figure out which exit edges exist
-                // we leave the probabilities the same as the original nodes (this means we will have outgoing edges whose probabilities do not sum to 1, because edges that go back in the kernel are omitted)
-                entranceNode->neighbors.clear();
-                for (const auto &en : exitNode.neighbors)
+                else
                 {
-                    // nodes within the kernel will not be in the neighbors of the virtual kernel
+                    throw AtlasException("Node predecessor not found in the control flow graph!");
+                }
+            }
+        }
+
+        // for each exit, fix its predecessors
+        //  - remove the original kernel node from the predecessors
+        //  - add the VKnode to the predecessors
+        kernelNode->neighbors.clear();
+        for (const auto &exitNode : kernelExits)
+        {
+            // the only edges leading from the virtual kernel node should be edges out of the kernel
+            // we are given the nodes within the kernel that have neighbors outside the kernel, so here we figure out which exit edges exist
+            // we leave the probabilities the same as the original nodes (this means we will have outgoing edges whose probabilities do not sum to 1, because edges that go back in the kernel are omitted)
+            for (const auto &en : exitNode.neighbors)
+            {
+                // nodes within the kernel will not be in the neighbors of the virtual kernel
+                if (kernel->nodes.find(en.first) == kernel->nodes.end())
+                {
                     if (kernel->nodes.find(en.first) == kernel->nodes.end())
                     {
-                        if (kernel->nodes.find(en.first) == kernel->nodes.end())
+                        auto exitNode = nodes.find(en.first);
+                        if (exitNode != nodes.end())
                         {
-                            auto exitNode = nodes.find(en.first);
-                            if (exitNode != nodes.end())
-                            {
-                                entranceNode->neighbors[en.first] = en.second;
-                            }
+                            kernelNode->neighbors[en.first] = en.second;
                         }
                     }
                 }
-                // now we have to figure out if the
-                // for each neighbor of the kernel exit, change its predecessor to the kernel entrance node
-                for (const auto &neighID : exitNode.neighbors)
-                {
-                    auto neighbor = *(nodes.find(neighID.first));
-                    neighbor->predecessors.erase(exitNode.NID);
-                    neighbor->predecessors.insert(entranceNode->NID);
-                }
-                // remove all nodes within the kernel except the entrance node
-                auto toRemove = kernel->nodes;
-                for (const auto &node : kernel->getEntrances())
-                {
-                    toRemove.erase(node);
-                }
-                for (const auto &node : toRemove)
-                {
-                    RemoveNode(nodes, node);
-                }
-                // finally replace the old entrance node with the new VKNode
-                RemoveNode(nodes, *(kernelEntrances.begin()));
-                nodes.insert(entranceNode);
-                kernel->kernelNode = entranceNode;
-                newPointers.push_back(kernel);
             }
-            else
+            // for each neighbor of the kernel exit, change its predecessor to the kernel entrance node
+            for (const auto &neighID : exitNode.neighbors)
             {
-                throw AtlasException("Kernel ID " + to_string(kernel->KID) + " has " + to_string(kernelEntrances.size()) + " entrances and " + to_string(kernelExits.size()) + " exits!");
+                auto neighbor = *(nodes.find(neighID.first));
+                neighbor->predecessors.erase(exitNode.NID);
+                neighbor->predecessors.insert(kernelNode->NID);
             }
         }
-        catch (AtlasException &e)
+        // remove all nodes within the kernel except the entrance node
+        auto toRemove = kernel->nodes;
+        for (const auto &node : kernel->getEntrances())
         {
-            spdlog::error(e.what());
+            toRemove.erase(node);
         }
+        for (const auto &node : toRemove)
+        {
+            RemoveNode(nodes, node);
+        }
+        // finally replace the old entrance node with the new VKNode
+        RemoveNode(nodes, *(kernelEntrances.begin()));
+        nodes.insert(kernelNode);
+        kernel->virtualNode = kernelNode;
+        newPointers.push_back(kernel);
     }
     return newPointers;
 }
