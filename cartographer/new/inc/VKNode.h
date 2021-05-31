@@ -1,6 +1,5 @@
 #pragma once
-#include "GraphNode.h"
-
+#include "Kernel.h"
 namespace TraceAtlas::Cartographer
 {
     /// @brief Virtual Kernel Node

@@ -106,7 +106,7 @@ void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filen
         {
             currentNode = GraphNode(key);
             // when reading the trace file, NID and blockID are 1to1
-            currentNode.blocks[(int64_t)key] = (int64_t)key;
+            currentNode.blocks.insert((int64_t)key);
         }
         else
         {
@@ -153,7 +153,7 @@ void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filen
             {
                 // we likely found the terminating block, so add the block and assign the current node to be its predecessor
                 auto programTerminator = GraphNode(neighbor.first);
-                programTerminator.blocks[(int64_t)programTerminator.NID] = (int64_t)programTerminator.NID;
+                programTerminator.blocks.insert((int64_t)programTerminator.NID);
                 programTerminator.predecessors.insert(node->NID);
                 AddNode(nodes, programTerminator);
             }
@@ -887,11 +887,14 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
             for (const auto &predID : ent.predecessors)
             {
                 auto pred = nodes.find(predID);
-                if (pred != nodes.end())
+                if (pred != nodes.end()) // sanity check
                 {
-                    (*pred)->neighbors[kernelNode->NID] = (*pred)->neighbors[ent.NID];
-                    (*pred)->neighbors.erase(ent.NID);
-                    kernelNode->predecessors.insert(predID);
+                    if (kernel->nodes.find(predID) == kernel->nodes.end()) // if this predecessor of the entrance is not a member of the kernel, proceed
+                    {
+                        (*pred)->neighbors[kernelNode->NID] = (*pred)->neighbors[ent.NID];
+                        (*pred)->neighbors.erase(ent.NID);
+                        kernelNode->predecessors.insert(predID);
+                    }
                 }
                 else
                 {
@@ -1202,7 +1205,7 @@ int main(int argc, char *argv[])
         {
             for (const auto &block : node.blocks)
             {
-                auto infoEntry = blockLabels.find(block.first);
+                auto infoEntry = blockLabels.find(block);
                 if (infoEntry != blockLabels.end())
                 {
                     for (const auto &label : (*infoEntry).second)

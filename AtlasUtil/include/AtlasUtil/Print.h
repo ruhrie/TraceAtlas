@@ -118,7 +118,7 @@ inline void PrintGraph(const std::set<TraceAtlas::Cartographer::GraphNode *, Tra
         std::string blocks;
         for (const auto &b : node->blocks)
         {
-            blocks += std::to_string(b.first) + "->" + std::to_string(b.second) + ",";
+            blocks += std::to_string(b) + ",";
         }
         spdlog::info("This node contains blocks: " + blocks);
         std::string preds;

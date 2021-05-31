@@ -67,10 +67,7 @@ std::set<int64_t> Kernel::getBlocks() const
     std::set<int64_t> blocks;
     for (const auto &node : nodes)
     {
-        for (const auto &block : node.blocks)
-        {
-            blocks.insert(block.first);
-        }
+        blocks.insert(node.blocks.begin(), node.blocks.end());
     }
     return blocks;
 }
@@ -88,10 +85,7 @@ std::set<int64_t> Kernel::Compare(const Kernel &compare) const
     {
         if (nodes.find(compNode) != nodes.end())
         {
-            for (const auto &block : compNode.blocks)
-            {
-                shared.insert(block.first);
-            }
+            shared.insert(compNode.blocks.begin(), compNode.blocks.end());
         }
     }
     return shared;

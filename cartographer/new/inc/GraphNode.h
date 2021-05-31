@@ -12,7 +12,7 @@ namespace TraceAtlas::Cartographer
         /// BBIDs from the source bitcode that are represented by this node
         /// Each key is a member BBID and its value is the basic block its unconditional edge points to
         /// If a key maps to itself, there is no edge attached to this block
-        std::map<int64_t, int64_t> blocks;
+        std::set<int64_t> blocks;
         /// Maps a neighbor nodeID to a probability edge. The set of keys is comprehensive for all neighbors of this GraphNode
         /// The first index in the pair is the raw count, the second is the histogram probability
         std::map<uint64_t, std::pair<uint64_t, double>> neighbors;
@@ -23,7 +23,7 @@ namespace TraceAtlas::Cartographer
         /// Meant to be constructed from a new block description in the input binary file
         virtual ~GraphNode();
         void addBlock(int64_t newBlock);
-        void addBlocks(const std::map<int64_t, int64_t> &newBlocks);
+        void addBlocks(const std::set<int64_t> &newBlocks);
 
     protected:
         static uint64_t nextNID;

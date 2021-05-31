@@ -1,11 +1,12 @@
 #pragma once
-#include "VKNode.h"
+#include "GraphNode.h"
 #include <deque>
 #include <string>
 #include <vector>
 
 namespace TraceAtlas::Cartographer
 {
+    class VKNode;
     struct Kernel
     {
         std::set<GraphNode, GNCompare> nodes;
