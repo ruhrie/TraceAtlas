@@ -291,6 +291,10 @@ void TrivialTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64
                                     (*succ2)->predecessors.erase((*succ)->NID);
                                     (*succ2)->predecessors.insert(currentNode->NID);
                                 }
+                                else
+                                {
+                                    throw AtlasException("Successor missing from control flow graph!");
+                                }
                             }
                             // add the successor blocks
                             currentNode->addBlocks((*succ)->blocks);
@@ -310,7 +314,7 @@ void TrivialTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64
                 }
                 else
                 {
-                    break;
+                    throw AtlasException("Successor missing from control flow graph!");
                 }
             }
             else
@@ -356,7 +360,7 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
             // 1.) 0-deep branch->select: entrance can go directly to exit
             // 2.) 1-deep branch->select: entrance cannot go directly to exit
             // holds all neighbors of all midnodes
-            std::set<uint64_t> midNodeTargets;
+            std::set<uint64_t> midNodeSuccessors;
             for (const auto &midNode : entrance->neighbors)
             {
                 midNodes.insert(midNode.first);
@@ -364,18 +368,17 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                 {
                     for (const auto &neighbor : (*nodes.find(midNode.first))->neighbors)
                     {
-                        midNodeTargets.insert(neighbor.first);
+                        midNodeSuccessors.insert(neighbor.first);
                     }
                 }
                 else
                 {
-                    // ensures that all our midnodes can be found
-                    break;
+                    throw AtlasException("Found a midnode that is not in the control flow graph!");
                 }
             }
-            if (midNodeTargets.size() == 1) // corner case where the exit of the subgraph has no successors (it is the last node to execute in the program). In this case we have to check if the entrance is a predecessor of the lone midNodeTarget
+            if (midNodeSuccessors.size() == 1) // corner case where the exit of the subgraph has no successors (it is the last node to execute in the program). In this case we have to check if the entrance is a predecessor of the lone midNodeTarget
             {
-                auto cornerCase = nodes.find(*midNodeTargets.begin());
+                auto cornerCase = nodes.find(*midNodeSuccessors.begin());
                 if (cornerCase != nodes.end())
                 {
                     if ((*cornerCase)->predecessors.find(entrance->NID) != (*cornerCase)->predecessors.end())
@@ -389,8 +392,12 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                     {
                         // we have confirmed case 2: all entrance successors lead to a common exit, meaning the entrance cannot lead directly to the exit
                         MergeCase = true;
-                        potentialExit = nodes.find(*midNodeTargets.begin());
+                        potentialExit = nodes.find(*midNodeSuccessors.begin());
                     }
+                }
+                else
+                {
+                    throw AtlasException("Could not find midNode in control flow graph!");
                 }
                 if (potentialExit == nodes.end())
                 {
@@ -422,6 +429,10 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                                         common = false;
                                     }
                                 }
+                            }
+                            else
+                            {
+                                throw AtlasException("Neighbor not found in control flow graph!");
                             }
                         }
                         if (common)
@@ -468,6 +479,7 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                 }
                 else
                 {
+                    throw AtlasException("Missing midnode from the control flow graph!");
                     badCondition = true;
                 }
             }
@@ -489,6 +501,7 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                 }
                 else
                 {
+                    throw AtlasException("Missing midnode from the control flow graph!");
                     badCondition = true;
                 }
             }
@@ -497,7 +510,8 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                 break;
             }
             // 4.) potentialExit can only have the midnodes as predecessors
-            tmpMids = midNodes;
+            // BW [5/31/21] This is a case specific check and is done later
+            /*tmpMids = midNodes;
             badCondition = false;
             for (auto &pred : (*potentialExit)->predecessors)
             {
@@ -510,7 +524,7 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
             if (badCondition)
             {
                 break;
-            }
+            }*/
             // 5.) potentialExit can't have the entrance or any midnodes as successors
             tmpMids = midNodes;
             badCondition = false; // flipped if we find a midnode or entrance in potentialExit successors, or we find a bad node
@@ -553,7 +567,7 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
             // Now we do case-specific checks
             if (MergeCase)
             {
-                // case 2: all entrance neighbors have a common successor
+                // case 2: the entrance cannot lead directly to the exit
                 // 2 conditions must be checked
                 // 1.) entrance only has midnodes as successors
                 tmpMids = midNodes;
@@ -578,7 +592,7 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
             }
             else
             {
-                // case 1: all entrance neighbors have a common successor, and the entrance is a predecessor of that successor
+                // case 1: the entrance can lead directly to the exit
                 // 2 conditions must be checked
                 // 1.) entrance only has midnodes and potentialExit as successors
                 tmpMids = midNodes;
@@ -617,6 +631,10 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                     (*succ2)->predecessors.erase((*potentialExit)->NID);
                     (*succ2)->predecessors.insert(entrance->NID);
                 }
+                else
+                {
+                    throw AtlasException("Missing successor from the control flow graph!");
+                }
             }
             // merge midNodes and potentialExit blocks in order
             for (auto n : midNodes)
@@ -625,6 +643,10 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                 if (midNode != nodes.end())
                 {
                     entrance->addBlocks((*midNode)->blocks);
+                }
+                else
+                {
+                    throw AtlasException("Missing midNode from the control flow graph!");
                 }
             }
             entrance->addBlocks((*potentialExit)->blocks);
@@ -636,6 +658,10 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                 if (midNode != nodes.end())
                 {
                     nodes.erase(*midNode);
+                }
+                else
+                {
+                    throw AtlasException("Missing midNode from the control flow graph!");
                 }
             }
             RemoveNode(nodes, *potentialExit);
@@ -763,7 +789,7 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
                         {
                             if (nodes.find(neighbor.first) == nodes.end())
                             {
-                                spdlog::error("Found a neighbor that does not exist within the graph!");
+                                throw AtlasException("Found a neighbor that does not exist within the graph!");
                             }
                             Q.push_back(*nodes.find(neighbor.first));
                         }
@@ -815,7 +841,7 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
                     auto neighbor = *nodes.find(nei.first);
                     if (nodes.find(nei.first) == nodes.end())
                     {
-                        spdlog::error("Found a neighbor that does not exist in the graph!");
+                        throw AtlasException("Found a neighbor that does not exist in the graph!");
                         continue;
                     }
                     neighbor->predecessors.erase(sink->NID);
@@ -894,6 +920,10 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
                         if (exitNode != nodes.end())
                         {
                             kernelNode->neighbors[en.first] = en.second;
+                        }
+                        else
+                        {
+                            throw AtlasException("Node predecessor not found in the control flow graph!");
                         }
                     }
                 }
