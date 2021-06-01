@@ -10,6 +10,7 @@ Kernel::Kernel()
 {
     KID = getNextKID();
     nodes = std::set<GraphNode, GNCompare>();
+    childKernels = std::set<uint32_t>();
     Label = "";
 }
 
@@ -17,6 +18,7 @@ Kernel::Kernel(uint32_t ID)
 {
     KID = ID;
     nodes = std::set<GraphNode, GNCompare>();
+    childKernels = std::set<uint32_t>();
     Label = "";
 }
 

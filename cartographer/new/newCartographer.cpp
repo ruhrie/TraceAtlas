@@ -1170,6 +1170,22 @@ int main(int argc, char *argv[])
                 }
                 if (!overlap)
                 {
+                    for (const auto &node : newKernel->nodes)
+                    {
+                        // we have to get exactly the node from the graph in order to support polymorphism
+                        auto potentialVKN = nodes.find(node.NID);
+                        if (potentialVKN != nodes.end())
+                        {
+                            if (auto VKN = dynamic_cast<VKNode *>(*potentialVKN))
+                            {
+                                newKernel->childKernels.insert(VKN->kernel->KID);
+                            }
+                        }
+                        else
+                        {
+                            throw AtlasException("Could not find kernel node in the graph!");
+                        }
+                    }
                     newKernels.insert(newKernel);
                 }
                 else
@@ -1272,8 +1288,9 @@ int main(int argc, char *argv[])
     outputJson["Entropy"]["End"]["Nodes"] = endNodes;
     outputJson["Entropy"]["End"]["Edges"] = endEdges;
 
-    // sequential ID for each kernel
-    int id = 0;
+    // sequential ID for each kernel and a map from KID to sequential ID
+    uint32_t id = 0;
+    map<uint32_t, uint32_t> SIDMap;
     // average nodes per kernel
     float totalNodes = 0.0;
     // average blocks per kernel
@@ -1292,7 +1309,23 @@ int main(int argc, char *argv[])
         }
         outputJson["Kernels"][to_string(id)]["Labels"] = std::vector<string>();
         outputJson["Kernels"][to_string(id)]["Labels"].push_back(kernel->Label);
+        SIDMap[kernel->KID] = id;
         id++;
+    }
+    // now assign hierarchy to each kernel
+    for (const auto &kern : kernels)
+    {
+        outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Children"] = vector<uint32_t>();
+        outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Parents"] = vector<uint32_t>();
+    }
+    for (const auto &kern : kernels)
+    {
+        // fill in parent category for children while we're filling in the children
+        for (const auto &child : kern->childKernels)
+        {
+            outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Children"].push_back(SIDMap[child]);
+            outputJson["Kernels"][to_string(SIDMap[child])]["Parents"].push_back(SIDMap[kern->KID]);
+        }
     }
     if (!kernels.empty())
     {
