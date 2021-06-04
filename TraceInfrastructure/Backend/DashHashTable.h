@@ -57,22 +57,58 @@ typedef struct HashTable_iterator
     __TA_arrayElem *lastRead;
 } __TA_HashTable_iterator;
 
+/// @brief Long index hashing function 
+///
+/// Inspired by the python hashing function, it uses all node IDs involved in an edge to compute the long index
 uint32_t __TA_hash(uint32_t x[MARKOV_ORDER]);
 
+/// @brief Short index hashing function
+///
+/// Uses __TA_hash() and the size of the hash table to compute the short index for this entry.
+/// x is an array of all node IDs involved in an edge
 uint32_t __TA_hash_source(uint32_t x[MARKOV_ORDER], uint32_t size);
 
+/// @brief Find a specified entry within a hash table element
+///
+/// Each hash table entry is made of TUPLE_SIZE entries. This function searches through all valid entries in a hash table index for an entry matching the sink node ID
 __TA_kvTuple *__TA_tupleLookup(__TA_arrayElem *entry, uint32_t sink);
 
+/// @brief Find a specified entry in the hash table
+///
+/// This function hashes the source and sink parameters to index the hash table a.
 __TA_arrayElem *__TA_arrayLookup(__TA_HashTable *a, uint32_t source, uint32_t sink);
 
+/// @brief Read from the hash table
+///
+/// Uses the source and sink members in b to read the given entry from the hash table. If the entry does not exist, this function returns NULL
 __TA_kvTuple *__TA_HashTable_read(__TA_HashTable *a, __TA_kvTuple *b);
 
+/// @brief Write to the hash table
+///
+/// Hashes the source and sink members in b to write to the corresponding entry in the hash table a
+/// If the element already exists, its frequency count will be overwritten with b->frequency
+/// Otherwise a new entry will be made for b.
 uint8_t __TA_HashTable_write(__TA_HashTable *a, __TA_kvTuple *b);
 
+/// @brief Increment an element in the hash table
+///
+/// Increments the frequency count of the entry corresponding to (b->source,b->sink) by one
+/// If the entry b does not exist, a new entry will be made and its frequency count will be set to 1.
 uint8_t __TA_HashTable_increment(__TA_HashTable *a, __TA_kvTuple *b);
 
+/// @brief Resolves clashing in the hash table
+///
+/// Each hash table entry has a finite set of elements, and it is possible for this buffer to fill up
+/// When this happens, a clash is detected and resolved by doubling the size of the hash table
 void __TA_resolveClash();
 
+/// @brief Write the hash table to a file
+///
+/// The output file format is binary
+/// The default name for this file is set by the MARKOV_FILE macro
+/// For a custom name, set the MARKOV_FILE environment variable
 void __TA_WriteHashTable(__TA_HashTable *a);
 
+/// Read the hash table from the file in path to the hash table a
+/// The file in path must be written in the same format and semantic as described in __TA_WriteHashTable()
 void __TA_ReadHashTable(__TA_HashTable *a, char *path);
