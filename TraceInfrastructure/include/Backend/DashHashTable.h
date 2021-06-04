@@ -57,7 +57,7 @@ typedef struct HashTable_iterator
     __TA_arrayElem *lastRead;
 } __TA_HashTable_iterator;
 
-/// @brief Long index hashing function 
+/// @brief Long index hashing function
 ///
 /// Inspired by the python hashing function, it uses all node IDs involved in an edge to compute the long index
 uint32_t __TA_hash(uint32_t x[MARKOV_ORDER]);
@@ -70,7 +70,8 @@ uint32_t __TA_hash_source(uint32_t x[MARKOV_ORDER], uint32_t size);
 
 /// @brief Find a specified entry within a hash table element
 ///
-/// Each hash table entry is made of TUPLE_SIZE entries. This function searches through all valid entries in a hash table index for an entry matching the sink node ID
+/// Each hash table entry is made of TUPLE_SIZE entries
+/// This function searches through all valid entries in a hash table index for an entry matching the sink node ID
 __TA_kvTuple *__TA_tupleLookup(__TA_arrayElem *entry, uint32_t sink);
 
 /// @brief Find a specified entry in the hash table
@@ -80,7 +81,8 @@ __TA_arrayElem *__TA_arrayLookup(__TA_HashTable *a, uint32_t source, uint32_t si
 
 /// @brief Read from the hash table
 ///
-/// Uses the source and sink members in b to read the given entry from the hash table. If the entry does not exist, this function returns NULL
+/// Uses the source and sink members in b to read the given entry from the hash table
+/// If the entry does not exist, this function returns NULL
 __TA_kvTuple *__TA_HashTable_read(__TA_HashTable *a, __TA_kvTuple *b);
 
 /// @brief Write to the hash table

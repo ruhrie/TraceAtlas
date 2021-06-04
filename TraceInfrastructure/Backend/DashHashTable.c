@@ -1,4 +1,4 @@
-#include "DashHashTable.h"
+#include "Backend/DashHashTable.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,7 +38,7 @@ uint32_t __TA_hash_source(uint32_t x[MARKOV_ORDER], uint32_t size)
 
 __TA_kvTuple *__TA_tupleLookup(__TA_arrayElem *entry, uint32_t sink)
 {
-    for (int i = 0; i < entry->popCount; i++)
+    for (uint32_t i = 0; i < entry->popCount; i++)
     {
         if (entry->tuple[i].sink == sink)
         {
@@ -142,9 +142,9 @@ void __TA_resolveClash(__TA_HashTable *hashTable)
     // reallocate a new array that has double the current entries
     hashTable->array = (__TA_arrayElem *)malloc(hashTable->getFullSize(hashTable) * sizeof(__TA_arrayElem));
     // put in everything from the old array
-    for (int i = 0; i < old.getFullSize(&old); i++)
+    for (uint32_t i = 0; i < old.getFullSize(&old); i++)
     {
-        for (int j = 0; j < old.array[i].popCount; j++)
+        for (uint32_t j = 0; j < old.array[i].popCount; j++)
         {
             __TA_HashTable_write(hashTable, &old.array[i].tuple[j]);
         }
@@ -191,16 +191,7 @@ void __TA_WriteHashTable(__TA_HashTable *a)
 
 void __TA_ReadHashTable(__TA_HashTable *a, char *path)
 {
-    char *p = getenv("MARKOV_FILE");
-    FILE *f;
-    if (p)
-    {
-        f = fopen(p, "rb");
-    }
-    else
-    {
-        f = fopen(MARKOV_FILE, "rb");
-    }
+    FILE *f = fopen(path, "rb");
     // the first 4 bytes is a uint32_t of how many nodes there are in the graph
     uint32_t nodes;
     fread(&nodes, sizeof(uint32_t), 1, f);

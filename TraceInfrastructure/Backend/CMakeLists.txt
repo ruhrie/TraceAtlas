@@ -1,4 +1,4 @@
-set(SOURCES BackendTrace.c BackendMarkov.cpp)
+set(SOURCES BackendTrace.c BackendMarkov.cpp DashHashTable.c)
 if(NOT WIN32)
     list(APPEND SOURCES BackendPapi.c)
 endif()
