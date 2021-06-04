@@ -1112,12 +1112,12 @@ int main(int argc, char *argv[])
     // Set of nodes that constitute the entire graph
     set<GraphNode *, p_GNCompare> nodes;
 
-    ReadBIN(nodes, InputFilename, true);
+    ReadBIN(nodes, InputFilename);
     if (nodes.empty())
     {
         return EXIT_FAILURE;
     }
-    return EXIT_SUCCESS;
+
     // transform graph in an iterative manner until the size of the graph doesn't change
     size_t graphSize = nodes.size();
     auto startEntropy = EntropyCalculation(nodes);
