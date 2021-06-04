@@ -1,3 +1,4 @@
+#include "Backend/DashHashTable.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -48,7 +49,6 @@ public:
     }
 };*/
 
-//long openIndicator = -1;
 //map<string, set<uint64_t>> blockCallers;
 
 /*struct labelMap
@@ -80,10 +80,16 @@ public:
     }
 };*/
 
+// Indicates which block was the caller of the current context
+long openIndicator = -1;
+// The current basic block ID of the program (the source node of the next edge to be updated in MarkovIncrement)
 uint64_t b;
-uint64_t *markovResult;
+// Flag indicating whether the program is actively being profiled
 bool markovActive = false;
-uint64_t *TraceAtlasMarkovMap;
+// Hash table of the profiler
+__TA_HashTable *hashTable;
+// Global structure that is used to increment the last seen edge in the hash table
+__TA_kvTuple nextEdge;
 //dict TraceAtlasMarkovMap;
 //labelMap TraceAtlasLabelMap;
 //vector<char *> labelList;
@@ -93,49 +99,18 @@ extern "C"
     extern uint64_t MarkovBlockCount;
     void MarkovInit(uint64_t blockCount)
     {
-        TraceAtlasMarkovMap = (uint64_t *)malloc(blockCount * blockCount * sizeof(uint64_t));
-        memset(TraceAtlasMarkovMap, 0, blockCount * blockCount * sizeof(uint64_t));
+        hashTable = (__TA_HashTable *)malloc(sizeof(__TA_HashTable));
+        hashTable->size = (uint32_t)(ceil(log((double)blockCount) / log(2.0)));
+        hashTable->getFullSize = getFullSize;
+        hashTable->array = (__TA_arrayElem *)malloc(hashTable->getFullSize(hashTable) * sizeof(__TA_arrayElem));
         MarkovBlockCount = blockCount;
         markovActive = true;
     }
     void MarkovDestroy()
     {
-        char *p = getenv("MARKOV_FILE");
-        FILE *f;
-        if (p == NULL)
-        {
-            f = fopen("markov.bin", "wb");
-        }
-        else
-        {
-            f = fopen(p, "wb");
-        }
-        for (uint64_t i = 0; i < MarkovBlockCount; i++)
-        {
-            // first, write the row index (source node identifier)
-            fwrite(&i, sizeof(uint64_t), 1, f);
-            uint64_t l = 0;
-            uint64_t nonZeroEntryIndices[MarkovBlockCount];
-            for (uint64_t j = 0; j < MarkovBlockCount; j++)
-            {
-                if (*(TraceAtlasMarkovMap + (MarkovBlockCount * i) + j) > 0)
-                {
-                    nonZeroEntryIndices[l] = j;
-                    l++;
-                }
-            }
-            // second, write the number of sink nodes this source node has (the number of non-zero entries in the matrix)
-            fwrite(&l, sizeof(uint64_t), 1, f);
-            for (uint64_t j = 0; j < l; j++)
-            {
-                // third, write the column value (the sink node value, which is a non-zero entry in the matrix)
-                fwrite(&nonZeroEntryIndices[j], sizeof(uint64_t), 1, f);
-                // fourth, write the entry of the matrix at size*i+j (the frequency count of that edge)
-                fwrite(TraceAtlasMarkovMap + MarkovBlockCount * i + nonZeroEntryIndices[j], sizeof(uint64_t), 1, f);
-            }
-        }
-        fclose(f);
-        free(TraceAtlasMarkovMap);
+        __TA_WriteHashTable(hashTable);
+        free(hashTable->array);
+        free(hashTable);
         markovActive = false;
     }
     void MarkovIncrement(uint64_t a)
@@ -145,7 +120,9 @@ extern "C"
             // this segfaults in GSL/GSL_projects_L/fft project, when processing MarkovIncrement(i64 399) (fails on the first try, preceded by 391,392,393 loop)
             // TraceAtlasMarkovMap is definitely not null at this point (shown by gdb)
             // the line that fails is in libSTL, its when two keys are being compared as equal, x = 398, y=<error reading variable>
-            TraceAtlasMarkovMap[MarkovBlockCount * b + a]++;
+            nextEdge.source = (uint32_t)b;
+            nextEdge.sink = (uint32_t)a;
+            __TA_HashTable_increment(hashTable, &nextEdge);
             b = a;
             /*if (!labelList.empty())
             {
@@ -171,7 +148,7 @@ extern "C"
     }
     void MarkovExit()
     {
-        //openIndicator = -1;
+        openIndicator = -1;
     }
     void TraceAtlasMarkovKernelEnter(char *label)
     {

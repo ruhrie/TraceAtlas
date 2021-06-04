@@ -1,7 +1,7 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <math.h>
 #include "Backend/DashHashTable.h"
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #define HASHTABLESIZE 1024
 
@@ -15,18 +15,18 @@
 int main()
 {
     // initial allocation of all data structures
-    __TA_HashTable* hashTable = (__TA_HashTable*)malloc( sizeof(__TA_HashTable) );
+    __TA_HashTable *hashTable = (__TA_HashTable *)malloc(sizeof(__TA_HashTable));
     // convert array size to power of 2, round to the ceiling
-    hashTable->size = (uint32_t)( ceil( log((double)HASHTABLESIZE) / log(2.0) ) );
+    hashTable->size = (uint32_t)(ceil(log((double)HASHTABLESIZE) / log(2.0)));
     hashTable->getFullSize = getFullSize;
-    hashTable->array = (__TA_arrayElem*)malloc( (hashTable->getFullSize(hashTable))*sizeof(__TA_arrayElem) );
+    hashTable->array = (__TA_arrayElem *)malloc((hashTable->getFullSize(hashTable)) * sizeof(__TA_arrayElem));
     __TA_kvTuple entry0;
 
-	entry0.source    = 0;
-	entry0.sink      = 1;
-	entry0.frequency = 0;
+    entry0.source = 0;
+    entry0.sink = 1;
+    entry0.frequency = 0;
     __TA_HashTable_increment(hashTable, &entry0);
-    __TA_kvTuple* read = __TA_HashTable_read(hashTable, &entry0);
+    __TA_kvTuple *read = __TA_HashTable_read(hashTable, &entry0);
     printf("The entry for source node %d has sink node %d and frequency count %lu.\n", read->source, read->sink, read->frequency);
 
     entry0.frequency = 100;

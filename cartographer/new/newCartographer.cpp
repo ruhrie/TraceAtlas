@@ -86,7 +86,7 @@ void RemoveNode(std::set<GraphNode *, p_GNCompare> &CFG, const GraphNode &remove
     // fourth, free
     CFG.erase(CFG.find(removeNode.NID));
 }
-
+/*
 void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filename, bool print = false)
 {
     std::fstream inputFile;
@@ -138,6 +138,119 @@ void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filen
     inputFile.close();
 
     // now fill in all the predecessor nodes
+    for (auto &node : nodes)
+    {
+        for (const auto &neighbor : node->neighbors)
+        {
+            auto successorNode = nodes.find(neighbor.first);
+            if (successorNode != nodes.end())
+            {
+                (*successorNode)->predecessors.insert(node->NID);
+            }
+            // the trace doesn't include the terminating block of the program (because it has no edges leading from it)
+            // But this creates a problem when defining kernel exits, so look for the node who has a neighbor that is not in the set already and add that neighbor (with correct predecessor)
+            else
+            {
+                // we likely found the terminating block, so add the block and assign the current node to be its predecessor
+                auto programTerminator = GraphNode(neighbor.first);
+                programTerminator.blocks[(int64_t)programTerminator.NID] = (int64_t)programTerminator.NID;
+                programTerminator.predecessors.insert(node->NID);
+                AddNode(nodes, programTerminator);
+            }
+        }
+    }
+
+    if (print)
+    {
+        for (const auto &node : nodes)
+        {
+            spdlog::info("Examining node " + std::to_string(node->NID));
+            std::string preds;
+            for (auto pred : node->predecessors)
+            {
+                preds += std::to_string(pred);
+                if (pred != *prev(node->predecessors.end()))
+                {
+                    preds += ",";
+                }
+            }
+            spdlog::info("Predecessors: " + preds);
+            for (const auto &neighbor : node->neighbors)
+            {
+                spdlog::info("Neighbor " + std::to_string(neighbor.first) + " has instance count " + std::to_string(neighbor.second.first) + " and probability " + std::to_string(neighbor.second.second));
+            }
+            std::cout << std::endl;
+        }
+    }
+}*/
+
+void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filename, bool print = false)
+{
+
+    FILE *f = fopen(filename.data(), "rb");
+    // the first 4 bytes is a uint32_t of how many nodes there are in the graph
+    uint32_t nodeCount;
+    fread(&nodeCount, sizeof(uint32_t), 1, f);
+    GraphNode newNode;
+    for (uint32_t i = 0; i < nodeCount; i++)
+    {
+        AddNode(nodes, GraphNode((uint64_t)i));
+    }
+
+    // the second 4 bytes is a uint32_t of how many edges there are in the file
+    uint32_t edges;
+    fread(&edges, sizeof(uint32_t), 1, f);
+
+    /*
+    // read all the edges
+    __TA_kvTuple newEntry;
+    for (uint32_t i = 0; i < edges; i++)
+    {
+        fread(&newEntry, sizeof(__TA_kvTuple), 1, f);
+        __TA_HashTable_write(a, &newEntry);
+    }*/
+
+    // read all the edges
+    uint32_t source = 0;
+    uint32_t sink = 0;
+    uint64_t frequency = 0;
+    for (uint32_t i = 0; i < edges; i++)
+    {
+        fread(&source, sizeof(uint32_t), 1, f);
+        fread(&sink, sizeof(uint32_t), 1, f);
+        fread(&frequency, sizeof(uint64_t), 1, f);
+
+        auto nodeIt = nodes.find(source);
+        if (nodeIt == nodes.end())
+        {
+            spdlog::critical("Found a source node ID that was not found in the graph!");
+            return;
+        }
+
+        if ((*nodeIt)->neighbors.find((uint64_t)sink) != (*nodeIt)->neighbors.end())
+        {
+            spdlog::critical("Found a sink node that is already a neighbor of this source node!");
+            return;
+        }
+        (*nodeIt)->neighbors[(uint64_t)sink].first = frequency;
+    }
+    fclose(f);
+
+    // calculate all the edge probabilities
+    for (auto &node : nodes)
+    {
+        uint64_t sum = 0;
+        for (const auto &successor : node->neighbors)
+        {
+            sum += successor.second.first;
+        }
+        for (auto &successor : node->neighbors)
+        {
+            successor.second.second = (double)successor.second.first / (double)sum;
+        }
+    }
+
+    // fill in all the predecessor nodes
     for (auto &node : nodes)
     {
         for (const auto &neighbor : node->neighbors)
@@ -999,12 +1112,12 @@ int main(int argc, char *argv[])
     // Set of nodes that constitute the entire graph
     set<GraphNode *, p_GNCompare> nodes;
 
-    ReadBIN(nodes, InputFilename);
+    ReadBIN(nodes, InputFilename, true);
     if (nodes.empty())
     {
         return EXIT_FAILURE;
     }
-
+    return EXIT_SUCCESS;
     // transform graph in an iterative manner until the size of the graph doesn't change
     size_t graphSize = nodes.size();
     auto startEntropy = EntropyCalculation(nodes);
