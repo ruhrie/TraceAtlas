@@ -1,16 +1,18 @@
 #pragma once
-#include "VKNode.h"
+#include "GraphNode.h"
 #include <deque>
-#include <map>
-#include <set>
+#include <string>
 #include <vector>
 
 namespace TraceAtlas::Cartographer
 {
+    class VKNode;
     struct Kernel
     {
         std::set<GraphNode, GNCompare> nodes;
-        VKNode *kernelNode;
+        /// set of KIDs that point to child kernels of this kernel
+        std::set<uint32_t> childKernels;
+        VKNode *virtualNode;
         uint32_t KID;
         std::string Label;
         Kernel();
@@ -24,7 +26,7 @@ namespace TraceAtlas::Cartographer
         /// @retval    exits Vector of IDs that specify which nodes (or blocks) are the kernel exits. Kernel exits are nodes that have a neighbor outside the kernel
         std::vector<GraphNode> getExits() const;
         /// @brief Returns the member blocks (from the source bitcode) of this kernel
-        const std::set<int64_t> getBlocks() const;
+        std::set<int64_t> getBlocks() const;
         /// @brief Compares this kernel to another kernel by measuring node differences
         ///
         /// If two kernels are the same, 1 will be returned

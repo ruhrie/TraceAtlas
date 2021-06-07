@@ -97,8 +97,9 @@ __TA_kvTuple nextEdge;
 extern "C"
 {
     extern uint64_t MarkovBlockCount;
-    void MarkovInit(uint64_t blockCount)
+    void MarkovInit(uint64_t blockCount, uint64_t ID)
     {
+        b = ID;
         hashTable = (__TA_HashTable *)malloc(sizeof(__TA_HashTable));
         hashTable->size = (uint32_t)(ceil(log((double)blockCount) / log(2.0)));
         hashTable->getFullSize = getFullSize;
@@ -112,15 +113,15 @@ extern "C"
         free(hashTable->array);
         free(hashTable);
         // just write an output BlockInfo file for now to get past file checked in automation tool
-        char* blockFile = getenv("BLOCK_FILE");
-        FILE* f;
-        if( blockFile )
+        char *blockFile = getenv("BLOCK_FILE");
+        FILE *f;
+        if (blockFile)
         {
             f = fopen(blockFile, "w");
         }
         else
         {
-            f = fopen("BlockInfo.json","w");
+            f = fopen("BlockInfo.json", "w");
         }
         fclose(f);
         markovActive = false;

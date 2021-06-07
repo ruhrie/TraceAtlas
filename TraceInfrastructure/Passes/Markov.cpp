@@ -39,12 +39,16 @@ namespace DashTracer::Passes
                 }
             }
 
-            int64_t id = GetBlockID(BB);
-            Value *idValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), (uint64_t)id);
-            std::vector<Value *> args;
-            args.push_back(idValue);
-            auto call = firstBuilder.CreateCall(MarkovIncrement, args);
-            call->setDebugLoc(NULL);
+            // skip this if we are in the first block of main
+            if (!((F.getName() == "main") && (fi == F.begin())))
+            {
+                int64_t id = GetBlockID(BB);
+                Value *idValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), (uint64_t)id);
+                std::vector<Value *> args;
+                args.push_back(idValue);
+                auto call = firstBuilder.CreateCall(MarkovIncrement, args);
+                call->setDebugLoc(NULL);
+            }
 
             auto exitCall = firstBuilder.CreateCall(MarkovExit);
             exitCall->moveBefore(lastInsertion);
@@ -58,13 +62,18 @@ namespace DashTracer::Passes
                 // MarkovInit
                 if (fi == F.begin())
                 {
+                    std::vector<Value *> args;
+                    // get blockCount and make it a value in the LLVM Module
                     firstInsertion = BB->getFirstInsertionPt();
                     firstInst = cast<Instruction>(firstInsertion);
                     IRBuilder<> initBuilder(firstInst);
                     uint64_t blockCount = GetBlockCount(F.getParent());
                     Value *countValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), blockCount);
-                    std::vector<Value *> args;
                     args.push_back(countValue);
+                    // get the BBID and make it a value in the LLVM Module
+                    int64_t id = GetBlockID(BB);
+                    Value *blockID = ConstantInt::get(Type::getInt64Ty(BB->getContext()), id);
+                    args.push_back(blockID);
                     auto call = initBuilder.CreateCall(MarkovInit, args);
                     call->setDebugLoc(NULL);
                 }
@@ -76,7 +85,7 @@ namespace DashTracer::Passes
                     auto *lastInst = cast<Instruction>(endInsertion);
                     IRBuilder<> lastBuilder(lastInst);
 
-                    call = lastBuilder.CreateCall(MarkovDestroy);
+                    auto call = lastBuilder.CreateCall(MarkovDestroy);
                     call->moveBefore(lastInst);
                     call->setDebugLoc(NULL);
                 }
@@ -86,7 +95,7 @@ namespace DashTracer::Passes
                     auto *lastInst = cast<Instruction>(endInsertion);
                     IRBuilder<> lastBuilder(lastInst);
 
-                    call = lastBuilder.CreateCall(MarkovDestroy);
+                    auto call = lastBuilder.CreateCall(MarkovDestroy);
                     call->moveBefore(lastInst);
                     call->setDebugLoc(NULL);
                 }
@@ -97,7 +106,7 @@ namespace DashTracer::Passes
 
     bool Markov::doInitialization(Module &M)
     {
-        MarkovInit = cast<Function>(M.getOrInsertFunction("MarkovInit", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext())).getCallee());
+        MarkovInit = cast<Function>(M.getOrInsertFunction("MarkovInit", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext()), Type::getInt64Ty(M.getContext())).getCallee());
         MarkovDestroy = cast<Function>(M.getOrInsertFunction("MarkovDestroy", Type::getVoidTy(M.getContext())).getCallee());
         MarkovIncrement = cast<Function>(M.getOrInsertFunction("MarkovIncrement", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext())).getCallee());
         MarkovExit = cast<Function>(M.getOrInsertFunction("MarkovExit", Type::getVoidTy(M.getContext())).getCallee());

@@ -106,7 +106,7 @@ void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filen
         {
             currentNode = GraphNode(key);
             // when reading the trace file, NID and blockID are 1to1
-            currentNode.blocks[(int64_t)key] = (int64_t)key;
+            currentNode.blocks.insert((int64_t)key);
         }
         else
         {
@@ -153,7 +153,7 @@ void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filen
             {
                 // we likely found the terminating block, so add the block and assign the current node to be its predecessor
                 auto programTerminator = GraphNode(neighbor.first);
-                programTerminator.blocks[(int64_t)programTerminator.NID] = (int64_t)programTerminator.NID;
+                programTerminator.blocks.insert((int64_t)programTerminator.NID);
                 programTerminator.predecessors.insert(node->NID);
                 AddNode(nodes, programTerminator);
             }
@@ -194,8 +194,8 @@ void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filen
     for (uint32_t i = 0; i < nodeCount; i++)
     {
         GraphNode newNode((uint64_t)i);
-        newNode.blocks.insert((uint64_t)i);
-        AddNode(nodes, GraphNode((uint64_t)i));
+        newNode.blocks.insert((int64_t)i);
+        AddNode(nodes, newNode);
     }
 
     // the second 4 bytes is a uint32_t of how many edges there are in the file
@@ -267,7 +267,6 @@ void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filen
             {
                 // we likely found the terminating block, so add the block and assign the current node to be its predecessor
                 auto programTerminator = GraphNode(neighbor.first);
-                programTerminator.blocks[(int64_t)programTerminator.NID] = (int64_t)programTerminator.NID;
                 programTerminator.predecessors.insert(node->NID);
                 AddNode(nodes, programTerminator);
             }
@@ -338,7 +337,7 @@ bool FindCycles(const std::set<GraphNode *, p_GNCompare> &nodes, const GraphNode
                 cycle = true;
                 break;
             }
-            else if (done.find(neighbor) == done.end())
+            if (done.find(neighbor) == done.end())
             {
                 Q.push_front(neighbor);
                 pushed = true;
@@ -405,6 +404,10 @@ void TrivialTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64
                                     (*succ2)->predecessors.erase((*succ)->NID);
                                     (*succ2)->predecessors.insert(currentNode->NID);
                                 }
+                                else
+                                {
+                                    throw AtlasException("Successor missing from control flow graph!");
+                                }
                             }
                             // add the successor blocks
                             currentNode->addBlocks((*succ)->blocks);
@@ -424,7 +427,7 @@ void TrivialTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64
                 }
                 else
                 {
-                    break;
+                    throw AtlasException("Successor missing from control flow graph!");
                 }
             }
             else
@@ -470,7 +473,7 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
             // 1.) 0-deep branch->select: entrance can go directly to exit
             // 2.) 1-deep branch->select: entrance cannot go directly to exit
             // holds all neighbors of all midnodes
-            std::set<uint64_t> midNodeTargets;
+            std::set<uint64_t> midNodeSuccessors;
             for (const auto &midNode : entrance->neighbors)
             {
                 midNodes.insert(midNode.first);
@@ -478,18 +481,17 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                 {
                     for (const auto &neighbor : (*nodes.find(midNode.first))->neighbors)
                     {
-                        midNodeTargets.insert(neighbor.first);
+                        midNodeSuccessors.insert(neighbor.first);
                     }
                 }
                 else
                 {
-                    // ensures that all our midnodes can be found
-                    break;
+                    throw AtlasException("Found a midnode that is not in the control flow graph!");
                 }
             }
-            if (midNodeTargets.size() == 1) // corner case where the exit of the subgraph has no successors (it is the last node to execute in the program). In this case we have to check if the entrance is a predecessor of the lone midNodeTarget
+            if (midNodeSuccessors.size() == 1) // corner case where the exit of the subgraph has no successors (it is the last node to execute in the program). In this case we have to check if the entrance is a predecessor of the lone midNodeTarget
             {
-                auto cornerCase = nodes.find(*midNodeTargets.begin());
+                auto cornerCase = nodes.find(*midNodeSuccessors.begin());
                 if (cornerCase != nodes.end())
                 {
                     if ((*cornerCase)->predecessors.find(entrance->NID) != (*cornerCase)->predecessors.end())
@@ -503,8 +505,12 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                     {
                         // we have confirmed case 2: all entrance successors lead to a common exit, meaning the entrance cannot lead directly to the exit
                         MergeCase = true;
-                        potentialExit = nodes.find(*midNodeTargets.begin());
+                        potentialExit = nodes.find(*midNodeSuccessors.begin());
                     }
+                }
+                else
+                {
+                    throw AtlasException("Could not find midNode in control flow graph!");
                 }
                 if (potentialExit == nodes.end())
                 {
@@ -536,6 +542,10 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                                         common = false;
                                     }
                                 }
+                            }
+                            else
+                            {
+                                throw AtlasException("Neighbor not found in control flow graph!");
                             }
                         }
                         if (common)
@@ -582,6 +592,7 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                 }
                 else
                 {
+                    throw AtlasException("Missing midnode from the control flow graph!");
                     badCondition = true;
                 }
             }
@@ -603,6 +614,7 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                 }
                 else
                 {
+                    throw AtlasException("Missing midnode from the control flow graph!");
                     badCondition = true;
                 }
             }
@@ -611,7 +623,8 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                 break;
             }
             // 4.) potentialExit can only have the midnodes as predecessors
-            tmpMids = midNodes;
+            // BW [5/31/21] This is a case specific check and is done later
+            /*tmpMids = midNodes;
             badCondition = false;
             for (auto &pred : (*potentialExit)->predecessors)
             {
@@ -624,7 +637,7 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
             if (badCondition)
             {
                 break;
-            }
+            }*/
             // 5.) potentialExit can't have the entrance or any midnodes as successors
             tmpMids = midNodes;
             badCondition = false; // flipped if we find a midnode or entrance in potentialExit successors, or we find a bad node
@@ -667,7 +680,7 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
             // Now we do case-specific checks
             if (MergeCase)
             {
-                // case 2: all entrance neighbors have a common successor
+                // case 2: the entrance cannot lead directly to the exit
                 // 2 conditions must be checked
                 // 1.) entrance only has midnodes as successors
                 tmpMids = midNodes;
@@ -692,7 +705,7 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
             }
             else
             {
-                // case 1: all entrance neighbors have a common successor, and the entrance is a predecessor of that successor
+                // case 1: the entrance can lead directly to the exit
                 // 2 conditions must be checked
                 // 1.) entrance only has midnodes and potentialExit as successors
                 tmpMids = midNodes;
@@ -731,6 +744,10 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                     (*succ2)->predecessors.erase((*potentialExit)->NID);
                     (*succ2)->predecessors.insert(entrance->NID);
                 }
+                else
+                {
+                    throw AtlasException("Missing successor from the control flow graph!");
+                }
             }
             // merge midNodes and potentialExit blocks in order
             for (auto n : midNodes)
@@ -739,6 +756,10 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                 if (midNode != nodes.end())
                 {
                     entrance->addBlocks((*midNode)->blocks);
+                }
+                else
+                {
+                    throw AtlasException("Missing midNode from the control flow graph!");
                 }
             }
             entrance->addBlocks((*potentialExit)->blocks);
@@ -750,6 +771,10 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                 if (midNode != nodes.end())
                 {
                     nodes.erase(*midNode);
+                }
+                else
+                {
+                    throw AtlasException("Missing midNode from the control flow graph!");
                 }
             }
             RemoveNode(nodes, *potentialExit);
@@ -846,13 +871,10 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
                         }*/
                         break;
                     }
-                    else
-                    {
-                        // there are still entries in the queue, so push the sink node to the back and iterate
-                        Q.push_back(sink);
-                        Q.pop_front();
-                        continue;
-                    }
+                    // there are still entries in the queue, so push the sink node to the back and iterate
+                    Q.push_back(sink);
+                    Q.pop_front();
+                    continue;
                 }
                 subgraph.insert(Q.front());
                 for (const auto &neighbor : Q.front()->neighbors)
@@ -880,7 +902,7 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
                         {
                             if (nodes.find(neighbor.first) == nodes.end())
                             {
-                                spdlog::error("Found a neighbor that does not exist within the graph!");
+                                throw AtlasException("Found a neighbor that does not exist within the graph!");
                             }
                             Q.push_back(*nodes.find(neighbor.first));
                         }
@@ -932,7 +954,7 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
                     auto neighbor = *nodes.find(nei.first);
                     if (nodes.find(nei.first) == nodes.end())
                     {
-                        spdlog::error("Found a neighbor that does not exist in the graph!");
+                        throw AtlasException("Found a neighbor that does not exist in the graph!");
                         continue;
                     }
                     neighbor->predecessors.erase(sink->NID);
@@ -955,71 +977,93 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
         // gather entrance and exit nodes
         auto kernelEntrances = kernel->getEntrances();
         auto kernelExits = kernel->getExits();
-        try
+
+        // steps
+        // first: select a node to become the VKNode (for now this is just the entrance at the front of the list)
+        // second: for each entrance, change the neighbor of each predecessor with the VKnode
+        // third: collect all edges that lead of out the kernel to the exits, and add all these edges to the VKnode neighbors
+        // fourth:
+
+        auto kernelNode = new VKNode(*kernelEntrances.begin(), kernel);
+        // remove each node in the kernel that are possibly in the entrance predecessors
+        // this removes all edges in the graph that can lead to the kernel other than the kernel entrance predecessors
+        for (const auto &node : kernel->nodes)
         {
-            if ((kernelEntrances.size() == 1) && (kernelExits.size() == 1))
+            kernelNode->predecessors.erase(node.NID);
+        }
+
+        // for each entrance, fix its predecessors
+        //  - make new entry pointing to the VKnode (this will duplicate the value from the original entrance node)
+        //  - add this entrance to the predecessors of the VKnode
+        for (const auto &ent : kernelEntrances)
+        {
+            for (const auto &predID : ent.predecessors)
             {
-                // change the neighbors of the entrance node to the exit node (because the exit nodes are the first blocks outside the kernel exit edges)
-                auto entranceNode = new VKNode(*kernelEntrances.begin(), kernel);
-                // remove each node in the kernel that are possibly in the node predecessors
-                for (const auto &node : kernel->nodes)
+                auto pred = nodes.find(predID);
+                if (pred != nodes.end()) // sanity check
                 {
-                    entranceNode->predecessors.erase(node.NID);
+                    if (kernel->nodes.find(predID) == kernel->nodes.end()) // if this predecessor of the entrance is not a member of the kernel, proceed
+                    {
+                        (*pred)->neighbors[kernelNode->NID] = (*pred)->neighbors[ent.NID];
+                        (*pred)->neighbors.erase(ent.NID);
+                        kernelNode->predecessors.insert(predID);
+                    }
                 }
-                auto exitNode = *(kernelExits.begin());
-                // investigate the neighbors
-                // the only edges leading from the virtual kernel node should be edges out of the kernel
-                // we are given the nodes within the kernel that have neighbors outside the kernel, so here we figure out which exit edges exist
-                // we leave the probabilities the same as the original nodes (this means we will have outgoing edges whose probabilities do not sum to 1, because edges that go back in the kernel are omitted)
-                entranceNode->neighbors.clear();
-                for (const auto &en : exitNode.neighbors)
+                else
                 {
-                    // nodes within the kernel will not be in the neighbors of the virtual kernel
+                    throw AtlasException("Node predecessor not found in the control flow graph!");
+                }
+            }
+        }
+
+        // for each exit, fix its predecessors
+        //  - remove the original kernel node from the predecessors
+        //  - add the VKnode to the predecessors
+        kernelNode->neighbors.clear();
+        for (const auto &exitNode : kernelExits)
+        {
+            // the only edges leading from the virtual kernel node should be edges out of the kernel
+            // we are given the nodes within the kernel that have neighbors outside the kernel, so here we figure out which exit edges exist
+            // we leave the probabilities the same as the original nodes (this means we will have outgoing edges whose probabilities do not sum to 1, because edges that go back in the kernel are omitted)
+            for (const auto &en : exitNode.neighbors)
+            {
+                // nodes within the kernel will not be in the neighbors of the virtual kernel
+                if (kernel->nodes.find(en.first) == kernel->nodes.end())
+                {
                     if (kernel->nodes.find(en.first) == kernel->nodes.end())
                     {
-                        if (kernel->nodes.find(en.first) == kernel->nodes.end())
+                        auto exitNode = nodes.find(en.first);
+                        if (exitNode != nodes.end())
                         {
-                            auto exitNode = nodes.find(en.first);
-                            if (exitNode != nodes.end())
-                            {
-                                entranceNode->neighbors[en.first] = en.second;
-                            }
+                            kernelNode->neighbors[en.first] = en.second;
+                        }
+                        else
+                        {
+                            throw AtlasException("Node predecessor not found in the control flow graph!");
                         }
                     }
                 }
-                // now we have to figure out if the
-                // for each neighbor of the kernel exit, change its predecessor to the kernel entrance node
-                for (const auto &neighID : exitNode.neighbors)
-                {
-                    auto neighbor = *(nodes.find(neighID.first));
-                    neighbor->predecessors.erase(exitNode.NID);
-                    neighbor->predecessors.insert(entranceNode->NID);
-                }
-                // remove all nodes within the kernel except the entrance node
-                auto toRemove = kernel->nodes;
-                for (const auto &node : kernel->getEntrances())
-                {
-                    toRemove.erase(node);
-                }
-                for (const auto &node : toRemove)
-                {
-                    RemoveNode(nodes, node);
-                }
-                // finally replace the old entrance node with the new VKNode
-                RemoveNode(nodes, *(kernelEntrances.begin()));
-                nodes.insert(entranceNode);
-                kernel->kernelNode = entranceNode;
-                newPointers.push_back(kernel);
             }
-            else
+            // for each neighbor of the kernel exit, change its predecessor to the kernel entrance node
+            for (const auto &neighID : exitNode.neighbors)
             {
-                throw AtlasException("Kernel ID " + to_string(kernel->KID) + " has " + to_string(kernelEntrances.size()) + " entrances and " + to_string(kernelExits.size()) + " exits!");
+                auto neighbor = *(nodes.find(neighID.first));
+                neighbor->predecessors.erase(exitNode.NID);
+                neighbor->predecessors.insert(kernelNode->NID);
             }
         }
-        catch (AtlasException &e)
+        // remove all nodes within the kernel except the entrance node
+        auto toRemove = kernel->nodes;
+        toRemove.erase(*kernelEntrances.begin());
+        for (const auto &node : toRemove)
         {
-            spdlog::error(e.what());
+            RemoveNode(nodes, node);
         }
+        // finally replace the old entrance node with the new VKNode
+        RemoveNode(nodes, *(kernelEntrances.begin()));
+        nodes.insert(kernelNode);
+        kernel->virtualNode = kernelNode;
+        newPointers.push_back(kernel);
     }
     return newPointers;
 }
@@ -1094,7 +1138,7 @@ int main(int argc, char *argv[])
     auto blockCallers = ReadBlockInfo(BlockInfoFilename);
     auto blockLabels = ReadBlockLabels(BlockInfoFilename);
     auto SourceBitcode = ReadBitcode(BitcodeFileName);
-    if (SourceBitcode.get() == nullptr)
+    if (SourceBitcode == nullptr)
     {
         return EXIT_FAILURE;
     }
@@ -1119,6 +1163,11 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+#ifdef DEBUG
+    spdlog::info("\n\nInput control flow graph:");
+    PrintGraph(nodes);
+#endif
+
     // transform graph in an iterative manner until the size of the graph doesn't change
     size_t graphSize = nodes.size();
     auto startEntropy = EntropyCalculation(nodes);
@@ -1142,11 +1191,14 @@ int main(int argc, char *argv[])
         {
             break;
         }
-        else
-        {
-            graphSize = nodes.size();
-        }
+        graphSize = nodes.size();
     }
+
+#ifdef DEBUG
+    spdlog::info("\n\nTransformed Graph:");
+    PrintGraph(nodes);
+#endif
+
     auto endEntropy = EntropyCalculation(nodes);
     auto endTotalEntropy = TotalEntropy(nodes);
     auto endNodes = nodes.size();
@@ -1225,13 +1277,28 @@ int main(int argc, char *argv[])
                         }
                         else
                         {
-                            // keep the existing kernel, throw out the new one
                             overlap = true;
                         }
                     }
                 }
                 if (!overlap)
                 {
+                    for (const auto &node : newKernel->nodes)
+                    {
+                        // we have to get exactly the node from the graph in order to support polymorphism
+                        auto potentialVKN = nodes.find(node.NID);
+                        if (potentialVKN != nodes.end())
+                        {
+                            if (auto VKN = dynamic_cast<VKNode *>(*potentialVKN))
+                            {
+                                newKernel->childKernels.insert(VKN->kernel->KID);
+                            }
+                        }
+                        else
+                        {
+                            throw AtlasException("Could not find kernel node in the graph!");
+                        }
+                    }
                     newKernels.insert(newKernel);
                 }
                 else
@@ -1261,7 +1328,11 @@ int main(int argc, char *argv[])
             done = true;
         }
     }
+
+#ifdef DEBUG
+    spdlog::info("\n\nResulting DAG:");
     PrintGraph(nodes);
+#endif
 
     // majority label vote for kernels
     for (const auto &kernel : kernels)
@@ -1272,7 +1343,7 @@ int main(int argc, char *argv[])
         {
             for (const auto &block : node.blocks)
             {
-                auto infoEntry = blockLabels.find(block.first);
+                auto infoEntry = blockLabels.find(block);
                 if (infoEntry != blockLabels.end())
                 {
                     for (const auto &label : (*infoEntry).second)
@@ -1294,7 +1365,7 @@ int main(int argc, char *argv[])
                 }
             }
         }
-        string maxVoteLabel = "";
+        string maxVoteLabel;
         int64_t maxVoteCount = 0;
         for (const auto &label : labelVotes)
         {
@@ -1330,8 +1401,9 @@ int main(int argc, char *argv[])
     outputJson["Entropy"]["End"]["Nodes"] = endNodes;
     outputJson["Entropy"]["End"]["Edges"] = endEdges;
 
-    // sequential ID for each kernel
-    int id = 0;
+    // sequential ID for each kernel and a map from KID to sequential ID
+    uint32_t id = 0;
+    map<uint32_t, uint32_t> SIDMap;
     // average nodes per kernel
     float totalNodes = 0.0;
     // average blocks per kernel
@@ -1350,7 +1422,23 @@ int main(int argc, char *argv[])
         }
         outputJson["Kernels"][to_string(id)]["Labels"] = std::vector<string>();
         outputJson["Kernels"][to_string(id)]["Labels"].push_back(kernel->Label);
+        SIDMap[kernel->KID] = id;
         id++;
+    }
+    // now assign hierarchy to each kernel
+    for (const auto &kern : kernels)
+    {
+        outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Children"] = vector<uint32_t>();
+        outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Parents"] = vector<uint32_t>();
+    }
+    for (const auto &kern : kernels)
+    {
+        // fill in parent category for children while we're filling in the children
+        for (const auto &child : kern->childKernels)
+        {
+            outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Children"].push_back(SIDMap[child]);
+            outputJson["Kernels"][to_string(SIDMap[child])]["Parents"].push_back(SIDMap[kern->KID]);
+        }
     }
     if (!kernels.empty())
     {
@@ -1365,6 +1453,13 @@ int main(int argc, char *argv[])
     ofstream oStream(OutputFilename);
     oStream << setw(4) << outputJson;
     oStream.close();
+
+    // free kernel set
+    for (const auto &kern : kernels)
+    {
+        delete kern;
+    }
+
     return 0;
 }
 
