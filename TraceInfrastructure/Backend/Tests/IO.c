@@ -119,7 +119,7 @@ int main()
     }
 
     // now print the resulting hash table to a binary file
-    __TA_WriteHashTable(hashTable);
+    __TA_WriteHashTable(hashTable, hashTable->getFullSize(hashTable));
 
     // now make a new hash table and read the output file in
     __TA_HashTable *hashTable2 = (__TA_HashTable *)malloc(sizeof(__TA_HashTable));

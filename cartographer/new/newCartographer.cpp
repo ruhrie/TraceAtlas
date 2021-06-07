@@ -191,9 +191,10 @@ void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filen
     // the first 4 bytes is a uint32_t of how many nodes there are in the graph
     uint32_t nodeCount;
     fread(&nodeCount, sizeof(uint32_t), 1, f);
-    GraphNode newNode;
     for (uint32_t i = 0; i < nodeCount; i++)
     {
+        GraphNode newNode((uint64_t)i);
+        newNode.blocks.insert((uint64_t)i);
         AddNode(nodes, GraphNode((uint64_t)i));
     }
 

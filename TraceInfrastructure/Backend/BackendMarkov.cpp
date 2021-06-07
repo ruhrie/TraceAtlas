@@ -108,7 +108,7 @@ extern "C"
     }
     void MarkovDestroy()
     {
-        __TA_WriteHashTable(hashTable);
+        __TA_WriteHashTable(hashTable, (uint32_t)MarkovBlockCount);
         free(hashTable->array);
         free(hashTable);
         // just write an output BlockInfo file for now to get past file checked in automation tool

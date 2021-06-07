@@ -22,9 +22,7 @@ extern "C"
     // we need both the source and the sink because we want a hash, not a hash of hashes
     typedef struct kvTuple
     {
-        // source
         uint32_t source;
-        // sink
         uint32_t sink;
         // edge count
         uint64_t frequency;
@@ -121,7 +119,7 @@ extern "C"
     /// The output file format is binary
     /// The default name for this file is set by the MARKOV_FILE macro
     /// For a custom name, set the MARKOV_FILE environment variable
-    void __TA_WriteHashTable(__TA_HashTable *a);
+    void __TA_WriteHashTable(__TA_HashTable *a, uint32_t blockCount);
 
     /// Read the hash table from the file in path to the hash table a
     /// The file in path must be written in the same format and semantic as described in __TA_WriteHashTable()

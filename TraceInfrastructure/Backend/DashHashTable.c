@@ -157,9 +157,8 @@ extern "C"
         printf("Resolved the clash!\n");
     }
 
-    void __TA_WriteHashTable(__TA_HashTable *a)
+    void __TA_WriteHashTable(__TA_HashTable *a, uint32_t blockCount)
     {
-        printf("Writing file!\n");
         char *p = getenv("MARKOV_FILE");
         FILE *f;
         if (p)
@@ -170,10 +169,9 @@ extern "C"
         {
             f = fopen(MARKOV_FILE, "wb");
         }
-        // first print the number of nodes in the graph
-        uint32_t nodes = a->getFullSize(a);
-        fwrite(&nodes, sizeof(uint32_t), 1, f);
-        // second print the number of edges in the file
+        // first write the number of nodes in the graph
+        fwrite(&blockCount, sizeof(uint32_t), 1, f);
+        // second write the number of edges in the file
         uint32_t edges = 0;
         for (uint32_t i = 0; i < a->getFullSize(a); i++)
         {
@@ -190,7 +188,6 @@ extern "C"
             }
         }
         fclose(f);
-        printf("Done!\n");
     }
 
     void __TA_ReadHashTable(__TA_HashTable *a, char *path)
