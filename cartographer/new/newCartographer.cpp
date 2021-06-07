@@ -977,7 +977,10 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
         // gather entrance and exit nodes
         auto kernelEntrances = kernel->getEntrances();
         auto kernelExits = kernel->getExits();
-
+        if (kernelEntrances.empty() || kernelExits.empty())
+        {
+            continue;
+        }
         // steps
         // first: select a node to become the VKNode (for now this is just the entrance at the front of the list)
         // second: for each entrance, change the neighbor of each predecessor with the VKnode
