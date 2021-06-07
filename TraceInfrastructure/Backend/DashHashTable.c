@@ -5,7 +5,7 @@
 
 #define HASH_MULTIPLIER 1000003UL
 #define HASH_MULTIPLIER_OFFSET 82520UL
-#define HASH_INITIAL 0x345678UL
+#define HASH_INITIAL 0x12345678UL
 #define HASH_OFFSET 97531UL
 
 #ifdef __cplusplus
@@ -25,7 +25,7 @@ extern "C"
         uint32_t y = HASH_INITIAL;
         for (int i = 0; i < MARKOV_ORDER; i++)
         {
-            y += (x[i] >> 16) ^ x[i] * m;
+            y += (x[i] >> 16) ^ x[i] * m + HASH_OFFSET;
             m += HASH_MULTIPLIER_OFFSET + MARKOV_ORDER + MARKOV_ORDER;
         }
 
@@ -37,14 +37,22 @@ extern "C"
     {
         // instead of doing a mask, I should do a right shift
         // so instead of modulo, we want to do a right shift by (32-arraysize)
-        return __TA_hash(x) >> (32 - size);
+        uint32_t shortHash = 0;
+        uint32_t longHash = __TA_hash(x);
+        uint32_t mask = 0x1;
+        for (uint32_t i = 0; i < size; i++)
+        {
+            shortHash += longHash & mask;
+            mask = mask << 1;
+        }
+        return shortHash;
     }
 
-    __TA_kvTuple *__TA_tupleLookup(__TA_arrayElem *entry, uint32_t sink)
+    __TA_kvTuple *__TA_tupleLookup(__TA_arrayElem *entry, __TA_kvTuple *index)
     {
         for (uint32_t i = 0; i < entry->popCount; i++)
         {
-            if (entry->tuple[i].sink == sink)
+            if ((entry->tuple[i].source == index->source) && (entry->tuple[i].sink == index->sink))
             {
                 return &entry->tuple[i];
             }
@@ -52,9 +60,9 @@ extern "C"
         return NULL;
     }
 
-    __TA_arrayElem *__TA_arrayLookup(__TA_HashTable *a, uint32_t source, uint32_t sink)
+    __TA_arrayElem *__TA_arrayLookup(__TA_HashTable *a, __TA_kvTuple *index)
     {
-        uint32_t x[MARKOV_ORDER] = {source, sink};
+        uint32_t x[MARKOV_ORDER] = {index->source, index->sink};
 #if __TA_DEBUG
         __TA_arrayElem *index = &a->array[__TA_hash_source(x, a->size)];
         // check to see if there was a clash in the hashing function
@@ -74,14 +82,14 @@ extern "C"
 
     __TA_kvTuple *__TA_HashTable_read(__TA_HashTable *a, __TA_kvTuple *b)
     {
-        __TA_arrayElem *entry = __TA_arrayLookup(a, b->source, b->sink);
-        return __TA_tupleLookup(entry, b->sink);
+        __TA_arrayElem *entry = __TA_arrayLookup(a, b);
+        return __TA_tupleLookup(entry, b);
     }
 
     uint8_t __TA_HashTable_write(__TA_HashTable *a, __TA_kvTuple *b)
     {
-        __TA_arrayElem *index = __TA_arrayLookup(a, b->source, b->sink);
-        __TA_kvTuple *entry = __TA_tupleLookup(index, b->sink);
+        __TA_arrayElem *index = __TA_arrayLookup(a, b);
+        __TA_kvTuple *entry = __TA_tupleLookup(index, b);
         if (entry)
         {
             entry->frequency = b->frequency;
@@ -107,8 +115,8 @@ extern "C"
 
     uint8_t __TA_HashTable_increment(__TA_HashTable *a, __TA_kvTuple *b)
     {
-        __TA_arrayElem *index = __TA_arrayLookup(a, b->source, b->sink);
-        __TA_kvTuple *entry = __TA_tupleLookup(index, b->sink);
+        __TA_arrayElem *index = __TA_arrayLookup(a, b);
+        __TA_kvTuple *entry = __TA_tupleLookup(index, b);
         if (entry)
         {
             (entry->frequency)++;

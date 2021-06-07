@@ -135,7 +135,10 @@ extern "C"
             // the line that fails is in libSTL, its when two keys are being compared as equal, x = 398, y=<error reading variable>
             nextEdge.source = (uint32_t)b;
             nextEdge.sink = (uint32_t)a;
-            __TA_HashTable_increment(hashTable, &nextEdge);
+            while (__TA_HashTable_increment(hashTable, &nextEdge))
+            {
+                __TA_resolveClash(hashTable);
+            }
             b = a;
             /*if (!labelList.empty())
             {

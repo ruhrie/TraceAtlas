@@ -72,7 +72,7 @@ namespace DashTracer::Passes
                     args.push_back(countValue);
                     // get the BBID and make it a value in the LLVM Module
                     int64_t id = GetBlockID(BB);
-                    Value *blockID = ConstantInt::get(Type::getInt64Ty(BB->getContext()), id);
+                    Value *blockID = ConstantInt::get(Type::getInt64Ty(BB->getContext()), (uint64_t)id);
                     args.push_back(blockID);
                     auto call = initBuilder.CreateCall(MarkovInit, args);
                     call->setDebugLoc(NULL);

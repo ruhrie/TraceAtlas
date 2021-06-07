@@ -82,12 +82,12 @@ extern "C"
     ///
     /// Each hash table entry is made of TUPLE_SIZE entries
     /// This function searches through all valid entries in a hash table index for an entry matching the sink node ID
-    __TA_kvTuple *__TA_tupleLookup(__TA_arrayElem *entry, uint32_t sink);
+    __TA_kvTuple *__TA_tupleLookup(__TA_arrayElem *entry, __TA_kvTuple *index);
 
     /// @brief Find a specified entry in the hash table
     ///
     /// This function hashes the source and sink parameters to index the hash table a.
-    __TA_arrayElem *__TA_arrayLookup(__TA_HashTable *a, uint32_t source, uint32_t sink);
+    __TA_arrayElem *__TA_arrayLookup(__TA_HashTable *a, __TA_kvTuple *index);
 
     /// @brief Read from the hash table
     ///
@@ -112,7 +112,7 @@ extern "C"
     ///
     /// Each hash table entry has a finite set of elements, and it is possible for this buffer to fill up
     /// When this happens, a clash is detected and resolved by doubling the size of the hash table
-    void __TA_resolveClash();
+    void __TA_resolveClash(__TA_HashTable *hashTable);
 
     /// @brief Write the hash table to a file
     ///
