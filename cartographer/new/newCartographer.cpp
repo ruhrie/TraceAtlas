@@ -191,12 +191,12 @@ void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filen
     // the first 4 bytes is a uint32_t of how many nodes there are in the graph
     uint32_t nodeCount;
     fread(&nodeCount, sizeof(uint32_t), 1, f);
-    for (uint32_t i = 0; i < nodeCount; i++)
+    /*for (uint32_t i = 0; i < nodeCount; i++)
     {
         GraphNode newNode((uint64_t)i);
         newNode.blocks.insert((int64_t)i);
         AddNode(nodes, newNode);
-    }
+    }*/
 
     // the second 4 bytes is a uint32_t of how many edges there are in the file
     uint32_t edges;
@@ -224,14 +224,15 @@ void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filen
         auto nodeIt = nodes.find(source);
         if (nodeIt == nodes.end())
         {
-            spdlog::critical("Found a source node ID that was not found in the graph!");
-            return;
+            GraphNode newNode = GraphNode((uint64_t)source);
+            newNode.blocks.insert((int64_t)source);
+            AddNode(nodes, newNode);
+            nodeIt = nodes.find(source);
         }
 
         if ((*nodeIt)->neighbors.find((uint64_t)sink) != (*nodeIt)->neighbors.end())
         {
-            spdlog::critical("Found a sink node that is already a neighbor of this source node!");
-            return;
+            throw AtlasException("Found a sink node that is already a neighbor of this source node!");
         }
         (*nodeIt)->neighbors[(uint64_t)sink].first = frequency;
     }
@@ -270,6 +271,16 @@ void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filen
                 programTerminator.predecessors.insert(node->NID);
                 AddNode(nodes, programTerminator);
             }
+        }
+    }
+
+    // finally, look for all nodes with no predecessors and no successors and remove them (they slow down the transform algorithms)
+    for (const auto &node : nodes)
+    {
+        auto nodeObject = *node;
+        if (nodeObject.predecessors.empty() && nodeObject.neighbors.empty())
+        {
+            RemoveNode(nodes, node);
         }
     }
 
@@ -1167,7 +1178,7 @@ int main(int argc, char *argv[])
     }
 
 #ifdef DEBUG
-    spdlog::info("\n\nInput control flow graph:");
+    spdlog::info("Input control flow graph:");
     PrintGraph(nodes);
 #endif
 
@@ -1198,7 +1209,7 @@ int main(int argc, char *argv[])
     }
 
 #ifdef DEBUG
-    spdlog::info("\n\nTransformed Graph:");
+    spdlog::info("Transformed Graph:");
     PrintGraph(nodes);
 #endif
 
@@ -1333,7 +1344,7 @@ int main(int argc, char *argv[])
     }
 
 #ifdef DEBUG
-    spdlog::info("\n\nResulting DAG:");
+    spdlog::info("Resulting DAG:");
     PrintGraph(nodes);
 #endif
 
@@ -1457,10 +1468,14 @@ int main(int argc, char *argv[])
     oStream << setw(4) << outputJson;
     oStream.close();
 
-    // free kernel set
+    // free kernel set and nodes
     for (const auto &kern : kernels)
     {
         delete kern;
+    }
+    for (const auto &node : nodes)
+    {
+        RemoveNode(nodes, node);
     }
 
     return 0;

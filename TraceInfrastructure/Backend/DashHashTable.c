@@ -185,10 +185,10 @@ extern "C"
         uint32_t maxPopCount = 0;
         for (uint32_t i = 0; i < a->getFullSize(a); i++)
         {
-            if( a->array[i].popCount )
+            if (a->array[i].popCount)
             {
                 liveArrayEntries++;
-                if( a->array[i].popCount > maxPopCount )
+                if (a->array[i].popCount > maxPopCount)
                 {
                     maxPopCount = a->array[i].popCount;
                 }
