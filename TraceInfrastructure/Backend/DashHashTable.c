@@ -182,11 +182,16 @@ extern "C"
         // second write the number of edges in the file
         uint32_t edges = 0;
         uint32_t liveArrayEntries = 0;
+        uint32_t maxPopCount = 0;
         for (uint32_t i = 0; i < a->getFullSize(a); i++)
         {
             if( a->array[i].popCount )
             {
                 liveArrayEntries++;
+                if( a->array[i].popCount > maxPopCount )
+                {
+                    maxPopCount = a->array[i].popCount;
+                }
             }
             edges += a->array[i].popCount;
         }
@@ -208,6 +213,8 @@ extern "C"
         printf("\nHASHTABLEEDGES: %d\n", edges);
         // live array entries
         printf("\nHASHTABLELIVEARRAYENTRIES: %d\n", liveArrayEntries);
+        // maximum occupancy of an array element
+        printf("\nHASHTABLEMAXPOPCOUNT: %d\n", maxPopCount);
     }
 
     void __TA_ReadHashTable(__TA_HashTable *a, char *path)
