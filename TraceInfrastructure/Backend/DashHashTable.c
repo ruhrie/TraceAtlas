@@ -181,8 +181,13 @@ extern "C"
         fwrite(&blockCount, sizeof(uint32_t), 1, f);
         // second write the number of edges in the file
         uint32_t edges = 0;
+        uint32_t liveArrayEntries = 0;
         for (uint32_t i = 0; i < a->getFullSize(a); i++)
         {
+            if( a->array[i].popCount )
+            {
+                liveArrayEntries++;
+            }
             edges += a->array[i].popCount;
         }
         fwrite(&edges, sizeof(uint32_t), 1, f);
@@ -196,6 +201,13 @@ extern "C"
             }
         }
         fclose(f);
+        // calculate some statistics about our hash table
+        // number of nodes
+        printf("\nHASHTABLESIZE: %d\n", blockCount);
+        // number of edges
+        printf("\nHASHTABLEEDGES: %d\n", edges);
+        // live array entries
+        printf("\nHASHTABLELIVEARRAYENTRIES: %d\n", liveArrayEntries);
     }
 
     void __TA_ReadHashTable(__TA_HashTable *a, char *path)
