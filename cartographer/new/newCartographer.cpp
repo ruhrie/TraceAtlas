@@ -77,14 +77,23 @@ void RemoveNode(std::set<GraphNode *, p_GNCompare> &CFG, GraphNode *removeNode)
         }
     }*/
     // fourth, free
-    CFG.erase(removeNode);
-    delete removeNode;
+    auto entry = CFG.find(removeNode->NID);
+    if (entry != CFG.end())
+    {
+        CFG.erase(entry);
+        delete removeNode;
+    }
 }
 
 void RemoveNode(std::set<GraphNode *, p_GNCompare> &CFG, const GraphNode &removeNode)
 {
     // fourth, free
-    CFG.erase(CFG.find(removeNode.NID));
+    auto entry = CFG.find(removeNode.NID);
+    if (entry != CFG.end())
+    {
+        CFG.erase(CFG.find(removeNode.NID));
+        delete *entry;
+    }
 }
 /*
 void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filename, bool print = false)
@@ -1237,6 +1246,23 @@ int main(int argc, char *argv[])
             auto nodeIDs = Dijkstras(nodes, node->NID, node->NID);
             if (!nodeIDs.empty())
             {
+                // check for cycles within the kernel, if it has more than 1 cycle this kernel will be thrown out
+                set<set<uint64_t>> cycles;
+                cycles.insert(set<uint64_t>(nodeIDs.begin(), nodeIDs.end()));
+                set<GraphNode *, p_GNCompare> kernelGraph;
+                for (auto &id : nodeIDs)
+                {
+                    kernelGraph.insert(*(nodes.find(id)));
+                }
+                for (const auto &node : kernelGraph)
+                {
+                    auto newCycle = Dijkstras(kernelGraph, node->NID, node->NID);
+                    cycles.insert(set<uint64_t>(newCycle.begin(), newCycle.end()));
+                }
+                if (cycles.size() > 1)
+                {
+                    continue;
+                }
                 auto newKernel = new Kernel();
                 for (const auto &id : nodeIDs)
                 {
@@ -1469,15 +1495,15 @@ int main(int argc, char *argv[])
     oStream.close();
 
     // free kernel set and nodes
+
+    /*for (const auto node : nodes)
+    {
+        RemoveNode(nodes, node);
+    }*/
     for (const auto &kern : kernels)
     {
         delete kern;
     }
-    for (const auto &node : nodes)
-    {
-        RemoveNode(nodes, node);
-    }
-
     return 0;
 }
 
