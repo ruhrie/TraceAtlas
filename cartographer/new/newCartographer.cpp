@@ -613,7 +613,6 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                 else
                 {
                     throw AtlasException("Missing midnode from the control flow graph!");
-                    badCondition = true;
                 }
             }
             if (badCondition)
@@ -635,7 +634,6 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                 else
                 {
                     throw AtlasException("Missing midnode from the control flow graph!");
-                    badCondition = true;
                 }
             }
             if (badCondition)
@@ -975,7 +973,6 @@ void FanInFanOutTransform(std::set<GraphNode *, p_GNCompare> &nodes)
                     if (nodes.find(nei.first) == nodes.end())
                     {
                         throw AtlasException("Found a neighbor that does not exist in the graph!");
-                        continue;
                     }
                     neighbor->predecessors.erase(sink->NID);
                     neighbor->predecessors.insert(source->NID);
@@ -994,99 +991,106 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
     vector<Kernel *> newPointers;
     for (const auto &kernel : newKernels)
     {
-        // gather entrance and exit nodes
-        auto kernelEntrances = kernel->getEntrances();
-        auto kernelExits = kernel->getExits();
-        if (kernelEntrances.empty() || kernelExits.empty())
+        try
         {
-            continue;
-        }
-        // steps
-        // first: select a node to become the VKNode (for now this is just the entrance at the front of the list)
-        // second: for each entrance, change the neighbor of each predecessor with the VKnode
-        // third: collect all edges that lead of out the kernel to the exits, and add all these edges to the VKnode neighbors
-        // fourth:
-
-        auto kernelNode = new VKNode(*kernelEntrances.begin(), kernel);
-        // remove each node in the kernel that are possibly in the entrance predecessors
-        // this removes all edges in the graph that can lead to the kernel other than the kernel entrance predecessors
-        for (const auto &node : kernel->nodes)
-        {
-            kernelNode->predecessors.erase(node.NID);
-        }
-
-        // for each entrance, fix its predecessors
-        //  - make new entry pointing to the VKnode (this will duplicate the value from the original entrance node)
-        //  - add this entrance to the predecessors of the VKnode
-        for (const auto &ent : kernelEntrances)
-        {
-            for (const auto &predID : ent.predecessors)
+            // gather entrance and exit nodes
+            auto kernelEntrances = kernel->getEntrances();
+            auto kernelExits = kernel->getExits();
+            if (kernelEntrances.empty() || kernelExits.empty())
             {
-                auto pred = nodes.find(predID);
-                if (pred != nodes.end()) // sanity check
+                continue;
+            }
+            // steps
+            // first: select a node to become the VKNode (for now this is just the entrance at the front of the list)
+            // second: for each entrance, change the neighbor of each predecessor with the VKnode
+            // third: collect all edges that lead of out the kernel to the exits, and add all these edges to the VKnode neighbors
+            // fourth:
+
+            auto kernelNode = new VKNode(*kernelEntrances.begin(), kernel);
+            // remove each node in the kernel that are possibly in the entrance predecessors
+            // this removes all edges in the graph that can lead to the kernel other than the kernel entrance predecessors
+            for (const auto &node : kernel->nodes)
+            {
+                kernelNode->predecessors.erase(node.NID);
+            }
+
+            // for each entrance, fix its predecessors
+            //  - make new entry pointing to the VKnode (this will duplicate the value from the original entrance node)
+            //  - add this entrance to the predecessors of the VKnode
+            for (const auto &ent : kernelEntrances)
+            {
+                for (const auto &predID : ent.predecessors)
                 {
-                    if (kernel->nodes.find(predID) == kernel->nodes.end()) // if this predecessor of the entrance is not a member of the kernel, proceed
+                    auto pred = nodes.find(predID);
+                    if (pred != nodes.end()) // sanity check
                     {
-                        (*pred)->neighbors[kernelNode->NID] = (*pred)->neighbors[ent.NID];
-                        (*pred)->neighbors.erase(ent.NID);
-                        kernelNode->predecessors.insert(predID);
+                        if (kernel->nodes.find(predID) == kernel->nodes.end()) // if this predecessor of the entrance is not a member of the kernel, proceed
+                        {
+                            (*pred)->neighbors[kernelNode->NID] = (*pred)->neighbors[ent.NID];
+                            (*pred)->neighbors.erase(ent.NID);
+                            kernelNode->predecessors.insert(predID);
+                        }
+                    }
+                    else
+                    {
+                        throw AtlasException("Node predecessor not found in the control flow graph!");
                     }
                 }
-                else
-                {
-                    throw AtlasException("Node predecessor not found in the control flow graph!");
-                }
             }
-        }
 
-        // for each exit, fix its predecessors
-        //  - remove the original kernel node from the predecessors
-        //  - add the VKnode to the predecessors
-        kernelNode->neighbors.clear();
-        for (const auto &exitNode : kernelExits)
-        {
-            // the only edges leading from the virtual kernel node should be edges out of the kernel
-            // we are given the nodes within the kernel that have neighbors outside the kernel, so here we figure out which exit edges exist
-            // we leave the probabilities the same as the original nodes (this means we will have outgoing edges whose probabilities do not sum to 1, because edges that go back in the kernel are omitted)
-            for (const auto &en : exitNode.neighbors)
+            // for each exit, fix its predecessors
+            //  - remove the original kernel node from the predecessors
+            //  - add the VKnode to the predecessors
+            kernelNode->neighbors.clear();
+            for (const auto &exitNode : kernelExits)
             {
-                // nodes within the kernel will not be in the neighbors of the virtual kernel
-                if (kernel->nodes.find(en.first) == kernel->nodes.end())
+                // the only edges leading from the virtual kernel node should be edges out of the kernel
+                // we are given the nodes within the kernel that have neighbors outside the kernel, so here we figure out which exit edges exist
+                // we leave the probabilities the same as the original nodes (this means we will have outgoing edges whose probabilities do not sum to 1, because edges that go back in the kernel are omitted)
+                for (const auto &en : exitNode.neighbors)
                 {
+                    // nodes within the kernel will not be in the neighbors of the virtual kernel
                     if (kernel->nodes.find(en.first) == kernel->nodes.end())
                     {
-                        auto exitNode = nodes.find(en.first);
-                        if (exitNode != nodes.end())
+                        if (kernel->nodes.find(en.first) == kernel->nodes.end())
                         {
-                            kernelNode->neighbors[en.first] = en.second;
-                        }
-                        else
-                        {
-                            throw AtlasException("Node predecessor not found in the control flow graph!");
+                            auto exitNode = nodes.find(en.first);
+                            if (exitNode != nodes.end())
+                            {
+                                kernelNode->neighbors[en.first] = en.second;
+                            }
+                            else
+                            {
+                                throw AtlasException("Node predecessor not found in the control flow graph!");
+                            }
                         }
                     }
                 }
+                // for each neighbor of the kernel exit, change its predecessor to the kernel entrance node
+                for (const auto &neighID : exitNode.neighbors)
+                {
+                    auto neighbor = *(nodes.find(neighID.first));
+                    neighbor->predecessors.erase(exitNode.NID);
+                    neighbor->predecessors.insert(kernelNode->NID);
+                }
             }
-            // for each neighbor of the kernel exit, change its predecessor to the kernel entrance node
-            for (const auto &neighID : exitNode.neighbors)
+            // remove all nodes within the kernel except the entrance node
+            auto toRemove = kernel->nodes;
+            toRemove.erase(*kernelEntrances.begin());
+            for (const auto &node : toRemove)
             {
-                auto neighbor = *(nodes.find(neighID.first));
-                neighbor->predecessors.erase(exitNode.NID);
-                neighbor->predecessors.insert(kernelNode->NID);
+                RemoveNode(nodes, node);
             }
+            // finally replace the old entrance node with the new VKNode
+            RemoveNode(nodes, *(kernelEntrances.begin()));
+            nodes.insert(kernelNode);
+            kernel->virtualNode = kernelNode;
+            newPointers.push_back(kernel);
         }
-        // remove all nodes within the kernel except the entrance node
-        auto toRemove = kernel->nodes;
-        toRemove.erase(*kernelEntrances.begin());
-        for (const auto &node : toRemove)
+        catch (AtlasException &e)
         {
-            RemoveNode(nodes, node);
+            spdlog::error(e.what());
         }
-        // finally replace the old entrance node with the new VKNode
-        RemoveNode(nodes, *(kernelEntrances.begin()));
-        nodes.insert(kernelNode);
-        kernel->virtualNode = kernelNode;
-        newPointers.push_back(kernel);
     }
     return newPointers;
 }
@@ -1180,9 +1184,17 @@ int main(int argc, char *argv[])
     // Set of nodes that constitute the entire graph
     set<GraphNode *, p_GNCompare> nodes;
 
-    ReadBIN(nodes, InputFilename);
-    if (nodes.empty())
+    try
     {
+        ReadBIN(nodes, InputFilename);
+        if (nodes.empty())
+        {
+            return EXIT_FAILURE;
+        }
+    }
+    catch (AtlasException &e)
+    {
+        spdlog::critical(e.what());
         return EXIT_FAILURE;
     }
 
@@ -1203,18 +1215,26 @@ int main(int argc, char *argv[])
     }
     while (true)
     {
-        // combine all trivial node merges
-        TrivialTransforms(nodes, IDToBlock);
-        // Next transform, find conditional branches and turn them into select statements
-        // In other words, find subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
-        BranchToSelectTransforms(nodes);
-        // Finally, transform the graph bottlenecks to avoid multiple entrance/multiple exit kernels
-        FanInFanOutTransform(nodes);
-        if (graphSize == nodes.size())
+        try
         {
-            break;
+            // combine all trivial node merges
+            TrivialTransforms(nodes, IDToBlock);
+            // Next transform, find conditional branches and turn them into select statements
+            // In other words, find subgraphs of nodes that have a common entrance and exit, flow from one end to the other, and combine them into a single node
+            BranchToSelectTransforms(nodes);
+            // Finally, transform the graph bottlenecks to avoid multiple entrance/multiple exit kernels
+            FanInFanOutTransform(nodes);
+            if (graphSize == nodes.size())
+            {
+                break;
+            }
+            graphSize = nodes.size();
         }
-        graphSize = nodes.size();
+        catch (AtlasException &e)
+        {
+            spdlog::critical(e.what());
+            return EXIT_FAILURE;
+        }
     }
 
 #ifdef DEBUG
@@ -1246,109 +1266,116 @@ int main(int argc, char *argv[])
             auto nodeIDs = Dijkstras(nodes, node->NID, node->NID);
             if (!nodeIDs.empty())
             {
-                // check for cycles within the kernel, if it has more than 1 cycle this kernel will be thrown out
-                set<set<uint64_t>> cycles;
-                cycles.insert(set<uint64_t>(nodeIDs.begin(), nodeIDs.end()));
-                set<GraphNode *, p_GNCompare> kernelGraph;
-                for (auto &id : nodeIDs)
+                try
                 {
-                    kernelGraph.insert(*(nodes.find(id)));
-                }
-                for (const auto &node : kernelGraph)
-                {
-                    auto newCycle = Dijkstras(kernelGraph, node->NID, node->NID);
-                    cycles.insert(set<uint64_t>(newCycle.begin(), newCycle.end()));
-                }
-                if (cycles.size() > 1)
-                {
-                    continue;
-                }
-                auto newKernel = new Kernel();
-                for (const auto &id : nodeIDs)
-                {
-                    newKernel->nodes.insert(**(nodes.find(id)));
-                }
-                // check for overlap with kernels from this iteration
-                bool overlap = false;
-                // set of kernels that are being kicked out of the newKernels set
-                set<Kernel *, KCompare> toRemove;
-                for (const auto &kern : newKernels)
-                {
-                    auto shared = kern->Compare(*newKernel);
-                    if (shared.size() == kern->getBlocks().size())
+                    // check for cycles within the kernel, if it has more than 1 cycle this kernel will be thrown out
+                    set<set<uint64_t>> cycles;
+                    cycles.insert(set<uint64_t>(nodeIDs.begin(), nodeIDs.end()));
+                    set<GraphNode *, p_GNCompare> kernelGraph;
+                    for (auto &id : nodeIDs)
                     {
-                        // if perfect overlap, this kernel has already been found
-                        overlap = true;
+                        kernelGraph.insert(*(nodes.find(id)));
                     }
-                    if (!shared.empty())
+                    for (const auto &node : kernelGraph)
                     {
-                        // we have an overlap with another kernel, there are two cases that we want to look at
-                        // 1.) shared function
-                        // 2.) kernel hierarchy
-
-                        // First, check for shared function
-                        // two overlapping functions need to satisfy the following condition in order for a shared function to be identified
-                        // 1.) All shared blocks are children of functions that are called within each kernel
-                        // first condition, all shared blocks are children of called functions within the kernel
-                        // set of all functions called in each of the two kernels
-                        set<Function *> calledFunctions;
-                        for (const auto &caller : blockCallers)
+                        auto newCycle = Dijkstras(kernelGraph, node->NID, node->NID);
+                        cycles.insert(set<uint64_t>(newCycle.begin(), newCycle.end()));
+                    }
+                    if (cycles.size() > 1)
+                    {
+                        continue;
+                    }
+                    auto newKernel = new Kernel();
+                    for (const auto &id : nodeIDs)
+                    {
+                        newKernel->nodes.insert(**(nodes.find(id)));
+                    }
+                    // check for overlap with kernels from this iteration
+                    bool overlap = false;
+                    // set of kernels that are being kicked out of the newKernels set
+                    set<Kernel *, KCompare> toRemove;
+                    for (const auto &kern : newKernels)
+                    {
+                        auto shared = kern->Compare(*newKernel);
+                        if (shared.size() == kern->getBlocks().size())
                         {
-                            // only check newKernel because it is the kernel in question
-                            if (newKernel->getBlocks().find(caller.first) != newKernel->getBlocks().end())
-                            {
-                                calledFunctions.insert(IDToBlock[caller.second]->getParent());
-                            }
+                            // if perfect overlap, this kernel has already been found
+                            overlap = true;
                         }
-                        for (const auto &block : shared)
+                        if (!shared.empty())
                         {
-                            if (calledFunctions.find(IDToBlock[block]->getParent()) == calledFunctions.end())
+                            // we have an overlap with another kernel, there are two cases that we want to look at
+                            // 1.) shared function
+                            // 2.) kernel hierarchy
+
+                            // First, check for shared function
+                            // two overlapping functions need to satisfy the following condition in order for a shared function to be identified
+                            // 1.) All shared blocks are children of functions that are called within each kernel
+                            // first condition, all shared blocks are children of called functions within the kernel
+                            // set of all functions called in each of the two kernels
+                            set<Function *> calledFunctions;
+                            for (const auto &caller : blockCallers)
                             {
-                                // this shared block had a parent that was not part of the called functions within the kernel, so mark these two kernels as overlapping
+                                // only check newKernel because it is the kernel in question
+                                if (newKernel->getBlocks().find(caller.first) != newKernel->getBlocks().end())
+                                {
+                                    calledFunctions.insert(IDToBlock[caller.second]->getParent());
+                                }
+                            }
+                            for (const auto &block : shared)
+                            {
+                                if (calledFunctions.find(IDToBlock[block]->getParent()) == calledFunctions.end())
+                                {
+                                    // this shared block had a parent that was not part of the called functions within the kernel, so mark these two kernels as overlapping
+                                    overlap = true;
+                                }
+                            }
+
+                            // Second, compare probability of exit. We will keep the loop that is less probable to exit
+                            if (newKernel->ExitProbability() < kern->ExitProbability())
+                            {
+                                // we keep the new kernel, add the compare kernel to the remove list
+                                toRemove.insert(kern);
+                            }
+                            else
+                            {
                                 overlap = true;
                             }
                         }
-
-                        // Second, compare probability of exit. We will keep the loop that is less probable to exit
-                        if (newKernel->ExitProbability() < kern->ExitProbability())
-                        {
-                            // we keep the new kernel, add the compare kernel to the remove list
-                            toRemove.insert(kern);
-                        }
-                        else
-                        {
-                            overlap = true;
-                        }
                     }
-                }
-                if (!overlap)
-                {
-                    for (const auto &node : newKernel->nodes)
+                    if (!overlap)
                     {
-                        // we have to get exactly the node from the graph in order to support polymorphism
-                        auto potentialVKN = nodes.find(node.NID);
-                        if (potentialVKN != nodes.end())
+                        for (const auto &node : newKernel->nodes)
                         {
-                            if (auto VKN = dynamic_cast<VKNode *>(*potentialVKN))
+                            // we have to get exactly the node from the graph in order to support polymorphism
+                            auto potentialVKN = nodes.find(node.NID);
+                            if (potentialVKN != nodes.end())
                             {
-                                newKernel->childKernels.insert(VKN->kernel->KID);
+                                if (auto VKN = dynamic_cast<VKNode *>(*potentialVKN))
+                                {
+                                    newKernel->childKernels.insert(VKN->kernel->KID);
+                                }
+                            }
+                            else
+                            {
+                                throw AtlasException("Could not find kernel node in the graph!");
                             }
                         }
-                        else
-                        {
-                            throw AtlasException("Could not find kernel node in the graph!");
-                        }
+                        newKernels.insert(newKernel);
                     }
-                    newKernels.insert(newKernel);
+                    else
+                    {
+                        delete newKernel;
+                    }
+                    for (auto remove : toRemove)
+                    {
+                        newKernels.erase(remove);
+                        delete remove;
+                    }
                 }
-                else
+                catch (AtlasException &e)
                 {
-                    delete newKernel;
-                }
-                for (auto remove : toRemove)
-                {
-                    newKernels.erase(remove);
-                    delete remove;
+                    spdlog::error(e.what());
                 }
             }
         }
