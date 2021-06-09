@@ -16,7 +16,7 @@ GraphNode::GraphNode(uint64_t ID)
 {
     NID = ID;
     // keep next ID updated
-    nextNID = NID;
+    nextNID = NID > nextNID ? NID : nextNID;
     blocks = std::set<int64_t>();
     neighbors = std::map<uint64_t, std::pair<uint64_t, double>>();
     predecessors = std::set<uint64_t>();
