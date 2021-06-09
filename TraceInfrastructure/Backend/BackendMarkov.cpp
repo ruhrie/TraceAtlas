@@ -82,6 +82,7 @@ public:
 
 // Indicates which block was the caller of the current context
 long openIndicator = -1;
+uint64_t totalBlocks;
 // The current basic block ID of the program (the source node of the next edge to be updated in MarkovIncrement)
 uint64_t b;
 // Flag indicating whether the program is actively being profiled
@@ -96,7 +97,6 @@ __TA_kvTuple nextEdge;
 
 extern "C"
 {
-    extern uint64_t MarkovBlockCount;
     void MarkovInit(uint64_t blockCount, uint64_t ID)
     {
         b = ID;
@@ -104,12 +104,12 @@ extern "C"
         hashTable->size = (uint32_t)(ceil(log((double)blockCount) / log(2.0)));
         hashTable->getFullSize = getFullSize;
         hashTable->array = (__TA_arrayElem *)malloc(hashTable->getFullSize(hashTable) * sizeof(__TA_arrayElem));
-        MarkovBlockCount = blockCount;
+        totalBlocks = blockCount;
         markovActive = true;
     }
     void MarkovDestroy()
     {
-        __TA_WriteHashTable(hashTable, (uint32_t)MarkovBlockCount);
+        __TA_WriteHashTable(hashTable, (uint32_t)totalBlocks);
         free(hashTable->array);
         free(hashTable);
         // just write an output BlockInfo file for now to get past file checked in automation tool
