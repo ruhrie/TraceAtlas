@@ -8,7 +8,7 @@
 #define TUPLE_SIZE 15
 
 // defines how many 4 byte integers we need to hash, as well as other things
-#define MARKOV_ORDER 2
+#define MARKOV_ORDER 1
 
 // output binary file name
 #define MARKOV_FILE "markov.bin"
@@ -28,13 +28,35 @@ extern "C"
         uint64_t frequency;
     } __TA_edgeTuple;
 
+    typedef struct labelTuple
+    {
+        uint32_t block;
+        // pad the structure to 6 word
+        uint32_t pad0;
+        uint64_t frequency;
+        char* label;
+    } __TA_labelTuple;
+
+    typedef struct callerTuple
+    {
+        uint32_t caller;
+        uint32_t callee;
+    } __TA_callerTuple;
+
+    typedef union element
+    {
+        __TA_edgeTuple edge;
+        __TA_labelTuple label;
+        __TA_callerTuple caller;
+    } __TA_element;
+
     typedef struct arrayElem
     {
         // number of neighbors an element can have
         __TA_edgeTuple tuple[TUPLE_SIZE];
         // number of active entries in the element
         uint32_t popCount;
-        // place holders to align struct to 256 bytes
+        // place holders to align struct to TUPLE_SIZE*4word+2word
         uint32_t hold0;
         uint32_t hold1;
         uint32_t hold2;
@@ -70,13 +92,13 @@ extern "C"
     /// @brief Long index hashing function
     ///
     /// Inspired by the python hashing function, it uses all node IDs involved in an edge to compute the long index
-    uint32_t __TA_hash(uint32_t x[MARKOV_ORDER]);
+    uint32_t __TA_hash(uint32_t x[MARKOV_ORDER+1]);
 
     /// @brief Short index hashing function
     ///
     /// Uses __TA_hash() and the size of the hash table to compute the short index for this entry.
     /// x is an array of all node IDs involved in an edge
-    uint32_t __TA_hash_source(uint32_t x[MARKOV_ORDER], uint32_t size);
+    uint32_t __TA_hash_source(uint32_t x[MARKOV_ORDER+1], uint32_t size);
 
     /// @brief Find a specified entry within a hash table element
     ///

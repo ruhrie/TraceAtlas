@@ -19,11 +19,11 @@ extern "C"
     }
 
     // used for hashing an integer
-    uint32_t __TA_hash(uint32_t x[MARKOV_ORDER])
+    uint32_t __TA_hash(uint32_t x[MARKOV_ORDER+1])
     {
         uint32_t m = HASH_MULTIPLIER;
         uint32_t y = HASH_INITIAL;
-        for (int i = 0; i < MARKOV_ORDER; i++)
+        for (int i = 0; i < MARKOV_ORDER+1; i++)
         {
             y += (x[i] >> 16) ^ x[i] * m + HASH_OFFSET;
             m += HASH_MULTIPLIER_OFFSET + MARKOV_ORDER + MARKOV_ORDER;
@@ -62,7 +62,7 @@ extern "C"
 
     __TA_arrayElem *__TA_arrayLookup(__TA_HashTable *a, __TA_edgeTuple *index)
     {
-        uint32_t x[MARKOV_ORDER] = {index->source, index->sink};
+        uint32_t x[MARKOV_ORDER+1] = {index->source, index->sink};
 #if __TA_DEBUG
         __TA_arrayElem *index = &a->array[__TA_hash_source(x, a->size)];
         // check to see if there was a clash in the hashing function
