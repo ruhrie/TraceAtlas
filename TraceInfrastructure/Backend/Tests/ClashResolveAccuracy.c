@@ -14,7 +14,7 @@
 // Since all newly allocated entries are initialized to 0, there is a corner case here where an entry with source 0 and sink 0 has frequency 0 and exists in the hash table everywhere an entry hasn't been touched. When the clashResolve writes all the old stuff into the new stuff, it comes across these entries and writes the wrong value to the 0,0 entry (if that entry has a non-zero frequency)
 void checkAccuracy(__TA_HashTable *a, int i, int l)
 {
-    __TA_kvTuple entry;
+    __TA_edgeTuple entry;
     // check the first for loop which should already be in there
     for (int j = 0; j <= i; j++)
     {
@@ -31,7 +31,7 @@ void checkAccuracy(__TA_HashTable *a, int i, int l)
                 }
             }
             entry.sink = j + k;
-            __TA_kvTuple *read = __TA_HashTable_read(a, &entry);
+            __TA_edgeTuple *read = __TA_HashTable_read(a, &entry);
             if (!read)
             {
                 printf("Failed to recover an entry of nodes (%d,%d) that should exist!\n", entry.source, entry.sink);
@@ -46,13 +46,13 @@ void checkAccuracy(__TA_HashTable *a, int i, int l)
 
 void checkAccuracy2(__TA_HashTable *a, int i)
 {
-    __TA_kvTuple entry;
+    __TA_edgeTuple entry;
     entry.source = HASHTABLESIZE - 1;
     entry.frequency = 1; // because each neighbor is pushed with an increment
     for (int k = 0; k < i; k++)
     {
         entry.sink = k;
-        __TA_kvTuple *read = __TA_HashTable_read(a, &entry);
+        __TA_edgeTuple *read = __TA_HashTable_read(a, &entry);
         if (!read)
         {
             printf("Failed to recover an entry of nodes (%d,%d) that should exist!\n", entry.source, entry.sink);
@@ -72,7 +72,7 @@ int main()
     hashTable->size = (uint32_t)(ceil(log((double)HASHTABLESIZE) / log(2.0)));
     hashTable->getFullSize = __TA_getFullSize;
     hashTable->array = (__TA_arrayElem *)malloc((hashTable->getFullSize(hashTable)) * sizeof(__TA_arrayElem));
-    __TA_kvTuple entry0;
+    __TA_edgeTuple entry0;
 
     // this pushes AVG_NEIGHBORS * HASHTABLESIZE entries into the table
     for (int i = 0; i < HASHTABLESIZE - 1; i++)

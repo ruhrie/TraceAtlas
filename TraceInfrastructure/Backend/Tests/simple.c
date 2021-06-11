@@ -20,13 +20,13 @@ int main()
     hashTable->size = (uint32_t)(ceil(log((double)HASHTABLESIZE) / log(2.0)));
     hashTable->getFullSize = __TA_getFullSize;
     hashTable->array = (__TA_arrayElem *)malloc((hashTable->getFullSize(hashTable)) * sizeof(__TA_arrayElem));
-    __TA_kvTuple entry0;
+    __TA_edgeTuple entry0;
 
     entry0.source = 0;
     entry0.sink = 1;
     entry0.frequency = 0;
     __TA_HashTable_increment(hashTable, &entry0);
-    __TA_kvTuple *read = __TA_HashTable_read(hashTable, &entry0);
+    __TA_edgeTuple *read = __TA_HashTable_read(hashTable, &entry0);
     printf("The entry for source node %d has sink node %d and frequency count %lu.\n", read->source, read->sink, read->frequency);
 
     entry0.frequency = 100;

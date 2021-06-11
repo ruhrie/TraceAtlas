@@ -48,7 +48,7 @@ extern "C"
         return shortHash;
     }
 
-    __TA_kvTuple *__TA_tupleLookup(__TA_arrayElem *entry, __TA_kvTuple *index)
+    __TA_edgeTuple *__TA_tupleLookup(__TA_arrayElem *entry, __TA_edgeTuple *index)
     {
         for (uint32_t i = 0; i < entry->popCount; i++)
         {
@@ -60,7 +60,7 @@ extern "C"
         return NULL;
     }
 
-    __TA_arrayElem *__TA_arrayLookup(__TA_HashTable *a, __TA_kvTuple *index)
+    __TA_arrayElem *__TA_arrayLookup(__TA_HashTable *a, __TA_edgeTuple *index)
     {
         uint32_t x[MARKOV_ORDER] = {index->source, index->sink};
 #if __TA_DEBUG
@@ -80,16 +80,16 @@ extern "C"
 #endif
     }
 
-    __TA_kvTuple *__TA_HashTable_read(__TA_HashTable *a, __TA_kvTuple *b)
+    __TA_edgeTuple *__TA_HashTable_read(__TA_HashTable *a, __TA_edgeTuple *b)
     {
         __TA_arrayElem *entry = __TA_arrayLookup(a, b);
         return __TA_tupleLookup(entry, b);
     }
 
-    uint8_t __TA_HashTable_write(__TA_HashTable *a, __TA_kvTuple *b)
+    uint8_t __TA_HashTable_write(__TA_HashTable *a, __TA_edgeTuple *b)
     {
         __TA_arrayElem *index = __TA_arrayLookup(a, b);
-        __TA_kvTuple *entry = __TA_tupleLookup(index, b);
+        __TA_edgeTuple *entry = __TA_tupleLookup(index, b);
         if (entry)
         {
             entry->frequency = b->frequency;
@@ -113,10 +113,10 @@ extern "C"
         return 0;
     }
 
-    uint8_t __TA_HashTable_increment(__TA_HashTable *a, __TA_kvTuple *b)
+    uint8_t __TA_HashTable_increment(__TA_HashTable *a, __TA_edgeTuple *b)
     {
         __TA_arrayElem *index = __TA_arrayLookup(a, b);
-        __TA_kvTuple *entry = __TA_tupleLookup(index, b);
+        __TA_edgeTuple *entry = __TA_tupleLookup(index, b);
         if (entry)
         {
             (entry->frequency)++;
@@ -202,7 +202,7 @@ extern "C"
         {
             for (uint32_t j = 0; j < a->array[i].popCount; j++)
             {
-                fwrite(&a->array[i].tuple[j], sizeof(__TA_kvTuple), 1, f);
+                fwrite(&a->array[i].tuple[j], sizeof(__TA_edgeTuple), 1, f);
             }
         }
         fclose(f);
@@ -231,10 +231,10 @@ extern "C"
         fread(&edges, sizeof(uint32_t), 1, f);
 
         // read all the edges
-        __TA_kvTuple newEntry;
+        __TA_edgeTuple newEntry;
         for (uint32_t i = 0; i < edges; i++)
         {
-            fread(&newEntry, sizeof(__TA_kvTuple), 1, f);
+            fread(&newEntry, sizeof(__TA_edgeTuple), 1, f);
             __TA_HashTable_write(a, &newEntry);
         }
         fclose(f);

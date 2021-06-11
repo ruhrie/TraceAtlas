@@ -18,7 +18,7 @@ int main()
     hashTable->size = (uint32_t)(ceil(log((double)HASHTABLESIZE) / log(2.0)));
     hashTable->getFullSize = __TA_getFullSize;
     hashTable->array = (__TA_arrayElem *)malloc((hashTable->getFullSize(hashTable)) * sizeof(__TA_arrayElem));
-    __TA_kvTuple entry0;
+    __TA_edgeTuple entry0;
 
     // this pushes AVG_NEIGHBORS * HASHTABLESIZE entries into the table
     for (int i = 0; i < HASHTABLESIZE - 1; i++)
