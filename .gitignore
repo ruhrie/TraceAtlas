@@ -7,3 +7,7 @@ testing/
 CMakeSettings.json
 out/
 kar/passwd.json
+*.clashResolve
+*.indexClash
+*.IO
+*.simple

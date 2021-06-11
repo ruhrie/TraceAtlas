@@ -18,6 +18,8 @@ clashResolve: $(EXECUTABLE).clashResolve
 
 io: $(EXECUTABLE).IO
 
+all: simp indexClash clashResolve io
+
 $(EXECUTABLE).simple: $(SOURCE).c
 	$(CC) $(DEBUG_FLAGS) $(INCLUDE) $(LIBRARIES) simple.c $< -o $@
 

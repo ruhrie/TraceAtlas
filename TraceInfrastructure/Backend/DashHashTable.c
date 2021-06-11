@@ -13,7 +13,7 @@ extern "C"
 {
 #endif
     // used for expanding the size exponent of a HashTable struct
-    uint32_t getFullSize(__TA_HashTable *self)
+    uint32_t __TA_getFullSize(__TA_HashTable *self)
     {
         return 0x1 << self->size;
     }

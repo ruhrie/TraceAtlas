@@ -87,7 +87,7 @@ int main()
     __TA_HashTable *hashTable = (__TA_HashTable *)malloc(sizeof(__TA_HashTable));
     // convert array size to power of 2, round to the ceiling
     hashTable->size = (uint32_t)(ceil(log((double)HASHTABLESIZE) / log(2.0)));
-    hashTable->getFullSize = getFullSize;
+    hashTable->getFullSize = __TA_getFullSize;
     hashTable->array = (__TA_arrayElem *)malloc((hashTable->getFullSize(hashTable)) * sizeof(__TA_arrayElem));
     __TA_kvTuple entry0;
 
@@ -123,7 +123,7 @@ int main()
 
     // now make a new hash table and read the output file in
     __TA_HashTable *hashTable2 = (__TA_HashTable *)malloc(sizeof(__TA_HashTable));
-    hashTable2->getFullSize = getFullSize;
+    hashTable2->getFullSize = __TA_getFullSize;
     __TA_ReadHashTable(hashTable2, MARKOV_FILE);
     CheckFileAccuracy(hashTable, hashTable2);
 

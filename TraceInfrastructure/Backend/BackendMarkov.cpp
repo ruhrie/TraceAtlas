@@ -102,7 +102,7 @@ extern "C"
         b = ID;
         hashTable = (__TA_HashTable *)malloc(sizeof(__TA_HashTable));
         hashTable->size = (uint32_t)(ceil(log((double)blockCount) / log(2.0)));
-        hashTable->getFullSize = getFullSize;
+        hashTable->getFullSize = __TA_getFullSize;
         hashTable->array = (__TA_arrayElem *)malloc(hashTable->getFullSize(hashTable) * sizeof(__TA_arrayElem));
         totalBlocks = blockCount;
         markovActive = true;

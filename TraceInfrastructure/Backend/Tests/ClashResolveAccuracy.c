@@ -70,7 +70,7 @@ int main()
     __TA_HashTable *hashTable = (__TA_HashTable *)malloc(sizeof(__TA_HashTable));
     // convert array size to power of 2, round to the ceiling
     hashTable->size = (uint32_t)(ceil(log((double)HASHTABLESIZE) / log(2.0)));
-    hashTable->getFullSize = getFullSize;
+    hashTable->getFullSize = __TA_getFullSize;
     hashTable->array = (__TA_arrayElem *)malloc((hashTable->getFullSize(hashTable)) * sizeof(__TA_arrayElem));
     __TA_kvTuple entry0;
 

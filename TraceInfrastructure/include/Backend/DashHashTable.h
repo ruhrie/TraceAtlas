@@ -54,7 +54,7 @@ extern "C"
     ///
     /// By default __TA_HashTable.size is the power base 2 of the size of the hash table
     /// This function will convert this power to an integer that indicates the base-10 size of the __TA_HashTable
-    uint32_t getFullSize(__TA_HashTable *self);
+    uint32_t __TA_getFullSize(__TA_HashTable *self);
 
     // needs an initializer function, and a function to return the next value and increment this thing
     // Motivation
