@@ -161,7 +161,7 @@ extern "C"
     }
 
     // thus function is only designed to use edgeTuple objects
-    void __TA_WriteHashTable(__TA_HashTable *a, uint32_t blockCount)
+    void __TA_WriteEdgeHashTable(__TA_HashTable *a, uint32_t blockCount)
     {
         char *p = getenv("MARKOV_FILE");
         FILE *f;
@@ -214,7 +214,7 @@ extern "C"
         printf("\nHASHTABLEMAXPOPCOUNT: %d\n", maxPopCount);
     }
 
-    void __TA_ReadHashTable(__TA_HashTable *a, char *path)
+    void __TA_ReadEdgeHashTable(__TA_HashTable *a, char *path)
     {
         FILE *f = fopen(path, "rb");
         // the first 4 bytes is a uint32_t of how many nodes there are in the graph

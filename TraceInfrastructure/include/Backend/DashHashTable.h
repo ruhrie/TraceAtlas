@@ -139,11 +139,11 @@ extern "C"
     /// The output file format is binary
     /// The default name for this file is set by the MARKOV_FILE macro
     /// For a custom name, set the MARKOV_FILE environment variable
-    void __TA_WriteHashTable(__TA_HashTable *a, uint32_t blockCount);
+    void __TA_WriteEdgeHashTable(__TA_HashTable *a, uint32_t blockCount);
 
     /// Read the hash table from the file in path to the hash table a
     /// The file in path must be written in the same format and semantic as described in __TA_WriteHashTable()
-    void __TA_ReadHashTable(__TA_HashTable *a, char *path);
+    void __TA_ReadEdgeHashTable(__TA_HashTable *a, char *path);
 
 #ifdef __cplusplus
 }

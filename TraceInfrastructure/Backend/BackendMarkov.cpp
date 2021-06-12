@@ -89,32 +89,48 @@ uint64_t b[MARKOV_ORDER];
 uint8_t increment;
 // Flag indicating whether the program is actively being profiled
 bool markovActive = false;
-// Hash table of the profiler
-__TA_HashTable *hashTable;
+// Hash table for the edges of the control flow graph
+__TA_HashTable *edgeHashTable;
+// Hash table for the labels of each basic block
+__TA_HashTable* labelHashTable;
+// Hash table for the caller-callee hash table
+__TA_HashTable* callerHashTable;
 // Global structure that is used to increment the last seen edge in the hash table
 __TA_element nextEdge;
-//dict TraceAtlasMarkovMap;
-//labelMap TraceAtlasLabelMap;
-//vector<char *> labelList;
 
 extern "C"
 {
     void MarkovInit(uint64_t blockCount, uint64_t ID)
     {
+        // edge circular buffer initialization
+        // this initialization stage lasts until MARKOV_ORDER+1 blocks have been seen
         increment = 0;
         b[0] = ID;
-        hashTable = (__TA_HashTable *)malloc(sizeof(__TA_HashTable));
-        hashTable->size = (uint32_t)(ceil(log((double)blockCount) / log(2.0)));
-        hashTable->getFullSize = __TA_getFullSize;
-        hashTable->array = (__TA_arrayElem *)malloc(hashTable->getFullSize(hashTable) * sizeof(__TA_arrayElem));
+
+        // edge hash table
+        edgeHashTable = (__TA_HashTable *)malloc(sizeof(__TA_HashTable));
+        edgeHashTable->size = (uint32_t)(ceil(log((double)blockCount) / log(2.0)));
+        edgeHashTable->getFullSize = __TA_getFullSize;
+        edgeHashTable->array = (__TA_arrayElem *)malloc(edgeHashTable->getFullSize(edgeHashTable) * sizeof(__TA_arrayElem));
+        // label hash table
+        labelHashTable = (__TA_HashTable *)malloc(sizeof(__TA_HashTable));
+        labelHashTable->size = (uint32_t)(ceil(log((double)blockCount) / log(2.0)));
+        labelHashTable->getFullSize = __TA_getFullSize;
+        labelHashTable->array = (__TA_arrayElem *)malloc(labelHashTable->getFullSize(labelHashTable) * sizeof(__TA_arrayElem));
+        // caller hash table
+        callerHashTable = (__TA_HashTable *)malloc(sizeof(__TA_HashTable));
+        callerHashTable->size = (uint32_t)(ceil(log((double)blockCount) / log(2.0)));
+        callerHashTable->getFullSize = __TA_getFullSize;
+        callerHashTable->array = (__TA_arrayElem *)malloc(callerHashTable->getFullSize(callerHashTable) * sizeof(__TA_arrayElem));
+
         totalBlocks = blockCount;
         markovActive = true;
     }
     void MarkovDestroy()
     {
-        __TA_WriteHashTable(hashTable, (uint32_t)totalBlocks);
-        free(hashTable->array);
-        free(hashTable);
+        __TA_WriteEdgeHashTable(edgeHashTable, (uint32_t)totalBlocks);
+        free(edgeHashTable->array);
+        free(edgeHashTable);
         // just write an output BlockInfo file for now to get past file checked in automation tool
         char *blockFile = getenv("BLOCK_FILE");
         FILE *f;
@@ -133,18 +149,25 @@ extern "C"
     {
         if (markovActive)
         {
+            // edge hash table
             for (uint8_t i = 0; i < MARKOV_ORDER; i++)
             {
                 // nextEdge.blocks must always be in chronological order. Thus we start from the beginning with that index (which is what the offset calculation is for)
                 nextEdge.edge.blocks[i] = (uint32_t)b[(increment + i) % MARKOV_ORDER];
             }
             nextEdge.edge.blocks[MARKOV_ORDER] = (uint32_t)a;
-            while (__TA_HashTable_increment(hashTable, &nextEdge))
+            while (__TA_HashTable_increment(edgeHashTable, &nextEdge))
             {
-                __TA_resolveClash(hashTable);
+                __TA_resolveClash(edgeHashTable);
             }
             b[increment % MARKOV_ORDER] = a;
             increment++;
+            
+            // label hash table
+            if( !labelStack.empty() )
+            {
+                
+            }
             /*if (!labelList.empty())
             {
                 string labelName(labelList.back());
@@ -159,10 +182,13 @@ extern "C"
                 }
                 TraceAtlasLabelMap.blockLabels[to_string(a)][labelName]++;
             }
+
+            // caller hash table
             // mark our block caller, if necessary
             if (openIndicator != -1)
             {
-                blockCallers[to_string(openIndicator)].insert(a);
+
+                //blockCallers[to_string(openIndicator)].insert(a);
             }
             openIndicator = (long)a;*/
         }
