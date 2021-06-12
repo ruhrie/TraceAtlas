@@ -7,6 +7,7 @@
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <set>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -164,7 +165,9 @@ extern "C"
             for (uint32_t j = 0; j < labelHashTable->array[i].popCount; j++)
             {
                 auto entry = labelHashTable->array[i].tuple[j];
-                labelMap[to_string(entry.label.blocks[0])]["Labels"] = map<string, uint64_t>();
+                char label[100];
+                sprintf(label, "%d", entry.label.blocks[0]);
+                labelMap[string(label)]["Labels"] = map<string, uint64_t>();
             }
         }
         for (uint32_t i = 0; i < callerHashTable->getFullSize(callerHashTable); i++)
@@ -172,7 +175,9 @@ extern "C"
             for (uint32_t j = 0; j < callerHashTable->array[i].popCount; j++)
             {
                 auto entry = callerHashTable->array[i].tuple[j];
-                labelMap[to_string(entry.label.blocks[0])]["BlockCallers"] = vector<string>();
+                char label[100];
+                sprintf(label, "%d", entry.label.blocks[0]);
+                labelMap[string(label)]["BlockCallers"] = vector<string>();
             }
         }
         for (uint32_t i = 0; i < labelHashTable->getFullSize(labelHashTable); i++)
@@ -180,7 +185,9 @@ extern "C"
             for (uint32_t j = 0; j < labelHashTable->array[i].popCount; j++)
             {
                 auto entry = labelHashTable->array[i].tuple[j];
-                labelMap[to_string(entry.label.blocks[0])]["Labels"][string(entry.label.label)] = entry.label.frequency;
+                char label[100];
+                sprintf(label, "%d", entry.label.blocks[0]);
+                labelMap[string(label)]["Labels"][string(entry.label.label)] = entry.label.frequency;
             }
         }
         for (uint32_t i = 0; i < callerHashTable->getFullSize(callerHashTable); i++)
@@ -188,7 +195,9 @@ extern "C"
             for (uint32_t j = 0; j < callerHashTable->array[i].popCount; j++)
             {
                 auto entry = callerHashTable->array[i].tuple[j];
-                labelMap[to_string(entry.label.blocks[0])]["BlockCallers"].push_back(entry.callee.blocks[1]);
+                char label[100];
+                sprintf(label, "%d", entry.label.blocks[0]);
+                labelMap[string(label)]["BlockCallers"].push_back(entry.callee.blocks[1]);
             }
         }
         ofstream file;
