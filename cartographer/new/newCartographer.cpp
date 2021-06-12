@@ -95,140 +95,31 @@ void RemoveNode(std::set<GraphNode *, p_GNCompare> &CFG, const GraphNode &remove
         delete *entry;
     }
 }
-/*
-void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filename, bool print = false)
-{
-    std::fstream inputFile;
-    inputFile.open(filename, std::ios::in | std::ios::binary);
-    if (!inputFile.good())
-    {
-        spdlog::critical("Could not open input file " + filename + " for reading.");
-        return;
-    }
-    while (inputFile.peek() != EOF)
-    {
-        // New block description: BBID,#ofNeighbors (16 bytes per neighbor)
-        uint64_t key;
-        inputFile.readsome((char *)&key, sizeof(uint64_t));
-        GraphNode currentNode;
-        if (nodes.find(key) == nodes.end())
-        {
-            currentNode = GraphNode(key);
-            // when reading the trace file, NID and blockID are 1to1
-            currentNode.blocks.insert((int64_t)key);
-        }
-        else
-        {
-            spdlog::error("Found a BBID that already existed in the graph!");
-        }
-        // the instance count of the edge
-        uint64_t count;
-        // for summing the total count of the neighbors
-        uint64_t sum = 0;
-        inputFile.readsome((char *)&count, sizeof(uint64_t));
-        for (uint64_t i = 0; i < count; i++)
-        {
-            uint64_t k2;
-            inputFile.readsome((char *)&k2, sizeof(uint64_t));
-            uint64_t val;
-            inputFile.readsome((char *)&val, sizeof(uint64_t));
-            if (val > 0)
-            {
-                sum += val;
-                currentNode.neighbors[k2] = std::pair(val, 0.0);
-            }
-        }
-        for (auto &key : currentNode.neighbors)
-        {
-            key.second.second = (double)key.second.first / (double)sum;
-        }
-        AddNode(nodes, currentNode);
-    }
-    inputFile.close();
-
-    // now fill in all the predecessor nodes
-    for (auto &node : nodes)
-    {
-        for (const auto &neighbor : node->neighbors)
-        {
-            auto successorNode = nodes.find(neighbor.first);
-            if (successorNode != nodes.end())
-            {
-                (*successorNode)->predecessors.insert(node->NID);
-            }
-            // the trace doesn't include the terminating block of the program (because it has no edges leading from it)
-            // But this creates a problem when defining kernel exits, so look for the node who has a neighbor that is not in the set already and add that neighbor (with correct predecessor)
-            else
-            {
-                // we likely found the terminating block, so add the block and assign the current node to be its predecessor
-                auto programTerminator = GraphNode(neighbor.first);
-                programTerminator.blocks.insert((int64_t)programTerminator.NID);
-                programTerminator.predecessors.insert(node->NID);
-                AddNode(nodes, programTerminator);
-            }
-        }
-    }
-
-    if (print)
-    {
-        for (const auto &node : nodes)
-        {
-            spdlog::info("Examining node " + std::to_string(node->NID));
-            std::string preds;
-            for (auto pred : node->predecessors)
-            {
-                preds += std::to_string(pred);
-                if (pred != *prev(node->predecessors.end()))
-                {
-                    preds += ",";
-                }
-            }
-            spdlog::info("Predecessors: " + preds);
-            for (const auto &neighbor : node->neighbors)
-            {
-                spdlog::info("Neighbor " + std::to_string(neighbor.first) + " has instance count " + std::to_string(neighbor.second.first) + " and probability " + std::to_string(neighbor.second.second));
-            }
-            std::cout << std::endl;
-        }
-    }
-}*/
 
 void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filename, bool print = false)
 {
 
     FILE *f = fopen(filename.data(), "rb");
-    // the first 4 bytes is a uint32_t of how many nodes there are in the graph
-    uint32_t nodeCount;
-    fread(&nodeCount, sizeof(uint32_t), 1, f);
-    /*for (uint32_t i = 0; i < nodeCount; i++)
-    {
-        GraphNode newNode((uint64_t)i);
-        newNode.blocks.insert((int64_t)i);
-        AddNode(nodes, newNode);
-    }*/
-
-    // the second 4 bytes is a uint32_t of how many edges there are in the file
+    // first word is a uint32_t of the markov order of the graph
+    uint32_t markovOrder;
+    fread(&markovOrder, sizeof(uint32_t), 1, f);
+    // second word is a uint32_t of how many edges there are in the file
     uint32_t edges;
     fread(&edges, sizeof(uint32_t), 1, f);
 
-    /*
     // read all the edges
-    __TA_kvTuple newEntry;
-    for (uint32_t i = 0; i < edges; i++)
-    {
-        fread(&newEntry, sizeof(__TA_kvTuple), 1, f);
-        __TA_HashTable_write(a, &newEntry);
-    }*/
-
-    // read all the edges
+    // for now, only works when MARKOV_ORDER=1
     uint32_t source = 0;
     uint32_t sink = 0;
     uint64_t frequency = 0;
+    // the __TA_element union contains 2 additional words for blockLabel char*
+    uint64_t garbage = 0;
     for (uint32_t i = 0; i < edges; i++)
     {
         fread(&source, sizeof(uint32_t), 1, f);
         fread(&sink, sizeof(uint32_t), 1, f);
         fread(&frequency, sizeof(uint64_t), 1, f);
+        fread(&garbage, sizeof(uint64_t), 1, f);
 
         auto nodeIt = nodes.find(source);
         if (nodeIt == nodes.end())

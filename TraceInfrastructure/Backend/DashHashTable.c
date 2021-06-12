@@ -19,21 +19,20 @@ extern "C"
     }
 
     // used for hashing an integer
-    uint32_t __TA_hash(uint32_t x[MARKOV_ORDER+1])
+    uint32_t __TA_hash(uint32_t x[MARKOV_ORDER + 1])
     {
         uint32_t m = HASH_MULTIPLIER;
         uint32_t y = HASH_INITIAL;
-        for (int i = 0; i < MARKOV_ORDER+1; i++)
+        for (int i = 0; i < MARKOV_ORDER + 1; i++)
         {
             y += (x[i] >> 16) ^ x[i] * m + HASH_OFFSET;
             m += HASH_MULTIPLIER_OFFSET + MARKOV_ORDER + MARKOV_ORDER;
         }
-
         return y;
     };
 
     // here size is ceil( log2(arraySize) )
-    uint32_t __TA_hash_source(uint32_t x[MARKOV_ORDER], uint32_t size)
+    uint32_t __TA_hash_source(uint32_t x[MARKOV_ORDER + 1], uint32_t size)
     {
         // instead of doing a mask, I should do a right shift
         // so instead of modulo, we want to do a right shift by (32-arraysize)
@@ -48,51 +47,39 @@ extern "C"
         return shortHash;
     }
 
-    __TA_edgeTuple *__TA_tupleLookup(__TA_arrayElem *entry, __TA_edgeTuple *index)
+    __TA_element *__TA_tupleLookup(__TA_arrayElem *entry, __TA_element *index)
     {
         for (uint32_t i = 0; i < entry->popCount; i++)
         {
-            if ((entry->tuple[i].source == index->source) && (entry->tuple[i].sink == index->sink))
+            for (uint32_t j = 0; j < MARKOV_ORDER + 1; j++)
             {
-                return &entry->tuple[i];
+                if ((entry->tuple[i].edge.blocks[j] == index->edge.blocks[j]) && (entry->tuple[i].edge.blocks[j] == index->edge.blocks[j]))
+                {
+                    return &entry->tuple[i];
+                }
             }
         }
         return NULL;
     }
 
-    __TA_arrayElem *__TA_arrayLookup(__TA_HashTable *a, __TA_edgeTuple *index)
+    __TA_arrayElem *__TA_arrayLookup(__TA_HashTable *a, __TA_element *index)
     {
-        uint32_t x[MARKOV_ORDER+1] = {index->source, index->sink};
-#if __TA_DEBUG
-        __TA_arrayElem *index = &a->array[__TA_hash_source(x, a->size)];
-        // check to see if there was a clash in the hashing function
-        if (index->popCount)
-        {
-            if (index->tuple[0].source != source)
-            {
-                // we have a clash, not sure how to resolve it yet
-                printf("We have a clash between existing entry %d and incoming entry %d!\n", index->tuple[0].source, source);
-            }
-        }
-        return index;
-#else
-    return &a->array[__TA_hash_source(x, a->size)];
-#endif
+        return &a->array[__TA_hash_source(index->edge.blocks, a->size)];
     }
 
-    __TA_edgeTuple *__TA_HashTable_read(__TA_HashTable *a, __TA_edgeTuple *b)
+    __TA_element *__TA_HashTable_read(__TA_HashTable *a, __TA_element *b)
     {
         __TA_arrayElem *entry = __TA_arrayLookup(a, b);
         return __TA_tupleLookup(entry, b);
     }
 
-    uint8_t __TA_HashTable_write(__TA_HashTable *a, __TA_edgeTuple *b)
+    uint8_t __TA_HashTable_write(__TA_HashTable *a, __TA_element *b)
     {
         __TA_arrayElem *index = __TA_arrayLookup(a, b);
-        __TA_edgeTuple *entry = __TA_tupleLookup(index, b);
+        __TA_element *entry = __TA_tupleLookup(index, b);
         if (entry)
         {
-            entry->frequency = b->frequency;
+            *entry = *b;
         }
         else
         {
@@ -104,22 +91,26 @@ extern "C"
             // we just have to make a new entry
             else
             {
-                index->tuple[index->popCount].source = b->source;
-                index->tuple[index->popCount].sink = b->sink;
+                /*for( uint32_t i = 0; i < MARKOV_ORDER+1; i++ )
+                {
+                    index->tuple[index->popCount].edge.blocks[j] = b->blocks[j];
+                }
                 index->tuple[index->popCount].frequency = b->frequency;
+                index->tuple[index->popCount].frequency++;*/
+                index->tuple[index->popCount] = *b;
                 index->popCount++;
             }
         }
         return 0;
     }
 
-    uint8_t __TA_HashTable_increment(__TA_HashTable *a, __TA_edgeTuple *b)
+    uint8_t __TA_HashTable_increment(__TA_HashTable *a, __TA_element *b)
     {
         __TA_arrayElem *index = __TA_arrayLookup(a, b);
-        __TA_edgeTuple *entry = __TA_tupleLookup(index, b);
+        __TA_element *entry = __TA_tupleLookup(index, b);
         if (entry)
         {
-            (entry->frequency)++;
+            (entry->edge.frequency)++;
         }
         else
         {
@@ -131,10 +122,14 @@ extern "C"
             // we just have to make a new entry
             else
             {
-                index->tuple[index->popCount].source = b->source;
-                index->tuple[index->popCount].sink = b->sink;
+                /*for( uint32_t i = 0; i < MARKOV_ORDER+1; i++ )
+                {
+                    index->tuple[index->popCount].edge.blocks[j] = b->blocks[j];
+                }
                 index->tuple[index->popCount].frequency = b->frequency;
-                index->tuple[index->popCount].frequency++;
+                index->tuple[index->popCount].frequency++;*/
+                index->tuple[index->popCount] = *b;
+                index->tuple[index->popCount].edge.frequency++;
                 index->popCount++;
             }
         }
@@ -165,6 +160,7 @@ extern "C"
         printf("Resolved the clash!\n");
     }
 
+    // thus function is only designed to use edgeTuple objects
     void __TA_WriteHashTable(__TA_HashTable *a, uint32_t blockCount)
     {
         char *p = getenv("MARKOV_FILE");
@@ -177,8 +173,9 @@ extern "C"
         {
             f = fopen(MARKOV_FILE, "wb");
         }
-        // first write the number of nodes in the graph
-        fwrite(&blockCount, sizeof(uint32_t), 1, f);
+        // first write the markov order of the graph
+        uint32_t MO = MARKOV_ORDER;
+        fwrite(&MO, sizeof(uint32_t), 1, f);
         // second write the number of edges in the file
         uint32_t edges = 0;
         uint32_t liveArrayEntries = 0;
@@ -202,7 +199,7 @@ extern "C"
         {
             for (uint32_t j = 0; j < a->array[i].popCount; j++)
             {
-                fwrite(&a->array[i].tuple[j], sizeof(__TA_edgeTuple), 1, f);
+                fwrite(&a->array[i].tuple[j], sizeof(__TA_element), 1, f);
             }
         }
         fclose(f);
@@ -231,10 +228,10 @@ extern "C"
         fread(&edges, sizeof(uint32_t), 1, f);
 
         // read all the edges
-        __TA_edgeTuple newEntry;
+        __TA_element newEntry;
         for (uint32_t i = 0; i < edges; i++)
         {
-            fread(&newEntry, sizeof(__TA_edgeTuple), 1, f);
+            fread(&newEntry, sizeof(__TA_element), 1, f);
             __TA_HashTable_write(a, &newEntry);
         }
         fclose(f);

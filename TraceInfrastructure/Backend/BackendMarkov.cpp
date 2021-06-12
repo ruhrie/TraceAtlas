@@ -83,14 +83,16 @@ public:
 // Indicates which block was the caller of the current context
 long openIndicator = -1;
 uint64_t totalBlocks;
-// The current basic block ID of the program (the source node of the next edge to be updated in MarkovIncrement)
-uint64_t b;
+// Circular buffer of the previous MARKOV_ORDER blocks seen
+uint64_t b[MARKOV_ORDER];
+// counter that is used to index the circular buffer. The index (increment%MARKOV_ORDER) always point to the oldest entry in the buffer (after it is fully initialized)
+uint8_t increment;
 // Flag indicating whether the program is actively being profiled
 bool markovActive = false;
 // Hash table of the profiler
 __TA_HashTable *hashTable;
 // Global structure that is used to increment the last seen edge in the hash table
-__TA_kvTuple nextEdge;
+__TA_element nextEdge;
 //dict TraceAtlasMarkovMap;
 //labelMap TraceAtlasLabelMap;
 //vector<char *> labelList;
@@ -99,7 +101,8 @@ extern "C"
 {
     void MarkovInit(uint64_t blockCount, uint64_t ID)
     {
-        b = ID;
+        increment = 0;
+        b[0] = ID;
         hashTable = (__TA_HashTable *)malloc(sizeof(__TA_HashTable));
         hashTable->size = (uint32_t)(ceil(log((double)blockCount) / log(2.0)));
         hashTable->getFullSize = __TA_getFullSize;
@@ -130,16 +133,18 @@ extern "C"
     {
         if (markovActive)
         {
-            // this segfaults in GSL/GSL_projects_L/fft project, when processing MarkovIncrement(i64 399) (fails on the first try, preceded by 391,392,393 loop)
-            // TraceAtlasMarkovMap is definitely not null at this point (shown by gdb)
-            // the line that fails is in libSTL, its when two keys are being compared as equal, x = 398, y=<error reading variable>
-            nextEdge.source = (uint32_t)b;
-            nextEdge.sink = (uint32_t)a;
+            for (uint8_t i = 0; i < MARKOV_ORDER; i++)
+            {
+                // nextEdge.blocks must always be in chronological order. Thus we start from the beginning with that index (which is what the offset calculation is for)
+                nextEdge.edge.blocks[i] = (uint32_t)b[(increment + i) % MARKOV_ORDER];
+            }
+            nextEdge.edge.blocks[MARKOV_ORDER] = (uint32_t)a;
             while (__TA_HashTable_increment(hashTable, &nextEdge))
             {
                 __TA_resolveClash(hashTable);
             }
-            b = a;
+            b[increment % MARKOV_ORDER] = a;
+            increment++;
             /*if (!labelList.empty())
             {
                 string labelName(labelList.back());

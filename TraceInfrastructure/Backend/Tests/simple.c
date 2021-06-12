@@ -20,23 +20,23 @@ int main()
     hashTable->size = (uint32_t)(ceil(log((double)HASHTABLESIZE) / log(2.0)));
     hashTable->getFullSize = __TA_getFullSize;
     hashTable->array = (__TA_arrayElem *)malloc((hashTable->getFullSize(hashTable)) * sizeof(__TA_arrayElem));
-    __TA_edgeTuple entry0;
+    __TA_element entry0;
 
-    entry0.source = 0;
-    entry0.sink = 1;
-    entry0.frequency = 0;
+    entry0.edge.blocks[0] = 0;
+    entry0.edge.blocks[1] = 1;
+    entry0.edge.frequency = 0;
     __TA_HashTable_increment(hashTable, &entry0);
-    __TA_edgeTuple *read = __TA_HashTable_read(hashTable, &entry0);
-    printf("The entry for source node %d has sink node %d and frequency count %lu.\n", read->source, read->sink, read->frequency);
+    __TA_element *read = __TA_HashTable_read(hashTable, &entry0);
+    printf("The entry for source node %d has sink node %d and frequency count %lu.\n", read->edge.blocks[0], read->edge.blocks[1], read->edge.frequency);
 
-    entry0.frequency = 100;
+    entry0.edge.frequency = 100;
     __TA_HashTable_write(hashTable, &entry0);
     read = __TA_HashTable_read(hashTable, &entry0);
-    printf("The entry for source node %d has sink node %d and frequency count %lu.\n", read->source, read->sink, read->frequency);
+    printf("The entry for source node %d has sink node %d and frequency count %lu.\n", read->edge.blocks[0], read->edge.blocks[1], read->edge.frequency);
 
     __TA_HashTable_increment(hashTable, &entry0);
     read = __TA_HashTable_read(hashTable, &entry0);
-    printf("The entry for source node %d has sink node %d and frequency count %lu.\n", read->source, read->sink, read->frequency);
+    printf("The entry for source node %d has sink node %d and frequency count %lu.\n", read->edge.blocks[0], read->edge.blocks[1], read->edge.frequency);
 
     free(hashTable->array);
     free(hashTable);
