@@ -55,14 +55,17 @@ inline std::map<int64_t, int64_t> ReadBlockInfo(std::string &BlockInfo)
     }
     for (const auto &bbid : j.items())
     {
-        auto vec = j[bbid.key()]["BlockCallers"].get<std::vector<int64_t>>();
-        if (vec.size() == 1)
+        if (j[bbid.key()].find("BlockCallers") != j[bbid.key()].end())
         {
-            blockCallers[stol(bbid.key())] = *vec.begin();
-        }
-        else if (vec.size() > 1)
-        {
-            //throw AtlasException("Found more than one entry in a blockCaller key!");
+            auto vec = j[bbid.key()]["BlockCallers"].get<std::vector<int64_t>>();
+            if (vec.size() == 1)
+            {
+                blockCallers[stol(bbid.key())] = *vec.begin();
+            }
+            else if (vec.size() > 1)
+            {
+                //throw AtlasException("Found more than one entry in a blockCaller key!");
+            }
         }
     }
     return blockCallers;

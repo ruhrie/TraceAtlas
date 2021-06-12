@@ -96,9 +96,9 @@ void RemoveNode(std::set<GraphNode *, p_GNCompare> &CFG, const GraphNode &remove
     }
 }
 
+// this function is only written to support MARKOV_ORDER=1 (TODO: generalize source,sink reading)
 void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filename, bool print = false)
 {
-
     FILE *f = fopen(filename.data(), "rb");
     // first word is a uint32_t of the markov order of the graph
     uint32_t markovOrder;
@@ -297,8 +297,7 @@ void TrivialTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64
                         auto sinkBlock = IDToBlock[(int64_t)(*succ)->NID];
                         if (sourceBlock == nullptr || sinkBlock == nullptr)
                         {
-                            spdlog::error("Found a node in the graph whose ID did not map to a basic block pointer in the ID map!");
-                            break;
+                            throw AtlasException("Found a node in the graph whose ID did not map to a basic block pointer in the ID map!");
                         }
                         if (sourceBlock->getParent() == sinkBlock->getParent())
                         {

@@ -10,6 +10,8 @@
 #include <unordered_map>
 #include <vector>
 
+#define STACK_SIZE 1000
+
 using namespace std;
 using json = nlohmann::json;
 
@@ -80,8 +82,29 @@ public:
     }
 };*/
 
+// stack for storing labels
+char *labelStack[STACK_SIZE];
+uint32_t stackCount = 0;
+
+void pushStack(char *newLabel)
+{
+    stackCount++;
+    if (stackCount < STACK_SIZE)
+    {
+        labelStack[stackCount] = newLabel;
+    }
+}
+
+char *popStack()
+{
+    char *pop = labelStack[stackCount];
+    stackCount--;
+    return pop;
+}
+
 // Indicates which block was the caller of the current context
-long openIndicator = -1;
+int64_t openIndicator = -1;
+// holds the count of all blocks in the bitcode source file
 uint64_t totalBlocks;
 // Circular buffer of the previous MARKOV_ORDER blocks seen
 uint64_t b[MARKOV_ORDER];
@@ -92,11 +115,13 @@ bool markovActive = false;
 // Hash table for the edges of the control flow graph
 __TA_HashTable *edgeHashTable;
 // Hash table for the labels of each basic block
-__TA_HashTable* labelHashTable;
+__TA_HashTable *labelHashTable;
 // Hash table for the caller-callee hash table
-__TA_HashTable* callerHashTable;
+__TA_HashTable *callerHashTable;
 // Global structure that is used to increment the last seen edge in the hash table
 __TA_element nextEdge;
+__TA_element nextLabel;
+__TA_element nextCallee;
 
 extern "C"
 {
@@ -131,18 +156,58 @@ extern "C"
         __TA_WriteEdgeHashTable(edgeHashTable, (uint32_t)totalBlocks);
         free(edgeHashTable->array);
         free(edgeHashTable);
-        // just write an output BlockInfo file for now to get past file checked in automation tool
-        char *blockFile = getenv("BLOCK_FILE");
-        FILE *f;
-        if (blockFile)
+
+        // construct BlockInfo json output
+        json labelMap;
+        for (uint32_t i = 0; i < labelHashTable->getFullSize(labelHashTable); i++)
         {
-            f = fopen(blockFile, "w");
+            for (uint32_t j = 0; j < labelHashTable->array[i].popCount; j++)
+            {
+                auto entry = labelHashTable->array[i].tuple[j];
+                labelMap[to_string(entry.label.blocks[0])]["Labels"] = map<string, uint64_t>();
+            }
+        }
+        for (uint32_t i = 0; i < callerHashTable->getFullSize(callerHashTable); i++)
+        {
+            for (uint32_t j = 0; j < callerHashTable->array[i].popCount; j++)
+            {
+                auto entry = callerHashTable->array[i].tuple[j];
+                labelMap[to_string(entry.label.blocks[0])]["BlockCallers"] = vector<string>();
+            }
+        }
+        for (uint32_t i = 0; i < labelHashTable->getFullSize(labelHashTable); i++)
+        {
+            for (uint32_t j = 0; j < labelHashTable->array[i].popCount; j++)
+            {
+                auto entry = labelHashTable->array[i].tuple[j];
+                labelMap[to_string(entry.label.blocks[0])]["Labels"][string(entry.label.label)] = entry.label.frequency;
+            }
+        }
+        for (uint32_t i = 0; i < callerHashTable->getFullSize(callerHashTable); i++)
+        {
+            for (uint32_t j = 0; j < callerHashTable->array[i].popCount; j++)
+            {
+                auto entry = callerHashTable->array[i].tuple[j];
+                labelMap[to_string(entry.label.blocks[0])]["BlockCallers"].push_back(entry.callee.blocks[1]);
+            }
+        }
+        ofstream file;
+        char *labelFileName = getenv("BLOCK_FILE");
+        if (labelFileName == nullptr)
+        {
+            file.open("BlockInfo.json");
         }
         else
         {
-            f = fopen("BlockInfo.json", "w");
+            file.open(labelFileName);
         }
-        fclose(f);
+        file << setw(4) << labelMap;
+
+        file.close();
+        free(labelHashTable->array);
+        free(labelHashTable);
+        free(callerHashTable->array);
+        free(callerHashTable);
         markovActive = false;
     }
     void MarkovIncrement(uint64_t a)
@@ -160,37 +225,29 @@ extern "C"
             {
                 __TA_resolveClash(edgeHashTable);
             }
-            b[increment % MARKOV_ORDER] = a;
-            increment++;
-            
+
             // label hash table
-            if( !labelStack.empty() )
+            if (stackCount > 0)
             {
-                
-            }
-            /*if (!labelList.empty())
-            {
-                string labelName(labelList.back());
-                if (TraceAtlasLabelMap.blockLabels.find(to_string(a)) == TraceAtlasLabelMap.blockLabels.end())
-                {
-                    TraceAtlasLabelMap.blockLabels[to_string(a)] = map<string, uint64_t>();
-                    blockCallers[to_string(a)] = set<uint64_t>();
-                }
-                if (TraceAtlasLabelMap.blockLabels[to_string(a)].find(labelName) == TraceAtlasLabelMap.blockLabels[to_string(a)].end())
-                {
-                    TraceAtlasLabelMap.blockLabels[to_string(a)][labelName] = 0;
-                }
-                TraceAtlasLabelMap.blockLabels[to_string(a)][labelName]++;
+                nextLabel.label.blocks[0] = (uint32_t)a;
+                // here we use the LSB of the label pointer to help hash more effectively
+                nextLabel.label.blocks[1] = (uint64_t)labelStack[stackCount] & 0xFFFF;
+                nextLabel.label.label = labelStack[stackCount];
+                __TA_HashTable_increment(labelHashTable, &nextLabel);
             }
 
             // caller hash table
             // mark our block caller, if necessary
             if (openIndicator != -1)
             {
-
-                //blockCallers[to_string(openIndicator)].insert(a);
+                nextCallee.callee.blocks[0] = (uint32_t)openIndicator;
+                nextCallee.callee.blocks[1] = (uint32_t)a;
+                __TA_HashTable_increment(callerHashTable, &nextCallee);
             }
-            openIndicator = (long)a;*/
+            openIndicator = (int64_t)a;
+
+            b[increment % MARKOV_ORDER] = a;
+            increment++;
         }
     }
     void MarkovExit()
@@ -199,10 +256,10 @@ extern "C"
     }
     void TraceAtlasMarkovKernelEnter(char *label)
     {
-        //labelList.push_back(label);
+        pushStack(label);
     }
     void TraceAtlasMarkovKernelExit()
     {
-        //labelList.pop_back();
+        popStack();
     }
 }

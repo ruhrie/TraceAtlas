@@ -45,7 +45,7 @@ extern "C"
     typedef union element {
         __TA_edgeTuple edge;
         __TA_labelTuple label;
-        __TA_callerTuple caller;
+        __TA_callerTuple callee;
     } __TA_element;
 
     typedef struct arrayElem
