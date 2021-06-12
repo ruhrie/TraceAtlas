@@ -91,12 +91,6 @@ extern "C"
             // we just have to make a new entry
             else
             {
-                /*for( uint32_t i = 0; i < MARKOV_ORDER+1; i++ )
-                {
-                    index->tuple[index->popCount].edge.blocks[j] = b->blocks[j];
-                }
-                index->tuple[index->popCount].frequency = b->frequency;
-                index->tuple[index->popCount].frequency++;*/
                 index->tuple[index->popCount] = *b;
                 index->popCount++;
             }
@@ -122,12 +116,6 @@ extern "C"
             // we just have to make a new entry
             else
             {
-                /*for( uint32_t i = 0; i < MARKOV_ORDER+1; i++ )
-                {
-                    index->tuple[index->popCount].edge.blocks[j] = b->blocks[j];
-                }
-                index->tuple[index->popCount].frequency = b->frequency;
-                index->tuple[index->popCount].frequency++;*/
                 index->tuple[index->popCount] = *b;
                 index->tuple[index->popCount].edge.frequency++;
                 index->popCount++;

@@ -16,73 +16,6 @@
 using namespace std;
 using json = nlohmann::json;
 
-/*class dict
-{
-public:
-    unordered_map<uint64_t, unordered_map<uint64_t, uint64_t>> base;
-    ~dict()
-    {
-        char *tfn = getenv("MARKOV_FILE");
-        string fileName;
-        if (tfn != nullptr)
-        {
-            fileName = tfn;
-        }
-        else
-        {
-            fileName = "markov.bin";
-        }
-        ofstream fp(fileName, std::ios::out | std::ios::binary);
-        for (auto addr1 : base)
-        {
-            // first, write source node ID
-            // second, write # of outgoing edges (length of non-zero entries)
-            // third, write the sink node ID
-            // fourth, write the frequency count of the edge
-            fp.write((const char *)&addr1.first, sizeof(uint64_t));
-            uint64_t length = addr1.second.size();
-            fp.write((const char *)&length, sizeof(std::size_t)); // BW are you sure this should be size_t and not uint64_t?
-            for (auto addr2 : addr1.second)
-            {
-                fp.write((const char *)&addr2.first, sizeof(uint64_t));
-                fp.write((const char *)&addr2.second, sizeof(std::size_t)); // same with this
-            }
-        }
-        fp.close();
-    }
-};*/
-
-//map<string, set<uint64_t>> blockCallers;
-
-/*struct labelMap
-{
-    map<string, map<string, uint64_t>> blockLabels;
-    ~labelMap()
-    {
-        json labelMap;
-        for (const auto &bbid : blockLabels)
-        {
-            labelMap[bbid.first]["Labels"] = bbid.second;
-        }
-        for (const auto &bbid : blockCallers)
-        {
-            labelMap[bbid.first]["BlockCallers"] = bbid.second;
-        }
-        ofstream file;
-        char *labelFileName = getenv("BLOCK_FILE");
-        if (labelFileName == nullptr)
-        {
-            file.open("BlockInfo.json");
-        }
-        else
-        {
-            file.open(labelFileName);
-        }
-        file << setw(4) << labelMap;
-        file.close();
-    }
-};*/
-
 // stack for storing labels
 char *labelStack[STACK_SIZE];
 uint32_t stackCount = 0;
@@ -154,6 +87,7 @@ extern "C"
     }
     void MarkovDestroy()
     {
+        // print profile bin file
         __TA_WriteEdgeHashTable(edgeHashTable, (uint32_t)totalBlocks);
         free(edgeHashTable->array);
         free(edgeHashTable);
@@ -212,6 +146,7 @@ extern "C"
         }
         file << setw(4) << labelMap;
 
+        // free everything
         file.close();
         free(labelHashTable->array);
         free(labelHashTable);
