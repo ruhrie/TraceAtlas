@@ -630,7 +630,7 @@ void BranchToSelectTransforms(std::set<GraphNode *, p_GNCompare> &nodes)
                 auto tmpPreds = (*potentialExit)->predecessors;
                 tmpMids = midNodes;
                 tmpMids.insert(entrance->NID);
-                for (auto &n : (*potentialExit)->predecessors)
+                for (auto &n : tmpMids)
                 {
                     tmpPreds.erase(n);
                 }
