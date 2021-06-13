@@ -16,7 +16,128 @@ using json = nlohmann::json;
 cl::opt<string> InputFilename("i", cl::desc("Specify bin file"), cl::value_desc(".bin filename"), cl::Required);
 cl::opt<string> BitcodeFileName("b", cl::desc("Specify bitcode file"), cl::value_desc(".bc filename"), cl::Required);
 cl::opt<string> BlockInfoFilename("bi", cl::desc("Specify BlockInfo.json file"), cl::value_desc(".json filename"), cl::Required);
+cl::opt<string> DotFile("d", cl::desc("Specify dot filename"), cl::value_desc("dot file"));
 cl::opt<string> OutputFilename("o", cl::desc("Specify output json"), cl::value_desc("kernel filename"), cl::Required);
+
+void ProfileBlock(BasicBlock *BB, map<int64_t, map<string, uint64_t>> &rMap, map<int64_t, map<string, uint64_t>> &cpMap)
+{
+    int64_t id = GetBlockID(BB);
+    for (auto bi = BB->begin(); bi != BB->end(); bi++)
+    {
+        auto *i = cast<Instruction>(bi);
+        if (i->getMetadata("TikSynthetic") != nullptr)
+        {
+            continue;
+        }
+        //start with the opcodes
+        string name = string(i->getOpcodeName());
+        rMap[id][name + "Count"]++;
+        //now check the type
+        Type *t = i->getType();
+        if (t->isVoidTy())
+        {
+            rMap[id]["typeVoid"]++;
+            cpMap[id][name + "typeVoid"]++;
+        }
+        else if (t->isFloatingPointTy())
+        {
+            rMap[id]["typeFloat"]++;
+            cpMap[id][name + "typeFloat"]++;
+        }
+        else if (t->isIntegerTy())
+        {
+            rMap[id]["typeInt"]++;
+            cpMap[id][name + "typeInt"]++;
+        }
+        else if (t->isArrayTy())
+        {
+            rMap[id]["typeArray"]++;
+            cpMap[id][name + "typeArray"]++;
+        }
+        else if (t->isVectorTy())
+        {
+            rMap[id]["typeVector"]++;
+            cpMap[id][name + "typeVector"]++;
+        }
+        else if (t->isPointerTy())
+        {
+            rMap[id]["typePointer"]++;
+            cpMap[id][name + "typePointer"]++;
+        }
+        else
+        {
+            std::string str;
+            llvm::raw_string_ostream rso(str);
+            t->print(rso);
+            cerr << "Unrecognized type: " + str + "\n";
+        }
+        rMap[id]["instructionCount"]++;
+        cpMap[id]["instructionCount"]++;
+    }
+}
+
+map<string, map<string, map<string, int>>> ProfileKernels(const std::map<string, std::set<int64_t>> &kernels, Module *M, std::map<int64_t, uint64_t> &blockCounts)
+{
+    map<int64_t, map<string, uint64_t>> rMap;  //dictionary which keeps track of the actual information per block
+    map<int64_t, map<string, uint64_t>> cpMap; //dictionary which keeps track of the cross product information per block
+    //start by profiling every basic block
+    for (auto &F : *M)
+    {
+        for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
+        {
+            ProfileBlock(cast<BasicBlock>(BB), rMap, cpMap);
+        }
+    }
+
+    // maps kernel ID to type of pi to instruction type to instruction count
+    map<string, map<string, map<string, int>>> fin;
+
+    map<string, map<string, int>> cPigData;  //from the trace
+    map<string, map<string, int>> pigData;   //from the bitcode
+    map<string, map<string, int>> ecPigData; //cross product from the trace
+    map<string, map<string, int>> epigData;  //cross product from the bitcode
+
+    for (const auto &kernel : kernels)
+    {
+        string iString = kernel.first;
+        auto blocks = kernel.second;
+        for (auto block : blocks)
+        {
+            // frequency count of this block
+            uint64_t count = blockCounts[block];
+            for (const auto &pair : rMap[block])
+            {
+                cPigData[iString][pair.first] += pair.second * count;
+                pigData[iString][pair.first] += pair.second;
+            }
+
+            for (const auto &pair : cpMap[block])
+            {
+                ecPigData[iString][pair.first] += pair.second * count;
+                epigData[iString][pair.first] += pair.second;
+            }
+        }
+    }
+
+    // now do kernel ID wise mapping
+    for (const auto &kernelID : pigData)
+    {
+        fin[kernelID.first]["Pig"] = kernelID.second;
+    }
+    for (const auto &kernelID : cPigData)
+    {
+        fin[kernelID.first]["CPig"] = kernelID.second;
+    }
+    for (const auto &kernelID : epigData)
+    {
+        fin[kernelID.first]["EPig"] = kernelID.second;
+    }
+    for (const auto &kernelID : ecPigData)
+    {
+        fin[kernelID.first]["ECPig"] = kernelID.second;
+    }
+    return fin;
+}
 
 void AddNode(std::set<GraphNode *, p_GNCompare> &nodes, const GraphNode &newNode)
 {
@@ -1073,6 +1194,8 @@ int main(int argc, char *argv[])
 
     // Set of nodes that constitute the entire graph
     set<GraphNode *, p_GNCompare> nodes;
+    // maps each block ID to its frequency count (used for performance intrinsics calculations later, must happen before transforms because GraphNodes are 1:1 with blocks)
+    map<int64_t, uint64_t> blockFrequencies;
 
     try
     {
@@ -1080,6 +1203,24 @@ int main(int argc, char *argv[])
         if (nodes.empty())
         {
             return EXIT_FAILURE;
+        }
+        // accumulate block frequencies
+        for (const auto &block : nodes)
+        {
+            // we sum along the columns (the probabilities of going to the current node), so we use the edge weight coming from each predecessor to this node
+            for (const auto &pred : block->predecessors)
+            {
+                auto predecessor = nodes.find(pred);
+                // find the edge of the predecessor that goes to the current node
+                for (const auto &nei : (*predecessor)->neighbors)
+                {
+                    if (nei.first == block->NID)
+                    {
+                        // retrieve the edge probability and accumulate it to this node
+                        blockFrequencies[(int64_t)nei.first] += nei.second.first;
+                    }
+                }
+            }
         }
     }
     catch (AtlasException &e)
@@ -1407,9 +1548,36 @@ int main(int argc, char *argv[])
         outputJson["Average Kernel Size (Nodes)"] = 0.0;
         outputJson["Average Kernel Size (Blocks)"] = 0.0;
     }
+
+    // performance intrinsics
+    map<string, set<int64_t>> kernelBlockSets;
+    for (const auto &kernel : outputJson["Kernels"].items())
+    {
+        if (outputJson["Kernels"].find(kernel.key()) != outputJson["Kernels"].end())
+        {
+            if (outputJson["Kernels"][kernel.key()].find("Blocks") != outputJson["Kernels"][kernel.key()].end())
+            {
+                auto blockSet = outputJson["Kernels"][kernel.key()]["Blocks"].get<set<int64_t>>();
+                kernelBlockSets[kernel.key()] = blockSet;
+            }
+        }
+    }
+
+    auto prof = ProfileKernels(kernelBlockSets, SourceBitcode.get(), blockFrequencies);
+    for (const auto &kernelID : prof)
+    {
+        outputJson["Kernels"][kernelID.first]["Performance Intrinsics"] = kernelID.second;
+    }
     ofstream oStream(OutputFilename);
     oStream << setw(4) << outputJson;
     oStream.close();
+    /*if (!DotFile.empty())
+    {
+        ofstream dStream(DotFile);
+        auto graph = GenerateDot(type35Kernels);
+        dStream << graph << "\n";
+        dStream.close();
+    }*/
 
     // free kernel set and nodes
 
