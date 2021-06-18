@@ -139,6 +139,53 @@ map<string, map<string, map<string, int>>> ProfileKernels(const std::map<string,
     return fin;
 }
 
+string GenerateDot(const set<GraphNode *, p_GNCompare> &nodes, const set<Kernel*, KCompare>& kernels)
+{
+    string dotString = "digraph{\n";
+    /*int j = 0;
+    // here we build the kernel group clusters
+    for (const auto &kernel : kernels)
+    {
+        dotString += "\tsubgraph cluster_" + to_string(j) + "{\n";
+        dotString += "\t\tlabel=\"Kernel " + to_string(j++) + "\";\n";
+        for (auto b : kernel->getBlocks())
+        {
+            dotString += "\t\t" + to_string(b) + ";\n";
+        }
+        dotString += "\t}\n";
+    }*/
+    // label kernels
+    for (const auto& kernel : kernels)
+    {
+        // this virtualNode NID won't work with child kernels because child kernels are free'd when parents swallow them
+        dotString += "\t" + to_string(kernel->virtualNode->NID) + " [label=\"" + kernel->Label + "\"]\n";
+    }
+    // now build out the nodes in the graph
+    for (const auto& node : nodes)
+    {
+        for (const auto& n : node->neighbors)
+        {
+            dotString += "\t" + to_string(node->NID) + " -> " + to_string(n.first) + ";\n";
+        }
+        /*for (auto bi = block->begin(); bi != block->end(); bi++)
+        {
+            if (auto *ci = dyn_cast<CallInst>(bi))
+            {
+                auto *F = ci->getCalledFunction();
+                if (F != nullptr && !F->empty())
+                {
+                    BasicBlock *entry = &F->getEntryBlock();
+                    auto id = GetBlockID(entry);
+                    dotString += "\t" + to_string(b) + " -> " + to_string(id) + " [style=dashed];\n";
+                }
+            }
+        }*/
+    }
+    dotString += "}";
+
+    return dotString;
+}
+
 void AddNode(std::set<GraphNode *, p_GNCompare> &nodes, const GraphNode &newNode)
 {
     nodes.insert(new GraphNode(newNode));
@@ -1571,13 +1618,13 @@ int main(int argc, char *argv[])
     ofstream oStream(OutputFilename);
     oStream << setw(4) << outputJson;
     oStream.close();
-    /*if (!DotFile.empty())
+    if (!DotFile.empty())
     {
         ofstream dStream(DotFile);
-        auto graph = GenerateDot(type35Kernels);
+        auto graph = GenerateDot(nodes, kernels);
         dStream << graph << "\n";
         dStream.close();
-    }*/
+    }
 
     // free kernel set and nodes
 
