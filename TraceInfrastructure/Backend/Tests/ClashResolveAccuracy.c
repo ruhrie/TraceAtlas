@@ -84,7 +84,7 @@ int main()
             entry0.blocks[1] = i + j;
             while (__TA_HashTable_increment(hashTable, (__TA_element *)&entry0))
             {
-                __TA_resolveClash(hashTable);
+                __TA_resolveClash(hashTable, hashTable->size + 1);
                 checkAccuracy(hashTable, i, j);
             }
         }
@@ -99,7 +99,7 @@ int main()
         entry0.blocks[1] = i;
         while (__TA_HashTable_increment(hashTable, (__TA_element *)&entry0))
         {
-            __TA_resolveClash(hashTable);
+            __TA_resolveClash(hashTable, hashTable->size + 1);
             checkAccuracy2(hashTable, i);
         }
     }

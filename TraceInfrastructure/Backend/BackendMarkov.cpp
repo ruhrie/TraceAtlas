@@ -167,7 +167,7 @@ extern "C"
             nextEdge.edge.blocks[MARKOV_ORDER] = (uint32_t)a;
             while (__TA_HashTable_increment(edgeHashTable, &nextEdge))
             {
-                __TA_resolveClash(edgeHashTable);
+                __TA_resolveClash(edgeHashTable, edgeHashTable->size + 1);
             }
 
             // label hash table
@@ -177,9 +177,9 @@ extern "C"
                 // here we use the LSB of the label pointer to help hash more effectively
                 nextLabel.label.blocks[1] = (uint64_t)labelStack[stackCount] & 0xFFFF;
                 nextLabel.label.label = labelStack[stackCount];
-                while(__TA_HashTable_increment(labelHashTable, &nextLabel))
+                while (__TA_HashTable_increment(labelHashTable, &nextLabel))
                 {
-                    __TA_resolveClash(labelHashTable);
+                    __TA_resolveClash(labelHashTable, labelHashTable->size + 1);
                 }
             }
 
@@ -189,9 +189,9 @@ extern "C"
             {
                 nextCallee.callee.blocks[0] = (uint32_t)openIndicator;
                 nextCallee.callee.blocks[1] = (uint32_t)a;
-                while(__TA_HashTable_increment(callerHashTable, &nextCallee))
+                while (__TA_HashTable_increment(callerHashTable, &nextCallee))
                 {
-                    __TA_resolveClash(callerHashTable);
+                    __TA_resolveClash(callerHashTable, callerHashTable->size + 1);
                 }
             }
             openIndicator = (int64_t)a;

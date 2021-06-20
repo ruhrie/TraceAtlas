@@ -130,7 +130,7 @@ extern "C"
     ///
     /// Each hash table entry has a finite set of elements, and it is possible for this buffer to fill up
     /// When this happens, a clash is detected and resolved by doubling the size of the hash table
-    void __TA_resolveClash(__TA_HashTable *hashTable);
+    void __TA_resolveClash(__TA_HashTable *hashTable, uint32_t newSize);
 
     /// @brief Write the hash table to a file
     ///

@@ -1,5 +1,6 @@
 #include "Backend/DashHashTable.h"
 #include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -7,6 +8,8 @@
 #define HASH_MULTIPLIER_OFFSET 82520UL
 #define HASH_INITIAL 0x12345678UL
 #define HASH_OFFSET 97531UL
+
+#define INTERNAL_CLASHES_LIMIT 5
 
 #ifdef __cplusplus
 extern "C"
@@ -124,8 +127,17 @@ extern "C"
         return 0;
     }
 
-    void __TA_resolveClash(__TA_HashTable *hashTable)
+    void __TA_resolveClash(__TA_HashTable *hashTable, uint32_t newSize)
     {
+        static bool freedOld = false;
+        // counts the number of recursions we do. If it exceeds INTERNAL_CLASHES_LIMIT we quit and exit the program.
+        static uint8_t internalClashes = 0;
+        printf("We have had %d recursions to resolve internal clashes.\n", internalClashes);
+        if (internalClashes == INTERNAL_CLASHES_LIMIT)
+        {
+            printf("We have exceeded the number of internal clashes allowed. Exiting...");
+            return;
+        }
         printf("Found a clash!\n");
         // local copy of the old hashTable
         __TA_HashTable old;
@@ -133,19 +145,42 @@ extern "C"
         old.array = hashTable->array;
         old.getFullSize = hashTable->getFullSize;
         // we double the size of the array each time there is a clash
-        hashTable->size++;
+        hashTable->size = newSize;
         // reallocate a new array that has double the current entries
         hashTable->array = (__TA_arrayElem *)malloc(hashTable->getFullSize(hashTable) * sizeof(__TA_arrayElem));
         // put in everything from the old array
+        printf("Old size is %d and new size is %d\n", old.size, hashTable->size);
         for (uint32_t i = 0; i < old.getFullSize(&old); i++)
         {
             for (uint32_t j = 0; j < old.array[i].popCount; j++)
             {
-                __TA_HashTable_write(hashTable, &old.array[i].tuple[j]);
+                while (__TA_HashTable_write(hashTable, &old.array[i].tuple[j]))
+                {
+                    internalClashes++;
+                    // we need to preserve the old array while incrementing the size
+                    free(hashTable->array);
+                    hashTable->array = old.array;
+                    hashTable->size = old.size;
+                    printf("Recursing into resolveClash!\n");
+                    __TA_resolveClash(hashTable, hashTable->size + (uint32_t)internalClashes);
+                    internalClashes--;
+                    printf("After decrement, internalClashes is now %d\n", internalClashes);
+                }
             }
         }
-        free(old.array);
-        printf("Resolved the clash!\n");
+        printf("Finished initializing new array\n");
+        // should only happen on the bottom of the recursion depth
+        if (!freedOld)
+        {
+            free(old.array);
+            freedOld = true;
+            printf("Resolved the clash!\n");
+        }
+        // should only happen on the top call to __TA_resolveClash (top of the recursion depth)
+        if (!internalClashes)
+        {
+            freedOld = false;
+        }
     }
 
     // thus function is only designed to use edgeTuple objects
@@ -229,7 +264,7 @@ extern "C"
             fread(&garbage, sizeof(uint64_t), 1, f);
             while (__TA_HashTable_write(a, &newEntry))
             {
-                __TA_resolveClash(a);
+                __TA_resolveClash(a, a->size + 1);
             }
         }
         fclose(f);
