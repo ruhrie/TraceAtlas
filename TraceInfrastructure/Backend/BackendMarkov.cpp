@@ -177,7 +177,10 @@ extern "C"
                 // here we use the LSB of the label pointer to help hash more effectively
                 nextLabel.label.blocks[1] = (uint64_t)labelStack[stackCount] & 0xFFFF;
                 nextLabel.label.label = labelStack[stackCount];
-                __TA_HashTable_increment(labelHashTable, &nextLabel);
+                while(__TA_HashTable_increment(labelHashTable, &nextLabel))
+                {
+                    __TA_resolveClash(labelHashTable);
+                }
             }
 
             // caller hash table
@@ -186,7 +189,10 @@ extern "C"
             {
                 nextCallee.callee.blocks[0] = (uint32_t)openIndicator;
                 nextCallee.callee.blocks[1] = (uint32_t)a;
-                __TA_HashTable_increment(callerHashTable, &nextCallee);
+                while(__TA_HashTable_increment(callerHashTable, &nextCallee))
+                {
+                    __TA_resolveClash(callerHashTable);
+                }
             }
             openIndicator = (int64_t)a;
 
