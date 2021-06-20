@@ -18,11 +18,9 @@ extern "C"
 {
 #endif
 
-    // always make the size of my structs a power of 2 because this will fit the struct on a single page and cache line
-    // we need both the source and the sink because we want a hash, not a hash of hashes
     typedef struct edgeTuple
     {
-        // first MARKOV_ORDER words is the prior MARKOV_ORDER blockIDs to execute (from least to greatest), last word is sink node blockID
+        // first MARKOV_ORDER words is the prior MARKOV_ORDER blockIDs to execute (in chronological order), last word is sink node blockID
         uint32_t blocks[MARKOV_ORDER + 1];
         // edge count
         uint64_t frequency;

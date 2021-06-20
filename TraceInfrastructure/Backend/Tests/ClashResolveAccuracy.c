@@ -18,7 +18,7 @@ void checkAccuracy(__TA_HashTable *a, int i, int l)
     // check the first for loop which should already be in there
     for (int j = 0; j <= i; j++)
     {
-        entry.source = j;
+        entry.blocks[0] = j;
         entry.frequency = 1; // this should be the value of the frequency because every entry is pushed by the incrementer
         for (int k = 0; k < AVG_NEIGHBORS; k++)
         {
@@ -30,15 +30,15 @@ void checkAccuracy(__TA_HashTable *a, int i, int l)
                     break;
                 }
             }
-            entry.sink = j + k;
-            __TA_edgeTuple *read = __TA_HashTable_read(a, &entry);
+            entry.blocks[1] = j + k;
+            __TA_element *read = __TA_HashTable_read(a, (__TA_element *)&entry);
             if (!read)
             {
-                printf("Failed to recover an entry of nodes (%d,%d) that should exist!\n", entry.source, entry.sink);
+                printf("Failed to recover an entry of nodes (%d,%d) that should exist!\n", entry.blocks[0], entry.blocks[1]);
             }
-            else if (read->frequency != entry.frequency)
+            else if (read->edge.frequency != entry.frequency)
             {
-                printf("The frequency value for entry (%d,%d) was %lu and the correct answer was %lu!\n", read->source, read->sink, read->frequency, entry.frequency);
+                printf("The frequency value for entry (%d,%d) was %lu and the correct answer was %lu!\n", read->edge.blocks[0], read->edge.blocks[1], read->edge.frequency, entry.frequency);
             }
         }
     }
@@ -47,19 +47,19 @@ void checkAccuracy(__TA_HashTable *a, int i, int l)
 void checkAccuracy2(__TA_HashTable *a, int i)
 {
     __TA_edgeTuple entry;
-    entry.source = HASHTABLESIZE - 1;
+    entry.blocks[0] = HASHTABLESIZE - 1;
     entry.frequency = 1; // because each neighbor is pushed with an increment
     for (int k = 0; k < i; k++)
     {
-        entry.sink = k;
-        __TA_edgeTuple *read = __TA_HashTable_read(a, &entry);
+        entry.blocks[1] = k;
+        __TA_element *read = __TA_HashTable_read(a, (__TA_element *)&entry);
         if (!read)
         {
-            printf("Failed to recover an entry of nodes (%d,%d) that should exist!\n", entry.source, entry.sink);
+            printf("Failed to recover an entry of nodes (%d,%d) that should exist!\n", entry.blocks[0], entry.blocks[1]);
         }
-        else if (read->frequency != entry.frequency)
+        else if (read->edge.frequency != entry.frequency)
         {
-            printf("The frequency value for entry (%d,%d) was %lu and the correct answer was %lu!\n", read->source, read->sink, read->frequency, entry.frequency);
+            printf("The frequency value for entry (%d,%d) was %lu and the correct answer was %lu!\n", read->edge.blocks[0], read->edge.blocks[1], read->edge.frequency, entry.frequency);
         }
     }
 }
@@ -77,12 +77,12 @@ int main()
     // this pushes AVG_NEIGHBORS * HASHTABLESIZE entries into the table
     for (int i = 0; i < HASHTABLESIZE - 1; i++)
     {
-        entry0.source = i;
+        entry0.blocks[0] = i;
         entry0.frequency = 0;
         for (int j = 0; j < AVG_NEIGHBORS; j++)
         {
-            entry0.sink = i + j;
-            while (__TA_HashTable_increment(hashTable, &entry0))
+            entry0.blocks[1] = i + j;
+            while (__TA_HashTable_increment(hashTable, (__TA_element *)&entry0))
             {
                 __TA_resolveClash(hashTable);
                 checkAccuracy(hashTable, i, j);
@@ -92,12 +92,12 @@ int main()
 
     printf("Now starting the highly connected node\n");
     // this pushes 2^18 entries into the table
-    entry0.source = HASHTABLESIZE - 1;
+    entry0.blocks[0] = HASHTABLESIZE - 1;
     entry0.frequency = 0;
     for (int i = 0; i < HIGHLY_CONNECTED_NEIGHBORS; i++)
     {
-        entry0.sink = i;
-        while (__TA_HashTable_increment(hashTable, &entry0))
+        entry0.blocks[1] = i;
+        while (__TA_HashTable_increment(hashTable, (__TA_element *)&entry0))
         {
             __TA_resolveClash(hashTable);
             checkAccuracy2(hashTable, i);

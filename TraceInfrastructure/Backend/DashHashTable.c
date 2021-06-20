@@ -205,22 +205,32 @@ extern "C"
     void __TA_ReadEdgeHashTable(__TA_HashTable *a, char *path)
     {
         FILE *f = fopen(path, "rb");
-        // the first 4 bytes is a uint32_t of how many nodes there are in the graph
-        uint32_t nodes;
-        fread(&nodes, sizeof(uint32_t), 1, f);
-        a->size = (uint32_t)(ceil(log((double)nodes) / log(2.0)));
-        a->array = (__TA_arrayElem *)malloc(a->getFullSize(a) * sizeof(__TA_arrayElem));
-
-        // the second 4 bytes is a uint32_t of how many edges there are in the file
+        // first word is a uint32_t of the markov order of the graph
+        uint32_t markovOrder;
+        fread(&markovOrder, sizeof(uint32_t), 1, f);
+        // second word is a uint32_t of how many edges there are in the file
         uint32_t edges;
         fread(&edges, sizeof(uint32_t), 1, f);
 
+        // estimate that each node has 2 neighbors on average, thus allocate edge/2 nodes in the hash table
+        a->size = (uint32_t)(ceil(log((double)edges / 2.0) / log(2.0)));
+        a->array = (__TA_arrayElem *)malloc(a->getFullSize(a) * sizeof(__TA_arrayElem));
+
         // read all the edges
+        // for now, only works when MARKOV_ORDER=1
         __TA_element newEntry;
+        // the __TA_element union contains 2 additional words for blockLabel char*
+        uint64_t garbage = 0;
         for (uint32_t i = 0; i < edges; i++)
         {
-            fread(&newEntry, sizeof(__TA_element), 1, f);
-            __TA_HashTable_write(a, &newEntry);
+            fread(&newEntry.edge.blocks[0], sizeof(uint32_t), 1, f);
+            fread(&newEntry.edge.blocks[1], sizeof(uint32_t), 1, f);
+            fread(&newEntry.edge.frequency, sizeof(uint64_t), 1, f);
+            fread(&garbage, sizeof(uint64_t), 1, f);
+            while (__TA_HashTable_write(a, &newEntry))
+            {
+                __TA_resolveClash(a);
+            }
         }
         fclose(f);
     }

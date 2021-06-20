@@ -23,12 +23,12 @@ int main()
     // this pushes AVG_NEIGHBORS * HASHTABLESIZE entries into the table
     for (int i = 0; i < HASHTABLESIZE - 1; i++)
     {
-        entry0.source = i;
+        entry0.blocks[0] = i;
         entry0.frequency = 0;
         for (int j = 0; j < AVG_NEIGHBORS; j++)
         {
-            entry0.sink = i + j;
-            while (__TA_HashTable_increment(hashTable, &entry0))
+            entry0.blocks[1] = i + j;
+            while (__TA_HashTable_increment(hashTable, (__TA_element *)&entry0))
             {
                 __TA_resolveClash(hashTable);
             }
@@ -36,12 +36,12 @@ int main()
     }
 
     // this pushes 2^18 entries into the table
-    entry0.source = HASHTABLESIZE - 1;
+    entry0.blocks[0] = HASHTABLESIZE - 1;
     entry0.frequency = 0;
     for (int i = 0; i < HIGHLY_CONNECTED_NEIGHBORS; i++)
     {
-        entry0.sink = i;
-        while (__TA_HashTable_increment(hashTable, &entry0))
+        entry0.blocks[1] = i;
+        while (__TA_HashTable_increment(hashTable, (__TA_element *)&entry0))
         {
             __TA_resolveClash(hashTable);
         }
