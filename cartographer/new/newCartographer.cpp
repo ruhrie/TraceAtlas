@@ -170,7 +170,7 @@ string GenerateDot(const set<GraphNode *, p_GNCompare> &nodes, const set<Kernel 
         {
             for (const auto &p : VKN->kernel->parentKernels)
             {
-                dotString += "\t" + to_string(node->NID) + " -> " + to_string(p) + ";\n";
+                dotString += "\t" + to_string(node->NID) + " -> " + to_string(p) + " [style=dashed];\n";
             }
         }
         /*for (auto bi = block->begin(); bi != block->end(); bi++)
