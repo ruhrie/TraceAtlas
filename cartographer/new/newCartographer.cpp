@@ -139,7 +139,7 @@ map<string, map<string, map<string, int>>> ProfileKernels(const std::map<string,
     return fin;
 }
 
-string GenerateDot(const set<GraphNode *, p_GNCompare> &nodes, const set<Kernel*, KCompare>& kernels)
+string GenerateDot(const set<GraphNode *, p_GNCompare> &nodes, const set<Kernel *, KCompare> &kernels)
 {
     string dotString = "digraph{\n";
     /*int j = 0;
@@ -155,17 +155,23 @@ string GenerateDot(const set<GraphNode *, p_GNCompare> &nodes, const set<Kernel*
         dotString += "\t}\n";
     }*/
     // label kernels
-    for (const auto& kernel : kernels)
+    for (const auto &kernel : kernels)
     {
-        // this virtualNode NID won't work with child kernels because child kernels are free'd when parents swallow them
         dotString += "\t" + to_string(kernel->virtualNode->NID) + " [label=\"" + kernel->Label + "\"]\n";
     }
     // now build out the nodes in the graph
-    for (const auto& node : nodes)
+    for (const auto &node : nodes)
     {
-        for (const auto& n : node->neighbors)
+        for (const auto &n : node->neighbors)
         {
             dotString += "\t" + to_string(node->NID) + " -> " + to_string(n.first) + ";\n";
+        }
+        if (auto VKN = dynamic_cast<VKNode *>(node))
+        {
+            for (const auto &p : VKN->kernel->parentKernels)
+            {
+                dotString += "\t" + to_string(node->NID) + " -> " + to_string(p) + ";\n";
+            }
         }
         /*for (auto bi = block->begin(); bi != block->end(); bi++)
         {
@@ -1132,15 +1138,29 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
                     neighbor->predecessors.insert(kernelNode->NID);
                 }
             }
-            // remove all nodes within the kernel except the entrance node
-            auto toRemove = kernel->nodes;
-            toRemove.erase(*kernelEntrances.begin());
-            for (const auto &node : toRemove)
+            // remove all nodes within the kernel except the entrance node and any virtual kernels within this kernel
+            for (const auto &node : kernel->nodes)
             {
+                auto it_Node = nodes.find(node.NID);
+                if (it_Node != nodes.end())
+                {
+                    if (auto VKN = dynamic_cast<VKNode *>(*it_Node))
+                    {
+                        // don't throw away virtual kernel nodes, but disconnect them from the graph
+                        VKN->kernel->parentKernels.insert((uint32_t)kernelNode->NID);
+                        VKN->neighbors.clear();
+                        VKN->predecessors.clear();
+                        continue;
+                    }
+                }
+                else
+                {
+                    throw AtlasException("Could not find kernel member in node graph!");
+                }
                 RemoveNode(nodes, node);
             }
             // finally replace the old entrance node with the new VKNode
-            RemoveNode(nodes, *(kernelEntrances.begin()));
+            //RemoveNode(nodes, *(kernelEntrances.begin()));
             nodes.insert(kernelNode);
             kernel->virtualNode = kernelNode;
             newPointers.push_back(kernel);
