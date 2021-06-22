@@ -12,6 +12,7 @@ namespace TraceAtlas::Cartographer
         std::set<GraphNode, GNCompare> nodes;
         /// set of KIDs that point to child kernels of this kernel
         std::set<uint32_t> childKernels;
+        std::set<uint32_t> parentKernels;
         VKNode *virtualNode;
         uint32_t KID;
         std::string Label;
