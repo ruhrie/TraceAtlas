@@ -138,7 +138,6 @@ extern "C"
             printf("We have exceeded the number of internal clashes allowed. Exiting...");
             return;
         }
-        printf("Found a clash!\n");
         // local copy of the old hashTable
         __TA_HashTable old;
         old.size = hashTable->size;
@@ -148,8 +147,12 @@ extern "C"
         hashTable->size = newSize;
         // reallocate a new array that has double the current entries
         hashTable->array = (__TA_arrayElem *)malloc(hashTable->getFullSize(hashTable) * sizeof(__TA_arrayElem));
+        if( !hashTable->array )
+        {
+            printf("Malloc failed!");
+        }
         // put in everything from the old array
-        printf("Old size is %d and new size is %d\n", old.size, hashTable->size);
+        printf("Old size is %d and new size is %d\n", old.getFullSize(&old), hashTable->getFullSize(hashTable));
         for (uint32_t i = 0; i < old.getFullSize(&old); i++)
         {
             for (uint32_t j = 0; j < old.array[i].popCount; j++)
