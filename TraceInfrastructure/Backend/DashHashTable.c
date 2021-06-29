@@ -39,6 +39,7 @@ extern "C"
     {
         // instead of doing a mask, I should do a right shift
         // so instead of modulo, we want to do a right shift by (32-arraysize)
+        // the mask just needs to be 0x(size - 1)
         uint32_t shortHash = 0;
         uint32_t longHash = __TA_hash(x);
         uint32_t mask = 0x1;
@@ -159,6 +160,10 @@ extern "C"
             {
                 while (__TA_HashTable_write(hashTable, &old.array[i].tuple[j]))
                 {
+                    // john: this should be impossible. When we double the size on an entry that clashes we can't have a conflict with copied, only the new entry.
+                    // john: always complete the copy before we start a new recursion
+                    // john: this loop will segfault as soon as the recursion returns
+                    // john: start with small default hash sizes in TBs
                     internalClashes++;
                     // we need to preserve the old array while incrementing the size
                     free(hashTable->array);
