@@ -99,6 +99,33 @@ namespace DashTracer::Passes
                     call->moveBefore(lastInst);
                     call->setDebugLoc(NULL);
                 }
+                else if (auto unreachableInst = dyn_cast<UnreachableInst>(fi->getTerminator()))
+                {
+                    auto endInsertion = BB->getTerminator();
+                    auto *lastInst = cast<Instruction>(endInsertion);
+                    IRBuilder<> lastBuilder(lastInst);
+
+                    auto call = lastBuilder.CreateCall(MarkovDestroy);
+                    call->moveBefore(lastInst);
+                    call->setDebugLoc(NULL);
+                }
+            }
+            // we also have to look for the exit() function from libc
+            for (auto bi = fi->begin(); bi != fi->end(); bi++)
+            {
+                if (auto call = dyn_cast<CallBase>(bi))
+                {
+                    if (call->getCalledFunction())
+                    {
+                        if (call->getCalledFunction()->getName() == "exit")
+                        {
+                            IRBuilder<> destroyInserter(call);
+                            auto insert = destroyInserter.CreateCall(MarkovDestroy);
+                            insert->moveBefore(call);
+                            call->setDebugLoc(NULL);
+                        }
+                    }
+                }
             }
         }
         return true;

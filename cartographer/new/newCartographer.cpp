@@ -271,9 +271,13 @@ void RemoveNode(std::set<GraphNode *, p_GNCompare> &CFG, const GraphNode &remove
 }
 
 // this function is only written to support MARKOV_ORDER=1 (TODO: generalize source,sink reading)
-void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filename, bool print = false)
+int ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filename, bool print = false)
 {
     FILE *f = fopen(filename.data(), "rb");
+    if (!f)
+    {
+        return 1;
+    }
     // first word is a uint32_t of the markov order of the graph
     uint32_t markovOrder;
     fread(&markovOrder, sizeof(uint32_t), 1, f);
@@ -380,6 +384,7 @@ void ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filen
             std::cout << std::endl;
         }
     }
+    return 0;
 }
 
 /// Returns true if one or more cycles exist in the graph specified by nodes, false otherwise
@@ -1266,7 +1271,12 @@ int main(int argc, char *argv[])
 
     try
     {
-        ReadBIN(nodes, InputFilename);
+        auto err = ReadBIN(nodes, InputFilename);
+        if (err)
+        {
+            spdlog::critical("Failed to read input profile file!");
+            return EXIT_FAILURE;
+        }
         if (nodes.empty())
         {
             return EXIT_FAILURE;
