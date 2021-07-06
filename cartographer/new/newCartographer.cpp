@@ -273,6 +273,7 @@ void RemoveNode(std::set<GraphNode *, p_GNCompare> &CFG, const GraphNode &remove
 // this function is only written to support MARKOV_ORDER=1 (TODO: generalize source,sink reading)
 int ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filename, bool print = false)
 {
+    // first initialize the graph to all the blocks in the 
     FILE *f = fopen(filename.data(), "rb");
     if (!f)
     {
@@ -281,7 +282,16 @@ int ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filena
     // first word is a uint32_t of the markov order of the graph
     uint32_t markovOrder;
     fread(&markovOrder, sizeof(uint32_t), 1, f);
-    // second word is a uint32_t of how many edges there are in the file
+    // second word is a uint32_t of the total number of blocks in the graph (each block may or may not be connected to the rest of the graph)
+    uint32_t blocks;
+    fread(&blocks, sizeof(uint32_t), 1, f);
+    for( uint32_t i = 0; i < blocks; i++ )
+    {
+        auto newNode = GraphNode(i);
+        newNode.blocks.insert((int64_t)i);
+        AddNode(nodes, newNode);
+    }
+    // third word is a uint32_t of how many edges there are in the file
     uint32_t edges;
     fread(&edges, sizeof(uint32_t), 1, f);
 
@@ -302,10 +312,7 @@ int ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filena
         auto nodeIt = nodes.find(source);
         if (nodeIt == nodes.end())
         {
-            GraphNode newNode = GraphNode((uint64_t)source);
-            newNode.blocks.insert((int64_t)source);
-            AddNode(nodes, newNode);
-            nodeIt = nodes.find(source);
+            throw AtlasException("Found a node described in an edge that does not exist in the BBID space!");
         }
 
         if ((*nodeIt)->neighbors.find((uint64_t)sink) != (*nodeIt)->neighbors.end())
@@ -340,8 +347,8 @@ int ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filena
             {
                 (*successorNode)->predecessors.insert(node->NID);
             }
-            // the trace doesn't include the terminating block of the program (because it has no edges leading from it)
-            // But this creates a problem when defining kernel exits, so look for the node who has a neighbor that is not in the set already and add that neighbor (with correct predecessor)
+            // the profile doesn't include the terminating block of the program (because it has no edges leading from it)
+            // But this creates a problem when defining kernel exits, so look for the node who has a neighbor that is not in the graph already and add that neighbor (with correct predecessor)
             else
             {
                 // we likely found the terminating block, so add the block and assign the current node to be its predecessor
@@ -353,13 +360,18 @@ int ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filena
     }
 
     // finally, look for all nodes with no predecessors and no successors and remove them (they slow down the transform algorithms)
-    for (const auto &node : nodes)
+    vector<GraphNode*> toRemove;
+    for (auto &node : nodes)
     {
         auto nodeObject = *node;
         if (nodeObject.predecessors.empty() && nodeObject.neighbors.empty())
         {
-            RemoveNode(nodes, node);
+            toRemove.push_back(node);
         }
+    }
+    for( const auto& r : toRemove )
+    {
+        RemoveNode(nodes, r);
     }
 
     if (print)
@@ -1070,10 +1082,10 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
                 continue;
             }
             // steps
-            // first: select a node to become the VKNode (for now this is just the entrance at the front of the list)
-            // second: for each entrance, change the neighbor of each predecessor with the VKnode
-            // third: collect all edges that lead of out the kernel to the exits, and add all these edges to the VKnode neighbors
-            // fourth:
+            // first: select a node to become the VKNode (for now this is just the entrance at the front of the list) and remove all predecessors of the kernel entrance that are within the kernel itself (virtual kernel nodes are not allowed to loop onto themselves)
+            // second: for each entrance, change the neighbor of each predecessor with the VKnode (this draws the existing edges from predecessor to kernel entrance - to the new VKNode)
+            // third: collect all edges that lead out the kernel, and add all these edges to the VKnode neighbors (this draws existing edges from the new VKNode to its exit nodes)
+            // fourth: remove all nodes within the kernel except any virtual kernels within this kernel (this deletes everything old in the graph, leaving only the new virtual kernel behind, but spares the child kernels which float in free space. They are used later to establish parent-child relationships)
 
             auto kernelNode = new VKNode(*kernelEntrances.begin(), kernel);
             // remove each node in the kernel that are possibly in the entrance predecessors
@@ -1083,9 +1095,9 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
                 kernelNode->predecessors.erase(node.NID);
             }
 
-            // for each entrance, fix its predecessors
-            //  - make new entry pointing to the VKnode (this will duplicate the value from the original entrance node)
-            //  - add this entrance to the predecessors of the VKnode
+            // for each entrance, fix the neighbors of each predecessor
+            //  - make new neighbor pointing to the VKnode (this will duplicate the neighbor for the original entrance node)
+            //  - add this predecessor to the predecessors of the VKnode
             for (const auto &ent : kernelEntrances)
             {
                 for (const auto &predID : ent.predecessors)
@@ -1135,7 +1147,7 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
                         }
                     }
                 }
-                // for each neighbor of the kernel exit, change its predecessor to the kernel entrance node
+                // for each neighbor of the kernel exit, change its predecessor to the virtual kernel node
                 for (const auto &neighID : exitNode.neighbors)
                 {
                     auto neighbor = *(nodes.find(neighID.first));
@@ -1253,7 +1265,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
     // Annotate its bitcodes and values
-    CleanModule(SourceBitcode.get());
+    //CleanModule(SourceBitcode.get());
     Format(SourceBitcode.get());
     // construct its callgraph
     map<int64_t, BasicBlock *> IDToBlock;

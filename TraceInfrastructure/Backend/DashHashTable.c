@@ -148,12 +148,13 @@ extern "C"
         hashTable->size = newSize;
         // reallocate a new array that has double the current entries
         hashTable->array = (__TA_arrayElem *)malloc(hashTable->getFullSize(hashTable) * sizeof(__TA_arrayElem));
-        if( !hashTable->array )
+        if (!hashTable->array)
         {
             printf("Malloc failed!");
         }
         // put in everything from the old array
         printf("Old size is %d and new size is %d\n", old.getFullSize(&old), hashTable->getFullSize(hashTable));
+        bool recursed = false;
         for (uint32_t i = 0; i < old.getFullSize(&old); i++)
         {
             for (uint32_t j = 0; j < old.array[i].popCount; j++)
@@ -164,7 +165,7 @@ extern "C"
                     // john: always complete the copy before we start a new recursion
                     // john: this loop will segfault as soon as the recursion returns
                     // john: start with small default hash sizes in TBs
-                    internalClashes++;
+                    /*internalClashes++;
                     // we need to preserve the old array while incrementing the size
                     free(hashTable->array);
                     hashTable->array = old.array;
@@ -173,14 +174,20 @@ extern "C"
                     __TA_resolveClash(hashTable, hashTable->size + (uint32_t)internalClashes);
                     internalClashes--;
                     printf("After decrement, internalClashes is now %d\n", internalClashes);
+                    recursed = true;
+                    break;*/
                 }
+            }
+            if (recursed)
+            {
+                break;
             }
         }
         printf("Finished initializing new array\n");
         // should only happen on the bottom of the recursion depth
         if (!freedOld)
         {
-            free(old.array);
+            //free(old.array);
             freedOld = true;
             printf("Resolved the clash!\n");
         }
@@ -207,7 +214,9 @@ extern "C"
         // first write the markov order of the graph
         uint32_t MO = MARKOV_ORDER;
         fwrite(&MO, sizeof(uint32_t), 1, f);
-        // second write the number of edges in the file
+        // second write the total number of blocks in the graph (each block may or may not be connected to the rest of the graph)
+        fwrite(&blockCount, sizeof(uint32_t), 1, f);
+        // third write the number of edges in the file
         uint32_t edges = 0;
         uint32_t liveArrayEntries = 0;
         uint32_t maxPopCount = 0;
