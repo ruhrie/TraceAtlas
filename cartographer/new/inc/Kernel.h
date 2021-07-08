@@ -18,14 +18,18 @@ namespace TraceAtlas::Cartographer
         std::string Label;
         Kernel();
         Kernel(uint32_t ID);
-        /// Returns the IDs of the kernel entrances
+        /// Returns copies of the kernel entrances nodes. These nodes were copied when the kernel was generated, and any changes to them will not be present in the control flow graph
         /// @retval    entrances Vector of IDs that specify which nodes (or blocks) are the kernel entrances. Kernel entrances are the source nodes of edges that enter the kernel
         std::vector<GraphNode> getEntrances() const;
+        /// Returns pointers to the kernel entrance nodes of the kernel within the CFG argument. All changes made to the entrances will be present in the CFG.
+        std::vector<GraphNode *> getEntrances(std::set<GraphNode *, p_GNCompare> &CFG) const;
         /// @brief Returns the IDs of the kernel exits
         ///
         /// @param[in] allNodes Set of all nodes in the control flow graph. Used to copy the nodes that are the destinations of edges that leave the kernel
         /// @retval    exits Vector of IDs that specify which nodes (or blocks) are the kernel exits. Kernel exits are nodes that have a neighbor outside the kernel
         std::vector<GraphNode> getExits() const;
+        /// Returns pointers to the kernel entrance nodes of the kernel within the CFG argument. All changes made to the entrances will be present in the CFG.
+        std::vector<GraphNode *> getExits(std::set<GraphNode *, p_GNCompare> &CFG) const;
         /// @brief Returns the member blocks (from the source bitcode) of this kernel
         std::set<int64_t> getBlocks() const;
         /// @brief Compares this kernel to another kernel by measuring node differences

@@ -273,7 +273,7 @@ void RemoveNode(std::set<GraphNode *, p_GNCompare> &CFG, const GraphNode &remove
 // this function is only written to support MARKOV_ORDER=1 (TODO: generalize source,sink reading)
 int ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filename, bool print = false)
 {
-    // first initialize the graph to all the blocks in the 
+    // first initialize the graph to all the blocks in the
     FILE *f = fopen(filename.data(), "rb");
     if (!f)
     {
@@ -285,7 +285,7 @@ int ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filena
     // second word is a uint32_t of the total number of blocks in the graph (each block may or may not be connected to the rest of the graph)
     uint32_t blocks;
     fread(&blocks, sizeof(uint32_t), 1, f);
-    for( uint32_t i = 0; i < blocks; i++ )
+    for (uint32_t i = 0; i < blocks; i++)
     {
         auto newNode = GraphNode(i);
         newNode.blocks.insert((int64_t)i);
@@ -360,7 +360,7 @@ int ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filena
     }
 
     // finally, look for all nodes with no predecessors and no successors and remove them (they slow down the transform algorithms)
-    vector<GraphNode*> toRemove;
+    vector<GraphNode *> toRemove;
     for (auto &node : nodes)
     {
         auto nodeObject = *node;
@@ -369,7 +369,7 @@ int ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filena
             toRemove.push_back(node);
         }
     }
-    for( const auto& r : toRemove )
+    for (const auto &r : toRemove)
     {
         RemoveNode(nodes, r);
     }
@@ -1075,8 +1075,8 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
         try
         {
             // gather entrance and exit nodes
-            auto kernelEntrances = kernel->getEntrances();
-            auto kernelExits = kernel->getExits();
+            auto kernelEntrances = kernel->getEntrances(nodes);
+            auto kernelExits = kernel->getExits(nodes);
             if (kernelEntrances.empty() || kernelExits.empty())
             {
                 continue;
@@ -1087,7 +1087,7 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
             // third: collect all edges that lead out the kernel, and add all these edges to the VKnode neighbors (this draws existing edges from the new VKNode to its exit nodes)
             // fourth: remove all nodes within the kernel except any virtual kernels within this kernel (this deletes everything old in the graph, leaving only the new virtual kernel behind, but spares the child kernels which float in free space. They are used later to establish parent-child relationships)
 
-            auto kernelNode = new VKNode(*kernelEntrances.begin(), kernel);
+            auto kernelNode = new VKNode(**kernelEntrances.begin(), kernel);
             // remove each node in the kernel that are possibly in the entrance predecessors
             // this removes all edges in the graph that can lead to the kernel other than the kernel entrance predecessors
             for (const auto &node : kernel->nodes)
@@ -1100,15 +1100,15 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
             //  - add this predecessor to the predecessors of the VKnode
             for (const auto &ent : kernelEntrances)
             {
-                for (const auto &predID : ent.predecessors)
+                for (const auto &predID : ent->predecessors)
                 {
                     auto pred = nodes.find(predID);
                     if (pred != nodes.end()) // sanity check
                     {
                         if (kernel->nodes.find(predID) == kernel->nodes.end()) // if this predecessor of the entrance is not a member of the kernel, proceed
                         {
-                            (*pred)->neighbors[kernelNode->NID] = (*pred)->neighbors[ent.NID];
-                            (*pred)->neighbors.erase(ent.NID);
+                            (*pred)->neighbors[kernelNode->NID] = (*pred)->neighbors[ent->NID];
+                            (*pred)->neighbors.erase(ent->NID);
                             kernelNode->predecessors.insert(predID);
                         }
                     }
@@ -1126,33 +1126,25 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
             for (const auto &exitNode : kernelExits)
             {
                 // the only edges leading from the virtual kernel node should be edges out of the kernel
-                // we are given the nodes within the kernel that have neighbors outside the kernel, so here we figure out which exit edges exist
+                // we are given the nodes inside the kernel that have successors outside the kernel, so here we figure out which exit edges from our exit node leave the kernel
                 // we leave the probabilities the same as the original nodes (this means we will have outgoing edges whose probabilities do not sum to 1, because edges that go back in the kernel are omitted)
-                for (const auto &en : exitNode.neighbors)
+                for (const auto &en : exitNode->neighbors)
                 {
                     // nodes within the kernel will not be in the neighbors of the virtual kernel
                     if (kernel->nodes.find(en.first) == kernel->nodes.end())
                     {
-                        if (kernel->nodes.find(en.first) == kernel->nodes.end())
+                        auto exitNeighbor = nodes.find(en.first);
+                        if (exitNeighbor != nodes.end())
                         {
-                            auto exitNode = nodes.find(en.first);
-                            if (exitNode != nodes.end())
-                            {
-                                kernelNode->neighbors[en.first] = en.second;
-                            }
-                            else
-                            {
-                                throw AtlasException("Node predecessor not found in the control flow graph!");
-                            }
+                            kernelNode->neighbors[en.first] = en.second;
+                            (*exitNeighbor)->predecessors.erase(exitNode->NID);
+                            (*exitNeighbor)->predecessors.insert(kernelNode->NID);
+                        }
+                        else
+                        {
+                            throw AtlasException("Node predecessor not found in the control flow graph!");
                         }
                     }
-                }
-                // for each neighbor of the kernel exit, change its predecessor to the virtual kernel node
-                for (const auto &neighID : exitNode.neighbors)
-                {
-                    auto neighbor = *(nodes.find(neighID.first));
-                    neighbor->predecessors.erase(exitNode.NID);
-                    neighbor->predecessors.insert(kernelNode->NID);
                 }
             }
             // remove all nodes within the kernel except the entrance node and any virtual kernels within this kernel
@@ -1177,7 +1169,6 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
                 RemoveNode(nodes, node);
             }
             // finally replace the old entrance node with the new VKNode
-            //RemoveNode(nodes, *(kernelEntrances.begin()));
             nodes.insert(kernelNode);
             kernel->virtualNode = kernelNode;
             newPointers.push_back(kernel);
