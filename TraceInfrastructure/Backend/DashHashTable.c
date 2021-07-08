@@ -260,7 +260,10 @@ extern "C"
         // first word is a uint32_t of the markov order of the graph
         uint32_t markovOrder;
         fread(&markovOrder, sizeof(uint32_t), 1, f);
-        // second word is a uint32_t of how many edges there are in the file
+        // second word is the number of nodes in the graph
+        uint32_t blocks;
+        fread(&blocks, sizeof(uint32_t), 1, f);
+        // third word is a uint32_t of how many edges there are in the file
         uint32_t edges;
         fread(&edges, sizeof(uint32_t), 1, f);
 
