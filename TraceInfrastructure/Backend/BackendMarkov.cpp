@@ -70,17 +70,17 @@ extern "C"
         edgeHashTable = (__TA_HashTable *)malloc(sizeof(__TA_HashTable));
         edgeHashTable->size = (uint32_t)(ceil(log((double)blockCount) / log(2.0)));
         edgeHashTable->getFullSize = __TA_getFullSize;
-        edgeHashTable->array = (__TA_arrayElem *)malloc(edgeHashTable->getFullSize(edgeHashTable) * sizeof(__TA_arrayElem));
+        edgeHashTable->array = (__TA_arrayElem *)calloc(edgeHashTable->getFullSize(edgeHashTable), sizeof(__TA_arrayElem));
         // label hash table
         labelHashTable = (__TA_HashTable *)malloc(sizeof(__TA_HashTable));
         labelHashTable->size = (uint32_t)(ceil(log((double)blockCount) / log(2.0)));
         labelHashTable->getFullSize = __TA_getFullSize;
-        labelHashTable->array = (__TA_arrayElem *)malloc(labelHashTable->getFullSize(labelHashTable) * sizeof(__TA_arrayElem));
+        labelHashTable->array = (__TA_arrayElem *)calloc(labelHashTable->getFullSize(labelHashTable), sizeof(__TA_arrayElem));
         // caller hash table
         callerHashTable = (__TA_HashTable *)malloc(sizeof(__TA_HashTable));
         callerHashTable->size = (uint32_t)(ceil(log((double)blockCount) / log(2.0)));
         callerHashTable->getFullSize = __TA_getFullSize;
-        callerHashTable->array = (__TA_arrayElem *)malloc(callerHashTable->getFullSize(callerHashTable) * sizeof(__TA_arrayElem));
+        callerHashTable->array = (__TA_arrayElem *)calloc(callerHashTable->getFullSize(callerHashTable), sizeof(__TA_arrayElem));
 
         totalBlocks = blockCount;
         markovActive = true;
