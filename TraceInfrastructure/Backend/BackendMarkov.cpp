@@ -167,7 +167,9 @@ extern "C"
             nextEdge.edge.blocks[MARKOV_ORDER] = (uint32_t)a;
             while (__TA_HashTable_increment(edgeHashTable, &nextEdge))
             {
+#ifdef DEBUG
                 cout << "Resolving clash in edge table" << endl;
+#endif
                 __TA_resolveClash(edgeHashTable, edgeHashTable->size + 1);
             }
 
@@ -180,7 +182,9 @@ extern "C"
                 nextLabel.label.label = labelStack[stackCount];
                 while (__TA_HashTable_increment(labelHashTable, &nextLabel))
                 {
+#ifdef DEBUG
                     cout << "Resolving clash in label table" << endl;
+#endif
                     __TA_resolveClash(labelHashTable, labelHashTable->size + 1);
                 }
             }
@@ -193,7 +197,9 @@ extern "C"
                 nextCallee.callee.blocks[1] = (uint32_t)a;
                 while (__TA_HashTable_increment(callerHashTable, &nextCallee))
                 {
+#ifdef DEBUG
                     cout << "Resolving clash in caller table" << endl;
+#endif
                     __TA_resolveClash(callerHashTable, callerHashTable->size + 1);
                 }
             }
