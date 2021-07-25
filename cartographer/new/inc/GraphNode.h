@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <map>
 #include <set>
+#include <vector>
 
 namespace TraceAtlas::Cartographer
 {
@@ -9,6 +10,8 @@ namespace TraceAtlas::Cartographer
     {
     public:
         uint64_t NID;
+        /// Holds the blockIDs that originally constructed this node from the profile
+        std::vector<uint32_t> originalBlocks;
         /// BBIDs from the source bitcode that are represented by this node
         /// Each key is a member BBID and its value is the basic block its unconditional edge points to
         /// If a key maps to itself, there is no edge attached to this block

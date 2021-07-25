@@ -9,8 +9,6 @@
 #define HASH_INITIAL 0x12345678UL
 #define HASH_OFFSET 97531UL
 
-#define INTERNAL_CLASHES_LIMIT 5
-
 #ifdef __cplusplus
 extern "C"
 {
@@ -217,6 +215,7 @@ extern "C"
         printf("\nHASHTABLEMAXPOPCOUNT: %d\n", maxPopCount);
     }
 
+    // this function is not built to handle markov orders above 1
     void __TA_ReadEdgeHashTable(__TA_HashTable *a, char *path)
     {
         FILE *f = fopen(path, "rb");

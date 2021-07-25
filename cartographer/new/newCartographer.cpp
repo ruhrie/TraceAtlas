@@ -19,6 +19,8 @@ cl::opt<string> BlockInfoFilename("bi", cl::desc("Specify BlockInfo.json file"),
 cl::opt<string> DotFile("d", cl::desc("Specify dot filename"), cl::value_desc("dot file"));
 cl::opt<string> OutputFilename("o", cl::desc("Specify output json"), cl::value_desc("kernel filename"), cl::Required);
 
+uint32_t markovOrder;
+
 void ProfileBlock(BasicBlock *BB, map<int64_t, map<string, uint64_t>> &rMap, map<int64_t, map<string, uint64_t>> &cpMap)
 {
     int64_t id = GetBlockID(BB);
@@ -280,46 +282,104 @@ int ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filena
         return 1;
     }
     // first word is a uint32_t of the markov order of the graph
-    uint32_t markovOrder;
     fread(&markovOrder, sizeof(uint32_t), 1, f);
+    // maps a block ID list (that represents the markov chain state, which could have arbitrary order number) to an ID for that node
+    map<vector<uint32_t>, uint64_t> NIDMap;
     // second word is a uint32_t of the total number of blocks in the graph (each block may or may not be connected to the rest of the graph)
     uint32_t blocks;
     fread(&blocks, sizeof(uint32_t), 1, f);
-    for (uint32_t i = 0; i < blocks; i++)
+    /*for (uint32_t i = 0; i < blocks; i++)
     {
         auto newNode = GraphNode(i);
         newNode.blocks.insert((int64_t)i);
         AddNode(nodes, newNode);
-    }
+    }*/
     // third word is a uint32_t of how many edges there are in the file
     uint32_t edges;
     fread(&edges, sizeof(uint32_t), 1, f);
 
     // read all the edges
-    // for now, only works when MARKOV_ORDER=1
-    uint32_t source = 0;
+    // unique identifier for a node
+    uint64_t UID = 0;
+    // list of source nodes for a new edge being read from the input profile
+    // nodes go in order of least recent to most recent
+    uint32_t newSources[markovOrder];
+    for (uint32_t i = 0; i < markovOrder; i++)
+    {
+        newSources[i] = 0;
+    }
+    // place to read in a given sink ID from the input profile
     uint32_t sink = 0;
+    // place to read in a given edge frequency from the input profile
     uint64_t frequency = 0;
     // the __TA_element union contains 2 additional words for blockLabel char*
     uint64_t garbage = 0;
     for (uint32_t i = 0; i < edges; i++)
     {
-        fread(&source, sizeof(uint32_t), 1, f);
+        for (uint32_t j = 0; j < markovOrder; j++)
+        {
+            // source node IDs go in order or least recent to most recent
+            fread(&newSources[j], sizeof(uint32_t), 1, f);
+        }
         fread(&sink, sizeof(uint32_t), 1, f);
         fread(&frequency, sizeof(uint64_t), 1, f);
         fread(&garbage, sizeof(uint64_t), 1, f);
-
-        auto nodeIt = nodes.find(source);
+        // if this source node combo already exists, use that UID. Else create a new one
+        uint64_t newNID = 0;
+        std::vector<uint32_t> newSourceIDs;
+        for (auto &id : newSources)
+        {
+            newSourceIDs.push_back(id);
+        }
+        if (NIDMap.find(newSourceIDs) == NIDMap.end())
+        {
+            newNID = UID++;
+            NIDMap[newSourceIDs] = newNID;
+            auto newNode = GraphNode(newNID);
+            newNode.blocks.insert(newSourceIDs.begin(), newSourceIDs.end());
+            newNode.originalBlocks = newSourceIDs;
+            AddNode(nodes, newNode);
+        }
+        else
+        {
+            newNID = NIDMap[newSourceIDs];
+        }
+        auto nodeIt = nodes.find(newNID);
         if (nodeIt == nodes.end())
         {
             throw AtlasException("Found a node described in an edge that does not exist in the BBID space!");
         }
+        auto newNode = *nodeIt;
 
-        if ((*nodeIt)->neighbors.find((uint64_t)sink) != (*nodeIt)->neighbors.end())
+        // now synthesize the sink neighbor of this node, if a node for it doesn't yet exist
+        // first we insert all newSourceIDs except the oldest one
+        // then we insert the sink node ID to complete all IDs for the neighbor node
+        vector<uint32_t> neighborSourceIDs(next(newSourceIDs.begin()), newSourceIDs.end());
+        neighborSourceIDs.push_back(sink);
+        uint64_t neighborNID = 0;
+        if (NIDMap.find(neighborSourceIDs) == NIDMap.end())
         {
-            throw AtlasException("Found a sink node that is already a neighbor of this source node!");
+            neighborNID = UID++;
+            NIDMap[neighborSourceIDs] = neighborNID;
+            auto newNode = GraphNode(neighborNID);
+            newNode.blocks.insert(neighborSourceIDs.begin(), neighborSourceIDs.end());
+            newNode.originalBlocks = neighborSourceIDs;
+            AddNode(nodes, newNode);
         }
-        (*nodeIt)->neighbors[(uint64_t)sink].first = frequency;
+        else
+        {
+            neighborNID = NIDMap[neighborSourceIDs];
+        }
+        auto neighborIt = nodes.find(neighborNID);
+        if (neighborIt == nodes.end())
+        {
+            throw AtlasException("Could not find a node in the graph that matches the NID found to map to this neighbor!");
+        }
+        if (newNode->neighbors.find(neighborNID) != newNode->neighbors.end())
+        {
+            throw AtlasException("This sink node ID is already a neighbor of this source node!");
+        }
+        newNode->neighbors[neighborNID].first = frequency;
     }
     fclose(f);
 
