@@ -36,6 +36,8 @@ char *popStack()
     return pop;
 }
 
+uint64_t edgesSeen = 0;
+
 // Indicates which block was the caller of the current context
 int64_t openIndicator = -1;
 // holds the count of all blocks in the bitcode source file
@@ -62,7 +64,6 @@ extern "C"
     void MarkovInit(uint64_t blockCount, uint64_t ID)
     {
         // edge circular buffer initialization
-        // this initialization stage lasts until MARKOV_ORDER+1 blocks have been seen
         increment = 0;
         b[0] = ID;
 
@@ -156,58 +157,66 @@ extern "C"
     }
     void MarkovIncrement(uint64_t a)
     {
-        if (markovActive)
+        if (!markovActive)
         {
-            // edge hash table
-            for (uint8_t i = 0; i < MARKOV_ORDER; i++)
-            {
-                // nextEdge.blocks must always be in chronological order. Thus we start from the beginning with that index (which is what the offset calculation is for)
-                nextEdge.edge.blocks[i] = (uint32_t)b[(increment + i) % MARKOV_ORDER];
-            }
-            nextEdge.edge.blocks[MARKOV_ORDER] = (uint32_t)a;
-            while (__TA_HashTable_increment(edgeHashTable, &nextEdge))
-            {
-#ifdef DEBUG
-                cout << "Resolving clash in edge table" << endl;
-#endif
-                __TA_resolveClash(edgeHashTable, edgeHashTable->size + 1);
-            }
-
-            // label hash table
-            if (stackCount > 0)
-            {
-                nextLabel.label.blocks[0] = (uint32_t)a;
-                // here we use the LSB of the label pointer to help hash more effectively
-                nextLabel.label.blocks[1] = (uint64_t)labelStack[stackCount] & 0xFFFF;
-                nextLabel.label.label = labelStack[stackCount];
-                while (__TA_HashTable_increment(labelHashTable, &nextLabel))
-                {
-#ifdef DEBUG
-                    cout << "Resolving clash in label table" << endl;
-#endif
-                    __TA_resolveClash(labelHashTable, labelHashTable->size + 1);
-                }
-            }
-
-            // caller hash table
-            // mark our block caller, if necessary
-            if (openIndicator != -1)
-            {
-                nextCallee.callee.blocks[0] = (uint32_t)openIndicator;
-                nextCallee.callee.blocks[1] = (uint32_t)a;
-                while (__TA_HashTable_increment(callerHashTable, &nextCallee))
-                {
-#ifdef DEBUG
-                    cout << "Resolving clash in caller table" << endl;
-#endif
-                    __TA_resolveClash(callerHashTable, callerHashTable->size + 1);
-                }
-            }
-            openIndicator = (int64_t)a;
-
-            b[increment % MARKOV_ORDER] = a;
-            increment++;
+            return;
         }
+        edgesSeen++;
+        // edge hash table
+        for (uint8_t i = 0; i < MARKOV_ORDER; i++)
+        {
+            // nextEdge.blocks must always be in chronological order. Thus we start from the beginning with that index (which is what the offset calculation is for)
+            int index = (increment + i) % MARKOV_ORDER;
+            nextEdge.edge.blocks[i] = (uint32_t)b[index];
+        }
+        nextEdge.edge.blocks[MARKOV_ORDER] = (uint32_t)a;
+        // we need to wait until the first MARKOV_ORDER blocks have been seen
+        if (edgesSeen < MARKOV_ORDER)
+        {
+            return;
+        }
+        while (__TA_HashTable_increment(edgeHashTable, &nextEdge))
+        {
+#ifdef DEBUG
+            cout << "Resolving clash in edge table" << endl;
+#endif
+            __TA_resolveClash(edgeHashTable, edgeHashTable->size + 1);
+        }
+
+        // label hash table
+        if (stackCount > 0)
+        {
+            nextLabel.label.blocks[0] = (uint32_t)a;
+            // here we use the LSB of the label pointer to help hash more effectively
+            nextLabel.label.blocks[1] = (uint64_t)labelStack[stackCount] & 0xFFFF;
+            nextLabel.label.label = labelStack[stackCount];
+            while (__TA_HashTable_increment(labelHashTable, &nextLabel))
+            {
+#ifdef DEBUG
+                cout << "Resolving clash in label table" << endl;
+#endif
+                __TA_resolveClash(labelHashTable, labelHashTable->size + 1);
+            }
+        }
+
+        // caller hash table
+        // mark our block caller, if necessary
+        if (openIndicator != -1)
+        {
+            nextCallee.callee.blocks[0] = (uint32_t)openIndicator;
+            nextCallee.callee.blocks[1] = (uint32_t)a;
+            while (__TA_HashTable_increment(callerHashTable, &nextCallee))
+            {
+#ifdef DEBUG
+                cout << "Resolving clash in caller table" << endl;
+#endif
+                __TA_resolveClash(callerHashTable, callerHashTable->size + 1);
+            }
+        }
+        openIndicator = (int64_t)a;
+
+        b[increment % MARKOV_ORDER] = a;
+        increment++;
     }
     void MarkovExit()
     {
