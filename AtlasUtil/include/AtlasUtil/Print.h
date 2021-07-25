@@ -115,6 +115,12 @@ inline void PrintGraph(const std::set<TraceAtlas::Cartographer::GraphNode *, Tra
         {
             spdlog::info("This node is a virtual kernel pointing to ID " + std::to_string(VKN->kernel->KID));
         }
+        std::string originalBlocks;
+        for (const auto &ob : node->originalBlocks)
+        {
+            originalBlocks += std::to_string(ob) + ",";
+        }
+        spdlog::info("This node was generated from original blocks " + originalBlocks);
         std::string blocks;
         for (const auto &b : node->blocks)
         {
