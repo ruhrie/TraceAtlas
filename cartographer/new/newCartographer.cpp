@@ -312,18 +312,12 @@ int ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filena
     uint32_t sink = 0;
     // place to read in a given edge frequency from the input profile
     uint64_t frequency = 0;
-    // the __TA_element union contains 2 additional words for blockLabel char*
-    uint64_t garbage = 0;
     for (uint32_t i = 0; i < edges; i++)
     {
-        for (uint32_t j = 0; j < markovOrder; j++)
-        {
-            // source node IDs go in order or least recent to most recent
-            fread(&newSources[j], sizeof(uint32_t), 1, f);
-        }
+        // source node IDs go in order or least recent to most recent
+        fread(&newSources, sizeof(uint32_t), markovOrder, f);
         fread(&sink, sizeof(uint32_t), 1, f);
         fread(&frequency, sizeof(uint64_t), 1, f);
-        fread(&garbage, sizeof(uint64_t), 1, f);
         // if this source node combo already exists, use that UID. Else create a new one
         uint64_t newNID = 0;
         std::vector<uint32_t> newSourceIDs;
