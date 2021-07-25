@@ -8,7 +8,7 @@
 #define TUPLE_SIZE 15
 
 // defines how many 4 byte integers we need to hash, as well as other things
-#define MARKOV_ORDER 1
+#define MARKOV_ORDER 2
 
 // output binary file name
 #define MARKOV_FILE "markov.bin"

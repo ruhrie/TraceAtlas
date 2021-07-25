@@ -53,12 +53,18 @@ extern "C"
     {
         for (uint32_t i = 0; i < entry->popCount; i++)
         {
+            bool allMatch = true;
+            ;
             for (uint32_t j = 0; j < MARKOV_ORDER + 1; j++)
             {
-                if ((entry->tuple[i].edge.blocks[j] == index->edge.blocks[j]) && (entry->tuple[i].edge.blocks[j] == index->edge.blocks[j]))
+                if ((entry->tuple[i].edge.blocks[j] != index->edge.blocks[j]))
                 {
-                    return &entry->tuple[i];
+                    allMatch = false;
                 }
+            }
+            if (allMatch)
+            {
+                return &entry->tuple[i];
             }
         }
         return NULL;
@@ -195,12 +201,16 @@ extern "C"
         }
         fwrite(&edges, sizeof(uint32_t), 1, f);
 
-        // third, write all the edges
+        // fourth, write all the entries in the hash table
         for (uint32_t i = 0; i < a->getFullSize(a); i++)
         {
             for (uint32_t j = 0; j < a->array[i].popCount; j++)
             {
-                fwrite(&a->array[i].tuple[j], sizeof(__TA_element), 1, f);
+                uint32_t sources[MARKOV_ORDER + 1] = {a->array[i].tuple[j].edge.blocks[0], a->array[i].tuple[j].edge.blocks[1], a->array[i].tuple[j].edge.blocks[2]};
+                uint64_t frequency = a->array[i].tuple[j].edge.frequency;
+                //fwrite(&a->array[i].tuple[j].edge, sizeof(__TA_edgeTuple), 1, f);
+                fwrite(&sources, sizeof(uint32_t), MARKOV_ORDER + 1, f);
+                fwrite(&frequency, sizeof(uint64_t), 1, f);
             }
         }
         fclose(f);
