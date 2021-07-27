@@ -20,6 +20,8 @@ cl::opt<string> DotFile("d", cl::desc("Specify dot filename"), cl::value_desc("d
 cl::opt<string> OutputFilename("o", cl::desc("Specify output json"), cl::value_desc("kernel filename"), cl::Required);
 
 uint32_t markovOrder;
+// maps a block ID list (that represents the markov chain state, which could have arbitrary order number) to an ID for that node
+map<vector<uint32_t>, uint64_t> NIDMap;
 
 void ProfileBlock(BasicBlock *BB, map<int64_t, map<string, uint64_t>> &rMap, map<int64_t, map<string, uint64_t>> &cpMap)
 {
@@ -166,7 +168,12 @@ string GenerateDot(const set<GraphNode *, p_GNCompare> &nodes, const set<Kernel 
     {
         for (const auto &n : node->neighbors)
         {
-            dotString += "\t" + to_string(node->NID) + " -> " + to_string(n.first) + ";\n";
+            string origBlocks = "";
+            for (const auto &block : node->originalBlocks)
+            {
+                origBlocks += to_string(block) + ",";
+            }
+            dotString += "\t\"" + origBlocks + "\" -> " + to_string(n.first) + ";\n";
         }
         if (auto VKN = dynamic_cast<VKNode *>(node))
         {
@@ -283,8 +290,6 @@ int ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filena
     }
     // first word is a uint32_t of the markov order of the graph
     fread(&markovOrder, sizeof(uint32_t), 1, f);
-    // maps a block ID list (that represents the markov chain state, which could have arbitrary order number) to an ID for that node
-    map<vector<uint32_t>, uint64_t> NIDMap;
     // second word is a uint32_t of the total number of blocks in the graph (each block may or may not be connected to the rest of the graph)
     uint32_t blocks;
     fread(&blocks, sizeof(uint32_t), 1, f);
@@ -358,6 +363,7 @@ int ReadBIN(std::set<GraphNode *, p_GNCompare> &nodes, const std::string &filena
             auto newNode = GraphNode(neighborNID);
             newNode.blocks.insert(neighborSourceIDs.begin(), neighborSourceIDs.end());
             newNode.originalBlocks = neighborSourceIDs;
+            newNode.predecessors.insert(newNID);
             AddNode(nodes, newNode);
         }
         else
@@ -538,13 +544,27 @@ void TrivialTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64
                     if (((*succ)->predecessors.size() == 1) && ((*succ)->predecessors.find(currentNode->NID) != (*succ)->predecessors.end()))
                     {
                         // third condition, edge must not cross a context level
-                        auto sourceBlock = IDToBlock[(int64_t)currentNode->NID];
-                        auto sinkBlock = IDToBlock[(int64_t)(*succ)->NID];
-                        if (sourceBlock == nullptr || sinkBlock == nullptr)
+                        // we need to collect all blocks represented by this node and get their parents
+                        std::set<llvm::Function *> parentBlocks;
+                        for (const auto &block : currentNode->originalBlocks)
                         {
-                            throw AtlasException("Found a node in the graph whose ID did not map to a basic block pointer in the ID map!");
+                            auto sourceBlock = IDToBlock[(int64_t)block];
+                            if (sourceBlock == nullptr)
+                            {
+                                throw AtlasException("Found a node in the graph whose ID did not map to a basic block pointer in the ID map!");
+                            }
+                            parentBlocks.insert(sourceBlock->getParent());
                         }
-                        if (sourceBlock->getParent() == sinkBlock->getParent())
+                        for (const auto &block : (*succ)->originalBlocks)
+                        {
+                            auto sinkBlock = IDToBlock[(int64_t)block];
+                            if (sinkBlock == nullptr)
+                            {
+                                throw AtlasException("Found a node in the graph whose ID did not map to a basic block pointer in the ID map!");
+                            }
+                            parentBlocks.insert(sinkBlock->getParent());
+                        }
+                        if (parentBlocks.size() == 1)
                         {
                             // trivial merge, we merge into the source node
                             // keep the NID, preds
