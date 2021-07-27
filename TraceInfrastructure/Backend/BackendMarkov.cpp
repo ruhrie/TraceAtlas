@@ -36,7 +36,7 @@ char *popStack()
     return pop;
 }
 
-uint64_t edgesSeen = 0;
+uint64_t blocksSeen = 0;
 
 // Indicates which block was the caller of the current context
 int64_t openIndicator = -1;
@@ -161,7 +161,7 @@ extern "C"
         {
             return;
         }
-        edgesSeen++;
+        blocksSeen++;
         // edge hash table
         for (uint8_t i = 0; i < MARKOV_ORDER; i++)
         {
@@ -170,8 +170,10 @@ extern "C"
             nextEdge.edge.blocks[i] = (uint32_t)b[index];
         }
         nextEdge.edge.blocks[MARKOV_ORDER] = (uint32_t)a;
-        // we need to wait until the first MARKOV_ORDER blocks have been seen
-        if (edgesSeen < MARKOV_ORDER)
+        b[increment % MARKOV_ORDER] = a;
+        increment++;
+        // we need to wait until the first MARKOV_ORDER blocks have been seen (MarkovInit records the first block, thus after MARKOV_ORDER blocks have been seen, we have our first edge)
+        if (blocksSeen < MARKOV_ORDER)
         {
             return;
         }
@@ -214,9 +216,6 @@ extern "C"
             }
         }
         openIndicator = (int64_t)a;
-
-        b[increment % MARKOV_ORDER] = a;
-        increment++;
     }
     void MarkovExit()
     {
