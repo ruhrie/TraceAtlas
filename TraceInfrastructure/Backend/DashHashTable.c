@@ -196,7 +196,8 @@ extern "C"
         {
             for (uint32_t j = 0; j < a->array[i].popCount; j++)
             {
-                fwrite(&(a->array[i].tuple[j].edge), sizeof(__TA_edgeTuple), 1, f);
+                fwrite(&(a->array[i].tuple[j].edge.blocks), sizeof(uint32_t), MARKOV_ORDER+1, f);
+                fwrite(&(a->array[i].tuple[j].edge.frequency), sizeof(uint64_t), 1, f);                
             }
         }
         fclose(f);
