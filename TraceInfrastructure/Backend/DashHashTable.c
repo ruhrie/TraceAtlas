@@ -35,18 +35,8 @@ extern "C"
     // here size is ceil( log2(arraySize) )
     uint32_t __TA_hash_source(uint32_t x[MARKOV_ORDER + 1], uint32_t size)
     {
-        // instead of doing a mask, I should do a right shift
-        // so instead of modulo, we want to do a right shift by (32-arraysize)
-        // the mask just needs to be 0x(size - 1)
-        uint32_t shortHash = 0;
-        uint32_t longHash = __TA_hash(x);
-        uint32_t mask = 0x1;
-        for (uint32_t i = 0; i < size; i++)
-        {
-            shortHash += longHash & mask;
-            mask = mask << 1;
-        }
-        return shortHash;
+        // take the least significant [size] bits of the long hash to make the short hash
+        return __TA_hash(x) & ( (0x1 << size) - 1);
     }
 
     __TA_element *__TA_tupleLookup(__TA_arrayElem *entry, __TA_element *index)
@@ -54,12 +44,12 @@ extern "C"
         for (uint32_t i = 0; i < entry->popCount; i++)
         {
             bool allMatch = true;
-            ;
             for (uint32_t j = 0; j < MARKOV_ORDER + 1; j++)
             {
                 if ((entry->tuple[i].edge.blocks[j] != index->edge.blocks[j]))
                 {
                     allMatch = false;
+                    break;
                 }
             }
             if (allMatch)
@@ -206,11 +196,7 @@ extern "C"
         {
             for (uint32_t j = 0; j < a->array[i].popCount; j++)
             {
-                uint32_t sources[MARKOV_ORDER + 1] = {a->array[i].tuple[j].edge.blocks[0], a->array[i].tuple[j].edge.blocks[1], a->array[i].tuple[j].edge.blocks[2]};
-                uint64_t frequency = a->array[i].tuple[j].edge.frequency;
-                //fwrite(&a->array[i].tuple[j].edge, sizeof(__TA_edgeTuple), 1, f);
-                fwrite(&sources, sizeof(uint32_t), MARKOV_ORDER + 1, f);
-                fwrite(&frequency, sizeof(uint64_t), 1, f);
+                fwrite(&(a->array[i].tuple[j].edge), sizeof(__TA_edgeTuple), 1, f);
             }
         }
         fclose(f);
