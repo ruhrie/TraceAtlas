@@ -5,7 +5,7 @@ InjectTracer(matmul)
 add_test(NAME matmul_trace COMMAND matmul-trace)
 set_tests_properties(matmul_trace PROPERTIES FIXTURES_SETUP matmul_trace_fixture)
 
-add_test(NAME matmul_cartographer COMMAND newCartographer -i ${CMAKE_CURRENT_BINARY_DIR}/markov.bin -b $<TARGET_FILE:matmul> -bi ${CMAKE_CURRENT_BINARY_DIR}/BlockInfo.json -o ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
+add_test(NAME matmul_cartographer COMMAND newCartographer -i ${CMAKE_CURRENT_BINARY_DIR}/markov.bin -b $<TARGET_FILE:matmul> -bi ${CMAKE_CURRENT_BINARY_DIR}/BlockInfo.json -d dot.dot -o ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
 set_tests_properties(matmul_cartographer PROPERTIES DEPENDS matmul_trace FIXTURES_REQUIRED matmul_trace_fixture FIXTURES_SETUP matmul_cartographer_fixture)
 
 add_test(NAME matmul_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:matmul>)

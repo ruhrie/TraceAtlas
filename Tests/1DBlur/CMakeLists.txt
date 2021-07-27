@@ -3,7 +3,7 @@ InjectTracer(1DBlur)
 
 add_test(NAME 1DBlur_Trace COMMAND 1DBlur-trace)
 
-add_test(NAME 1DBlur_cartographer COMMAND newCartographer -i ${CMAKE_CURRENT_BINARY_DIR}/markov.bin -b $<TARGET_FILE:1DBlur> -bi ${CMAKE_CURRENT_BINARY_DIR}/BlockInfo.json -o ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
+add_test(NAME 1DBlur_cartographer COMMAND newCartographer -i ${CMAKE_CURRENT_BINARY_DIR}/markov.bin -b $<TARGET_FILE:1DBlur> -bi ${CMAKE_CURRENT_BINARY_DIR}/BlockInfo.json -d dot.dot -o ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
 set_tests_properties(1DBlur_cartographer PROPERTIES DEPENDS 1DBlur_Trace)
 
 add_test(NAME 1DBlur_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:1DBlur>)

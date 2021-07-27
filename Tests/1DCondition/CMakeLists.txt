@@ -3,7 +3,7 @@ InjectTracer(1DCondition)
 
 add_test(NAME 1DCondition_Trace COMMAND 1DCondition-trace)
 
-add_test(NAME 1DCondition_cartographer COMMAND newCartographer -i ${CMAKE_CURRENT_BINARY_DIR}/markov.bin -b $<TARGET_FILE:1DCondition> -bi ${CMAKE_CURRENT_BINARY_DIR}/BlockInfo.json -o ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
+add_test(NAME 1DCondition_cartographer COMMAND newCartographer -i ${CMAKE_CURRENT_BINARY_DIR}/markov.bin -b $<TARGET_FILE:1DCondition> -bi ${CMAKE_CURRENT_BINARY_DIR}/BlockInfo.json -d dot.dot -o ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
 set_tests_properties(1DCondition_cartographer PROPERTIES DEPENDS 1DCondition_Trace)
 
 add_test(NAME 1DCondition_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:1DCondition>)
