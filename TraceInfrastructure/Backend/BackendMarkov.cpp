@@ -36,16 +36,14 @@ char *popStack()
     return pop;
 }
 
+// counter that is used to index the circular buffer. The index (increment%MARKOV_ORDER) always point to the oldest entry in the buffer (after it is fully initialized)
 uint64_t blocksSeen = 0;
-
 // Indicates which block was the caller of the current context
 int64_t openIndicator = -1;
 // holds the count of all blocks in the bitcode source file
 uint64_t totalBlocks;
 // Circular buffer of the previous MARKOV_ORDER blocks seen
 uint64_t b[MARKOV_ORDER];
-// counter that is used to index the circular buffer. The index (increment%MARKOV_ORDER) always point to the oldest entry in the buffer (after it is fully initialized)
-uint8_t increment;
 // Flag indicating whether the program is actively being profiled
 bool markovActive = false;
 // Hash table for the edges of the control flow graph
@@ -64,7 +62,6 @@ extern "C"
     void MarkovInit(uint64_t blockCount, uint64_t ID)
     {
         // edge circular buffer initialization
-        increment = 0;
         b[0] = ID;
 
         // edge hash table
@@ -161,17 +158,16 @@ extern "C"
         {
             return;
         }
-        blocksSeen++;
         // edge hash table
         for (uint8_t i = 0; i < MARKOV_ORDER; i++)
         {
             // nextEdge.blocks must always be in chronological order. Thus we start from the beginning with that index (which is what the offset calculation is for)
-            int index = (increment + i) % MARKOV_ORDER;
+            int index = (blocksSeen + i) % MARKOV_ORDER;
             nextEdge.edge.blocks[i] = (uint32_t)b[index];
         }
         nextEdge.edge.blocks[MARKOV_ORDER] = (uint32_t)a;
-        b[increment % MARKOV_ORDER] = a;
-        increment++;
+        b[blocksSeen % MARKOV_ORDER] = a;
+        blocksSeen++;
         // we need to wait until the first MARKOV_ORDER blocks have been seen (MarkovInit records the first block, thus after MARKOV_ORDER blocks have been seen, we have our first edge)
         if (blocksSeen < MARKOV_ORDER)
         {

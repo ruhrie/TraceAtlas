@@ -1,6 +1,7 @@
 
 #include "Passes/MarkovIO.h"
 #include "AtlasUtil/Annotate.h"
+#include "AtlasUtil/Format.h"
 #include "Passes/Annotate.h"
 #include "Passes/CommandArgs.h"
 #include "Passes/Functions.h"
@@ -15,6 +16,7 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
+
 using namespace llvm;
 
 namespace DashTracer
@@ -24,6 +26,7 @@ namespace DashTracer
         GlobalVariable *tst;
         bool MarkovIO::runOnModule(Module &M)
         {
+            Format(&M);
             uint64_t blockCount = GetBlockCount(&M);
             ConstantInt *i = ConstantInt::get(Type::getInt64Ty(M.getContext()), blockCount);
             tst = new GlobalVariable(M, i->getType(), false, llvm::GlobalValue::LinkageTypes::ExternalLinkage, i, "MarkovBlockCount");
