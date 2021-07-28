@@ -163,17 +163,27 @@ string GenerateDot(const set<GraphNode *, p_GNCompare> &nodes, const set<Kernel 
     {
         dotString += "\t" + to_string(kernel->virtualNode->NID) + " [label=\"" + kernel->Label + "\"]\n";
     }
+    // label nodes based on their original blocks
+    for (const auto &node : nodes)
+    {
+        string origBlocks = "";
+        if( node->originalBlocks.empty() )
+        {
+            continue;
+        }
+        origBlocks += to_string(node->originalBlocks.front());
+        for (auto block = next(node->originalBlocks.begin()) ; block != node->originalBlocks.end() ; block++ )
+        {
+            origBlocks += "," + to_string(*block);
+        }
+        dotString += "\t" + to_string(node->NID) + " [label=\"" + origBlocks + "\"]\n";
+    }
     // now build out the nodes in the graph
     for (const auto &node : nodes)
     {
         for (const auto &n : node->neighbors)
         {
-            string origBlocks = "";
-            for (const auto &block : node->originalBlocks)
-            {
-                origBlocks += to_string(block) + ",";
-            }
-            dotString += "\t\"" + origBlocks + "\" -> " + to_string(n.first) + ";\n";
+            dotString += "\t" + to_string(node->NID) + " -> " + to_string(n.first) + ";\n";
         }
         if (auto VKN = dynamic_cast<VKNode *>(node))
         {
@@ -1386,6 +1396,10 @@ int main(int argc, char *argv[])
 #ifdef DEBUG
     spdlog::info("Input control flow graph:");
     PrintGraph(nodes);
+    ofstream debugStream("StaticControlGraph.dot");
+    auto staticGraph = GenerateDot(nodes, std::set<Kernel*, KCompare>());
+    debugStream << staticGraph << "\n";
+    debugStream.close();
 #endif
 
     // transform graph in an iterative manner until the size of the graph doesn't change
