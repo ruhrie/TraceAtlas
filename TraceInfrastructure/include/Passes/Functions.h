@@ -22,5 +22,8 @@ namespace DashTracer
         extern Function *MarkovDestroy;
         extern Function *MarkovIncrement;
         extern Function *MarkovExit;
+        extern Function *InstanceInit;
+        extern Function *InstanceDestroy;
+        extern Function *InstanceIncrement;
     } // namespace Passes
 } // namespace DashTracer
