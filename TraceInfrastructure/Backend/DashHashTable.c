@@ -36,7 +36,7 @@ extern "C"
     uint32_t __TA_hash_source(uint32_t x[MARKOV_ORDER + 1], uint32_t size)
     {
         // take the least significant [size] bits of the long hash to make the short hash
-        return __TA_hash(x) & ( (0x1 << size) - 1);
+        return __TA_hash(x) & ((0x1 << size) - 1);
     }
 
     __TA_element *__TA_tupleLookup(__TA_arrayElem *entry, __TA_element *index)
@@ -196,8 +196,8 @@ extern "C"
         {
             for (uint32_t j = 0; j < a->array[i].popCount; j++)
             {
-                fwrite(&(a->array[i].tuple[j].edge.blocks), sizeof(uint32_t), MARKOV_ORDER+1, f);
-                fwrite(&(a->array[i].tuple[j].edge.frequency), sizeof(uint64_t), 1, f);                
+                fwrite(&(a->array[i].tuple[j].edge.blocks), sizeof(uint32_t), MARKOV_ORDER + 1, f);
+                fwrite(&(a->array[i].tuple[j].edge.frequency), sizeof(uint64_t), 1, f);
             }
         }
         fclose(f);

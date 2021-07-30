@@ -82,6 +82,24 @@ function(InjectTracer tar)
     target_link_libraries(${tar}-trace PRIVATE AtlasBackend)
 endfunction()
 
+function(InjectInstance tar)
+    target_compile_options(${tar} PRIVATE "-flto" "-g")
+    set_target_properties(${tar} PROPERTIES LINK_FLAGS "-fuse-ld=lld -Wl,--plugin-opt=emit-llvm")
+    add_custom_command(OUTPUT instance.bc
+        COMMAND ${LLVM_INSTALL_PREFIX}/bin/opt -load $<TARGET_FILE:AtlasPasses> -Instance $<TARGET_FILE:${tar}> -o instance.bc
+        DEPENDS $<TARGET_FILE:${tar}>
+    )
+    set_source_files_properties(
+        instance.bc
+        PROPERTIES
+        EXTERNAL_OBJECT true
+        GENERATED true
+    )
+    add_executable(${tar}-instance-trace instance.bc)
+    set_target_properties(${tar}-instance-trace PROPERTIES LINKER_LANGUAGE CXX)
+    target_link_libraries(${tar}-instance-trace PRIVATE AtlasBackend)
+endfunction()
+
 # our unit tests
 option(ENABLE_TESTING "Build tests" ON)
 option(ENABLE_TESTING_LONG "Build tests long" OFF)

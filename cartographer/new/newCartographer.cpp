@@ -167,12 +167,12 @@ string GenerateDot(const set<GraphNode *, p_GNCompare> &nodes, const set<Kernel 
     for (const auto &node : nodes)
     {
         string origBlocks = "";
-        if( node->originalBlocks.empty() )
+        if (node->originalBlocks.empty())
         {
             continue;
         }
         origBlocks += to_string(node->originalBlocks.front());
-        for (auto block = next(node->originalBlocks.begin()) ; block != node->originalBlocks.end() ; block++ )
+        for (auto block = next(node->originalBlocks.begin()); block != node->originalBlocks.end(); block++)
         {
             origBlocks += "," + to_string(*block);
         }
@@ -1397,7 +1397,7 @@ int main(int argc, char *argv[])
     spdlog::info("Input control flow graph:");
     PrintGraph(nodes);
     ofstream debugStream("StaticControlGraph.dot");
-    auto staticGraph = GenerateDot(nodes, std::set<Kernel*, KCompare>());
+    auto staticGraph = GenerateDot(nodes, std::set<Kernel *, KCompare>());
     debugStream << staticGraph << "\n";
     debugStream.close();
 #endif

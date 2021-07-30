@@ -1,4 +1,4 @@
-#include "Passes/Markov.h"
+#include "Passes/Instance.h"
 #include "AtlasUtil/Annotate.h"
 #include "Passes/Annotate.h"
 #include "Passes/CommandArgs.h"
@@ -52,9 +52,6 @@ namespace DashTracer::Passes
                     firstInsertion = BB->getFirstInsertionPt();
                     firstInst = cast<Instruction>(firstInsertion);
                     IRBuilder<> initBuilder(firstInst);
-                    uint64_t blockCount = GetBlockCount(F.getParent());
-                    Value *countValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), blockCount);
-                    args.push_back(countValue);
                     // get the BBID and make it a value in the LLVM Module
                     int64_t id = GetBlockID(BB);
                     Value *blockID = ConstantInt::get(Type::getInt64Ty(BB->getContext()), (uint64_t)id);
@@ -118,7 +115,7 @@ namespace DashTracer::Passes
 
     bool Instance::doInitialization(Module &M)
     {
-        InstanceInit = cast<Function>(M.getOrInsertFunction("InstanceInit", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext()), Type::getInt64Ty(M.getContext())).getCallee());
+        InstanceInit = cast<Function>(M.getOrInsertFunction("InstanceInit", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext())).getCallee());
         InstanceDestroy = cast<Function>(M.getOrInsertFunction("InstanceDestroy", Type::getVoidTy(M.getContext())).getCallee());
         InstanceIncrement = cast<Function>(M.getOrInsertFunction("InstanceIncrement", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext())).getCallee());
         return false;
