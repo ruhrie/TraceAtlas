@@ -12,6 +12,5 @@ namespace TraceAtlas::Cartographer
         VKNode(struct Kernel *p_k);
         VKNode(const GraphNode &GN, struct Kernel *p_k);
         ~VKNode() = default;
-        void addNodeBlocks(GraphNode *newNode);
     };
 } // namespace TraceAtlas::Cartographer
