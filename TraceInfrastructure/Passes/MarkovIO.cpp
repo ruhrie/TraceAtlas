@@ -26,7 +26,6 @@ namespace DashTracer
         GlobalVariable *tst;
         bool MarkovIO::runOnModule(Module &M)
         {
-            Format(&M);
             uint64_t blockCount = GetBlockCount(&M);
             ConstantInt *i = ConstantInt::get(Type::getInt64Ty(M.getContext()), blockCount);
             tst = new GlobalVariable(M, i->getType(), false, llvm::GlobalValue::LinkageTypes::ExternalLinkage, i, "MarkovBlockCount");
