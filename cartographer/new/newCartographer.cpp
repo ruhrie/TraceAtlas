@@ -176,14 +176,14 @@ string GenerateDot(const set<GraphNode *, p_GNCompare> &nodes, const set<Kernel 
         {
             origBlocks += "," + to_string(*block);
         }
-        dotString += "\t" + to_string(node->NID) + " [label=\"" + origBlocks + "\"]\n";
+        dotString += "\t" + to_string(node->NID) + " [label=\"" + origBlocks + "\"];\n";
     }
     // now build out the nodes in the graph
     for (const auto &node : nodes)
     {
         for (const auto &n : node->neighbors)
         {
-            dotString += "\t" + to_string(node->NID) + " -> " + to_string(n.first) + ";\n";
+            dotString += "\t" + to_string(node->NID) + " -> " + to_string(n.first) + " [label=" + to_string(n.second.second) + "];\n";
         }
         if (auto VKN = dynamic_cast<VKNode *>(node))
         {
@@ -1439,6 +1439,10 @@ int main(int argc, char *argv[])
 #ifdef DEBUG
     spdlog::info("Transformed Graph:");
     PrintGraph(nodes);
+    ofstream debugStream2("TransformedStaticControlGraph.dot");
+    auto transformedStaticGraph = GenerateDot(nodes, std::set<Kernel *, KCompare>());
+    debugStream2 << transformedStaticGraph << "\n";
+    debugStream2.close();
 #endif
 
     auto endEntropy = EntropyCalculation(nodes);
