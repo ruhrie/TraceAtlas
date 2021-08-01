@@ -595,7 +595,10 @@ void TrivialTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64
                                 }
                             }
                             // add the successor blocks
-                            currentNode->addBlocks((*succ)->blocks);
+                            if( !currentNode->mergeSuccessor(**succ) )
+                            {
+                                throw AtlasException("Tried to merge a successor that did not have the correct original blocks!");
+                            }
 
                             // remove stale node from the node set
                             RemoveNode(nodes, *succ);
@@ -1237,6 +1240,7 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
                 auto it_Node = nodes.find(node.NID);
                 if (it_Node != nodes.end())
                 {
+                    kernelNode->mergeSuccessor(**it_Node);
                     if (auto VKN = dynamic_cast<VKNode *>(*it_Node))
                     {
                         // don't throw away virtual kernel nodes, but disconnect them from the graph
@@ -1698,6 +1702,32 @@ int main(int argc, char *argv[])
     // now assign hierarchy to each kernel
     for (const auto &kern : kernels)
     {
+        auto entIDs = vector<uint32_t>();
+        auto exIDs  = vector<uint32_t>();
+        // The entrances IDs we export have to refer to a block in the original bitcode explicitly, not an NID in our constructed graph here
+        // Every ID up to the last in originalBlocks is past history
+        // The last block represents the current block
+        // The block that is outside the kernel is a neighbor of this node, 
+        // The node that is still within the kernel that has an edge leading out of the kernel has its current block within the kernel and the next block outside the kernel
+        // Thus we choose the last block in originalBlocks as the exit block
+        // The same logic is applied to the entrance blocks, except the entrance block is the sink node of an edge that enters the kernel
+        // This doesn't change what the logic is because the last node in the originalBlocks struct is still the current block
+        if( !kern->getExits().empty() )
+        {
+            for( const auto& ex : kern->getExits() )
+            {
+                exIDs.push_back(ex.originalBlocks.back());
+            }
+        }
+        if( !kern->getEntrances().empty())
+        {
+            for( const auto& en : kern->getEntrances() )
+            {
+                entIDs.push_back(en.originalBlocks.back());
+            }
+        }
+        outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Entrances"] = vector<uint32_t>(entIDs);
+        outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Exits"] = vector<uint32_t>(exIDs);
         outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Children"] = vector<uint32_t>();
         outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Parents"] = vector<uint32_t>();
     }
