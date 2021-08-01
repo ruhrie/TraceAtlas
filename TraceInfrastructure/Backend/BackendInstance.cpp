@@ -109,17 +109,18 @@ extern "C"
             cout << e.what() << endl;
             exit(EXIT_FAILURE);
         }
-        for (const auto &bbid : j.items())
+        if( j.find("Kernels") != j.end() )
         {
-            if (j[bbid.key()].find("Kernels") != j[bbid.key()].end())
+            for (const auto &kid : j["Kernels"].items())
             {
-                for (const auto &kid : j[bbid.key()]["Kernels"].items())
-                {
-                    auto newKernel = KernelInstance(stoi(kid.key()));
-                    // need blocks, entrances, exits, children and parents
-                    newKernel.blocks.insert(j[bbid.key()]["Kernels"][kid.key()]["Blocks"].begin(), j[bbid.key()]["Kernels"][kid.key()]["Blocks"].end());
-                    kernels.insert(newKernel);
-                }
+                auto newKernel = KernelInstance(stoi(kid.key()));
+                // need blocks, entrances, exits, children and parents
+                newKernel.blocks.insert(j["Kernels"][kid.key()]["Blocks"].begin(), j["Kernels"][kid.key()]["Blocks"].end());
+                newKernel.entrances.insert(j["Kernels"][kid.key()]["Entrances"].begin(), j["Kernels"][kid.key()]["Entrances"].end());
+                newKernel.exits.insert(j["Kernels"][kid.key()]["Exits"].begin(), j["Kernels"][kid.key()]["Exits"].end());
+                newKernel.parents.insert(j["Kernels"][kid.key()]["Parents"].begin(), j["Kernels"][kid.key()]["Parents"].end());
+                newKernel.children.insert(j["Kernels"][kid.key()]["Children"].begin(), j["Kernels"][kid.key()]["Children"].end());
+                kernels.insert(newKernel);
             }
         }
     }
