@@ -70,6 +70,45 @@ std::vector<GraphNode *> Kernel::getEntrances(std::set<GraphNode *, p_GNCompare>
     return entrances;
 }
 
+/// @brief Returns the IDs of the blocks from the original bitcode that are entrances of the kernel (they have a predecessor that is outside the kernel)
+std::set<uint32_t> Kernel::getEntranceBlocks(std::set<GraphNode *, p_GNCompare> &CFG, uint32_t markovOrder) const
+{
+    std::set<uint32_t> entBlockIDs;
+    if( markovOrder == 0 )
+    {
+        return entBlockIDs;
+    }
+    if( markovOrder == 1 )
+    {
+        for( const auto& ent : getEntrances() )
+        {
+            entBlockIDs.insert(ent.originalBlocks.front());
+        }
+        return entBlockIDs;
+    }
+    for( const auto& ent : getEntrances() )
+    {
+        // the ent we are given is the node within the kernel that has a predecessor outside the kernel
+        // we acquire this predecessor and take the current state ID from its originalBlocks vector
+        for( const auto& n : ent.predecessors )
+        {
+            if( nodes.find(n) == nodes.end() )
+            {
+                // get the node from the graph and find the current block in its neighbors
+                auto nodeIt = CFG.find(n);
+                // sanity check
+                if( nodeIt == CFG.end() )
+                {
+                    throw AtlasException("Found an entrance predecessor that does not exist in the CFG!");
+                }
+                auto lastBlock = (*nodeIt)->originalBlocks.back();
+                entBlockIDs.insert(lastBlock);
+            }
+        }
+    }
+    return entBlockIDs;
+}
+
 /// @brief Returns the IDs of the kernel exits
 ///
 /// @param[in] allNodes Set of all nodes in the control flow graph. Used to copy the nodes that are the destinations of edges that leave the kernel
@@ -112,6 +151,46 @@ std::vector<GraphNode *> Kernel::getExits(std::set<GraphNode *, p_GNCompare> &CF
     }
     return exitNodes;
 }
+
+/// @brief Returns the IDs of the blocks from the original bitcode that are exits of the kernel (they have a successor that is outside the kernel)
+std::set<uint32_t> Kernel::getExitBlocks(std::set<GraphNode *, p_GNCompare> &CFG, uint32_t markovOrder) const
+{
+    std::set<uint32_t> exitBlockIDs;
+    if( markovOrder == 0 )
+    {
+        return exitBlockIDs;
+    }
+    if( markovOrder == 1 )
+    {
+        for( const auto& exit : getExits() )
+        {
+            exitBlockIDs.insert(exit.originalBlocks.front());
+        }
+        return exitBlockIDs;
+    }
+    for( const auto& exit : getExits() )
+    {
+        // the exit we are given is the node within the kernel that has a successor outside the kernel
+        // we acquire this successor and take the previous state ID from its originalBlocks vector
+        for( const auto& n : exit.neighbors )
+        {
+            if( nodes.find(n.first) == nodes.end() )
+            {
+                // get the node from the graph and look at its previous block
+                auto nodeIt = CFG.find(n.first);
+                // sanity check
+                if( nodeIt == CFG.end() )
+                {
+                    throw AtlasException("Found an exit neighbor that does not exist in the CFG!");
+                }
+                auto lastBlock = (*nodeIt)->originalBlocks[ (*nodeIt)->originalBlocks.size()-2];
+                exitBlockIDs.insert(lastBlock);
+            }
+        }
+    }
+    return exitBlockIDs;
+}
+
 /// @brief Returns the member blocks (from the source bitcode) of this kernel
 std::set<int64_t> Kernel::getBlocks() const
 {

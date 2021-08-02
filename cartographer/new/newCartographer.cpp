@@ -1712,18 +1712,18 @@ int main(int argc, char *argv[])
         // Thus we choose the last block in originalBlocks as the exit block
         // The same logic is applied to the entrance blocks, except the entrance block is the sink node of an edge that enters the kernel
         // This doesn't change what the logic is because the last node in the originalBlocks struct is still the current block
-        if( !kern->getExits().empty() )
+        if( !kern->getExitBlocks(nodes, markovOrder).empty() )
         {
-            for( const auto& ex : kern->getExits() )
+            for( const auto& ex : kern->getExitBlocks(nodes, markovOrder) )
             {
-                exIDs.push_back(ex.originalBlocks.back());
+                exIDs.push_back(ex);
             }
         }
-        if( !kern->getEntrances().empty())
+        if( !kern->getEntranceBlocks(nodes, markovOrder).empty())
         {
-            for( const auto& en : kern->getEntrances() )
+            for( const auto& en : kern->getEntranceBlocks(nodes, markovOrder) )
             {
-                entIDs.push_back(en.originalBlocks.back());
+                entIDs.push_back(en);
             }
         }
         outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Entrances"] = vector<uint32_t>(entIDs);
