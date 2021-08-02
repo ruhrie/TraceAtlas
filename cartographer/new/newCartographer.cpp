@@ -164,6 +164,7 @@ string GenerateDot(const set<GraphNode *, p_GNCompare> &nodes, const set<Kernel 
         dotString += "\t" + to_string(kernel->virtualNode->NID) + " [label=\"" + kernel->Label + "\"]\n";
     }
     // label nodes based on their original blocks
+    // label nodes based on their original blocks
     for (const auto &node : nodes)
     {
         string origBlocks = "";
@@ -171,10 +172,17 @@ string GenerateDot(const set<GraphNode *, p_GNCompare> &nodes, const set<Kernel 
         {
             continue;
         }
-        origBlocks += to_string(node->originalBlocks.front());
-        for (auto block = next(node->originalBlocks.begin()); block != node->originalBlocks.end(); block++)
+        origBlocks += to_string(node->originalBlocks.back());
+        if( markovOrder > 1)
         {
-            origBlocks += "," + to_string(*block);
+            origBlocks += "|";
+            auto block = next(node->originalBlocks.rbegin());
+            origBlocks += to_string(*block);
+            block++;
+            for (; block != node->originalBlocks.rend(); block++)
+            {
+                origBlocks += "," + to_string(*block);
+            }
         }
         dotString += "\t" + to_string(node->NID) + " [label=\"" + origBlocks + "\"];\n";
     }
