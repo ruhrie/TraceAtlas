@@ -74,30 +74,30 @@ std::vector<GraphNode *> Kernel::getEntrances(std::set<GraphNode *, p_GNCompare>
 std::set<uint32_t> Kernel::getEntranceBlocks(std::set<GraphNode *, p_GNCompare> &CFG, uint32_t markovOrder) const
 {
     std::set<uint32_t> entBlockIDs;
-    if( markovOrder == 0 )
+    if (markovOrder == 0)
     {
         return entBlockIDs;
     }
-    if( markovOrder == 1 )
+    if (markovOrder == 1)
     {
-        for( const auto& ent : getEntrances() )
+        for (const auto &ent : getEntrances())
         {
             entBlockIDs.insert(ent.originalBlocks.front());
         }
         return entBlockIDs;
     }
-    for( const auto& ent : getEntrances() )
+    for (const auto &ent : getEntrances())
     {
         // the ent we are given is the node within the kernel that has a predecessor outside the kernel
         // we acquire this predecessor and take the current state ID from its originalBlocks vector
-        for( const auto& n : ent.predecessors )
+        for (const auto &n : ent.predecessors)
         {
-            if( nodes.find(n) == nodes.end() )
+            if (nodes.find(n) == nodes.end())
             {
                 // get the node from the graph and find the current block in its neighbors
                 auto nodeIt = CFG.find(n);
                 // sanity check
-                if( nodeIt == CFG.end() )
+                if (nodeIt == CFG.end())
                 {
                     throw AtlasException("Found an entrance predecessor that does not exist in the CFG!");
                 }
@@ -156,34 +156,34 @@ std::vector<GraphNode *> Kernel::getExits(std::set<GraphNode *, p_GNCompare> &CF
 std::set<uint32_t> Kernel::getExitBlocks(std::set<GraphNode *, p_GNCompare> &CFG, uint32_t markovOrder) const
 {
     std::set<uint32_t> exitBlockIDs;
-    if( markovOrder == 0 )
+    if (markovOrder == 0)
     {
         return exitBlockIDs;
     }
-    if( markovOrder == 1 )
+    if (markovOrder == 1)
     {
-        for( const auto& exit : getExits() )
+        for (const auto &exit : getExits())
         {
             exitBlockIDs.insert(exit.originalBlocks.front());
         }
         return exitBlockIDs;
     }
-    for( const auto& exit : getExits() )
+    for (const auto &exit : getExits())
     {
         // the exit we are given is the node within the kernel that has a successor outside the kernel
         // we acquire this successor and take the previous state ID from its originalBlocks vector
-        for( const auto& n : exit.neighbors )
+        for (const auto &n : exit.neighbors)
         {
-            if( nodes.find(n.first) == nodes.end() )
+            if (nodes.find(n.first) == nodes.end())
             {
                 // get the node from the graph and look at its previous block
                 auto nodeIt = CFG.find(n.first);
                 // sanity check
-                if( nodeIt == CFG.end() )
+                if (nodeIt == CFG.end())
                 {
                     throw AtlasException("Found an exit neighbor that does not exist in the CFG!");
                 }
-                auto lastBlock = (*nodeIt)->originalBlocks[ (*nodeIt)->originalBlocks.size()-2];
+                auto lastBlock = (*nodeIt)->originalBlocks[(*nodeIt)->originalBlocks.size() - 2];
                 exitBlockIDs.insert(lastBlock);
             }
         }

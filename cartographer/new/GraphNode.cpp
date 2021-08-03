@@ -39,22 +39,22 @@ uint64_t GraphNode::getNextNID()
     return nextNID++;
 }
 
-bool GraphNode::mergeSuccessor(const GraphNode& succ)
+bool GraphNode::mergeSuccessor(const GraphNode &succ)
 {
     // the blocks of the node simply get added, if unique
     blocks.insert(succ.blocks.begin(), succ.blocks.end());
     // the original blocks have to be added in order such that we preserve which original block ID is the current block, and which blocks preceded it (in the order they executed)
-    for( const auto& block : succ.originalBlocks )
+    for (const auto &block : succ.originalBlocks)
     {
         bool found = false;
-        for( const auto& b : originalBlocks )
+        for (const auto &b : originalBlocks)
         {
-            if( block == b )
+            if (block == b)
             {
                 found = true;
             }
         }
-        if( !found )
+        if (!found)
         {
             originalBlocks.push_back(block);
         }

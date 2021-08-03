@@ -173,7 +173,7 @@ string GenerateDot(const set<GraphNode *, p_GNCompare> &nodes, const set<Kernel 
             continue;
         }
         origBlocks += to_string(node->originalBlocks.back());
-        if( markovOrder > 1)
+        if (markovOrder > 1)
         {
             origBlocks += "|";
             auto block = next(node->originalBlocks.rbegin());
@@ -603,7 +603,7 @@ void TrivialTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64
                                 }
                             }
                             // add the successor blocks
-                            if( !currentNode->mergeSuccessor(**succ) )
+                            if (!currentNode->mergeSuccessor(**succ))
                             {
                                 throw AtlasException("Tried to merge a successor that did not have the correct original blocks!");
                             }
