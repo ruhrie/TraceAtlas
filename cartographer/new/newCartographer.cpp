@@ -1710,7 +1710,7 @@ int main(int argc, char *argv[])
     // now assign hierarchy to each kernel
     for (const auto &kern : kernels)
     {
-        auto entIDs = vector<uint32_t>();
+        /*auto entIDs = vector<uint32_t>();
         auto exIDs  = vector<uint32_t>();
         // The entrances IDs we export have to refer to a block in the original bitcode explicitly, not an NID in our constructed graph here
         // Every ID up to the last in originalBlocks is past history
@@ -1735,7 +1735,7 @@ int main(int argc, char *argv[])
             }
         }
         outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Entrances"] = vector<uint32_t>(entIDs);
-        outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Exits"] = vector<uint32_t>(exIDs);
+        outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Exits"] = vector<uint32_t>(exIDs);*/
         outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Children"] = vector<uint32_t>();
         outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Parents"] = vector<uint32_t>();
     }
