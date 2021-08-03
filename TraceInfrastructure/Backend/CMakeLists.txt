@@ -9,7 +9,7 @@ set_target_properties(
     OUTPUT_NAME AtlasBackend
 )
 
-target_link_libraries(AtlasBackend ${llvm_libs} ZLIB::ZLIB nlohmann_json nlohmann_json::nlohmann_json)
+target_link_libraries(AtlasBackend ${llvm_libs} AtlasUtil ZLIB::ZLIB nlohmann_json nlohmann_json::nlohmann_json)
 target_include_directories(AtlasBackend PUBLIC ${TRACE_INC})
 if(WIN32)
     target_compile_options(AtlasBackend PRIVATE -W3 -Wextra -Wconversion)
