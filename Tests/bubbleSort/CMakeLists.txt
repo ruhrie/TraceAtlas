@@ -1,11 +1,14 @@
 add_executable(bubbleSort bubbleSort.c)
 target_include_directories(bubbleSort PRIVATE ${CMAKE_SOURCE_DIR}/TraceInfrastructure/include/)
 InjectTracer(bubbleSort)
+InjectInstance(bubbleSort)
 
 add_test(NAME bubbleSort_Trace COMMAND bubbleSort-trace 512)
 
 add_test(NAME bubbleSort_cartographer COMMAND newCartographer -i ${CMAKE_CURRENT_BINARY_DIR}/markov.bin -b $<TARGET_FILE:bubbleSort> -bi ${CMAKE_CURRENT_BINARY_DIR}/BlockInfo.json -d dot.dot -o ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
 set_tests_properties(bubbleSort_cartographer PROPERTIES DEPENDS bubbleSort_Trace)
+
+add_test(NAME bubbleSort_DAG_Trace COMMAND bubbleSort-instance-trace)
 
 add_test(NAME bubbleSort_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:bubbleSort> -S)
 set_tests_properties(bubbleSort_tik PROPERTIES DEPENDS bubbleSort_cartographer)

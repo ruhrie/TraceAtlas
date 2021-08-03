@@ -1,10 +1,13 @@
 add_executable(2DConv 2DConv.c)
 InjectTracer(2DConv)
+InjectInstance(2DConv)
 
 add_test(NAME 2DConv_Trace COMMAND 2DConv-trace)
 
 add_test(NAME 2DConv_cartographer COMMAND newCartographer -i ${CMAKE_CURRENT_BINARY_DIR}/markov.bin -b $<TARGET_FILE:2DConv> -bi ${CMAKE_CURRENT_BINARY_DIR}/BlockInfo.json -d dot.dot -o ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
 set_tests_properties(2DConv_cartographer PROPERTIES DEPENDS 2DConv_Trace)
+
+add_test(NAME 2DConv_DAG_Trace COMMAND 2DConv-instance-trace)
 
 add_test(NAME 2DConv_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:2DConv>)
 set_tests_properties(2DConv_tik PROPERTIES DEPENDS 2DConv_cartographer)

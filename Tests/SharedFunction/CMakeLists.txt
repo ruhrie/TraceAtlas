@@ -1,10 +1,13 @@
 add_executable(SharedFunction SharedFunction.c)
 InjectTracer(SharedFunction)
+InjectInstance(SharedFunction)
 
 add_test(NAME SharedFunction_Trace COMMAND SharedFunction-trace)
 
 add_test(NAME SharedFunction_cartographer COMMAND newCartographer -i ${CMAKE_CURRENT_BINARY_DIR}/markov.bin -b $<TARGET_FILE:SharedFunction> -bi ${CMAKE_CURRENT_BINARY_DIR}/BlockInfo.json -d dot.dot -o ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
 set_tests_properties(SharedFunction_cartographer PROPERTIES DEPENDS SharedFunction_Trace)
+
+add_test(NAME SharedFunction_DAG_Trace COMMAND SharedFunction-instance-trace)
 
 add_test(NAME SharedFunction_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:SharedFunction>)
 set_tests_properties(SharedFunction_tik PROPERTIES DEPENDS SharedFunction_cartographer)
