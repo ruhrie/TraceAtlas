@@ -218,6 +218,32 @@ extern "C"
     void InstanceDestroy()
     {
         // output data structure here
+        // construct BlockInfo json output
+        json labelMap;
+        /*
+        for (uint32_t i = 0; i < callerHashTable->getFullSize(callerHashTable); i++)
+        {
+            for (uint32_t j = 0; j < callerHashTable->array[i].popCount; j++)
+            {
+                auto entry = callerHashTable->array[i].tuple[j];
+                char label[100];
+                sprintf(label, "%d", entry.label.blocks[0]);
+                labelMap[string(label)]["BlockCallers"].push_back(entry.callee.blocks[1]);
+            }
+        }
+        */
+        ofstream file;
+        char *labelFileName = getenv("BLOCK_FILE");
+        if (labelFileName == nullptr)
+        {
+            file.open("BlockInfo.json");
+        }
+        else
+        {
+            file.open(labelFileName);
+        }
+        file << setw(4) << labelMap;
+
         // free our stuff
         for (auto entry : kernels)
         {
