@@ -29,6 +29,7 @@ struct Kernel
     set<uint64_t> exits;
     set<int> parents;
     set<int> children;
+    vector<struct KernelInstance*> instances;
     Kernel(){};
     Kernel(int id)
     {
@@ -54,26 +55,33 @@ struct p_KCompare
 };
 
 /// Tracks the iteration of a kernel
-struct KernelIteration
+struct KernelInstance
 {
+    /// Unique idenfitfier
+    uint64_t IID;
     /// Points to the kernel this iteration maps to
     const Kernel *k;
-    /// Counter for the number of times this kernel has occurred
-    uint32_t iteration;
+    /// Position of this instance in the timeline of kernel instances
+    uint32_t position;
+    /// Counter for the number of times this kernel instance has occurred
+    uint32_t iterations;
     /// Size of the children array
     uint8_t childCount;
     /// Array of child kernels that are called by this kernel.
     /// These children are known to be called at runtime by this kernel in this order
     /// Noting that this structure is the parent structure, the children array can encode arbitrary hierarchical depths of child kernels (ie this array can contain arrays of children)
-    struct KernelIteration *children;
-    KernelIteration(const Kernel *kern, std::set<Kernel *, p_KCompare> kernels)
+    struct KernelInstance *children;
+    KernelInstance(Kernel *kern, std::set<Kernel *, p_KCompare> kernels)
     {
+        IID = nextIID++;
         k = kern;
-        iteration = 0;
+        iterations = 0;
+        position = (uint32_t)kern->instances.size();
+        kern->instances.push_back(this);
         childCount = 0;
         // during initialization we encode how many children have been initialized through childCount
-        children = (KernelIteration *)calloc(kern->children.size(), sizeof(KernelIteration));
-        std::deque<KernelIteration *> Q;
+        children = (KernelInstance *)calloc(kern->children.size(), sizeof(KernelInstance));
+        std::deque<KernelInstance *> Q;
         Q.push_back(this);
         while (!Q.empty())
         {
@@ -83,7 +91,7 @@ struct KernelIteration
                 Q.front()->children[Q.front()->childCount].k = child;
                 if (!child->children.empty())
                 {
-                    Q.front()->children[Q.front()->childCount].children = (KernelIteration *)calloc(child->children.size(), sizeof(KernelIteration));
+                    Q.front()->children[Q.front()->childCount].children = (KernelInstance *)calloc(child->children.size(), sizeof(KernelInstance));
                     Q.push_back(&Q.front()->children[Q.front()->childCount]);
                 }
                 Q.front()->childCount++;
@@ -91,22 +99,25 @@ struct KernelIteration
             Q.pop_front();
         }
     }
+    static uint64_t nextIID;
 };
+
+uint64_t KernelInstance::nextIID = 0;
 
 struct p_KICompare
 {
     using is_transparent = void;
-    bool operator()(const KernelIteration *lhs, const KernelIteration *rhs) const
+    bool operator()(const KernelInstance *lhs, const KernelInstance *rhs) const
     {
         return lhs->k->ID < rhs->k->ID;
     }
-    bool operator()(const KernelIteration *lhs, int rhs) const
+    bool operator()(const KernelInstance *lhs, uint64_t rhs) const
     {
-        return lhs->k->ID < rhs;
+        return lhs->IID < rhs;
     }
-    bool operator()(int lhs, const KernelIteration *rhs) const
+    bool operator()(uint64_t lhs, const KernelInstance *rhs) const
     {
-        return lhs < rhs->k->ID;
+        return lhs < rhs->IID;
     }
 };
 
@@ -115,7 +126,7 @@ set<Kernel *, p_KCompare> kernels;
 /// Holds all kernels that are alive at a given moment
 std::set<Kernel *, p_KCompare> liveKernels;
 /// Holds an entry for all kernel objects
-std::set<KernelIteration *, p_KICompare> iterations;
+std::set<KernelInstance *, p_KICompare> instances;
 /// Holds the order of kernels measured while profiling (kernel IDs)
 std::vector<int> TimeLine;
 /// Remembers the block seen before the current so we can dynamically find kernel exits
@@ -183,7 +194,7 @@ extern "C"
             throw AtlasException("Could not find parent kernel!");
         }
         // Second, recurse until we find a child kernel who has no active children (or no children at all) and update its iteration count
-        auto parentInstance = *iterations.find(parentMost->ID);
+        auto parentInstance = parentMost->instances.back();
         auto currentParent = parentInstance;
         while (true)
         {
@@ -202,14 +213,14 @@ extern "C"
                 if (!foundChild)
                 {
                     // we must be the lowest in the tree but not a leaf. Update our structure
-                    currentParent->iteration++;
+                    currentParent->iterations++;
                     break;
                 }
             }
             else
             {
-                // we have found the kerneliteration to update
-                currentParent->iteration++;
+                // we have found the KernelInstance to update
+                currentParent->iterations++;
                 break;
             }
         }
@@ -218,8 +229,15 @@ extern "C"
     void InstanceDestroy()
     {
         // output data structure here
-        // construct BlockInfo json output
-        json labelMap;
+        // first create an instance to kernel ID mapping
+        // remember that this is hierarchical
+        map<uint32_t, int> InstanceToKernel;
+        for( unsigned int i = 0; i < TimeLine.size(); i++ )
+        {
+            auto currentInstance = instances.find(TimeLine[i]);
+            // next get all children instances attached to this iteration
+        }
+        json instanceMap;
         /*
         for (uint32_t i = 0; i < callerHashTable->getFullSize(callerHashTable); i++)
         {
@@ -228,28 +246,28 @@ extern "C"
                 auto entry = callerHashTable->array[i].tuple[j];
                 char label[100];
                 sprintf(label, "%d", entry.label.blocks[0]);
-                labelMap[string(label)]["BlockCallers"].push_back(entry.callee.blocks[1]);
+                instanceMap[string(label)]["BlockCallers"].push_back(entry.callee.blocks[1]);
             }
         }
         */
         ofstream file;
-        char *labelFileName = getenv("BLOCK_FILE");
-        if (labelFileName == nullptr)
+        char *instanceFileName = getenv("INSTANCE_FILE");
+        if (instanceFileName == nullptr)
         {
-            file.open("BlockInfo.json");
+            file.open("Instance.json");
         }
         else
         {
-            file.open(labelFileName);
+            file.open(instanceFileName);
         }
-        file << setw(4) << labelMap;
+        file << setw(4) << instanceMap;
 
         // free our stuff
         for (auto entry : kernels)
         {
             delete entry;
         }
-        for (auto entry : iterations)
+        for (auto entry : instances)
         {
             // need to recursively free all children then the entry
         }
@@ -275,9 +293,13 @@ extern "C"
                     if (kern->parents.empty())
                     {
                         TimeLine.push_back(kern->ID);
+                        auto newIteration = new KernelInstance(kern, kernels);
+                        instances.insert(newIteration);
+                        IncrementCounts();
                     }
-                    else
+                    /*else
                     {
+                        // all parents must be live before we update the iteration counts
                         std::deque<Kernel *> Q;
                         Q.push_front(kern);
                         while (!Q.empty())
@@ -293,8 +315,7 @@ extern "C"
                             }
                             Q.pop_front();
                         }
-                    }
-                    IncrementCounts();
+                    }*/
                 }
             }
             else
@@ -318,10 +339,10 @@ extern "C"
     void InstanceInit(uint64_t a)
     {
         ReadKernelFile();
-        for (const auto &kern : kernels)
+        /*for (const auto &kern : kernels)
         {
-            iterations.insert(new KernelIteration(kern, kernels));
-        }
+            instances.insert(new KernelInstance(kern, kernels));
+        }*/
         instanceActive = true;
         InstanceIncrement(a);
     }
