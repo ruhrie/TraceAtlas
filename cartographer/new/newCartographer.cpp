@@ -1374,6 +1374,7 @@ int main(int argc, char *argv[])
         }
         if (nodes.empty())
         {
+            spdlog::critical("No nodes could be read from the input profile!");
             return EXIT_FAILURE;
         }
         // accumulate block frequencies
