@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #define HASH_MULTIPLIER 1000003UL
 #define HASH_MULTIPLIER_OFFSET 82520UL
@@ -168,6 +169,7 @@ extern "C"
         {
             f = fopen(MARKOV_FILE, "wb");
         }
+        clock_t start = clock();
         // first write the markov order of the graph
         uint32_t MO = MARKOV_ORDER;
         fwrite(&MO, sizeof(uint32_t), 1, f);
@@ -190,7 +192,6 @@ extern "C"
             edges += a->array[i].popCount;
         }
         fwrite(&edges, sizeof(uint32_t), 1, f);
-
         // fourth, write all the entries in the hash table
         for (uint32_t i = 0; i < a->getFullSize(a); i++)
         {
@@ -200,16 +201,19 @@ extern "C"
                 fwrite(&(a->array[i].tuple[j].edge.frequency), sizeof(uint64_t), 1, f);
             }
         }
+        clock_t end = clock();
         fclose(f);
         // calculate some statistics about our hash table
         // number of nodes
-        printf("\nHASHTABLESIZE: %d\n", blockCount);
+        printf("\nHASHTABLENODES: %d\n", blockCount);
         // number of edges
         printf("\nHASHTABLEEDGES: %d\n", edges);
         // live array entries
         printf("\nHASHTABLELIVEARRAYENTRIES: %d\n", liveArrayEntries);
         // maximum occupancy of an array element
         printf("\nHASHTABLEMAXPOPCOUNT: %d\n", maxPopCount);
+        // time it took to print the state transition table, in seconds
+        printf("HASHTABLEPRINTTIME: %f\n", ((double)(end - start)) / CLOCKS_PER_SEC);
     }
 
     // this function is not built to handle markov orders above 1
