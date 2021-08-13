@@ -159,6 +159,9 @@ extern "C"
     // thus function is only designed to use edgeTuple objects
     void __TA_WriteEdgeHashTable(__TA_HashTable *a, uint32_t blockCount)
     {
+        // time keepers for printing the profile
+        struct timespec start;
+        struct timespec end;
         char *p = getenv("MARKOV_FILE");
         FILE *f;
         if (p)
@@ -169,7 +172,9 @@ extern "C"
         {
             f = fopen(MARKOV_FILE, "wb");
         }
-        clock_t start = clock();
+        while (clock_gettime(CLOCK_MONOTONIC, &start))
+        {
+        }
         // first write the markov order of the graph
         uint32_t MO = MARKOV_ORDER;
         fwrite(&MO, sizeof(uint32_t), 1, f);
@@ -201,7 +206,9 @@ extern "C"
                 fwrite(&(a->array[i].tuple[j].edge.frequency), sizeof(uint64_t), 1, f);
             }
         }
-        clock_t end = clock();
+        while (clock_gettime(CLOCK_MONOTONIC, &end))
+        {
+        }
         fclose(f);
         // calculate some statistics about our hash table
         // number of nodes
@@ -216,8 +223,10 @@ extern "C"
         // John: this works as long as DVFS (dynamic voltage and frequency scaling) is turned off
         // clock_gettime()
         // CLOCK_MONOTONIC is the parameter we want
-        printf("HASHTABLEPRINTTIME: %f\n", ((double)(end - start)) / CLOCKS_PER_SEC);
-
+        double secdiff = (double)(end.tv_sec - start.tv_sec);
+        double nsecdiff = ((double)(end.tv_nsec - start.tv_nsec)) * pow(10.0, -9.0);
+        double totalTime = secdiff + nsecdiff;
+        printf("\nHASHTABLEPRINTTIME: %f\n", totalTime);
     }
 
     // this function is not built to handle markov orders above 1

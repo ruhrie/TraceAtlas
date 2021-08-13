@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -56,6 +57,9 @@ __TA_HashTable *callerHashTable;
 __TA_element nextEdge;
 __TA_element nextLabel;
 __TA_element nextCallee;
+// start and end points to specifically time the profiles
+struct timespec __TA_stopwatch_start;
+struct timespec __TA_stopwatch_end;
 
 extern "C"
 {
@@ -82,9 +86,20 @@ extern "C"
 
         totalBlocks = blockCount;
         markovActive = true;
+        while (clock_gettime(CLOCK_MONOTONIC, &__TA_stopwatch_start))
+            ;
     }
     void MarkovDestroy()
     {
+        // stop the timer and print
+        while (clock_gettime(CLOCK_MONOTONIC, &__TA_stopwatch_end))
+        {
+        }
+        double secdiff = (double)(__TA_stopwatch_end.tv_sec - __TA_stopwatch_start.tv_sec);
+        double nsecdiff = ((double)(__TA_stopwatch_end.tv_nsec - __TA_stopwatch_start.tv_nsec)) * pow(10.0, -9.0);
+        double totalTime = secdiff + nsecdiff;
+        printf("\nPROFILETIME: %f\n", totalTime);
+
         // print profile bin file
         __TA_WriteEdgeHashTable(edgeHashTable, (uint32_t)totalBlocks);
         free(edgeHashTable->array);

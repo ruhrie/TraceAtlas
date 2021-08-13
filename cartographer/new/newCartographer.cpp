@@ -173,7 +173,7 @@ string GenerateDot(const set<GraphNode *, p_GNCompare> &nodes, const set<Kernel 
             continue;
         }
         origBlocks += to_string(node->originalBlocks.back());
-        if( markovOrder > 1)
+        if (markovOrder > 1)
         {
             origBlocks += "|";
             auto block = next(node->originalBlocks.rbegin());
