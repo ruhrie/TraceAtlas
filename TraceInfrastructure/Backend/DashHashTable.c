@@ -213,7 +213,11 @@ extern "C"
         // maximum occupancy of an array element
         printf("\nHASHTABLEMAXPOPCOUNT: %d\n", maxPopCount);
         // time it took to print the state transition table, in seconds
+        // John: this works as long as DVFS (dynamic voltage and frequency scaling) is turned off
+        // clock_gettime()
+        // CLOCK_MONOTONIC is the parameter we want
         printf("HASHTABLEPRINTTIME: %f\n", ((double)(end - start)) / CLOCKS_PER_SEC);
+
     }
 
     // this function is not built to handle markov orders above 1
