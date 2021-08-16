@@ -29,7 +29,7 @@ struct Kernel
     set<uint64_t> exits;
     set<int> parents;
     set<int> children;
-    vector<struct KernelInstance*> instances;
+    vector<struct KernelInstance *> instances;
     Kernel(){};
     Kernel(int id)
     {
@@ -70,7 +70,7 @@ struct KernelInstance
     /// Array of child kernels that are called by this kernel.
     /// These children are known to be called at runtime by this kernel in this order
     /// Noting that this structure is the parent structure, the children array can encode arbitrary hierarchical depths of child kernels (ie this array can contain arrays of children)
-    struct KernelInstance *children;
+    set<KernelInstance *> children;
     KernelInstance(Kernel *kern, std::set<Kernel *, p_KCompare> kernels)
     {
         IID = nextIID++;
@@ -80,8 +80,8 @@ struct KernelInstance
         kern->instances.push_back(this);
         childCount = 0;
         // during initialization we encode how many children have been initialized through childCount
-        children = (KernelInstance *)calloc(kern->children.size(), sizeof(KernelInstance));
-        std::deque<KernelInstance *> Q;
+        children = set<KernelInstance *>();
+        /*std::deque<KernelInstance *> Q;
         Q.push_back(this);
         while (!Q.empty())
         {
@@ -97,7 +97,7 @@ struct KernelInstance
                 Q.front()->childCount++;
             }
             Q.pop_front();
-        }
+        }*/
     }
     static uint64_t nextIID;
 };
@@ -126,7 +126,7 @@ set<Kernel *, p_KCompare> kernels;
 /// Holds all kernels that are alive at a given moment
 std::set<Kernel *, p_KCompare> liveKernels;
 /// Holds an entry for all kernel objects
-std::set<KernelInstance *, p_KICompare> instances;
+//std::set<KernelInstance *, p_KICompare> instances;
 /// Holds the order of kernels measured while profiling (kernel IDs)
 std::vector<int> TimeLine;
 /// Remembers the block seen before the current so we can dynamically find kernel exits
@@ -174,7 +174,7 @@ extern "C"
         }
     }
 
-    void IncrementCounts()
+    /*void IncrementCounts()
     {
         // update the kernel instance structures
         // all active kernels should have a hierarchical relationship
@@ -224,7 +224,7 @@ extern "C"
                 break;
             }
         }
-    }
+    }*/
 
     void InstanceDestroy()
     {
@@ -232,11 +232,11 @@ extern "C"
         // first create an instance to kernel ID mapping
         // remember that this is hierarchical
         map<uint32_t, int> InstanceToKernel;
-        for( unsigned int i = 0; i < TimeLine.size(); i++ )
+        /*for( unsigned int i = 0; i < TimeLine.size(); i++ )
         {
             auto currentInstance = instances.find(TimeLine[i]);
             // next get all children instances attached to this iteration
-        }
+        }*/
         json instanceMap;
         /*
         for (uint32_t i = 0; i < callerHashTable->getFullSize(callerHashTable); i++)
@@ -267,10 +267,10 @@ extern "C"
         {
             delete entry;
         }
-        for (auto entry : instances)
+        /*for (auto entry : instances)
         {
             // need to recursively free all children then the entry
-        }
+        }*/
         instanceActive = false;
     }
 
@@ -280,6 +280,7 @@ extern "C"
         {
             return;
         }
+        Kernel *enteredKernel = nullptr;
         // first step, acquire all kernels who have this block in them
         // we must process the parent kernels first
         for (auto &kern : kernels)
@@ -288,15 +289,14 @@ extern "C"
             {
                 if (kern->blocks.find((uint32_t)a) != kern->blocks.end())
                 {
+                    enteredKernel = kern;
                     liveKernels.insert(kern);
                     kern->entrances.insert(a);
                     if (kern->parents.empty())
                     {
                         TimeLine.push_back(kern->ID);
-                        auto newIteration = new KernelInstance(kern, kernels);
-                        instances.insert(newIteration);
-                        IncrementCounts();
                     }
+                    //IncrementCounts();
                     /*else
                     {
                         // all parents must be live before we update the iteration counts
@@ -326,6 +326,46 @@ extern "C"
                     kern->exits.insert(lastBlock);
                     liveKernels.erase(kern);
                 }
+                else if (kern->entrances.find(a) != kern->entrances.end())
+                {
+                    // we have made a revolution within this kernel, so update its iteration count
+                    kern->instances.back()->iterations++;
+                }
+            }
+        }
+        // now make a new kernel instance if necessary
+        if (enteredKernel)
+        {
+            // instances are in the eye of the parent
+            if (enteredKernel->parents.empty())
+            {
+                auto newInstance = new KernelInstance(enteredKernel, kernels);
+                enteredKernel->instances.push_back(newInstance);
+            }
+            else if (enteredKernel->parents.size() == 1)
+            {
+                // if we already have an instance for this child in the parent we don't make a new one
+                auto parent = *kernels.find(*(enteredKernel->parents.begin()));
+                auto parentInstance = parent->instances.back();
+                bool childFound = false;
+                for (auto child : parentInstance->children)
+                {
+                    if (child->k == enteredKernel)
+                    {
+                        childFound = true;
+                    }
+                }
+                if (!childFound)
+                {
+                    // we don't have an instance for this child yet, create one
+                    auto newInstance = new KernelInstance(enteredKernel, kernels);
+                    parentInstance->children.insert(newInstance);
+                    enteredKernel->instances.push_back(newInstance);
+                }
+            }
+            else
+            {
+                throw AtlasException("Don't know what to do about finding the current kernel instance when there is more than one parent!");
             }
         }
         // if we don't find any live kernels it means we are in non-kernel code
