@@ -203,12 +203,12 @@ extern "C"
         // free our stuff
         for (auto entry : kernels)
         {
+            for (auto instance : entry->instances)
+            {
+                delete instance;
+            }
             delete entry;
         }
-        /*for (auto entry : instances)
-        {
-            // need to recursively free all children then the entry
-        }*/
         instanceActive = false;
     }
 
