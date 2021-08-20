@@ -22,4 +22,5 @@ namespace DashTracer::Passes
     Function *InstanceInit;
     Function *InstanceDestroy;
     Function *InstanceIncrement;
+    Function *MemInstructionDump;
 } // namespace DashTracer::Passes

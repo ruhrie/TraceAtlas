@@ -1,9 +1,8 @@
-#include "Passes/TraceMem.h"
+#include "Passes/MemProfile.h"
 #include "AtlasUtil/Annotate.h"
 #include "Passes/Annotate.h"
 #include "Passes/CommandArgs.h"
 #include "Passes/Functions.h"
-#include "Passes/TraceMemIO.h"
 #include "llvm/IR/DataLayout.h"
 #include <fstream>
 #include <llvm/IR/Function.h>
@@ -43,34 +42,51 @@ namespace DashTracer::Passes
                 {
                     IRBuilder<> builder(load);
                     Value *addr = load->getPointerOperand();
-                    Type *tyaddr = addr->getType();
-                    Type *tyaddrContain = tyaddr->getContainedType(0);
-                    uint64_t sizeSig = dl.getTypeAllocSize(tyaddrContain);
-                    auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(block->getContext()), 0), true);
-                    Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(block->getContext()));
-                    builder.CreateCall(LoadDump, cast);
-                    values.push_back(cast);
-                    ConstantInt *sizeSigVal = ConstantInt::get(llvm::Type::getInt8Ty(block->getContext()), sizeSig);
-                    values.push_back(sizeSigVal);
+                    // auto *type = load->getType()->getContainedType(0);
+                    uint64_t dataSize = 0; //dl.getTypeAllocSize(type);
+                    
+                    // addr
+                    auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(block->getContext()), 0), true);                    
+                    Value *addrCast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(block->getContext()));
+                    values.push_back(addrCast);
+                    //bb id
+                    Value *blockID = ConstantInt::get(Type::getInt64Ty(BB->getContext()), (uint64_t)blockId);
+                    values.push_back(blockID);
+                    // data size
+                    Value *dataSizeValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), dataSize);
+                    values.push_back(dataSizeValue);
+                    // type 0 = load, 1 = store
+                    uint64_t OPtype = 0;
+                    Value *OPtypeValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), OPtype);
+                    values.push_back(OPtypeValue);
+
                     auto ref = ArrayRef<Value *>(values);
-                    builder.CreateCall(DumpLoadValue, ref);
+                    builder.CreateCall(MemInstructionDump, ref);
                 }
 
                 if (auto *store = dyn_cast<StoreInst>(CI))
                 {
                     IRBuilder<> builder(store);
                     Value *addr = store->getPointerOperand();
-                    Type *tyaddr = addr->getType();
-                    Type *tyaddrContain = tyaddr->getContainedType(0);
-                    uint64_t sizeSig = dl.getTypeAllocSize(tyaddrContain);
-                    auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(block->getContext()), 0), true);
-                    Value *cast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(block->getContext()));
-                    builder.CreateCall(StoreDump, cast);
-                    values.push_back(cast);
-                    ConstantInt *sizeSigVal = ConstantInt::get(llvm::Type::getInt8Ty(block->getContext()), sizeSig);
-                    values.push_back(sizeSigVal);
+                    // auto *type = store->getType()->getContainedType(0);
+                    uint64_t dataSize = 0; //dl.getTypeAllocSize(type);
+                    // addr
+                    auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(block->getContext()), 0), true);                    
+                    Value *addrCast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(block->getContext()));
+                    values.push_back(addrCast);
+                    //bb id
+                    Value *blockID = ConstantInt::get(Type::getInt64Ty(BB->getContext()), (uint64_t)blockId);
+                    values.push_back(blockID);
+                    // data size
+                    Value *dataSizeValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), dataSize);
+                    values.push_back(dataSizeValue);
+                    // type 0 = load, 1 = store
+                    uint64_t OPtype = 1;
+                    Value *OPtypeValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), OPtype);
+                    values.push_back(OPtypeValue);
+
                     auto ref = ArrayRef<Value *>(values);
-                    builder.CreateCall(DumpStoreValue, ref);
+                    builder.CreateCall(MemInstructionDump, ref);
                 }
             }
             
@@ -80,17 +96,14 @@ namespace DashTracer::Passes
 
     bool MemProfile::doInitialization(Module &M)
     {
-        DumpLoadValue = cast<Function>(M.getOrInsertFunction("TraceAtlasDumpLoadValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
-        DumpStoreValue = cast<Function>(M.getOrInsertFunction("TraceAtlasDumpStoreValue", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt8Ty(M.getContext())).getCallee());
-        LoadDump = cast<Function>(M.getOrInsertFunction("TraceAtlasLoadDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
-        StoreDump = cast<Function>(M.getOrInsertFunction("TraceAtlasStoreDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
+        MemInstructionDump = cast<Function>(M.getOrInsertFunction("MemInstructionDump", Type::getVoidTy(M.getContext()),Type::getIntNPtrTy(M.getContext(), 8), Type::getInt64Ty(M.getContext()),Type::getInt64Ty(M.getContext()),Type::getInt64Ty(M.getContext())).getCallee());
         return false;
     }
 
     void MemProfile::getAnalysisUsage(AnalysisUsage &AU) const
     {
         AU.addRequired<DashTracer::Passes::EncodedAnnotate>();
-        AU.addRequired<DashTracer::Passes::MemProfileIO>();
+
     }
     char MemProfile::ID = 1;
     static RegisterPass<MemProfile> Y("MemProfile", "memory profiler", true, false);
