@@ -23,12 +23,62 @@ using namespace std;
 namespace DashTracer::Passes
 {
 
-
     bool MemProfile::runOnFunction(Function &F)
     {
 
         for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
         {
+
+            if (F.getName() == "main")
+            {
+                if (BB == F.begin())
+                {
+                    auto firstInsertion = BB->getFirstInsertionPt();
+                    auto *firstInst = cast<Instruction>(firstInsertion);
+                    firstInsertion = BB->getFirstInsertionPt();
+                    firstInst = cast<Instruction>(firstInsertion);
+                    IRBuilder<> initBuilder(firstInst);
+                    initBuilder.CreateCall(MemProfInitialization);
+                }
+                else if (auto retInst = dyn_cast<ReturnInst>(BB->getTerminator()))
+                {
+                    auto endInsertion = BB->getTerminator();
+                    auto *lastInst = cast<Instruction>(endInsertion);
+                    IRBuilder<> lastBuilder(lastInst);
+                    lastBuilder.CreateCall(MemProfDestroy);
+                }
+                else if (auto resumeInst = dyn_cast<ResumeInst>(BB->getTerminator()))
+                {
+                    auto endInsertion = BB->getTerminator();
+                    auto *lastInst = cast<Instruction>(endInsertion);
+                    IRBuilder<> lastBuilder(lastInst);
+                    lastBuilder.CreateCall(MemProfDestroy);
+                }
+                else if (auto unreachableInst = dyn_cast<UnreachableInst>(BB->getTerminator()))
+                {
+                    auto endInsertion = BB->getTerminator();
+                    auto *lastInst = cast<Instruction>(endInsertion);
+                    IRBuilder<> lastBuilder(lastInst);
+                    lastBuilder.CreateCall(MemProfDestroy);
+                }
+            }
+            for (auto bi = BB->begin(); bi != BB->end(); bi++)
+            {
+                if (auto call = dyn_cast<CallBase>(bi))
+                {
+                    if (call->getCalledFunction())
+                    {
+                        if (call->getCalledFunction()->getName() == "exit")
+                        {
+                            IRBuilder<> destroyInserter(call);
+                            auto insert = destroyInserter.CreateCall(MemProfDestroy);
+                            insert->moveBefore(call);
+                            call->setDebugLoc(NULL);
+                        }
+                    }
+                }
+            }
+
             auto *block = cast<BasicBlock>(BB);
             auto dl = block->getModule()->getDataLayout();
             int64_t blockId = GetBlockID(block);
@@ -42,11 +92,11 @@ namespace DashTracer::Passes
                 {
                     IRBuilder<> builder(load);
                     Value *addr = load->getPointerOperand();
-                    // auto *type = load->getType()->getContainedType(0);
-                    uint64_t dataSize = 0; //dl.getTypeAllocSize(type);
-                    
+                    auto *type = load->getType();
+                    uint64_t dataSize = dl.getTypeAllocSize(type);
+
                     // addr
-                    auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(block->getContext()), 0), true);                    
+                    auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(block->getContext()), 0), true);
                     Value *addrCast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(block->getContext()));
                     values.push_back(addrCast);
                     //bb id
@@ -68,10 +118,10 @@ namespace DashTracer::Passes
                 {
                     IRBuilder<> builder(store);
                     Value *addr = store->getPointerOperand();
-                    // auto *type = store->getType()->getContainedType(0);
-                    uint64_t dataSize = 0; //dl.getTypeAllocSize(type);
+                    auto *type = store->getValueOperand()->getType();
+                    uint64_t dataSize = dl.getTypeAllocSize(type);
                     // addr
-                    auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(block->getContext()), 0), true);                    
+                    auto castCode = CastInst::getCastOpcode(addr, true, PointerType::get(Type::getInt8PtrTy(block->getContext()), 0), true);
                     Value *addrCast = builder.CreateCast(castCode, addr, Type::getInt8PtrTy(block->getContext()));
                     values.push_back(addrCast);
                     //bb id
@@ -89,21 +139,21 @@ namespace DashTracer::Passes
                     builder.CreateCall(MemInstructionDump, ref);
                 }
             }
-            
         }
         return true;
     }
 
     bool MemProfile::doInitialization(Module &M)
     {
-        MemInstructionDump = cast<Function>(M.getOrInsertFunction("MemInstructionDump", Type::getVoidTy(M.getContext()),Type::getIntNPtrTy(M.getContext(), 8), Type::getInt64Ty(M.getContext()),Type::getInt64Ty(M.getContext()),Type::getInt64Ty(M.getContext())).getCallee());
+        MemInstructionDump = cast<Function>(M.getOrInsertFunction("MemInstructionDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt64Ty(M.getContext()), Type::getInt64Ty(M.getContext()), Type::getInt64Ty(M.getContext())).getCallee());
+        MemProfInitialization = cast<Function>(M.getOrInsertFunction("MemProfInitialization", Type::getVoidTy(M.getContext())).getCallee());
+        MemProfDestroy = cast<Function>(M.getOrInsertFunction("MemProfDestroy", Type::getVoidTy(M.getContext())).getCallee());
         return false;
     }
 
     void MemProfile::getAnalysisUsage(AnalysisUsage &AU) const
     {
         AU.addRequired<DashTracer::Passes::EncodedAnnotate>();
-
     }
     char MemProfile::ID = 1;
     static RegisterPass<MemProfile> Y("MemProfile", "memory profiler", true, false);
