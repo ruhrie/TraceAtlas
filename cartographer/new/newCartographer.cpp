@@ -33,10 +33,10 @@ void ProfileBlock(BasicBlock *BB, map<int64_t, map<string, uint64_t>> &rMap, map
         {
             continue;
         }
-        //start with the opcodes
+        // opcode
         string name = string(i->getOpcodeName());
         rMap[id][name + "Count"]++;
-        //now check the type
+        // type
         Type *t = i->getType();
         if (t->isVoidTy())
         {
@@ -231,53 +231,6 @@ void AddNode(std::set<GraphNode *, p_GNCompare> &nodes, const VKNode &newNode)
 
 void RemoveNode(std::set<GraphNode *, p_GNCompare> &CFG, GraphNode *removeNode)
 {
-    // first, remove the node in question from any kernels it may belong to
-    // set of kernels that are updated versions of existing kernels, each member will eventually replace the old one in the kernels (input arg) set
-    /*for (const auto &kernel : kernels)
-    {
-        if (kernel->nodes.find(removeNode) != kernel->nodes.end())
-        {
-            // remove the node from the kernel
-            kernel->nodes.erase(removeNode);
-        }
-    }*/
-    // second, look for any VKNodes in the CFG and update their node sets if applicable
-    /*set<VKNode,  p_GNCompare> newVKNodes;
-    for (auto node : CFG)
-    {
-        //if( auto VKNode = dynamic_pointer_cast<struct VKNode>(sharedNode) )
-        if (auto VKN = dynamic_cast<VKNode *>(node))
-        {
-            VKN->nodes.erase(removeNode);
-        }
-    }*/
-
-    // third, remove the node from the graph and update the neighbors of the predecessors and the predecessors of the neighbors
-    /*for( const auto& predID : removeNode->predecessors )
-    {
-        auto pred = CFG.find(predID);
-        if( pred != CFG.end() )
-        {
-            (*pred)->neighbors.erase(removeNode->NID); 
-            for( const auto& neighbor : removeNode->neighbors )
-            {
-                (*pred)->neighbors[neighbor.first] = neighbor.second;
-            }
-        }
-    }
-    for( const auto& neighborID : removeNode->neighbors )
-    {
-        auto neighbor = CFG.find(neighborID.first);
-        if( neighbor != CFG.end() )
-        {
-            (*neighbor)->predecessors.erase(removeNode->NID);
-            for( const auto& predID : removeNode->predecessors )
-            {
-                (*neighbor)->predecessors.insert(predID);
-            }
-        }
-    }*/
-    // fourth, free
     auto entry = CFG.find(removeNode->NID);
     if (entry != CFG.end())
     {
