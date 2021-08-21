@@ -21,40 +21,62 @@
 using namespace std;
 using json = nlohmann::json;
 
-struct UniqueID
+class UniqueID
 {
+public:
     /// Unique idenfitfier
     uint64_t IID;
-    /// Counter for the next unique idenfitfier
-    static uint64_t nextIID;
+    UniqueID() = default;
+    virtual ~UniqueID() = default;
     uint64_t getNextIID()
     {
         return nextIID++;
     }
+protected:
+    void setNextIID(uint64_t next)
+    {
+        if( next > nextIID )
+        {
+            nextIID = next + 1;
+        }
+    }
+private:
+    /// Counter for the next unique idenfitfier
+    static uint64_t nextIID;
 };
 
 uint64_t UniqueID::nextIID = 0;
 
-struct Kernel
+class CodeSection
 {
-    int ID;
-    set<uint32_t> blocks;
+public:
+    set<uint64_t> blocks;
     set<uint64_t> entrances;
     set<uint64_t> exits;
+    virtual ~CodeSection();
+};
+
+CodeSection::~CodeSection() = default;
+
+class Kernel : public CodeSection, public UniqueID
+{
+public:
+    int ID;
     set<int> parents;
     set<int> children;
-    vector<struct KernelInstance *> instances;
+    vector<class KernelInstance *> instances;
     Kernel(){};
     Kernel(int id)
     {
         ID = id;
+        setNextIID((uint64_t)ID);
     }
 };
 
-struct NonKernel : UniqueID
+class NonKernel : public UniqueID, public CodeSection
 {
-    set<uint64_t> blocks;
-    vector<struct NonKernelInstance*> instances;
+public:
+    vector<class NonKernelInstance*> instances;
     NonKernel()
     {
         IID = getNextIID();
@@ -78,15 +100,24 @@ struct p_KCompare
     }
 };
 
-/// Tracks the iteration of a kernel
-struct KernelInstance : UniqueID
+class CodeInstance
 {
-    /// Points to the kernel this iteration maps to
-    const Kernel *k;
+public:
     /// Position of this instance in the timeline of kernel instances
     uint32_t position;
     /// Counter for the number of times this kernel instance has occurred
     uint32_t iterations;
+    virtual ~CodeInstance();
+};
+
+CodeInstance::~CodeInstance() = default;
+
+/// Tracks the iteration of a kernel
+class KernelInstance : public UniqueID, public CodeInstance
+{
+public:
+    /// Points to the kernel this iteration maps to
+    const Kernel *k;
     /// Array of child kernels that are called by this kernel.
     /// These children are known to be called at runtime by this kernel in this order
     /// Noting that this structure is the parent structure, the children array can encode arbitrary hierarchical depths of child kernels (ie this array can contain arrays of children)
@@ -99,6 +130,19 @@ struct KernelInstance : UniqueID
         position = (uint32_t)kern->instances.size();
         kern->instances.push_back(this);
         children = set<KernelInstance *>();
+    }
+};
+
+class NonKernelInstance : public UniqueID, public CodeInstance
+{
+public:
+    set<uint64_t> blocks;
+    uint64_t firstBlock;
+    NonKernel* nk;
+    NonKernelInstance(uint64_t firstBlock)
+    {
+        IID = getNextIID();
+        blocks.insert(firstBlock);
     }
 };
 
@@ -119,24 +163,13 @@ struct p_UIDCompare
     }
 };
 
-struct NonKernelInstance : UniqueID
-{
-    set<uint64_t> blocks;
-    NonKernel* nk;
-    NonKernelInstance(uint64_t firstBlock)
-    {
-        IID = getNextIID();
-        blocks.insert(firstBlock);
-    }
-};
-
 /// Holds all kernel instances we will be looking for in the profile
 set<Kernel *, p_KCompare> kernels;
 /// Holds all non-kernel instance we find in the profile
 set<NonKernel*, p_UIDCompare> nonKernels;
 /// Holds all kernels that are alive at a given moment
 std::set<Kernel *, p_KCompare> liveKernels;
-/// Holds the order of kernel instancesmeasured while profiling (kernel IDs, instance index)
+/// Holds the order of kernel instances measured while profiling (kernel IDs, instance index)
 std::vector<pair<int, int>> TimeLine;
 /// Current non kernel instance. If nullptr there is no current non-kernel instance
 NonKernelInstance* currentNKI;
@@ -178,20 +211,16 @@ extern "C"
                 newKernel->parents.insert(j["Kernels"][kid.key()]["Parents"].begin(), j["Kernels"][kid.key()]["Parents"].end());
                 newKernel->children.insert(j["Kernels"][kid.key()]["Children"].begin(), j["Kernels"][kid.key()]["Children"].end());
                 kernels.insert(newKernel);
-                if( (uint64_t)newKernel->ID > UniqueID::nextIID )
-                {
-                    UniqueID::nextIID = (uint64_t)newKernel->ID + 1;
-                }
             }
         }
     }
 
     void InstanceDestroy()
     {
-        // output data structure here
+        // output data structure
         // first create an instance to kernel ID mapping
         // remember that this is hierarchical
-        map<uint32_t, vector<KernelInstance *>> TimeToInstances;
+        map<uint32_t, vector<UniqueID *>> TimeToInstances;
         json instanceMap;
         for (uint32_t i = 0; i < TimeLine.size(); i++)
         {
@@ -206,7 +235,7 @@ extern "C"
                 // construct a map for all embedded kernels for this instance
                 auto currentInstance = (*currentKernel)->instances[(unsigned int)TimeLine[i].second];
                 std::deque<KernelInstance *> Q;
-                vector<KernelInstance *> hierarchy;
+                vector<UniqueID *> hierarchy;
                 Q.push_front(currentInstance);
                 while (!Q.empty())
                 {
@@ -221,22 +250,47 @@ extern "C"
             }
             else if( currentNonKernel != nonKernels.end() )
             {
-                // stuff
+                TimeToInstances[i] = vector<UniqueID*>( (*currentNonKernel)->instances.begin(), (*currentNonKernel)->instances.end() );
             }
             else
             {
-                throw AtlasException("Could not map the ID in the TimeLine to neither a kernel nor a nonkernel!");
+                throw AtlasException("ID in the TimeLine mapped to neither a kernel nor a nonkernel!");
             }
         }
 
+        // output what happens at each time instance
         for (const auto &time : TimeToInstances)
         {
-            instanceMap[to_string(time.first)] = vector<pair<int, int>>();
-            for (const auto &instance : time.second)
+            instanceMap["Time"][to_string(time.first)] = vector<pair<int, int>>();
+            for (auto UID : time.second)
             {
-                instanceMap[to_string(time.first)].push_back(pair<int, int>(instance->k->ID, instance->iterations));
+                if( auto instance = dynamic_cast<KernelInstance*>(UID) )
+                {
+                    instanceMap["Time"][to_string(time.first)].push_back(pair<int, int>(instance->k->ID, instance->iterations));
+                }
+                else if( auto nkinstance = dynamic_cast<NonKernelInstance*>(UID) )
+                {
+                    instanceMap["Time"][to_string(time.first)].push_back(pair<int, int>(nkinstance->nk->IID, nkinstance->iterations));
+                }
             }
         }
+
+        // output kernel instances for completeness
+        for( const auto& k : kernels )
+        {
+            instanceMap["Kernels"][to_string(k->ID)]["Blocks"] = vector<uint64_t>(k->blocks.begin(), k->blocks.end());
+            instanceMap["Kernels"][to_string(k->ID)]["Entrances"] = vector<uint64_t>(k->entrances.begin(), k->entrances.end());
+            instanceMap["Kernels"][to_string(k->ID)]["Exits"] = vector<uint64_t>(k->exits.begin(), k->exits.end());
+        }
+        // output the nonkernel instances we found
+        for( const auto& nk : nonKernels )
+        {
+            instanceMap["NonKernels"][to_string(nk->IID)]["Blocks"] = vector<uint64_t>(nk->blocks.begin(), nk->blocks.end());
+            instanceMap["NonKernels"][to_string(nk->IID)]["Entrances"] = vector<uint64_t>(nk->entrances.begin(), nk->entrances.end());
+            instanceMap["NonKernels"][to_string(nk->IID)]["Exits"] = vector<uint64_t>(nk->exits.begin(), nk->exits.end());
+        }
+
+        // print the file
         ofstream file;
         char *instanceFileName = getenv("INSTANCE_FILE");
         if (instanceFileName == nullptr)
@@ -253,6 +307,14 @@ extern "C"
         for (auto entry : kernels)
         {
             for (auto instance : entry->instances)
+            {
+                delete instance;
+            }
+            delete entry;
+        }
+        for( auto entry : nonKernels )
+        {
+            for( auto instance : entry->instances )
             {
                 delete instance;
             }
@@ -284,7 +346,7 @@ extern "C"
                     liveKernels.insert(kern);
                     kern->entrances.insert(a);
                     // take care of any serial code that occurred before our kernel
-                    if( !currentNKI )
+                    if( currentNKI )
                     {
                         // first we have to find out whether or not this nonKernel has been seen before
                         // the only way to do this is to go through all non-kernel instances and find one whose block set matches this one
@@ -300,11 +362,30 @@ extern "C"
                         if( !match )
                         {
                             match = new NonKernel();
+                            nonKernels.insert(match);
                         }
-                        match->instances.push_back(currentNKI);
-                        currentNKI->nk = match;
-                        currentNKI = nullptr;
                         TimeLine.push_back( pair<int, int>(match->IID, match->instances.size() ) );
+                        // look to see if we have an instance exactly like this one already in the nonkernel
+                        for( const auto& instance : match->instances )
+                        {
+                            if( instance->firstBlock == currentNKI->firstBlock )
+                            {
+                                // we already have this instance
+                                delete currentNKI;
+                                instance->iterations++;
+                                currentNKI = nullptr;
+                            }
+                        }
+                        if( currentNKI != nullptr )
+                        {
+                            currentNKI->nk = match;
+                            // push the new instance
+                            match->instances.push_back(currentNKI);
+                            match->blocks.insert(currentNKI->blocks.begin(), currentNKI->blocks.end());
+                            match->entrances.insert(currentNKI->firstBlock);
+                            match->exits.insert(lastBlock);
+                        }
+                        currentNKI = nullptr;
                     }
                     // if this kernel is the top level kernel insert it into the timeline
                     if (kern->parents.empty())
@@ -371,6 +452,7 @@ extern "C"
             else
             {
                 currentNKI = new NonKernelInstance(a);
+                currentNKI->firstBlock = a;
             }
         }
         lastBlock = a;
