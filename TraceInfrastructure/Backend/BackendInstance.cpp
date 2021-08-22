@@ -47,7 +47,7 @@ private:
 
 uint64_t UniqueID::nextIID = 0;
 
-class CodeSection
+class CodeSection : public UniqueID
 {
 public:
     set<uint64_t> blocks;
@@ -58,22 +58,22 @@ public:
 
 CodeSection::~CodeSection() = default;
 
-class Kernel : public CodeSection, public UniqueID
+class Kernel : public CodeSection
 {
 public:
-    int ID;
+    string label;
     set<int> parents;
     set<int> children;
     vector<class KernelInstance *> instances;
     Kernel(){};
     Kernel(int id)
     {
-        ID = id;
-        setNextIID((uint64_t)ID);
+        IID = (uint64_t)id;
+        setNextIID(IID);
     }
 };
 
-class NonKernel : public UniqueID, public CodeSection
+class NonKernel : public CodeSection
 {
 public:
     vector<class NonKernelInstance*> instances;
@@ -88,19 +88,19 @@ struct p_KCompare
     using is_transparent = void;
     bool operator()(const Kernel *lhs, const Kernel *rhs) const
     {
-        return lhs->ID < rhs->ID;
+        return lhs->IID < rhs->IID;
     }
-    bool operator()(const Kernel *lhs, int rhs) const
+    bool operator()(const Kernel *lhs, uint64_t rhs) const
     {
-        return lhs->ID < rhs;
+        return lhs->IID < rhs;
     }
-    bool operator()(int lhs, const Kernel *rhs) const
+    bool operator()(uint64_t lhs, const Kernel *rhs) const
     {
-        return lhs < rhs->ID;
+        return lhs < rhs->IID;
     }
 };
 
-class CodeInstance
+class CodeInstance : public UniqueID
 {
 public:
     /// Position of this instance in the timeline of kernel instances
@@ -113,7 +113,7 @@ public:
 CodeInstance::~CodeInstance() = default;
 
 /// Tracks the iteration of a kernel
-class KernelInstance : public UniqueID, public CodeInstance
+class KernelInstance : public CodeInstance
 {
 public:
     /// Points to the kernel this iteration maps to
@@ -133,7 +133,7 @@ public:
     }
 };
 
-class NonKernelInstance : public UniqueID, public CodeInstance
+class NonKernelInstance : public CodeInstance
 {
 public:
     set<uint64_t> blocks;
@@ -179,6 +179,102 @@ uint64_t lastBlock;
 /// On/off switch for the profiler
 bool instanceActive = false;
 
+void GenerateDot(const set<NonKernel *, p_UIDCompare> &nonKernels, const set<Kernel *, p_KCompare> &kernels)
+{
+    string dotString = "digraph{\n";
+    // label kernels and nonkernels
+    for (const auto &kernel : kernels)
+    {
+        dotString += "\t" + to_string(kernel->IID) + " [label=\"" + kernel->label + "\"]\n";
+    }
+    for (const auto &nk : nonKernels)
+    {
+        string nkLabel = "";
+        auto blockIt = nk->blocks.begin();
+        nkLabel += to_string(*blockIt);
+        blockIt++;
+        for( ; blockIt != nk->blocks.end(); blockIt++ )
+        {
+            nkLabel += "," + to_string(*blockIt);
+        }
+        dotString += "\t" + to_string(nk->IID) + " [label=\"" + nkLabel + "\"]\n";
+    }
+    // now build out the nodes in the graph
+    // we only go to the second to last element because the last element has no outgoing edges
+    for (unsigned int i = 0; i < TimeLine.size()-1; i++)
+    {
+        auto currentKernel = kernels.find(TimeLine[i].first);
+        auto currentNonKernel = nonKernels.find(TimeLine[i].first);
+        auto nextKernel = kernels.find(TimeLine[i+1].first);
+        auto nextNonKernel = nonKernels.find(TimeLine[i+1].first);
+        // curremtSection is a base pointer that describes the current node in the graph (the source node of the edge to be described)
+        CodeSection* currentSection;
+        if( (currentKernel != kernels.end()) && (currentNonKernel != nonKernels.end()) )
+        {
+            throw AtlasException("Overlap between kernel ID and nonKernel ID!");
+        }
+        else if( currentKernel != kernels.end() )
+        {
+            currentSection = *currentKernel;
+            auto currentInstance = (*currentKernel)->instances[(unsigned int)TimeLine[i].second];
+            // construct a map for all embedded kernels for this instance
+            // don't use the timeline vector because it only allows for 1 child to each parent (the structures scale this to arbitrary number of children)
+            std::deque<KernelInstance *> Q;
+            vector<KernelInstance *> hierarchy;
+            Q.push_front(currentInstance);
+            while (!Q.empty())
+            {
+                for (auto child = Q.front()->children.begin(); child != Q.front()->children.end(); child++)
+                {
+                    Q.push_back(*child);
+                }
+                hierarchy.push_back(Q.front());
+                Q.pop_front();
+            }
+            for (auto UID = next(hierarchy.begin()); UID != hierarchy.end(); UID++)
+            {
+                dotString += "\t" + to_string((*UID)->IID) + " -> " + to_string( (*prev(UID))->IID ) + " [style=dashed] [label="+to_string((*UID)->iterations)+"];\n";
+            }
+        }
+        else if( currentNonKernel != nonKernels.end() )
+        {
+            // nonkernel sections cannot have hierarchy
+            currentSection = *currentNonKernel;
+        }
+        else
+        {
+            throw AtlasException("ID in the TimeLine mapped to neither a kernel nor a nonkernel!");
+        }
+        // nextSection is a base pointer describing the next node in the graph (the sink node of the edge to be described)
+        CodeSection* nextSection;
+        if( (nextKernel != kernels.end()) && (nextNonKernel != nonKernels.end()) )
+        {
+            throw AtlasException("Overlap between kernel ID and nonKernel ID!");
+        }
+        else if( nextKernel != kernels.end() )
+        {
+            nextSection = *nextKernel;
+        }
+        else if( nextNonKernel != nonKernels.end() )
+        {
+            nextSection = *nextNonKernel;
+        }
+        else
+        {
+            throw AtlasException("ID in the TimeLine mapped to neither a kernel nor a nonkernel!");
+        }
+        // TODO: add iteration count to the edge
+        dotString += "\t" + to_string(currentSection->IID) + " -> " + to_string(nextSection->IID) + ";\n";//[label=" + to_string(currentSection->) + "];\n";
+
+    }
+    dotString += "}";
+
+    // print file
+    ofstream DAGStream("DAG.dot");
+    DAGStream << dotString << "\n";
+    DAGStream.close();
+}
+
 extern "C"
 {
     void ReadKernelFile()
@@ -207,6 +303,7 @@ extern "C"
             for (const auto &kid : j["Kernels"].items())
             {
                 auto newKernel = new Kernel(stoi(kid.key()));
+                newKernel->label = j["Kernels"][kid.key()]["Labels"].front();
                 newKernel->blocks.insert(j["Kernels"][kid.key()]["Blocks"].begin(), j["Kernels"][kid.key()]["Blocks"].end());
                 newKernel->parents.insert(j["Kernels"][kid.key()]["Parents"].begin(), j["Kernels"][kid.key()]["Parents"].end());
                 newKernel->children.insert(j["Kernels"][kid.key()]["Children"].begin(), j["Kernels"][kid.key()]["Children"].end());
@@ -266,7 +363,7 @@ extern "C"
             {
                 if( auto instance = dynamic_cast<KernelInstance*>(UID) )
                 {
-                    instanceMap["Time"][to_string(time.first)].push_back(pair<int, int>(instance->k->ID, instance->iterations));
+                    instanceMap["Time"][to_string(time.first)].push_back(pair<int, int>(instance->k->IID, instance->iterations));
                 }
                 else if( auto nkinstance = dynamic_cast<NonKernelInstance*>(UID) )
                 {
@@ -278,9 +375,9 @@ extern "C"
         // output kernel instances for completeness
         for( const auto& k : kernels )
         {
-            instanceMap["Kernels"][to_string(k->ID)]["Blocks"] = vector<uint64_t>(k->blocks.begin(), k->blocks.end());
-            instanceMap["Kernels"][to_string(k->ID)]["Entrances"] = vector<uint64_t>(k->entrances.begin(), k->entrances.end());
-            instanceMap["Kernels"][to_string(k->ID)]["Exits"] = vector<uint64_t>(k->exits.begin(), k->exits.end());
+            instanceMap["Kernels"][to_string(k->IID)]["Blocks"] = vector<uint64_t>(k->blocks.begin(), k->blocks.end());
+            instanceMap["Kernels"][to_string(k->IID)]["Entrances"] = vector<uint64_t>(k->entrances.begin(), k->entrances.end());
+            instanceMap["Kernels"][to_string(k->IID)]["Exits"] = vector<uint64_t>(k->exits.begin(), k->exits.end());
         }
         // output the nonkernel instances we found
         for( const auto& nk : nonKernels )
@@ -302,6 +399,9 @@ extern "C"
             file.open(instanceFileName);
         }
         file << setw(4) << instanceMap;
+
+        // generate dot file for the DAG
+        GenerateDot(nonKernels, kernels);
 
         // free our stuff
         for (auto entry : kernels)
@@ -390,7 +490,7 @@ extern "C"
                     // if this kernel is the top level kernel insert it into the timeline
                     if (kern->parents.empty())
                     {
-                        TimeLine.push_back(pair<int, int>(kern->ID, kern->instances.size()));
+                        TimeLine.push_back(pair<int, int>(kern->IID, kern->instances.size()));
                     }
                 }
             }
