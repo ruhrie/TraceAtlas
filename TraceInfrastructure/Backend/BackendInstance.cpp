@@ -185,7 +185,10 @@ void GenerateDot(const set<NonKernel *, p_UIDCompare> &nonKernels, const set<Ker
     // label kernels and nonkernels
     for (const auto &kernel : kernels)
     {
-        dotString += "\t" + to_string(kernel->IID) + " [label=\"" + kernel->label + "\"]\n";
+        for( const auto& instance : kernel->instances )
+        {
+            dotString += "\t" + to_string(instance->IID) + " [label=\"" + kernel->label + "\"]\n";
+        }
     }
     for (const auto &nk : nonKernels)
     {
@@ -197,7 +200,10 @@ void GenerateDot(const set<NonKernel *, p_UIDCompare> &nonKernels, const set<Ker
         {
             nkLabel += "," + to_string(*blockIt);
         }
-        dotString += "\t" + to_string(nk->IID) + " [label=\"" + nkLabel + "\"]\n";
+        for( const auto& instance : nk->instances )
+        {
+            dotString += "\t" + to_string(instance->IID) + " [label=\"" + nkLabel + "\"]\n";
+        }
     }
     // now build out the nodes in the graph
     // we only go to the second to last element because the last element has no outgoing edges
@@ -263,8 +269,36 @@ void GenerateDot(const set<NonKernel *, p_UIDCompare> &nonKernels, const set<Ker
         {
             throw AtlasException("ID in the TimeLine mapped to neither a kernel nor a nonkernel!");
         }
+        // now find the correct kernel instances from the timeline and encode the edge connecting them
+        CodeInstance* currentInstance;
+        if( auto currentKernel = dynamic_cast<Kernel*>(currentSection) )
+        {
+            currentInstance = currentKernel->instances[TimeLine[i].second];
+        }
+        else if( auto currentNonKernel = dynamic_cast<NonKernel*>(currentSection) )
+        {
+            currentInstance = currentNonKernel->instances[TimeLine[i].second];
+        }
+        else
+        {
+            throw AtlasException("currentSection maps to neither a kernel nor a non-kernel!");
+        }
+        // now find the correct kernel instances from the timeline and encode the edge connecting them
+        CodeInstance* nextInstance;
+        if( auto nextKernel = dynamic_cast<Kernel*>(nextSection) )
+        {
+            nextInstance = nextKernel->instances[TimeLine[i].second];
+        }
+        else if( auto nextNonKernel = dynamic_cast<NonKernel*>(nextSection) )
+        {
+            nextInstance = nextNonKernel->instances[TimeLine[i].second];
+        }
+        else
+        {
+            throw AtlasException("nextSection maps to neither a kernel nor a non-kernel!");
+        }
         // TODO: add iteration count to the edge
-        dotString += "\t" + to_string(currentSection->IID) + " -> " + to_string(nextSection->IID) + ";\n";//[label=" + to_string(currentSection->) + "];\n";
+        dotString += "\t" + to_string(currentInstance->IID) + " -> " + to_string(nextInstance->IID) + ";\n";//[label=" + to_string(currentSection->) + "];\n";
 
     }
     dotString += "}";
