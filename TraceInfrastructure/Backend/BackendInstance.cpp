@@ -121,11 +121,11 @@ void GenerateDot(const set<CodeSection *, p_UIDCompare> &codeSections)
                 dotString += "\t" + to_string((*UID)->IID) + " -> " + to_string((*prev(UID))->IID) + " [style=dashed] [label=" + to_string((*UID)->iterations) + "];\n";
             }
             // step 2
-            currentInstance = currentKernel->getInstance(TimeLine[i].second);
+            currentInstance = currentKernel->getInstance((unsigned int)TimeLine[i].second);
         }
         else if (auto currentNonKernel = dynamic_cast<NonKernel *>(currentSection))
         {
-            currentInstance = currentNonKernel->getInstance(TimeLine[i].second);
+            currentInstance = currentNonKernel->getInstance((unsigned int)TimeLine[i].second);
         }
         else
         {
@@ -135,11 +135,11 @@ void GenerateDot(const set<CodeSection *, p_UIDCompare> &codeSections)
         CodeInstance *nextInstance;
         if (auto nextKernel = dynamic_cast<Kernel *>(nextSection))
         {
-            nextInstance = nextKernel->getInstance(TimeLine[i].second);
+            nextInstance = nextKernel->getInstance((unsigned int)TimeLine[i].second);
         }
         else if (auto nextNonKernel = dynamic_cast<NonKernel *>(nextSection))
         {
-            nextInstance = nextNonKernel->getInstance(TimeLine[i].second);
+            nextInstance = nextNonKernel->getInstance((unsigned int)TimeLine[i].second);
         }
         else
         {
@@ -181,19 +181,34 @@ extern "C"
         }
         if (j.find("Kernels") != j.end())
         {
+            // first build all kernel objects and add them to the list
             for (const auto &kid : j["Kernels"].items())
             {
                 auto newKernel = new Kernel(stoi(kid.key()));
                 newKernel->label = j["Kernels"][kid.key()]["Labels"].front();
                 newKernel->blocks.insert(j["Kernels"][kid.key()]["Blocks"].begin(), j["Kernels"][kid.key()]["Blocks"].end());
-                newKernel->parents.insert(j["Kernels"][kid.key()]["Parents"].begin(), j["Kernels"][kid.key()]["Parents"].end());
-                newKernel->children.insert(j["Kernels"][kid.key()]["Children"].begin(), j["Kernels"][kid.key()]["Children"].end());
+
                 codeSections.insert(newKernel);
                 kernels.insert(newKernel);
                 for (const auto &b : newKernel->blocks)
                 {
                     blockToSection[b].insert(newKernel);
                 }
+            }
+            // now build out the hierarchy structures
+            for( const auto &kid : j["Kernels"].items())
+            {
+                auto kern = *kernels.find(stoi(kid.key()));
+                auto parents = j["Kernels"][kid.key()]["Parents"];
+                auto children= j["Kernels"][kid.key()]["Children"];
+                for( const auto& pid : parents )
+                {
+                    kern->parents.insert( *kernels.find(pid) );
+                }                
+                for( const auto& cid : children )
+                {
+                    kern->children.insert( *kernels.find(cid) );
+                }                
             }
         }
     }
@@ -315,7 +330,7 @@ extern "C"
         {
             return;
         }
-        Kernel *enteredKernel = nullptr;
+        set<Kernel *> enteredKernels;
         // first step, acquire all kernels who have this block in them
         // we must process the parent kernels first
         for (auto &cs : blockToSection[a])
@@ -326,11 +341,7 @@ extern "C"
                 {
                     if (kern->blocks.find((uint32_t)a) != kern->blocks.end())
                     {
-                        if (enteredKernel != nullptr)
-                        {
-                            throw AtlasException("We have multiple kernel entrances that map to this block!");
-                        }
-                        enteredKernel = kern;
+                        enteredKernels.insert(kern);
                         liveKernels.insert(kern);
                         kern->entrances.insert(a);
                         // take care of any serial code that occurred before our kernel
@@ -403,23 +414,66 @@ extern "C"
                 }
             }
         }
-        // now make a new kernel instance if necessary
-        if (enteredKernel)
+        // now make new kernel instances if necessary
+        // we most go top-down in the hierarchy when creating instances aka parents must go first
+        vector<Kernel*> sortedEnteredKernels;
+        for( const auto& kern : enteredKernels )
         {
-            // instances are in the eye of the parent
-            if (enteredKernel->parents.empty())
+            if( std::find(sortedEnteredKernels.begin(), sortedEnteredKernels.end(), kern) != sortedEnteredKernels.end() )
             {
-                new KernelInstance(enteredKernel);
+                continue;
             }
-            else if (enteredKernel->parents.size() == 1)
+            deque<Kernel*> Q;
+            Q.push_back(kern);
+            while( !Q.empty() )
+            {
+                if( Q.front()->parents.empty() )
+                {
+                    // we have found the parentmost, push the Q (because it is sorted by now) into the sorted vector
+                    for( const auto& el : Q )
+                    {
+                        sortedEnteredKernels.push_back(el);
+                    }
+                    Q.clear();
+                }
+                else
+                {
+                    // push the parent of this child to the front of the queue
+                    bool liveParent = false;
+                    for( const auto& p : Q.front()->parents )
+                    {
+                        if( enteredKernels.find(p) != enteredKernels.end() )
+                        {
+                            Q.push_front(p);
+                            liveParent = true;
+                        }
+                    }
+                    if( !liveParent )
+                    {
+                        // if no live parents exist we can just trivially push this child
+                        sortedEnteredKernels.push_back(Q.front());
+                        Q.clear();
+                    }
+                }
+            }
+        }
+
+        for (const auto& enteredKern : sortedEnteredKernels)
+        {
+            // instances are in the eye of the parent (we only consider an instance new from the perspective of the hierarchical level immediately above us)
+            if (enteredKern->parents.empty())
+            {
+                new KernelInstance(enteredKern);
+            }
+            else if (enteredKern->parents.size() == 1)
             {
                 // if we already have an instance for this child in the parent we don't make a new one
-                auto parent = dynamic_cast<Kernel *>(*codeSections.find(*(enteredKernel->parents.begin())));
+                auto parent = static_cast<Kernel *>(*codeSections.find(*(enteredKern->parents.begin())));
                 auto parentInstance = parent->getCurrentInstance();
                 bool childFound = false;
                 for (auto child : parentInstance->children)
                 {
-                    if (child->k == enteredKernel)
+                    if (child->k == enteredKern)
                     {
                         childFound = true;
                     }
@@ -427,7 +481,7 @@ extern "C"
                 if (!childFound)
                 {
                     // we don't have an instance for this child yet, create one
-                    auto newInstance = new KernelInstance(enteredKernel);
+                    auto newInstance = new KernelInstance(enteredKern);
                     parentInstance->children.insert(newInstance);
                 }
             }

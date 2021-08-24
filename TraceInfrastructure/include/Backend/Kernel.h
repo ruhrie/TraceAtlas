@@ -8,8 +8,8 @@ class Kernel : public CodeSection
 {
 public:
     std::string label;
-    std::set<int> parents;
-    std::set<int> children;
+    std::set<class Kernel*> parents;
+    std::set<class Kernel*> children;
     Kernel();
     Kernel(int id);
     class KernelInstance *getInstance(unsigned int i) const;
