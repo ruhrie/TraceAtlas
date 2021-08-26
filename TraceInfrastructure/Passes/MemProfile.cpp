@@ -106,15 +106,14 @@ namespace DashTracer::Passes
                     Value *dataSizeValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), dataSize);
                     values.push_back(dataSizeValue);
                     // type 0 = load, 1 = store
-                    uint64_t OPtype = 0;
-                    Value *OPtypeValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), OPtype);
-                    values.push_back(OPtypeValue);
+                    // uint64_t OPtype = 0;
+                    // Value *OPtypeValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), OPtype);
+                    // values.push_back(OPtypeValue);
 
                     auto ref = ArrayRef<Value *>(values);
-                    builder.CreateCall(MemInstructionDump, ref);
+                    builder.CreateCall(LoadInstructionDump, ref);
                 }
-
-                if (auto *store = dyn_cast<StoreInst>(CI))
+                else if (auto *store = dyn_cast<StoreInst>(CI))
                 {
                     IRBuilder<> builder(store);
                     Value *addr = store->getPointerOperand();
@@ -131,12 +130,12 @@ namespace DashTracer::Passes
                     Value *dataSizeValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), dataSize);
                     values.push_back(dataSizeValue);
                     // type 0 = load, 1 = store
-                    uint64_t OPtype = 1;
-                    Value *OPtypeValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), OPtype);
-                    values.push_back(OPtypeValue);
+                    // uint64_t OPtype = 1;
+                    // Value *OPtypeValue = ConstantInt::get(Type::getInt64Ty(BB->getContext()), OPtype);
+                    // values.push_back(OPtypeValue);
 
                     auto ref = ArrayRef<Value *>(values);
-                    builder.CreateCall(MemInstructionDump, ref);
+                    builder.CreateCall(StoreInstructionDump, ref);
                 }
             }
         }
@@ -145,7 +144,8 @@ namespace DashTracer::Passes
 
     bool MemProfile::doInitialization(Module &M)
     {
-        MemInstructionDump = cast<Function>(M.getOrInsertFunction("MemInstructionDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt64Ty(M.getContext()), Type::getInt64Ty(M.getContext()), Type::getInt64Ty(M.getContext())).getCallee());
+        LoadInstructionDump = cast<Function>(M.getOrInsertFunction("LoadInstructionDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt64Ty(M.getContext()), Type::getInt64Ty(M.getContext())).getCallee());
+        StoreInstructionDump = cast<Function>(M.getOrInsertFunction("StoreInstructionDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8), Type::getInt64Ty(M.getContext()), Type::getInt64Ty(M.getContext())).getCallee());
         MemProfInitialization = cast<Function>(M.getOrInsertFunction("MemProfInitialization", Type::getVoidTy(M.getContext())).getCallee());
         MemProfDestroy = cast<Function>(M.getOrInsertFunction("MemProfDestroy", Type::getVoidTy(M.getContext())).getCallee());
         return false;

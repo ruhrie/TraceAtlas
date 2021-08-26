@@ -5,12 +5,17 @@
 #include <string.h>
 #include <zlib.h>
 
-void MemInstructionDump(void *address, uint64_t bbID, uint64_t datasize, uint64_t type)
+void StoreInstructionDump(void *address, uint64_t bbID, uint64_t datasize)
 {
 
-    printf("Address:%#lX, BBid: %lu, datasize:%lu, type: %lu\n ", (uint64_t)address, bbID, datasize, type);
+    printf("Address:%#lX, BBid: %lu, datasize:%lu", (uint64_t)address, bbID, datasize);
 }
 
+void LoadInstructionDump(void *address, uint64_t bbID, uint64_t datasize)
+{
+
+    printf("Address:%#lX, BBid: %lu, datasize:%lu", (uint64_t)address, bbID, datasize);
+}
 void MemProfInitialization()
 {
 

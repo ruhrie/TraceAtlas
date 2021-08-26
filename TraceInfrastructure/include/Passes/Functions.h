@@ -25,9 +25,8 @@ namespace DashTracer
         extern Function *InstanceInit;
         extern Function *InstanceDestroy;
         extern Function *InstanceIncrement;
-        extern Function *InstanceIncrement;
-        extern Function *InstanceIncrement;
-        extern Function *MemInstructionDump;
+        extern Function *LoadInstructionDump;
+        extern Function *StoreInstructionDump;
         extern Function *MemProfInitialization;
         extern Function *MemProfDestroy;
     } // namespace Passes
