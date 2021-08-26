@@ -416,44 +416,41 @@ extern "C"
         }
         // now make new kernel instances if necessary
         // we most go top-down in the hierarchy when creating instances aka parents must go first
-        vector<Kernel*> sortedEnteredKernels;
+        deque<Kernel*> sortedEnteredKernels;
         for( const auto& kern : enteredKernels )
         {
             if( std::find(sortedEnteredKernels.begin(), sortedEnteredKernels.end(), kern) != sortedEnteredKernels.end() )
             {
                 continue;
             }
-            deque<Kernel*> Q;
-            Q.push_back(kern);
-            while( !Q.empty() )
+            if( kern->parents.empty() )
             {
-                if( Q.front()->parents.empty() )
+                sortedEnteredKernels.push_front(kern);
+            }
+            else
+            {
+                if( kern->parents.size() > 1 )
                 {
-                    // we have found the parentmost, push the Q (because it is sorted by now) into the sorted vector
-                    for( const auto& el : Q )
-                    {
-                        sortedEnteredKernels.push_back(el);
-                    }
-                    Q.clear();
+                    throw AtlasException("Can't sort a kernel that has multiple parents!");
+                }
+                auto parent = *kern->parents.begin();
+                if( enteredKernels.find(parent) == enteredKernels.end() )
+                {
+                    // we should never get a case where a child kernel has an instance before a parent kernel
+                    // this kernel has a parent but the parent is not being entered, which must mean that the parent already has an instance
+                    // this makes the case equivalent to having no parents for the current kernel, so push it to the front
+                    sortedEnteredKernels.push_front(kern);
+                    continue;
+                }
+                auto parentPos = std::find(sortedEnteredKernels.begin(), sortedEnteredKernels.end(), parent);
+                if(  parentPos != sortedEnteredKernels.end() )
+                {
+                    sortedEnteredKernels.insert(next(parentPos), kern);
                 }
                 else
                 {
-                    // push the parent of this child to the front of the queue
-                    bool liveParent = false;
-                    for( const auto& p : Q.front()->parents )
-                    {
-                        if( enteredKernels.find(p) != enteredKernels.end() )
-                        {
-                            Q.push_front(p);
-                            liveParent = true;
-                        }
-                    }
-                    if( !liveParent )
-                    {
-                        // if no live parents exist we can just trivially push this child
-                        sortedEnteredKernels.push_back(Q.front());
-                        Q.clear();
-                    }
+                    // our parent is not yet in the queue, push to the front
+                    sortedEnteredKernels.push_front(kern);
                 }
             }
         }
@@ -470,6 +467,10 @@ extern "C"
                 // if we already have an instance for this child in the parent we don't make a new one
                 auto parent = static_cast<Kernel *>(*codeSections.find(*(enteredKern->parents.begin())));
                 auto parentInstance = parent->getCurrentInstance();
+                if( !parentInstance )
+                {
+                    throw AtlasException("Found a parent kernel that does not have an instance before its child!");
+                }
                 bool childFound = false;
                 for (auto child : parentInstance->children)
                 {
