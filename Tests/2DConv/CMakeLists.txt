@@ -8,6 +8,7 @@ add_test(NAME 2DConv_cartographer COMMAND newCartographer -i ${CMAKE_CURRENT_BIN
 set_tests_properties(2DConv_cartographer PROPERTIES DEPENDS 2DConv_Trace)
 
 add_test(NAME 2DConv_DAG_Trace COMMAND 2DConv-instance-trace)
+set_tests_properties(2DConv_DAG_Trace PROPERTIES DEPENDS 2DConv_cartographer)
 
 add_test(NAME 2DConv_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:2DConv>)
 set_tests_properties(2DConv_tik PROPERTIES DEPENDS 2DConv_cartographer)

@@ -9,6 +9,7 @@ add_test(NAME bubbleSort_cartographer COMMAND newCartographer -i ${CMAKE_CURRENT
 set_tests_properties(bubbleSort_cartographer PROPERTIES DEPENDS bubbleSort_Trace)
 
 add_test(NAME bubbleSort_DAG_Trace COMMAND bubbleSort-instance-trace)
+set_tests_properties(bubbleSort_DAG_Trace PROPERTIES DEPENDS bubbleSort_cartographer)
 
 add_test(NAME bubbleSort_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:bubbleSort> -S)
 set_tests_properties(bubbleSort_tik PROPERTIES DEPENDS bubbleSort_cartographer)

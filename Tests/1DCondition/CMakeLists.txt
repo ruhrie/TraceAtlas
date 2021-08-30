@@ -8,6 +8,7 @@ add_test(NAME 1DCondition_cartographer COMMAND newCartographer -i ${CMAKE_CURREN
 set_tests_properties(1DCondition_cartographer PROPERTIES DEPENDS 1DCondition_Trace)
 
 add_test(NAME 1DCondition_DAG_Trace COMMAND 1DCondition-instance-trace)
+set_tests_properties(1DCondition_DAG_Trace PROPERTIES DEPENDS 1DCondition_cartographer)
 
 add_test(NAME 1DCondition_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:1DCondition>)
 set_tests_properties(1DCondition_tik PROPERTIES DEPENDS 1DCondition_cartographer)

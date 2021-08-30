@@ -10,6 +10,7 @@ add_test(NAME matmul_cartographer COMMAND newCartographer -i ${CMAKE_CURRENT_BIN
 set_tests_properties(matmul_cartographer PROPERTIES DEPENDS matmul_trace FIXTURES_REQUIRED matmul_trace_fixture FIXTURES_SETUP matmul_cartographer_fixture)
 
 add_test(NAME matmul_DAG_Trace COMMAND matmul-instance-trace)
+set_tests_properties(matmul_DAG_Trace PROPERTIES DEPENDS matmul_cartographer)
 
 add_test(NAME matmul_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:matmul>)
 set_tests_properties(matmul_tik PROPERTIES DEPENDS matmul_cartographer FIXTURES_REQUIRED matmul_cartographer_fixture)

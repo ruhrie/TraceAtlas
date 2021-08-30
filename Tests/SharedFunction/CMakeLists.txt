@@ -8,6 +8,7 @@ add_test(NAME SharedFunction_cartographer COMMAND newCartographer -i ${CMAKE_CUR
 set_tests_properties(SharedFunction_cartographer PROPERTIES DEPENDS SharedFunction_Trace)
 
 add_test(NAME SharedFunction_DAG_Trace COMMAND SharedFunction-instance-trace)
+set_tests_properties(SharedFunction_DAG_Trace PROPERTIES DEPENDS SharedFunction_cartographer)
 
 add_test(NAME SharedFunction_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:SharedFunction>)
 set_tests_properties(SharedFunction_tik PROPERTIES DEPENDS SharedFunction_cartographer)

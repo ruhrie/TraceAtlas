@@ -8,6 +8,7 @@ add_test(NAME FunctionCall_cartographer COMMAND newCartographer -i ${CMAKE_CURRE
 set_tests_properties(FunctionCall_cartographer PROPERTIES DEPENDS FunctionCall_Trace)
 
 add_test(NAME FunctionCall_DAG_Trace COMMAND FunctionCall-instance-trace)
+set_tests_properties(FunctionCall_DAG_Trace PROPERTIES DEPENDS FunctionCall_cartographer)
 
 add_test(NAME FunctionCall_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:FunctionCall>)
 set_tests_properties(FunctionCall_tik PROPERTIES DEPENDS FunctionCall_cartographer)

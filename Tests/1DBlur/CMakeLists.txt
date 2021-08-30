@@ -8,6 +8,7 @@ add_test(NAME 1DBlur_cartographer COMMAND newCartographer -i ${CMAKE_CURRENT_BIN
 set_tests_properties(1DBlur_cartographer PROPERTIES DEPENDS 1DBlur_Trace)
 
 add_test(NAME 1DBlur_DAG_Trace COMMAND 1DBlur-instance-trace)
+set_tests_properties(1DBlur_DAG_Trace PROPERTIES DEPENDS 1DBlur_cartographer)
 
 add_test(NAME 1DBlur_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:1DBlur>)
 set_tests_properties(1DBlur_tik PROPERTIES DEPENDS 1DBlur_cartographer)
