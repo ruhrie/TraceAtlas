@@ -1,10 +1,13 @@
 add_executable(FunctionCall FunctionCall.c)
 InjectTracer(FunctionCall)
+InjectInstance(FunctionCall)
 
 add_test(NAME FunctionCall_Trace COMMAND FunctionCall-trace)
 
 add_test(NAME FunctionCall_cartographer COMMAND newCartographer -i ${CMAKE_CURRENT_BINARY_DIR}/markov.bin -b $<TARGET_FILE:FunctionCall> -bi ${CMAKE_CURRENT_BINARY_DIR}/BlockInfo.json -d dot.dot -o ${CMAKE_CURRENT_BINARY_DIR}/kernel.json)
 set_tests_properties(FunctionCall_cartographer PROPERTIES DEPENDS FunctionCall_Trace)
+
+add_test(NAME FunctionCall_DAG_Trace COMMAND FunctionCall-instance-trace)
 
 add_test(NAME FunctionCall_tik COMMAND tik -j ${CMAKE_CURRENT_BINARY_DIR}/kernel.json -o ${CMAKE_CURRENT_BINARY_DIR}/tik.bc $<TARGET_FILE:FunctionCall>)
 set_tests_properties(FunctionCall_tik PROPERTIES DEPENDS FunctionCall_cartographer)

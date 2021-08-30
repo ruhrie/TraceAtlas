@@ -28,6 +28,10 @@ void pushStack(char *newLabel)
     {
         labelStack[stackCount] = newLabel;
     }
+    else
+    {
+        cout << "Critical: Label stack has overflowed! Ignoring new label" << endl;
+    }
 }
 
 char *popStack()

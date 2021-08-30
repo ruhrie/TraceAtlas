@@ -22,8 +22,3 @@ VKNode::VKNode(const GraphNode &GN, struct Kernel *p_k)
     neighbors = GN.neighbors;
     predecessors = GN.predecessors;
 }
-
-void VKNode::addNodeBlocks(GraphNode *newNode)
-{
-    blocks.insert(newNode->blocks.begin(), newNode->blocks.end());
-}

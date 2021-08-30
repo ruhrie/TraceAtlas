@@ -19,4 +19,11 @@ namespace DashTracer::Passes
     Function *MarkovDestroy;
     Function *MarkovIncrement;
     Function *MarkovExit;
+    Function *InstanceInit;
+    Function *InstanceDestroy;
+    Function *InstanceIncrement;
+    Function *LoadInstructionDump;
+    Function *StoreInstructionDump;
+    Function *MemProfInitialization;
+    Function *MemProfDestroy;
 } // namespace DashTracer::Passes

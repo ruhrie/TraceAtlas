@@ -33,10 +33,10 @@ void ProfileBlock(BasicBlock *BB, map<int64_t, map<string, uint64_t>> &rMap, map
         {
             continue;
         }
-        //start with the opcodes
+        // opcode
         string name = string(i->getOpcodeName());
         rMap[id][name + "Count"]++;
-        //now check the type
+        // type
         Type *t = i->getType();
         if (t->isVoidTy())
         {
@@ -231,53 +231,6 @@ void AddNode(std::set<GraphNode *, p_GNCompare> &nodes, const VKNode &newNode)
 
 void RemoveNode(std::set<GraphNode *, p_GNCompare> &CFG, GraphNode *removeNode)
 {
-    // first, remove the node in question from any kernels it may belong to
-    // set of kernels that are updated versions of existing kernels, each member will eventually replace the old one in the kernels (input arg) set
-    /*for (const auto &kernel : kernels)
-    {
-        if (kernel->nodes.find(removeNode) != kernel->nodes.end())
-        {
-            // remove the node from the kernel
-            kernel->nodes.erase(removeNode);
-        }
-    }*/
-    // second, look for any VKNodes in the CFG and update their node sets if applicable
-    /*set<VKNode,  p_GNCompare> newVKNodes;
-    for (auto node : CFG)
-    {
-        //if( auto VKNode = dynamic_pointer_cast<struct VKNode>(sharedNode) )
-        if (auto VKN = dynamic_cast<VKNode *>(node))
-        {
-            VKN->nodes.erase(removeNode);
-        }
-    }*/
-
-    // third, remove the node from the graph and update the neighbors of the predecessors and the predecessors of the neighbors
-    /*for( const auto& predID : removeNode->predecessors )
-    {
-        auto pred = CFG.find(predID);
-        if( pred != CFG.end() )
-        {
-            (*pred)->neighbors.erase(removeNode->NID); 
-            for( const auto& neighbor : removeNode->neighbors )
-            {
-                (*pred)->neighbors[neighbor.first] = neighbor.second;
-            }
-        }
-    }
-    for( const auto& neighborID : removeNode->neighbors )
-    {
-        auto neighbor = CFG.find(neighborID.first);
-        if( neighbor != CFG.end() )
-        {
-            (*neighbor)->predecessors.erase(removeNode->NID);
-            for( const auto& predID : removeNode->predecessors )
-            {
-                (*neighbor)->predecessors.insert(predID);
-            }
-        }
-    }*/
-    // fourth, free
     auto entry = CFG.find(removeNode->NID);
     if (entry != CFG.end())
     {
@@ -603,7 +556,10 @@ void TrivialTransforms(std::set<GraphNode *, p_GNCompare> &nodes, std::map<int64
                                 }
                             }
                             // add the successor blocks
-                            currentNode->addBlocks((*succ)->blocks);
+                            if (!currentNode->mergeSuccessor(**succ))
+                            {
+                                throw AtlasException("Tried to merge a successor that did not have the correct original blocks!");
+                            }
 
                             // remove stale node from the node set
                             RemoveNode(nodes, *succ);
@@ -1245,6 +1201,7 @@ std::vector<Kernel *> VirtualizeKernels(std::set<Kernel *, KCompare> &newKernels
                 auto it_Node = nodes.find(node.NID);
                 if (it_Node != nodes.end())
                 {
+                    kernelNode->mergeSuccessor(**it_Node);
                     if (auto VKN = dynamic_cast<VKNode *>(*it_Node))
                     {
                         // don't throw away virtual kernel nodes, but disconnect them from the graph
@@ -1707,6 +1664,32 @@ int main(int argc, char *argv[])
     // now assign hierarchy to each kernel
     for (const auto &kern : kernels)
     {
+        /*auto entIDs = vector<uint32_t>();
+        auto exIDs  = vector<uint32_t>();
+        // The entrances IDs we export have to refer to a block in the original bitcode explicitly, not an NID in our constructed graph here
+        // Every ID up to the last in originalBlocks is past history
+        // The last block represents the current block
+        // The block that is outside the kernel is a neighbor of this node, 
+        // The node that is still within the kernel that has an edge leading out of the kernel has its current block within the kernel and the next block outside the kernel
+        // Thus we choose the last block in originalBlocks as the exit block
+        // The same logic is applied to the entrance blocks, except the entrance block is the sink node of an edge that enters the kernel
+        // This doesn't change what the logic is because the last node in the originalBlocks struct is still the current block
+        if( !kern->getExitBlocks(nodes, markovOrder).empty() )
+        {
+            for( const auto& ex : kern->getExitBlocks(nodes, markovOrder) )
+            {
+                exIDs.push_back(ex);
+            }
+        }
+        if( !kern->getEntranceBlocks(nodes, markovOrder).empty())
+        {
+            for( const auto& en : kern->getEntranceBlocks(nodes, markovOrder) )
+            {
+                entIDs.push_back(en);
+            }
+        }
+        outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Entrances"] = vector<uint32_t>(entIDs);
+        outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Exits"] = vector<uint32_t>(exIDs);*/
         outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Children"] = vector<uint32_t>();
         outputJson["Kernels"][to_string(SIDMap[kern->KID])]["Parents"] = vector<uint32_t>();
     }

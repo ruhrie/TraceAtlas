@@ -27,6 +27,8 @@ namespace TraceAtlas::Cartographer
         virtual ~GraphNode();
         void addBlock(int64_t newBlock);
         void addBlocks(const std::set<int64_t> &newBlocks);
+        /// Merges the blocks and originalBlocks of a successor node
+        bool mergeSuccessor(const GraphNode &succ);
 
     protected:
         static uint64_t nextNID;
