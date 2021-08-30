@@ -25,7 +25,6 @@ namespace DashTracer::Passes
             auto *BB = cast<BasicBlock>(fi);
             auto firstInsertion = BB->getFirstInsertionPt();
             auto *firstInst = cast<Instruction>(firstInsertion);
-            auto lastInsertion = BB->getTerminator();
             IRBuilder<> firstBuilder(firstInst);
 
             // skip this if we are in the first block of main
