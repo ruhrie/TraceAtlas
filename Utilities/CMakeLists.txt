@@ -81,3 +81,24 @@ set_target_properties(KernelSerial
 	PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin" 
 )
+
+add_executable(KernelDAG KernelDAG.cpp)
+target_link_libraries(KernelDAG ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
+target_include_directories(KernelDAG SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(KernelDAG PRIVATE ${LLVM_DEFINITIONS})
+
+set_target_properties(KernelDAG
+	PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin" 
+)
+
+
+add_executable(JR-cedr JR-cedr.cpp)
+target_link_libraries(JR-cedr ${llvm_libs} nlohmann_json nlohmann_json::nlohmann_json AtlasUtil)
+target_include_directories(JR-cedr SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(JR-cedr PRIVATE ${LLVM_DEFINITIONS})
+
+set_target_properties(JR-cedr
+	PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin" 
+)

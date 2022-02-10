@@ -37,11 +37,11 @@ namespace DashTracer::Passes
             firstBuilder.CreateCall(BB_ID, args);
             args.pop_back();
             args.push_back(falseConst);
-            errs()<<"BB-ID:"<<id<<"\n";
+            // errs() << "BB-ID:" << id << "\n";
             for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI)
             {
                 auto *CI = dyn_cast<Instruction>(BI);
-                errs()<< *CI<< "\n";
+                // errs() << *CI << "\n";
                 if (DumpLoads)
                 {
                     if (auto *load = dyn_cast<LoadInst>(CI))
@@ -64,6 +64,41 @@ namespace DashTracer::Passes
                         builder.CreateCall(StoreDump, cast);
                     }
                 }
+
+                if (MemCpyInst *MCI = dyn_cast<MemCpyInst>(CI))
+                {
+                    std::vector<Value *> values;
+                    // destination
+                    Value *op0 = MCI->getOperand(0);
+                    //source
+                    Value *op1 = MCI->getOperand(1);
+                    // len
+                    Value *op2 = MCI->getOperand(2); 
+
+                    IRBuilder<> builder(MCI);
+                    
+                    auto castCode = CastInst::getCastOpcode(op0, true, PointerType::get(Type::getInt8PtrTy(BB->getContext()), 0), true);
+                    Value *op0cast = builder.CreateCast(castCode, op0, Type::getInt8PtrTy(BB->getContext()));
+                    values.push_back(op0cast);
+                    
+                    castCode = CastInst::getCastOpcode(op1, true, PointerType::get(Type::getInt8PtrTy(BB->getContext()), 0), true);
+                    Value *op1cast = builder.CreateCast(castCode, op1, Type::getInt8PtrTy(BB->getContext()));
+                    values.push_back(op1cast);
+
+                    castCode = CastInst::getCastOpcode(op2, true, PointerType::get(Type::getInt8PtrTy(BB->getContext()), 0), true);
+                    Value *op2cast = builder.CreateCast(castCode, op2, Type::getInt8PtrTy(BB->getContext()));
+                    values.push_back(op2cast);
+                    
+                    
+                    auto ref = ArrayRef<Value *>(values);
+                    builder.CreateCall(MemCpyDump, ref);
+
+                    // errs()<<"memcpy"
+                    // <<"op0:"<<*op0<<"\n"
+                    // <<"op1:"<<*op1<<"\n"
+                    // <<"op2:"<<*op2<<"\n";          
+                   
+                }
             }
             Instruction *preTerm = BB->getTerminator();
             IRBuilder endBuilder(preTerm);
@@ -77,6 +112,8 @@ namespace DashTracer::Passes
         BB_ID = cast<Function>(M.getOrInsertFunction("BB_ID_Dump", Type::getVoidTy(M.getContext()), Type::getInt64Ty(M.getContext()), Type::getInt1Ty(M.getContext())).getCallee());
         LoadDump = cast<Function>(M.getOrInsertFunction("LoadDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
         StoreDump = cast<Function>(M.getOrInsertFunction("StoreDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
+        //input types?
+        MemCpyDump = cast<Function>(M.getOrInsertFunction("MemCpyDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8),Type::getIntNPtrTy(M.getContext(), 8),Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
         return false;
     }
 
