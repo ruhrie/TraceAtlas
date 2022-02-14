@@ -174,7 +174,7 @@ void StoreDump(void *address)
     // printf("StoreAddress:%#lX\n", (uint64_t)address);
 }
 
-void MemCpyDump(void *src,void *dest,void *len)
+void MemCpyDump(void *dest,void *src,void *len)
 {
     char fin[128];
     sprintf(fin, "MemCpy:%#lX,%#lX,%lu\n", (uint64_t)src,(uint64_t)dest,(uint64_t)len);
@@ -232,5 +232,12 @@ void KernelExit(char *label)
     strcpy(fin, "KernelExit:");
     strcat(fin, label);
     strcat(fin, "\n");
+    WriteStream(fin);
+}
+
+void NonKernelSplit()
+{
+    char fin[128];
+    strcpy(fin, "NonKernelSplit:get\n");
     WriteStream(fin);
 }

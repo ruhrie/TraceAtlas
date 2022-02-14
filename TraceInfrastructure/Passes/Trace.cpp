@@ -19,7 +19,7 @@ using namespace llvm;
 namespace DashTracer::Passes
 {
     bool EncodedTrace::runOnFunction(Function &F)
-    {
+    {   
         for (auto fi = F.begin(); fi != F.end(); fi++)
         {
             auto BB = cast<BasicBlock>(fi);
@@ -99,6 +99,19 @@ namespace DashTracer::Passes
                     // <<"op2:"<<*op2<<"\n";          
                    
                 }
+
+                // if (BranchInst  *br = dyn_cast<BranchInst>(CI))
+                // {
+                    
+                //     if(br->isConditional())
+                //     {
+                //         errs()<<"branch:"<<*br<<"\n";
+                //         IRBuilder<> builder(br);
+                //         errs()<<"conditional\n";
+                //         builder.CreateCall(CondBranch);
+                //     }
+            
+                // }
             }
             Instruction *preTerm = BB->getTerminator();
             IRBuilder endBuilder(preTerm);
@@ -114,6 +127,7 @@ namespace DashTracer::Passes
         StoreDump = cast<Function>(M.getOrInsertFunction("StoreDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
         //input types?
         MemCpyDump = cast<Function>(M.getOrInsertFunction("MemCpyDump", Type::getVoidTy(M.getContext()), Type::getIntNPtrTy(M.getContext(), 8),Type::getIntNPtrTy(M.getContext(), 8),Type::getIntNPtrTy(M.getContext(), 8)).getCallee());
+        // CondBranch = cast<Function>(M.getOrInsertFunction("CondBranch", Type::getVoidTy(M.getContext())).getCallee());
         return false;
     }
 

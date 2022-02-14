@@ -185,6 +185,19 @@ bool overlap(wsTuple a, wsTuple b, int64_t error)
     }
 }
 
+
+bool overlapDependenceChecking(wsTuple a, wsTuple b, int64_t error)
+{
+    if (max(a.start, b.start) < (min(a.end, b.end)) + error)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
 bool included(wsTuple newer, wsTuple existed)
 {
     return (newer.start >= existed.start && newer.end <= existed.end && (newer.start + newer.end - existed.end - existed.start != 0));
@@ -500,6 +513,11 @@ void ControlParse(int block)
     // }
 }
 
+
+
+// this is for nested basic blocks
+stack<int> basicBlockBuff;
+stack<int> instCounterBuff;
 void Process(string &key, string &value)
 {
 
@@ -508,9 +526,12 @@ void Process(string &key, string &value)
     if (key == "BBEnter")
     {
         // todo saving the tuple trace per instance, and load them while processing
-        // block represents current processed block id in the trace
-        instCounter = 0;
+        // block represents current processed block id in the trace  
         int block = stoi(value, nullptr, 0);
+        basicBlockBuff.push(block);
+        instCounterBuff.push(instCounter);
+        
+        instCounter = 0;
         vBlock = block;
         if (BBMemInstSize.find(vBlock) != BBMemInstSize.end())
         {
@@ -521,6 +542,31 @@ void Process(string &key, string &value)
             noerrorInTrace = false;
         }
         ControlParse(block);
+    }
+    else if(key == "BBExit")
+    {
+        if(basicBlockBuff.size()>1)
+        {      
+            basicBlockBuff.pop();
+            vBlock = basicBlockBuff.top();
+            instCounter = instCounterBuff.top();
+            instCounterBuff.pop();
+            
+            
+            if (BBMemInstSize.find(vBlock) != BBMemInstSize.end())
+            {
+                noerrorInTrace = true;
+            }
+            else
+            {
+                noerrorInTrace = false;
+            }
+        }
+        else
+        {
+            basicBlockBuff.pop();
+            instCounterBuff.pop();
+        }
     }
     else if (key == "StoreAddress")
     {
@@ -594,19 +640,19 @@ void Process(string &key, string &value)
         {
 
             // load tuples
-            // wsTuple loadwksTuple;
-            // loadwksTuple = (wsTuple){src, src + len, len, 1, 0, 0};
+            wsTuple loadwksTuple;
+            loadwksTuple = (wsTuple){src, src + len, len, 1, 0, 0};
 
             // // if the load address is from the kernel's store tuple, then not counting this load
-            // if (!CheckLoadAfterStore(storewsTupleMap[currentNodeID], loadwksTuple))
-            // {
-            //     trivialMergeOptRegister(loadwsTupleMap[currentNodeID], loadwksTuple, loadlastHitTimeSet);
-            // }
+            if (!CheckLoadAfterStore(storewsTupleMap[currentNodeID], loadwksTuple))
+            {
+                trivialMergeOptRegister(loadwsTupleMap[currentNodeID], loadwksTuple, loadlastHitTimeSet);
+            }
 
 
-            // wsTuple storewksTuple;
-            // storewksTuple = (wsTuple){dest, dest + len, len, 1, 0, 0};
-            // trivialMergeOptRegister(storewsTupleMap[currentNodeID], storewksTuple, storelastHitTimeSet);
+            wsTuple storewksTuple;
+            storewksTuple = (wsTuple){dest, dest + len, len, 1, 0, 0};
+            trivialMergeOptRegister(storewsTupleMap[currentNodeID], storewksTuple, storelastHitTimeSet);
         }
         
     }
@@ -995,16 +1041,16 @@ bool DepCheck(wsTuple t_new, wsTupleMap processMap)
             auto iter = processMap.find(t_new.start);
             // need to delete someone
 
-            if (processMap.find(prev(iter)->first) != processMap.end() && overlap(processMap[t_new.start], prev(iter)->second, 0) &&
-                processMap.find(next(iter)->first) != processMap.end() && overlap(processMap[t_new.start], next(iter)->second, 0))
+            if (processMap.find(prev(iter)->first) != processMap.end() && overlapDependenceChecking(processMap[t_new.start], prev(iter)->second, 0) &&
+                processMap.find(next(iter)->first) != processMap.end() && overlapDependenceChecking(processMap[t_new.start], next(iter)->second, 0))
             {
                 return true;
             }
-            else if (processMap.find(prev(iter)->first) != processMap.end() && overlap(processMap[t_new.start], prev(iter)->second, 0))
+            else if (processMap.find(prev(iter)->first) != processMap.end() && overlapDependenceChecking(processMap[t_new.start], prev(iter)->second, 0))
             {
                 return true;
             }
-            else if (processMap.find(next(iter)->first) != processMap.end() && overlap(processMap[t_new.start], next(iter)->second, 0))
+            else if (processMap.find(next(iter)->first) != processMap.end() && overlapDependenceChecking(processMap[t_new.start], next(iter)->second, 0))
             {
                 return true;
             }
@@ -1273,17 +1319,18 @@ int RecursiveCheckPrevNode(int liveNode, int newNode)
     }
     else // continue the recursion
     {
-        if (DAGPrevNodeMap[checkNode].size()>0)
-        {
-            for (auto prevNode : DAGPrevNodeMap[checkNode])
-            {
-                int res = RecursiveCheckPrevNode(prevNode,newNode);
-                if (res != 0)
-                {
-                    return 2;
-                }
-            }
-        }
+        // disable the recursion, this will introduce some problem that new node depend on nodes that appeared very early
+        // if (DAGPrevNodeMap[checkNode].size()>0)
+        // {
+        //     for (auto prevNode : DAGPrevNodeMap[checkNode])
+        //     {
+        //         int res = RecursiveCheckPrevNode(prevNode,newNode);
+        //         if (res != 0)
+        //         {
+        //             return 2;
+        //         }
+        //     }
+        // }
     }
     return 0;
 }
@@ -1317,9 +1364,20 @@ void DAGGenNormal()
 
         if(!inserted)
         {
-            // update live node set
-            LiveNodeSet.insert(i.first);
-            NodePosition[i.first] = 0;
+            // for cheating, only check node 0
+            if (RecursiveCheckPrevNode(0, i.first) ==1)
+            {
+                // update live node set
+                LiveNodeSet.insert(i.first);
+                DAGPrevNodeMap[i.first].insert(0);
+            }
+            else
+            {
+                LiveNodeSet.insert(i.first);
+                NodePosition[i.first] = 0;
+
+            }
+            
         }
         inserted = false;
     }

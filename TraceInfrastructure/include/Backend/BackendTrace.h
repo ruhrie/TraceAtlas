@@ -59,6 +59,7 @@ extern "C"
 #endif
     void KernelEnter(char *label);
     void KernelExit(char *label);
+    void NonKernelSplit();
 #ifdef __cplusplus
 }
 #endif

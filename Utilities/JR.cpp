@@ -69,12 +69,15 @@ bool CheckPrevKernelNode()
     return false;
 }
 
+// for usage to split the non-kernel when a conditional branch is seen
+bool inKernel = false;
 // assume no nested kernels
 void Process(string &key, string &value)
 {
     //kernel enter concludes the previous node, kernel or non-kernel
     if (key == "KernelEnter")
-    {   
+    {
+        inKernel = true;   
         if(CheckPrevKernelNode())
         {
             nodeInfo newNode = nodeInfo{currentLabel,kernelInstanceBBs};
@@ -109,6 +112,7 @@ void Process(string &key, string &value)
         currentLabel = "-1";
         kernelInstanceBBs.clear();
         kernelInstanceIdCounter++;
+        inKernel = false;
     }
 
     else if (key == "BBExit")
@@ -123,6 +127,18 @@ void Process(string &key, string &value)
     {     
        currentblock = stol(value, nullptr, 0);
        kernelInstanceBBs.insert(currentblock);
+    }
+    else if (key == "NonKernelSplit")
+    {
+        printf("get!!!!!!!!!!!\n");
+        if(inKernel == false)
+        {
+
+            nodeInfo newNode = nodeInfo{currentLabel,kernelInstanceBBs};
+            nodeKiidMap[kernelInstanceIdCounter] = newNode;
+            kernelInstanceIdCounter++;   
+            kernelInstanceBBs.clear();
+        }
     }
 }
 
