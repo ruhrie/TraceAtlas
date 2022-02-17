@@ -257,6 +257,15 @@ wsTuple tp_or(wsTuple a, wsTuple b, bool dynamic, set<int> &lastHitTimeSet)
     return wksTuple;
 }
 
+
+wsTuple tp_or_tuple(wsTuple a, wsTuple b)
+{
+    wsTuple wksTuple;
+    wksTuple = (wsTuple){min(a.start, b.start), max(a.end, b.end), a.byte_count + b.byte_count, a.ref_count + b.ref_count, 0, 0};
+    return wksTuple;
+}
+
+
 // online changing the map to speed up the processing
 int updateRegister = 0;
 
@@ -1067,6 +1076,86 @@ bool DepCheck(wsTuple t_new, wsTupleMap processMap)
     return false;
 }
 
+
+
+void UpdateResultTupleMap(wsTuple t_new, wsTupleMap &processMap)
+{
+    if (processMap.size() == 0)
+    {
+        processMap[t_new.start] = t_new;
+        return;
+    }
+    else if (processMap.size() == 1)
+    {
+        auto iter = processMap.begin();
+        // the condition to decide (add and delete) or update
+        if (overlap(t_new, iter->second, 0))
+        {
+            wsTuple res_tuple = tp_or_tuple(t_new, iter->second);
+            processMap[res_tuple.start] = res_tuple;
+            if (t_new.start != iter->first)
+            {
+                processMap.erase(iter);
+            }
+        }
+        else
+        {
+            processMap[t_new.start] = t_new;
+        }
+    }
+    else
+    {
+        if (processMap.find(t_new.start) == processMap.end())
+        {
+            processMap[t_new.start] = t_new;
+            auto iter = processMap.find(t_new.start);
+            // need to delete someone
+
+            if (processMap.find(prev(iter)->first) != processMap.end() && overlapDependenceChecking(processMap[t_new.start], prev(iter)->second, 0) &&
+                processMap.find(next(iter)->first) != processMap.end() && overlapDependenceChecking(processMap[t_new.start], next(iter)->second, 0))
+            {
+                processMap[prev(iter)->first] = tp_or_tuple(prev(iter)->second, processMap[t_new.start]);
+                processMap[prev(iter)->first] = tp_or_tuple(prev(iter)->second, next(iter)->second);
+                processMap.erase(next(iter));
+                processMap.erase(iter);
+            }
+            else if (processMap.find(prev(iter)->first) != processMap.end() && overlapDependenceChecking(processMap[t_new.start], prev(iter)->second, 0))
+            {
+                processMap[prev(iter)->first] = tp_or_tuple(prev(iter)->second, processMap[t_new.start]);
+                processMap.erase(iter);
+            }
+            else if (processMap.find(next(iter)->first) != processMap.end() && overlapDependenceChecking(processMap[t_new.start], next(iter)->second, 0))
+            {
+                processMap[iter->first] = tp_or_tuple(iter->second, next(iter)->second);
+                processMap.erase(next(iter));
+            }
+        }
+        else
+        {
+            auto iter = processMap.find(t_new.start);
+            processMap[t_new.start] = tp_or_tuple(t_new, processMap[t_new.start]);
+            if (processMap.find(next(iter)->first) != processMap.end() && overlap(processMap[t_new.start], next(iter)->second, 0))
+            {
+                processMap[t_new.start] = tp_or_tuple(next(iter)->second, processMap[t_new.start]);
+                processMap.erase(next(iter));
+            }
+        }
+    }
+    return;
+}
+
+void DepCheckResTuple(wsTuple t_new, wsTupleMap processMap,wsTupleMap &resultMap)
+{
+    for (auto tp: processMap)
+    {
+        if (overlap(t_new, tp.second, 0))
+        {
+            wsTuple res_tuple = tp_or_tuple(t_new, tp.second);
+            UpdateResultTupleMap(t_new,resultMap);
+        }
+    }
+}
+
 bool DepCheckMaps(int checkpoint, vector<int> nodeCheckVector)
 {
     bool dep = false;
@@ -1217,6 +1306,29 @@ bool CheckNodeDep(int source, int target)
     return dep;
 }
 
+
+// check if the store overlap of 1 and 2, overlaps with the load of node3
+bool StoreSetOverlaping(int node1, int node2, int node3)
+{
+    bool dep = false;
+    wsTupleMap Overlaps;
+    for (auto i : storewsTupleMap[node1])
+    {
+        DepCheckResTuple(i.second, storewsTupleMap[node2],Overlaps);
+    }
+
+    for (auto i : Overlaps)
+    {
+        dep = DepCheck(i.second, loadwsTupleMap[node3]);
+        if (dep == true)
+        {
+            return true;
+        }
+    }
+    return dep;
+}
+
+
 // void DAGGenNormal()
 // {
 //     queue<int> DAGTopoOrder;
@@ -1292,92 +1404,112 @@ bool CheckNodeDep(int source, int target)
 set<pair<int, int>> DAGEdge;
 
 map <int,set<int>> DAGPrevNodeMap;
-set <int> LiveNodeSet;
+
+//https://stackoverflow.com/questions/8833938/is-the-stdset-iteration-order-always-ascending-according-to-the-c-specificat
+set<int, greater<int>> LiveNodeSet;
+
 
 
 // node position for networks graph 
+
 map <int,int> NodePosition;
 
+
+// find which node in the graph should the new node connect
+// return node value if success else return -1 
 int RecursiveCheckPrevNode(int liveNode, int newNode)
 {
     int checkNode = liveNode;
 
     if (CheckNodeDep(liveNode,newNode))
     {
-
-        // find an edge
-        
-        // update DAGEdge
-        pair<int, int> edge = {liveNode, newNode};
-        DAGEdge.insert(edge);
-        if(NodePosition[newNode] < NodePosition[liveNode]+1)
-        {
-            NodePosition[newNode] = NodePosition[liveNode]+1;
-        }
-        
-        return 1;
+        return liveNode;
     }
     else // continue the recursion
     {
         // disable the recursion, this will introduce some problem that new node depend on nodes that appeared very early
-        // if (DAGPrevNodeMap[checkNode].size()>0)
-        // {
-        //     for (auto prevNode : DAGPrevNodeMap[checkNode])
-        //     {
-        //         int res = RecursiveCheckPrevNode(prevNode,newNode);
-        //         if (res != 0)
-        //         {
-        //             return 2;
-        //         }
-        //     }
-        // }
+        if (DAGPrevNodeMap[checkNode].size()>0)
+        {
+            for (auto prevNode : DAGPrevNodeMap[checkNode])
+            {
+                // problem here !!!
+                int res = RecursiveCheckPrevNode(prevNode,newNode);
+                if (res != -1)
+                {
+                    return res;
+                }
+            }
+        }
     }
-    return 0;
+    return -1;
 }
 
 void DAGGenNormal()
 {
     bool inserted = false;
-    set<int> tempNodeSet = LiveNodeSet;
+    set<int, greater<int>> tempNodeSet = LiveNodeSet;
+    set<int> LiveNodeCheckingSet;
     for (auto i : kernelIdMap)
     {
         // check the dep with live node, and recursive check all the prev node of live node
         for (auto node : LiveNodeSet)
-        {
-            // check dep node and i.first
-            if (RecursiveCheckPrevNode(node, i.first) == 1)
+        {  
+            // connected to the graph
+            int ConnectedNode = RecursiveCheckPrevNode(node, i.first);
+            bool overlapedWithBefore = false;
+            if (ConnectedNode != -1)
             {
-                inserted = true;
-                tempNodeSet.erase(node);
-                tempNodeSet.insert(i.first);
-                // update DAGPrevNodeMap
-                DAGPrevNodeMap[i.first].insert(node);
-            }
-            else if (RecursiveCheckPrevNode(node, i.first) == 2)
-            {
-                inserted = true;
-                tempNodeSet.insert(i.first);
+                
+                
+                // check if the store set of this node overlap with the store set of prev checked live node, if so means the live node should cover this one
+                // therefore not include this one
+                for (auto i1: LiveNodeCheckingSet)
+                {
+                    if(StoreSetOverlaping(i1,ConnectedNode,i.first))
+                    {
+                        // not include this one
+                        overlapedWithBefore = true;
+                        break;
+                    }
+                }
+
+
+                if (overlapedWithBefore)
+                {
+                    continue;
+                }
+                else
+                {
+                    //update the checking set
+                    LiveNodeCheckingSet.insert(ConnectedNode);
+                    // update the edges
+
+                    pair<int, int> edge = {ConnectedNode, i.first};
+                    DAGEdge.insert(edge);
+                    if(NodePosition[i.first] < NodePosition[ConnectedNode]+1)
+                    {
+                        NodePosition[i.first] = NodePosition[ConnectedNode]+1;
+                    }
+
+                    // update the live node
+                    inserted = true;
+                    DAGPrevNodeMap[i.first].insert(node);
+                    tempNodeSet.insert(i.first);
+
+                    if (ConnectedNode == node)
+                    {      
+                        tempNodeSet.erase(node);
+                    }              
+                }           
             }         
         }
 
         LiveNodeSet = tempNodeSet;
-
+        LiveNodeCheckingSet.clear();
         if(!inserted)
-        {
-            // for cheating, only check node 0
-            if (RecursiveCheckPrevNode(0, i.first) ==1)
-            {
-                // update live node set
-                LiveNodeSet.insert(i.first);
-                DAGPrevNodeMap[i.first].insert(0);
-            }
-            else
-            {
-                LiveNodeSet.insert(i.first);
-                NodePosition[i.first] = 0;
-
-            }
-            
+        {       
+            LiveNodeSet.insert(i.first);
+            NodePosition[i.first] = 0;          
         }
         inserted = false;
     }
@@ -1456,7 +1588,7 @@ int main(int argc, char **argv)
     {
         for (auto stii : sti.second)
         {
-            if (stii.second.ref_count > 1 && stii.second.byte_count > 1)
+            // if (stii.second.ref_count > 1 && stii.second.byte_count > 1)
             {
                 jOut["tuplePerInstance"]["store"][to_string(sti.first)][to_string(stii.first)]["1"] = stii.second.start;
                 jOut["tuplePerInstance"]["store"][to_string(sti.first)][to_string(stii.first)]["2"] = stii.second.end;
@@ -1470,7 +1602,7 @@ int main(int argc, char **argv)
     {
         for (auto stii : sti.second)
         {
-            if (stii.second.ref_count > 1 && stii.second.byte_count > 1)
+            // if (stii.second.ref_count > 1 && stii.second.byte_count > 1)
             {
                 jOut["tuplePerInstance"]["load"][to_string(sti.first)][to_string(stii.first)]["1"] = stii.second.start;
                 jOut["tuplePerInstance"]["load"][to_string(sti.first)][to_string(stii.first)]["2"] = stii.second.end;
