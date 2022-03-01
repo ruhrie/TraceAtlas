@@ -90,9 +90,7 @@ void Process(string &key, string &value)
         else
         {
             currentLabel = value;
-        }
-        
-        
+        }    
     }
     //kernel exit concludes the previous kernel node
     else if (key == "KernelExit")
@@ -142,6 +140,9 @@ void Process(string &key, string &value)
     }
 }
 
+
+// legal bbs mean that if these bbs in nonkernel, then they can be downward merged into kernels
+// to reduce the complexity
 void GetLegalBBs()
 {
     LLVMContext context;
@@ -192,6 +193,8 @@ int main(int argc, char **argv)
     GetLegalBBs();
 
     ProcessTrace(InputFilename, Process, "Generating JR", noBar);
+
+    // this is to fix the case that the last node is not counted
     if(CheckPrevKernelNode())
     {
         nodeInfo newNode = nodeInfo{currentLabel,kernelInstanceBBs};

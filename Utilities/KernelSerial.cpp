@@ -185,7 +185,6 @@ bool overlap(wsTuple a, wsTuple b, int64_t error)
     }
 }
 
-
 bool overlapDependenceChecking(wsTuple a, wsTuple b, int64_t error)
 {
     if (max(a.start, b.start) < (min(a.end, b.end)) + error)
@@ -257,14 +256,12 @@ wsTuple tp_or(wsTuple a, wsTuple b, bool dynamic, set<int> &lastHitTimeSet)
     return wksTuple;
 }
 
-
 wsTuple tp_or_tuple(wsTuple a, wsTuple b)
 {
     wsTuple wksTuple;
     wksTuple = (wsTuple){min(a.start, b.start), max(a.end, b.end), a.byte_count + b.byte_count, a.ref_count + b.ref_count, 0, 0};
     return wksTuple;
 }
-
 
 // online changing the map to speed up the processing
 int updateRegister = 0;
@@ -485,44 +482,7 @@ void ControlParse(int block)
         currentNodeID = NodeID;
         NodeID++;
     }
-
-    // if (currentKernel == "-1" || kernelMap[currentKernel].find(block) == kernelMap[currentKernel].end())
-    // {
-    //     string innerKernel = "-1";
-    //     for (auto k : kernelMap)
-    //     {
-    //         if (k.second.find(block) != k.second.end())
-    //         {
-    //             innerKernel = k.first;
-    //             break;
-    //         }
-    //     }
-
-    //     // non-kerenl, only from kernel-> non-kernel will this branch be triggered
-    //     if (currentKernel != "-1" && innerKernel == "-1")
-    //     {
-    //         currentNodeID = NodeID;
-    //         kernelIdMap[NodeID++] = innerKernel;
-    //         timing = 0;
-    //         timingIn = 0;
-    //         loadlastHitTimeSet.clear();
-    //         storelastHitTimeSet.clear();
-    //     }
-    //     currentKernel = innerKernel;
-    //     if (innerKernel != "-1")
-    //     {
-    //         timing = 0;
-    //         timingIn = 0;
-    //         currentNodeID = NodeID;
-    //         // kernelIdMap records the map from kernel instance id to kernel id
-    //         kernelIdMap[NodeID++] = currentKernel;
-    //         loadlastHitTimeSet.clear();
-    //         storelastHitTimeSet.clear();
-    //     }
-    // }
 }
-
-
 
 // this is for nested basic blocks
 stack<int> basicBlockBuff;
@@ -535,11 +495,11 @@ void Process(string &key, string &value)
     if (key == "BBEnter")
     {
         // todo saving the tuple trace per instance, and load them while processing
-        // block represents current processed block id in the trace  
+        // block represents current processed block id in the trace
         int block = stoi(value, nullptr, 0);
         basicBlockBuff.push(block);
         instCounterBuff.push(instCounter);
-        
+
         instCounter = 0;
         vBlock = block;
         if (BBMemInstSize.find(vBlock) != BBMemInstSize.end())
@@ -552,16 +512,15 @@ void Process(string &key, string &value)
         }
         ControlParse(block);
     }
-    else if(key == "BBExit")
+    else if (key == "BBExit")
     {
-        if(basicBlockBuff.size()>1)
-        {      
+        if (basicBlockBuff.size() > 1)
+        {
             basicBlockBuff.pop();
             vBlock = basicBlockBuff.top();
             instCounter = instCounterBuff.top();
             instCounterBuff.pop();
-            
-            
+
             if (BBMemInstSize.find(vBlock) != BBMemInstSize.end())
             {
                 noerrorInTrace = true;
@@ -634,9 +593,9 @@ void Process(string &key, string &value)
     }
     else if (key == "MemCpy")
     {
-        string srcStr,destStr,lenStr;
+        string srcStr, destStr, lenStr;
         // printf("value: %s \n",value.c_str());
-        stringstream  streamData(value);
+        stringstream streamData(value);
         getline(streamData, srcStr, ',');
         getline(streamData, destStr, ',');
         getline(streamData, lenStr, ',');
@@ -658,14 +617,11 @@ void Process(string &key, string &value)
                 trivialMergeOptRegister(loadwsTupleMap[currentNodeID], loadwksTuple, loadlastHitTimeSet);
             }
 
-
             wsTuple storewksTuple;
             storewksTuple = (wsTuple){dest, dest + len, len, 1, 0, 0};
             trivialMergeOptRegister(storewsTupleMap[currentNodeID], storewksTuple, storelastHitTimeSet);
         }
-        
     }
-    
 }
 
 void print_user(Instruction *CI, map<Instruction *, tuple<int64_t, int64_t>> memInstIndexMap)
@@ -1076,8 +1032,6 @@ bool DepCheck(wsTuple t_new, wsTupleMap processMap)
     return false;
 }
 
-
-
 void UpdateResultTupleMap(wsTuple t_new, wsTupleMap &processMap)
 {
     if (processMap.size() == 0)
@@ -1144,15 +1098,354 @@ void UpdateResultTupleMap(wsTuple t_new, wsTupleMap &processMap)
     return;
 }
 
-void DepCheckResTuple(wsTuple t_new, wsTupleMap processMap,wsTupleMap &resultMap)
+void DepCheckResTuple(wsTuple t_new, wsTupleMap processMap, wsTupleMap &resultMap)
 {
-    for (auto tp: processMap)
+    for (auto tp : processMap)
     {
         if (overlap(t_new, tp.second, 0))
         {
             wsTuple res_tuple = tp_or_tuple(t_new, tp.second);
-            UpdateResultTupleMap(t_new,resultMap);
+            UpdateResultTupleMap(t_new, resultMap);
         }
+    }
+}
+
+wsTuple tp_and_tuple(wsTuple a, wsTuple b)
+{
+    wsTuple wksTuple;
+    // the byte count and ref counter are not used now, need updates
+    wksTuple = (wsTuple){max(a.start, b.start), min(a.end, b.end), 0, 0, 0, 0};
+    return wksTuple;
+}
+
+// void SubstractResultTupleMap(wsTuple t_new, wsTupleMap &processMap)
+// {
+//     if (processMap.size() == 0)
+//     {
+//         return;
+//     }
+//     else if (processMap.size() == 1)
+//     {
+//         auto iter = processMap.begin();
+//         if (overlap(t_new, iter->second, 0))
+//         {
+//             wsTuple and_tuple = tp_and_tuple(t_new, iter->second);
+//             wsTuple res_tuple;
+//             //3 cases, number of result tuples: 0, 1, 2
+//             // case 0
+//             if(and_tuple.start==iter->second.start && and_tuple.end == iter->second.end)
+//             {
+//                 processMap.erase(iter);
+//             } //case 1 overlap at the beginning
+//             else if(and_tuple.start==iter->second.start && and_tuple.end < iter->second.end)
+//             {
+//                 res_tuple = (wsTuple){and_tuple.end, iter->second.end, 0, 0, 0, 0};
+//                 processMap[res_tuple.start] = res_tuple;
+//                 processMap.erase(iter);
+//             }//case 1 overlap at the end
+//             else if(and_tuple.start > iter->second.start && and_tuple.end == iter->second.end)
+//             {
+//                 res_tuple = (wsTuple){iter->second.start, and_tuple.start, 0, 0, 0, 0};
+//                 processMap[iter->second.start] = res_tuple;
+//             } // case 2
+//             else if (and_tuple.start > iter->second.start && and_tuple.end < iter->second.end)
+//             {
+//                 res_tuple = (wsTuple){iter->second.start, and_tuple.start, 0, 0, 0, 0};
+//                 processMap[iter->second.start] = res_tuple;
+
+//                 res_tuple = (wsTuple){and_tuple.end, iter->second.end, 0, 0, 0, 0};
+//                 processMap[res_tuple.start] = res_tuple;
+//             }
+//         }
+//     }
+//     else
+//     {
+
+//         if(processMap.find(t_new.start) != processMap.end()&& processMap.find(t_new.end) != processMap.end())
+//         {
+//             auto start = processMap.find(t_new.start);
+//             auto iter = processMap.find(t_new.end);
+//             iter = prev(iter);
+//             while (iter != start && processMap.find(iter->second.start)!=processMap.end())
+//             {
+//                 if(iter->second.start>t_new.start && iter->second.end < t_new.end)
+//                 {
+//                     processMap.erase(iter);
+//                 }
+//                 iter = prev(iter);
+//             }
+//             processMap.erase(start);
+//         }
+//         else if (processMap.find(t_new.start) == processMap.end()&& processMap.find(t_new.end) != processMap.end())
+//         {
+//             auto iter = processMap.find(t_new.end);
+//             processMap[t_new.start] = t_new;
+//             auto start = processMap.find(t_new.start);
+
+//             // delete the tuples between start and end of overlap
+//             iter = prev(iter);
+//             while (iter != start && processMap.find(iter->second.start)!=processMap.end())
+//             {
+//                 if(iter->second.start>t_new.start && iter->second.end < t_new.end)
+//                 {
+//                     processMap.erase(iter);
+//                 }
+//                 iter = prev(iter);
+//             }
+
+//             auto previous = prev(start);
+
+//             // overlap at the end
+
+//             if(overlap(previous->second,start->second,0))
+//             {
+//                 wsTuple and_tuple = tp_and_tuple(t_new, previous->second);
+//                 wsTuple res_tuple;
+//                 res_tuple = (wsTuple){previous->second.start, and_tuple.start, 0, 0, 0, 0};
+//                 processMap[previous->second.start] = res_tuple;
+//             }
+//             processMap.erase(start);
+//         }
+//         else if (processMap.find(t_new.start) != processMap.end()&& processMap.find(t_new.end) == processMap.end())
+//         {
+//             processMap[t_new.end] = t_new;
+//             auto end = processMap.find(t_new.end);
+//             auto start = processMap.find(t_new.start);
+
+//             auto iter = end;
+//             // delete the tuples between start and end of overlap
+//             iter = prev(iter);
+//             while (iter != start && processMap.find(iter->second.start)!=processMap.end())
+//             {
+//                 if(iter->second.start>t_new.start && iter->second.end < t_new.end)
+//                 {
+//                     processMap.erase(iter);
+//                 }
+//                 iter = prev(iter);
+//             }
+
+//             auto nextTuple = prev(end);
+
+//             // overlap at the beginning
+
+//             if(overlap(nextTuple->second,end->second,0)&& nextTuple->second.end > t_new.end)
+//             {
+//                 wsTuple and_tuple = tp_and_tuple(t_new, nextTuple->second);
+//                 wsTuple res_tuple;
+//                 res_tuple = (wsTuple){and_tuple.end, nextTuple->second.end, 0, 0, 0, 0};
+//                 processMap[res_tuple.start] = res_tuple;
+//             }
+//             processMap.erase(end);
+//             processMap.erase(start);
+//         }
+//         else if (processMap.find(t_new.start) == processMap.end()&& processMap.find(t_new.end) == processMap.end())
+//         {
+
+//             processMap[t_new.end] = t_new;
+//             auto end = processMap.find(t_new.end);
+//             processMap[t_new.start] = t_new;
+//             auto start = processMap.find(t_new.start);
+
+//             auto iter = end;
+//             // delete the tuples between start and end of overlap
+//             iter = prev(iter);
+//             while (iter != start && processMap.find(iter->second.start)!=processMap.end())
+//             {
+//                 if(iter->second.start>t_new.start && iter->second.end < t_new.end)
+//                 {
+//                     processMap.erase(iter);
+//                 }
+//                 iter = prev(iter);
+//             }
+
+//             auto previous = prev(start);
+
+//             // overlap at the end
+
+//             if(overlap(previous->second,start->second,0)&& processMap.find(previous->second.start)!=processMap.end())
+//             {
+//                 wsTuple and_tuple = tp_and_tuple(t_new, previous->second);
+//                 wsTuple res_tuple;
+//                 res_tuple = (wsTuple){previous->second.start, and_tuple.start, 0, 0, 0, 0};
+//                 processMap[previous->second.start] = res_tuple;
+//             }
+
+//             auto nextTuple = prev(end);
+
+//             // overlap at the beginning
+
+//             if(overlap(nextTuple->second,end->second,0)&& nextTuple->second.end > t_new.end)
+//             {
+//                 wsTuple and_tuple = tp_and_tuple(t_new, nextTuple->second);
+//                 wsTuple res_tuple;
+//                 res_tuple = (wsTuple){and_tuple.end, nextTuple->second.end, 0, 0, 0, 0};
+//                 processMap[res_tuple.start] = res_tuple;
+
+//             }
+//             else
+//             {
+//                 processMap.erase(end);
+//             }
+
+//             processMap.erase(start);
+//         }
+//     }
+// }
+
+void SubstractResultTupleMap(wsTuple t_new, wsTupleMap &processMap)
+{
+    if (processMap.size() == 0)
+    {
+        return;
+    }
+    else if (processMap.size() == 1)
+    {
+        auto iter = processMap.begin();
+        if (overlapDependenceChecking(t_new, iter->second, 0))
+        {
+            wsTuple and_tuple = tp_and_tuple(t_new, iter->second);
+            wsTuple res_tuple;
+            //3 cases, number of result tuples: 0, 1, 2
+            // case 0
+            if (and_tuple.start == iter->second.start && and_tuple.end == iter->second.end)
+            {
+                processMap.erase(iter);
+            } //case 1 overlap at the beginning
+            else if (and_tuple.start == iter->second.start && and_tuple.end < iter->second.end)
+            {
+                res_tuple = (wsTuple){and_tuple.end, iter->second.end, 0, 0, 0, 0};
+                processMap[res_tuple.start] = res_tuple;
+                processMap.erase(iter);
+            } //case 1 overlap at the end
+            else if (and_tuple.start > iter->second.start && and_tuple.end == iter->second.end)
+            {
+                res_tuple = (wsTuple){iter->second.start, and_tuple.start, 0, 0, 0, 0};
+                processMap[iter->second.start] = res_tuple;
+            } // case 2
+            else if (and_tuple.start > iter->second.start && and_tuple.end < iter->second.end)
+            {
+                res_tuple = (wsTuple){iter->second.start, and_tuple.start, 0, 0, 0, 0};
+                processMap[iter->second.start] = res_tuple;
+
+                res_tuple = (wsTuple){and_tuple.end, iter->second.end, 0, 0, 0, 0};
+                processMap[res_tuple.start] = res_tuple;
+            }
+        }
+    }
+    else
+    {
+        //start overlap
+        if (processMap.find(t_new.start) != processMap.end())
+        {
+            auto start = processMap.find(t_new.start);
+            // the first tuple in process map
+            if (start->second.end > t_new.end)
+            {
+                wsTuple res_tuple = (wsTuple){t_new.end, start->second.end, 0, 0, 0, 0};
+                processMap[res_tuple.start] = res_tuple;
+            }
+
+            // the following tuples in process map
+            auto iter = next(start);
+            while (processMap.find(iter->second.start) != processMap.end())
+            {
+                // tuples in process map exceed the range of subtractor
+                if (t_new.end <= iter->second.start)
+                {
+                    break;
+                }
+                else if (t_new.end < iter->second.end)
+                {
+                    wsTuple res_tuple = (wsTuple){t_new.end, iter->second.end, 0, 0, 0, 0};
+                    processMap[res_tuple.start] = res_tuple;
+                    auto deleteIter = iter;
+                    iter = next(iter);
+                    processMap.erase(deleteIter);
+                }
+                else if (t_new.end >= iter->second.end)
+                {
+                    auto deleteIter = iter;
+                    iter = next(iter);
+                    processMap.erase(deleteIter);
+                }
+                else
+                {
+                    iter = next(iter);
+                }
+            }
+            processMap.erase(start);
+        }
+        else
+        {
+            processMap[t_new.start] = t_new;
+            auto start = processMap.find(t_new.start);
+
+            // check the tuple in process map that before substractor
+            auto iter = start;
+            iter = prev(iter);
+            // there is one prev tuple
+            if (processMap.find(iter->second.start) != processMap.end())
+            {
+                // overlaps
+                if (iter->second.end > t_new.start)
+                {
+                    // 1 tuple res
+                    if (iter->second.end <= t_new.end)
+                    {
+                        wsTuple res_tuple = (wsTuple){iter->second.start, t_new.start, 0, 0, 0, 0};
+                        processMap[res_tuple.start] = res_tuple;
+                    } // 2 tuple res
+                    else
+                    {
+                        wsTuple res_tuple1 = (wsTuple){iter->second.start, t_new.start, 0, 0, 0, 0};
+                        processMap[res_tuple1.start] = res_tuple1;
+                        wsTuple res_tuple2 = (wsTuple){t_new.end, iter->second.end, 0, 0, 0, 0};
+                        processMap[res_tuple2.start] = res_tuple2;
+                    }
+                }
+            }
+
+            // check the following tuples
+            iter = start;
+            iter = next(iter);
+
+            while (processMap.find(iter->second.start) != processMap.end())
+            {
+                // tuples in process map exceed the range of subtractor
+                if (t_new.end <= iter->second.start)
+                {
+                    break;
+                }
+                else if (t_new.end < iter->second.end)
+                {
+                    wsTuple res_tuple = (wsTuple){t_new.end, iter->second.end, 0, 0, 0, 0};
+                    processMap[res_tuple.start] = res_tuple;
+                    auto deleteIter = iter;
+                    iter = next(iter);
+                    processMap.erase(deleteIter); // need to point to next iter before delete it
+                }
+                else if (t_new.end >= iter->second.end)
+                {
+                    auto deleteIter = iter;
+                    iter = next(iter);
+                    processMap.erase(deleteIter);
+                }
+                else
+                {
+                    iter = next(iter);
+                }
+            }
+            processMap.erase(start);
+        }
+    }
+}
+
+void SubstractionResTuple(wsTupleMap substractee, wsTupleMap substractor, wsTupleMap &resultMap)
+{
+    resultMap = substractee;
+    for (auto tor : substractor)
+    {
+        SubstractResultTupleMap(tor.second, resultMap);
     }
 }
 
@@ -1263,9 +1556,9 @@ void DAGGenerationCEDR()
 //     {
 //         temp = q.front();
 //         q.pop();
- 
+
 //         tempStack.push(temp);
-      
+
 //         // temp degree = 0
 
 //         // i cant represent node
@@ -1276,7 +1569,7 @@ void DAGGenerationCEDR()
 //             {
 //                 indegreeInner[i] = 0;
 //                 if (indegreeInner[i] == 0)
-//                 {  
+//                 {
 //                     q.push(i);
 //                 }
 //             }
@@ -1306,7 +1599,6 @@ bool CheckNodeDep(int source, int target)
     return dep;
 }
 
-
 // check if the store overlap of 1 and 2, overlaps with the load of node3
 bool StoreSetOverlaping(int node1, int node2, int node3)
 {
@@ -1314,7 +1606,7 @@ bool StoreSetOverlaping(int node1, int node2, int node3)
     wsTupleMap Overlaps;
     for (auto i : storewsTupleMap[node1])
     {
-        DepCheckResTuple(i.second, storewsTupleMap[node2],Overlaps);
+        DepCheckResTuple(i.second, storewsTupleMap[node2], Overlaps);
     }
 
     for (auto i : Overlaps)
@@ -1328,112 +1620,36 @@ bool StoreSetOverlaping(int node1, int node2, int node3)
     return dep;
 }
 
-
-// void DAGGenNormal()
-// {
-//     queue<int> DAGTopoOrder;
-//     int processedSize = 0;
-//     for (auto i : kernelIdMap)
-//     {
-//         processedSize++;
-//         bool inserted = false;
-//         if (DAGTopoOrder.size() == 0)
-//         {
-//             DAGTopoOrder.push(i.first);
-//             inserted = true;
-//             indegree[i.first] = 0;
-//         }
-//         else
-//         {
-//             queue<int> innerTopo = DAGTopoOrder;
-//             int temp;
-//             // set<int> checkedNodes;
-
-//             // for every node in topo queue, check the dep
-//             while (!innerTopo.empty())
-//             {
-//                 temp = innerTopo.front();
-//                 innerTopo.pop();
-//                 // bool repeat = false;
-//                 // check the depedence
-
-//                 // if checked node have edge with temp, then break
-//                 // for (auto checked :checkedNodes)
-//                 // {
-//                 //     pair<int, int> edge = {temp, checked};
-//                 //     if (NormalDAG.find(edge) != NormalDAG.end())
-//                 //     {
-                        
-//                 //         repeat = true;
-//                 //         break;
-//                 //     }
-//                 // }
-//                 // if(repeat && inserted)
-//                 // {
-//                 //     // checkedNodes.clear();
-//                 //     continue;
-//                 // }
-//                 // checkedNodes.insert(temp);
-//                 if (CheckNodeDep(temp, i.first))
-//                 {
-
-//                     // insert to the pair result
-//                     pair<int, int> edge = {temp, i.first};
-//                     NormalDAG.insert(edge);
-
-//                     // update the indegree
-//                     indegree[i.first] = indegree[temp] + 1;
-
-//                     // update the topo vector
-//                     topo(DAGTopoOrder, processedSize);
-//                     inserted = true;
-                    
-//                 }
-//             }
-//             // checkedNodes.clear();
-//         }
-//         if (!inserted)
-//         {
-//             indegree[i.first] = 0;
-//             topo(DAGTopoOrder, processedSize);
-//         }
-//     }
-// }
-
-
 set<pair<int, int>> DAGEdge;
 
-map <int,set<int>> DAGPrevNodeMap;
+map<int, set<int, greater<int>>> DAGPrevNodeMap;
 
 //https://stackoverflow.com/questions/8833938/is-the-stdset-iteration-order-always-ascending-according-to-the-c-specificat
 set<int, greater<int>> LiveNodeSet;
 
+// node position for networks graph
 
-
-// node position for networks graph 
-
-map <int,int> NodePosition;
-
+map<int, int> NodePosition;
 
 // find which node in the graph should the new node connect
-// return node value if success else return -1 
+// return node value if success else return -1
 int RecursiveCheckPrevNode(int liveNode, int newNode)
 {
     int checkNode = liveNode;
 
-    if (CheckNodeDep(liveNode,newNode))
+    if (CheckNodeDep(liveNode, newNode))
     {
         return liveNode;
     }
     else // continue the recursion
     {
         // disable the recursion, this will introduce some problem that new node depend on nodes that appeared very early
-        if (DAGPrevNodeMap[checkNode].size()>0)
+        if (DAGPrevNodeMap[checkNode].size() > 0)
         {
             for (auto prevNode : DAGPrevNodeMap[checkNode])
             {
                 // problem here !!!
-                int res = RecursiveCheckPrevNode(prevNode,newNode);
+                int res = RecursiveCheckPrevNode(prevNode, newNode);
                 if (res != -1)
                 {
                     return res;
@@ -1444,79 +1660,363 @@ int RecursiveCheckPrevNode(int liveNode, int newNode)
     return -1;
 }
 
-void DAGGenNormal()
+bool CheckNodeNewStoreDep(int source, wsTupleMap NewNodeLoadWS)
 {
-    bool inserted = false;
-    set<int, greater<int>> tempNodeSet = LiveNodeSet;
-    set<int> LiveNodeCheckingSet;
-    for (auto i : kernelIdMap)
+    int dep = false;
+    for (auto i : storewsTupleMap[source])
     {
-        // check the dep with live node, and recursive check all the prev node of live node
-        for (auto node : LiveNodeSet)
-        {  
-            // connected to the graph
-            int ConnectedNode = RecursiveCheckPrevNode(node, i.first);
-            bool overlapedWithBefore = false;
-            if (ConnectedNode != -1)
+        dep = DepCheck(i.second, NewNodeLoadWS);
+        if (dep == true)
+        {
+            return true;
+        }
+    }
+    return dep;
+}
+
+void updatePrveNodeMap(int baseNode, int checkNode, map<int, set<int>> &prevNodeMap)
+{
+    if (checkNode == 0)
+    {
+        return;
+    }
+
+    for (auto prevNode : DAGPrevNodeMap[checkNode])
+    {
+        // problem here !!!
+        prevNodeMap[baseNode].insert(prevNode);
+        updatePrveNodeMap(baseNode, prevNode, prevNodeMap);
+    }
+}
+
+// the subtraction inside this also need to be recursive checking like the outside one
+void RecursivePrevNodeCheck(int checkNode, set<int, greater<int>> &LiveNodeCheckingSet, wsTupleMap &NewNodeLoadWS)
+{
+
+    set<int, greater<int>> tempDepPrevNodes;
+    if (DAGPrevNodeMap[checkNode].size() > 0)
+    {
+        // reset check node
+        for (auto prevNode : DAGPrevNodeMap[checkNode])
+        {
+            if (CheckNodeNewStoreDep(prevNode, NewNodeLoadWS))
             {
-                
-                
-                // check if the store set of this node overlap with the store set of prev checked live node, if so means the live node should cover this one
-                // therefore not include this one
-                for (auto i1: LiveNodeCheckingSet)
+                LiveNodeCheckingSet.insert(prevNode);
+                tempDepPrevNodes.insert(prevNode);
+            }
+        }
+        // subtract here for all dep prev nodes
+        for (auto depPrev : tempDepPrevNodes)
+        {
+            SubstractionResTuple(NewNodeLoadWS, storewsTupleMap[depPrev], NewNodeLoadWS);
+        }
+
+        for (auto depPrev : tempDepPrevNodes)
+        {
+            RecursivePrevNodeCheck(depPrev, LiveNodeCheckingSet, NewNodeLoadWS);
+        }
+    }
+}
+
+void CheckLiveNodePrevNode(int liveNode, set<int, greater<int>> &LiveNodeCheckingSet, wsTupleMap &NewNodeLoadWS)
+{
+    int checkNode = liveNode;
+
+    if (CheckNodeNewStoreDep(liveNode, NewNodeLoadWS))
+    {
+        LiveNodeCheckingSet.insert(liveNode);
+        // new node store ws substract livenode
+        SubstractionResTuple(NewNodeLoadWS, storewsTupleMap[liveNode], NewNodeLoadWS);
+    }
+    RecursivePrevNodeCheck(liveNode, LiveNodeCheckingSet, NewNodeLoadWS);
+}
+
+// tuple overwrite
+void ConstructColoringStructure(wsTuple t_new, int id, wsTupleMap &processMap, map<int64_t, int> &nodeIDMap)
+{
+    
+    if (processMap.size() == 0)
+    {
+        processMap[t_new.start] = t_new;
+        nodeIDMap[t_new.start] = id;
+        return;
+    }
+    else
+    {
+        //dont need to check the prev tuple
+        if (processMap.find(t_new.start) != processMap.end())
+        { 
+            auto old = processMap.find(t_new.start);
+            // the first tuple in process map
+            if (old->second.end > t_new.end)
+            {
+                wsTuple res_tuple = (wsTuple){t_new.end, old->second.end, 0, 0, 0, 0};
+                processMap[res_tuple.start] = res_tuple;
+                nodeIDMap[res_tuple.start] = nodeIDMap[old->second.start];
+            }
+            // the following tuples in process map
+            auto iter = next(old);
+            while (processMap.find(iter->second.start) != processMap.end())
+            {
+                // tuples in process map exceed the range of subtractor
+                if (t_new.end <= iter->second.start)
                 {
-                    if(StoreSetOverlaping(i1,ConnectedNode,i.first))
-                    {
-                        // not include this one
-                        overlapedWithBefore = true;
-                        break;
-                    }
+                    break;
                 }
-
-
-                if (overlapedWithBefore)
+                else if (t_new.end < iter->second.end)
                 {
-                    continue;
+                    wsTuple res_tuple = (wsTuple){t_new.end, iter->second.end, 0, 0, 0, 0};
+                    processMap[res_tuple.start] = res_tuple;
+                    nodeIDMap[res_tuple.start]= nodeIDMap[iter->second.start];
+                    auto deleteIter = iter;
+                    iter = next(iter);
+                    processMap.erase(deleteIter);
+                    nodeIDMap.erase(deleteIter->second.start);
+                }
+                else if (t_new.end >= iter->second.end)
+                {
+                    auto deleteIter = iter;
+                    iter = next(iter);
+                    processMap.erase(deleteIter);
+                    nodeIDMap.erase(deleteIter->second.start);
                 }
                 else
                 {
-                    //update the checking set
-                    LiveNodeCheckingSet.insert(ConnectedNode);
-                    // update the edges
+                    iter = next(iter);
+                }
+            }
 
-                    pair<int, int> edge = {ConnectedNode, i.first};
-                    DAGEdge.insert(edge);
-                    if(NodePosition[i.first] < NodePosition[ConnectedNode]+1)
+            processMap[t_new.start] = t_new;
+            nodeIDMap[t_new.start] = id;
+        }
+        else
+        {
+            processMap[t_new.start] = t_new;
+            nodeIDMap[t_new.start] = id;
+            auto old = processMap.find(t_new.start);
+
+            // check the tuple in process map that before substractor
+            auto iter = old;
+            iter = prev(iter);
+            // there is one prev tuple
+            if (processMap.find(iter->second.start) != processMap.end())
+            {
+                // overlaps
+                if (iter->second.end > t_new.start)
+                {
+                    // 1 tuple res
+                    if (iter->second.end <= t_new.end)
                     {
-                        NodePosition[i.first] = NodePosition[ConnectedNode]+1;
+                        wsTuple res_tuple = (wsTuple){iter->second.start, t_new.start, 0, 0, 0, 0};
+                        processMap[res_tuple.start] = res_tuple;
+                        // node id doesnt change
+                    } // 2 tuple res
+                    else
+                    {
+                        wsTuple res_tuple1 = (wsTuple){iter->second.start, t_new.start, 0, 0, 0, 0};
+                        processMap[res_tuple1.start] = res_tuple1;
+                        wsTuple res_tuple2 = (wsTuple){t_new.end, iter->second.end, 0, 0, 0, 0};
+                        processMap[res_tuple2.start] = res_tuple2;
+                        nodeIDMap[res_tuple2.start] = nodeIDMap[res_tuple1.start];
                     }
+                }
+            }
 
-                    // update the live node
+            // check the following tuples
+            iter = old;
+            iter = next(iter);
+
+            while (processMap.find(iter->second.start) != processMap.end())
+            {
+                // tuples in process map exceed the range of subtractor
+                if (t_new.end <= iter->second.start)
+                {
+                    break;
+                }
+                else if (t_new.end < iter->second.end)
+                {
+                    wsTuple res_tuple = (wsTuple){t_new.end, iter->second.end, 0, 0, 0, 0};
+                    processMap[res_tuple.start] = res_tuple;
+                    nodeIDMap[res_tuple.start]= nodeIDMap[iter->second.start];
+                    auto deleteIter = iter;
+                    iter = next(iter);
+                    processMap.erase(deleteIter);
+                    nodeIDMap.erase(deleteIter->second.start);
+                }
+                else if (t_new.end >= iter->second.end)
+                {
+                    auto deleteIter = iter;
+                    iter = next(iter);
+                    processMap.erase(deleteIter);
+                    nodeIDMap.erase(deleteIter->second.start);
+                }
+                else
+                {
+                    iter = next(iter);
+                }
+            }
+        }
+    }
+}
+
+map<int64_t, int> lastWriterNodeIDMap;
+wsTupleMap lastWriterTupleMap;
+
+void DAGGenColoring()
+{
+    bool inserted = false;
+    for (auto i : kernelIdMap)
+    {
+        for (auto tp : lastWriterTupleMap)
+        {
+            if(DepCheck(tp.second, loadwsTupleMap[i.first]))
+            {
+                int node = lastWriterNodeIDMap[tp.first];
+                if(node != i.first)
+                {
                     inserted = true;
-                    DAGPrevNodeMap[i.first].insert(node);
-                    tempNodeSet.insert(i.first);
-
-                    if (ConnectedNode == node)
-                    {      
-                        tempNodeSet.erase(node);
-                    }              
-                }           
-            }         
+                    pair<int, int> edge = {node, i.first};
+                    DAGEdge.insert(edge);
+                    if (NodePosition[i.first] < NodePosition[node] + 1)
+                    {
+                        NodePosition[i.first] = NodePosition[node] + 1;
+                    }
+                }
+            }
         }
 
-        LiveNodeSet = tempNodeSet;
-        LiveNodeCheckingSet.clear();
+        for (auto st : storewsTupleMap[i.first])
+        {
+            ConstructColoringStructure(st.second, i.first, lastWriterTupleMap,lastWriterNodeIDMap);
+        }
+
         if(!inserted)
-        {       
-            LiveNodeSet.insert(i.first);
-            NodePosition[i.first] = 0;          
+        {
+            NodePosition[i.first] = 0;
         }
         inserted = false;
     }
 }
 
+void DAGGenNormal()
+{
+    bool inserted = false;
+    set<int, greater<int>> tempNodeSet = LiveNodeSet;
+    set<int, greater<int>> LiveNodeCheckingSet;
+    
+    for (auto i : kernelIdMap)
+    {
+        // check the dep with live node, and recursive check all the prev node of live node
+        for (auto node : LiveNodeSet)
+        {
+            wsTupleMap NewNodeLoadWSTemp = loadwsTupleMap[i.first];
+            //update the live node checking set
+            CheckLiveNodePrevNode(node, LiveNodeCheckingSet, NewNodeLoadWSTemp);
+        }
+
+        wsTupleMap NewNodeLoadWSTemp = loadwsTupleMap[i.first];
+
+        for (auto it : LiveNodeCheckingSet)
+        {
+            if (CheckNodeNewStoreDep(it, NewNodeLoadWSTemp))
+            {
+                bool nextNodeIn = false;
+                // check if it is the prev node of live node then not adding edge
+
+                if (!nextNodeIn)
+                {
+                    // update the edges
+                    pair<int, int> edge = {it, i.first};
+                    DAGEdge.insert(edge);
+                    if (NodePosition[i.first] < NodePosition[it] + 1)
+                    {
+                        NodePosition[i.first] = NodePosition[it] + 1;
+                    }
+
+                    // update the live node
+                    inserted = true;
+                    DAGPrevNodeMap[i.first].insert(it);
+                    tempNodeSet.insert(i.first);
+                    
+                    if (LiveNodeSet.find(it) != LiveNodeSet.end())
+                    {
+                        tempNodeSet.erase(it);
+                    }
+                }
+
+                SubstractionResTuple(NewNodeLoadWSTemp, storewsTupleMap[it], NewNodeLoadWSTemp);
+            }
+        }
+
+        LiveNodeSet = tempNodeSet;
+        LiveNodeCheckingSet.clear();
+      
+        if (!inserted)
+        {
+            LiveNodeSet.insert(i.first);
+            NodePosition[i.first] = 0;
+        }
+        inserted = false;
+    }
+}
+
+int get_random_node(set<int> s)
+{
+    auto r = rand()%s.size();
+    auto it = begin(s);
+    std::advance(it,r);
+    return *it;
+}
+
+void GenSchedule(set<int> &schedulableNodes,vector<int> &schedule,map<int,set<int>> &NextNodeMap,map<int,set<int>> &PrevNodeMap)
+{
+    int scheduleNode = get_random_node(schedulableNodes);
+    schedulableNodes.erase(scheduleNode);
+    schedule.push_back(scheduleNode);
 
 
+    // update the prev map and the next map
+    for (auto it: NextNodeMap[scheduleNode])
+    {
+        PrevNodeMap[it].erase(scheduleNode);
+        if (PrevNodeMap[it].size()==0)
+        {
+            // update the schedulable nodes set
+            schedulableNodes.insert(it);
+        } 
+    }
+    NextNodeMap.erase(scheduleNode);
+    PrevNodeMap.erase(scheduleNode);
+    if(schedulableNodes.size()==0)
+    {
+        return;
+    }
+    GenSchedule(schedulableNodes,schedule,NextNodeMap,PrevNodeMap);
+}
+void GenTestSchedule()
+{
+    map<int,set<int>> NextNodeMap;
+    map<int,set<int>> PrevNodeMap;
+    set<int> schedulableNodes;
+    vector<int> schedule;
+
+    for (auto i : DAGEdge)
+    {
+        NextNodeMap[i.first].insert(i.second);
+        PrevNodeMap[i.second].insert(i.first);
+    }
+
+    for (auto i : kernelIdMap)
+    {
+        if(PrevNodeMap[i.first].size()==0)
+        {
+            schedulableNodes.insert(i.first);
+        }
+    }
+
+    GenSchedule(schedulableNodes,schedule,NextNodeMap,PrevNodeMap);
+
+}
 int main(int argc, char **argv)
 {
 
@@ -1524,9 +2024,7 @@ int main(int argc, char **argv)
     start_time = clock();
     cl::ParseCommandLineOptions(argc, argv);
 
-    NontriOpen = false;
-    NontriTh = 0;
-    NonTriErrTh = 0;
+    
 
     //read the json
     parsingKernelInfo(KernelFilename);
@@ -1535,7 +2033,7 @@ int main(int argc, char **argv)
 
     end_time = clock();
     printf("\n time %ld \n", (end_time - start_time));
-    printf("err_th %f \n n_th %d \n", NonTriErrTh, NontriTh);
+
     printf("peakTupleNum %d\n", peakLoadTNum + peakStoreTNum);
     // for (auto &i : storewsTupleMap)
     // {
@@ -1582,7 +2080,10 @@ int main(int argc, char **argv)
     // jOut["aggreatedSize"] = aggreatedSize;
 
     DAGGenerationCEDR();
-    DAGGenNormal();
+    // DAGGenNormal();
+    DAGGenColoring();
+
+    GenTestSchedule();
 
     for (auto sti : storewsTupleMap)
     {
@@ -1615,7 +2116,6 @@ int main(int argc, char **argv)
     jOut["barrierRemoval"] = barrierRemoval;
     jOut["DAGEdge"] = DAGEdge;
     jOut["NodePosition"] = NodePosition;
-  
 
     // for (auto d :dependency)
     // {
