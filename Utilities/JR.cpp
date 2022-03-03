@@ -77,15 +77,20 @@ void Process(string &key, string &value)
     //kernel enter concludes the previous node, kernel or non-kernel
     if (key == "KernelEnter")
     {
-        inKernel = true;   
+        inKernel = true;
+
+        // if it is neccessary to merge the bb before kernel into the kernel   
         if(CheckPrevKernelNode())
         {
+            // kernel enter bb need to be the start bb of current node
+            kernelInstanceBBs.erase(currentblock);
             nodeInfo newNode = nodeInfo{currentLabel,kernelInstanceBBs};
             nodeKiidMap[kernelInstanceIdCounter] = newNode;
 
             kernelInstanceIdCounter++;   
             currentLabel = value;
             kernelInstanceBBs.clear();
+            kernelInstanceBBs.insert(currentblock);
         }
         else
         {
@@ -131,11 +136,12 @@ void Process(string &key, string &value)
         printf("get!!!!!!!!!!!\n");
         if(inKernel == false)
         {
-
+            kernelInstanceBBs.erase(currentblock);
             nodeInfo newNode = nodeInfo{currentLabel,kernelInstanceBBs};
             nodeKiidMap[kernelInstanceIdCounter] = newNode;
             kernelInstanceIdCounter++;   
             kernelInstanceBBs.clear();
+            kernelInstanceBBs.insert(currentblock);
         }
     }
 }

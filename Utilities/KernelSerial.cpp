@@ -470,15 +470,47 @@ bool CheckLoadAfterStore(wsTupleMap storeMap, wsTuple t_new)
     return overlaps;
 }
 
+
+// node id -> bbid
+map <int, int> StartBBinNode;
+
+// node id ->(bbid, counter)
+map <int, pair<int,int>> endBBinNode;
+
+// bbid -> counter
+map<int,int> CounterInNodeForEndBB;
+
+int last_block = -1;
+
 void ControlParse(int block)
 {
 
     if (kernelControlMap[currentNodeID].find(block) == kernelControlMap[currentNodeID].end())
     {
+
+        
+        // end bb is not true
+        if (currentNodeID>=0)
+        {
+            endBBinNode[currentNodeID] = pair<int,int>(last_block,CounterInNodeForEndBB[last_block]);
+            StartBBinNode[NodeID] = block; // NodeID is the next node
+            CounterInNodeForEndBB.clear();        
+        }
+        
+
+
+
+        
+
+
+        // legacy variables for reuse distance
         timing = 0;
         timingIn = 0;
         loadlastHitTimeSet.clear();
         storelastHitTimeSet.clear();
+
+
+        // for working set info
         currentNodeID = NodeID;
         NodeID++;
     }
@@ -494,9 +526,29 @@ void Process(string &key, string &value)
 
     if (key == "BBEnter")
     {
-        // todo saving the tuple trace per instance, and load them while processing
-        // block represents current processed block id in the trace
+        
+
         int block = stoi(value, nullptr, 0);
+
+        
+
+        
+
+        // update the bb counter to figure out the end bb in the node
+        // for counting the basic block appearance number
+    
+        if (CounterInNodeForEndBB.find(block)==CounterInNodeForEndBB.end())
+        {
+            CounterInNodeForEndBB[block] = 1;
+        }
+        else
+        {
+            CounterInNodeForEndBB[block]++;
+        }
+
+
+        // this is used to dealing with function calls inside bb that causes jumping into another bb before 
+        // one bb ends
         basicBlockBuff.push(block);
         instCounterBuff.push(instCounter);
 
@@ -514,6 +566,9 @@ void Process(string &key, string &value)
     }
     else if (key == "BBExit")
     {
+        // store the last bb to figure out the end bb of a node
+        last_block = vBlock;
+
         if (basicBlockBuff.size() > 1)
         {
             basicBlockBuff.pop();
@@ -2080,8 +2135,8 @@ int main(int argc, char **argv)
     // jOut["aggreatedSize"] = aggreatedSize;
 
     DAGGenerationCEDR();
-    // DAGGenNormal();
-    DAGGenColoring();
+    DAGGenNormal();
+    // DAGGenColoring();
 
     GenTestSchedule();
 
