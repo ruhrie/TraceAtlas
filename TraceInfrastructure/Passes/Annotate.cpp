@@ -6,14 +6,28 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Type.h>
 #include <llvm/Support/raw_ostream.h>
+#include <map>
 
 using namespace llvm;
 
+ 
 namespace DashTracer::Passes
 {
+
     bool EncodedAnnotate::runOnModule(Module &M)
     {
         Annotate(&M);
+
+        for (auto &mi : M)
+        {
+            for (auto fi = mi.begin(); fi != mi.end(); fi++)
+            {
+                auto *bb = cast<BasicBlock>(fi);                              
+                int64_t id = GetBlockID(bb);
+                BBidToPtr[id] = bb;
+            }
+        } 
+
         return true;
     }
 

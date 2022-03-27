@@ -13,6 +13,7 @@ extern cl::opt<int> KernelIndex;
 /// The name of the input kernel file
 /// </summary>
 extern cl::opt<std::string> KernelFilename;
+extern cl::opt<std::string> DAGBBIOFile;
 
 extern cl::opt<bool> DumpLoads;
 
