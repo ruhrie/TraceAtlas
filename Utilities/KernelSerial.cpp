@@ -1750,9 +1750,13 @@ void RecursivePrevNodeCheck(int checkNode, set<int, greater<int>> &LiveNodeCheck
             SubstractionResTuple(NewNodeLoadWS, storewsTupleMap[depPrev], NewNodeLoadWS);
         }
 
-        for (auto depPrev : tempDepPrevNodes)
+        // for (auto depPrev : tempDepPrevNodes)
+        // {
+        //     RecursivePrevNodeCheck(depPrev, LiveNodeCheckingSet, NewNodeLoadWS);
+        // }
+        for (auto prevNode : DAGPrevNodeMap[checkNode])
         {
-            RecursivePrevNodeCheck(depPrev, LiveNodeCheckingSet, NewNodeLoadWS);
+            RecursivePrevNodeCheck(prevNode, LiveNodeCheckingSet, NewNodeLoadWS);
         }
     }
 }
@@ -2291,11 +2295,155 @@ void DAGTransformSingleThread()
 }
 
 // source node end bb -> old target start bb, new target start bb
+
+// void GenBBMapping()
+// {
+//     int lastNode= -1;
+//     for(auto i: testSchedule)
+//     {
+//         if(lastNode != -1)
+//         {
+//             // update the node mapping
+//             BBMapingTransform[endBBinNode[lastNode]] = pair<int,int>{StartBBinNode[lastNode+1],StartBBinNode[i]};
+//         }
+//         lastNode = i;
+//     }
+// }
+
+
+
+vector <int> ScheduleForSingThread;
+
+// start kernel stage basic block
+map<int,int> startKernelIndex;
+
+// start kernel stage basic block
+map<int,int> middleKernelIndex;
+// end kernel stage basic block, number of kernels counter
+map<int,pair<int,int>> EndKernelIndexToCounter;
+
+
+void SingThreadSchedule(set<int> schedulableNonKernel,set<int> schedulableKernel,map<int,set<int>> NextNodeMap,map<int,set<int>> PrevNodeMap,map<int,int> KernelPosition)
+{
+    int stage = 1;
+    while(schedulableKernel.size()>0 ||schedulableNonKernel.size()>0)
+    {
+        // schedule the non-kernels
+        for (auto nk:schedulableNonKernel)
+        {
+            ScheduleForSingThread.push_back(nk);
+
+            for (auto it: NextNodeMap[nk])
+            {
+                PrevNodeMap[it].erase(nk); 
+            }
+            PrevNodeMap.erase(nk);
+        }
+        //schedule kernels
+        int kernelSchedCounter = 0;
+        int lastSchedKernelID = -1;
+
+        for (auto k:schedulableKernel)
+        {
+            kernelSchedCounter++;
+            // 
+            if (kernelSchedCounter ==1)
+            {
+                // startKernelIndex.insert(KernelPosition[k]);
+                startKernelIndex[StartBBinNode[k]]=stage;
+            }
+            else
+            {
+                middleKernelIndex[StartBBinNode[k]]=stage;
+            }
+
+            ScheduleForSingThread.push_back(k);
+            for (auto it: NextNodeMap[k])
+            {
+                PrevNodeMap[it].erase(k); 
+            }
+            PrevNodeMap.erase(k);
+            lastSchedKernelID = k;
+        }
+        if(lastSchedKernelID != -1)
+        {
+            middleKernelIndex.erase(StartBBinNode[lastSchedKernelID]);
+            EndKernelIndexToCounter[StartBBinNode[lastSchedKernelID]]= {stage,kernelSchedCounter};
+            stage++;
+        }
+
+        //update the schedule node set
+        schedulableNonKernel.clear();
+        schedulableKernel.clear();
+
+        for (auto i : kernelIdMap)
+        {
+            if(PrevNodeMap.find(i.first) !=PrevNodeMap.end() && PrevNodeMap[i.first].size()==0)
+            {
+                if(i.second=="-1")
+                {
+                    schedulableNonKernel.insert(i.first);
+                }
+                else
+                {
+                    schedulableKernel.insert(i.first);
+                }
+            }
+        } 
+    }
+}
+void DAGScheduleSingleThread()
+{
+
+    
+    map<int,set<int>> NextNodeMap;
+    map<int,set<int>> PrevNodeMap;
+
+    for (auto i : DAGEdge)
+    {
+        NextNodeMap[i.first].insert(i.second);
+        PrevNodeMap[i.second].insert(i.first);
+    }
+
+    set<int> schedulableKernel;
+    set<int> schedulableNonKernel;
+
+    // map kernel id to kernel binary position
+    map<int,int> KernelPosition;
+    int kernelPosCounter = 0;
+    for (auto i : kernelIdMap)
+    {
+        if(i.second !="-1")
+        {
+            kernelPosCounter++;
+            KernelPosition[i.first] = kernelPosCounter;
+        }
+
+
+
+        if(PrevNodeMap[i.first].size()==0)
+        {
+            if(i.second=="-1")
+            {
+                schedulableNonKernel.insert(i.first);
+            }
+            else
+            {
+                schedulableKernel.insert(i.first);
+            }
+        }
+    }
+
+    SingThreadSchedule(schedulableNonKernel,schedulableKernel,NextNodeMap,PrevNodeMap,KernelPosition); 
+
+}
+
+
 map <int,pair<int,int>> BBMapingTransform;
 void GenBBMapping()
 {
     int lastNode= -1;
-    for(auto i: testSchedule)
+    for(auto i: ScheduleForSingThread)
     {
         if(lastNode != -1)
         {
@@ -2304,6 +2452,52 @@ void GenBBMapping()
         }
         lastNode = i;
     }
+}
+
+
+// set<string>startKernelNames;
+// map <string,int64_t> EndKernelNameToCounter;
+
+void GetBasicBlockNames()
+{
+
+    // LLVMContext context;
+    // SMDiagnostic smerror;
+    // unique_ptr<Module> sourceBitcode;
+    // try
+    // {
+    //     sourceBitcode = parseIRFile(bitcodeFile, smerror, context);
+    // }
+    // catch (exception &e)
+    // {
+    //     return;
+    // }
+
+    // Module *M = sourceBitcode.get();
+    // Annotate(M);
+
+    // for (auto &mi : *M)
+    // {
+    //     for (auto fi = mi.begin(); fi != mi.end(); fi++)
+    //     {
+    //         auto *bb = cast<BasicBlock>(fi);
+    //         auto dl = bb->getModule()->getDataLayout();
+    //         int64_t id = GetBlockID(bb);
+    //         std::string Str;
+    //         raw_string_ostream OS(Str);
+    //         bb->printAsOperand(OS, false);                     
+    //         if (startKernelIndex.find(id)!=startKernelIndex.end())
+    //         {             
+    //             startKernelNames.insert(OS.str());
+    //         }
+    //         if (EndKernelIndexToCounter.find(id)!=EndKernelIndexToCounter.end())
+    //         {     
+    //             EndKernelNameToCounter[OS.str()] =EndKernelIndexToCounter[id];
+    //         }
+    //     }
+    // }
+
+
 }
 
 int main(int argc, char **argv)
@@ -2373,10 +2567,18 @@ int main(int argc, char **argv)
     // DAGGenColoring();
     CheckWAW();
 
-    GenTestSchedule();
-    GenBBMapping();
+    // GenTestSchedule();
+    // GenBBMapping();
+    //for transformed schedule generation
+    DAGScheduleSingleThread();
+    //for transformed DAG generation
+    // DAGTransformSingleThread();
 
-    DAGTransformSingleThread();
+    GenBBMapping();
+    
+
+    //for the case that binary changed
+    GetBasicBlockNames();
 
     for (auto sti : storewsTupleMap)
     {
@@ -2422,17 +2624,20 @@ int main(int argc, char **argv)
     }
 
     jOut["testSchedule"] = testSchedule;
+
+
+
     jOut["BBMapingTransform"] = BBMapingTransform;
+    jOut["ScheduleForSingThread"] = ScheduleForSingThread;
+
+    jOut["startKernelIndex"] = startKernelIndex;
+    jOut["EndKernelIndexToCounter"] = EndKernelIndexToCounter;
+    jOut["middleKernelIndex"] = middleKernelIndex;
 
 
-    // for (auto sti : BBidToPtr)
-    // { 
-    //     jOut["BBidToPtr"][to_string(sti.first)] = sti.second;     
-    // }
+    
+   
 
-    
-    
-    
 
     // for (auto d :dependency)
     // {
